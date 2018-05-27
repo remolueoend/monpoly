@@ -1,0 +1,12 @@
+   > command <
+   @1307532861 approve (152)
+   @1307955600 approve (163)
+               publish (160)
+   @1308477599 approve (187)
+               publish (163) (152)
+   > get_pos <
+   @1308477609 approve (163)
+               publish (169) (150)
+   > split key {1, 3}, {2,4} <
+   @1308477610 approve (150)
+   @1308600000 approve (169)
