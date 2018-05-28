@@ -154,12 +154,56 @@
 
   (* let parse_error str = () *)
 
-  let make_split str lvalues rvalues = 
-    {key = str; lvalues = lvalues; rvalues = rvalues; }
+
+  let make_split group = ConstraintSet group
+
+
+ let make_group2 subgroup1 subgroup2 = 
+    let group = Helper.singleton subgroup2 in
+    Helper.add subgroup1 group
+
+let make_group group subgroup = 
+  if Helper.is_empty group then
+    Helper.singleton subgroup
+  else 
+    Helper.add subgroup group
+
+
+let get_1 (a, _) = a
+let get_2 (_, a) = a
+
+
+let make_subgroup relname values = 
+  let schema = get_schema relname in 
+  (* attr is list of types belonging to list in values *)
+  let pname, attr = schema in 
+  let convert_lists p l = 
+    let t = get_2 p in
+    let pos = ref 0 in
+    List.map
+    (fun s ->
+       incr pos;
+       match t with
+       | TInt ->
+         (try Int (int_of_string s)
+          with Failure _ ->
+            raise (Type_error ("Expected type int for field number "
+                               ^ (string_of_int !pos))))
+       | TStr -> Str s
+       | TFloat ->
+         (try Float (float_of_string s)
+          with Failure _ ->
+            raise (Type_error ("Expected type float for field number "
+                               ^ (string_of_int !pos))))
+    )
+    l
+  in  
+  let cstlists = List.map2 convert_lists attr values in
+  { relname = relname; values = cstlists } 
 %}
 
 
-%token AT LPA RPA LCU RCU COM
+%token AT LPA RPA LCB RCB COM
 %token <string> STR
 %token EOF
 %token CMD
@@ -186,8 +230,8 @@ predicate:
 
 
 tsdb:
-      | CMD STR EOC                { CommandTuple { c = $2; split = None    } }
-      | CMD STR split EOC         { CommandTuple { c = $2; split = Some $3 } }
+      | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
+      | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
       | AT STR db AT            { f "tsdb(next)";  DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
       | AT STR db CMD           { f "tsdb(next)";  DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
       | AT STR db EOF           { f "tsdb(last)";  DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
@@ -240,8 +284,14 @@ fields:
       | STR                     { f "fields(end)"; [$1] }
       |                         { f "fields()"; [] }
 
-split:
-      | STR group COM group     { make_split $1 $2 $4 }
-
+parameters:
+      | STR                     { Argument $1  }
+      | LCB group RCB           { make_split $2}
 group:
-      | LCU fields RCU          { $2 }                    
+      | subgroup subgroup       { make_group2 $2 $1 } 
+    
+subgroup:
+      | LCB STR COM LPA tuple RPA RCB  { make_subgroup $2 [$5] }    
+
+tuple:
+      | RPA fields LPA          { $2 }

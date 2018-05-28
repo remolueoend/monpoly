@@ -58,7 +58,7 @@ let usage_string =
                [-check] [-sigout] [-unix] [-mem] [-nonewlastts]
                [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
                [-ignore_parse_errors] [-stop_at_out_of_order_ts]
-               [-stop_at_first_viol] [-save <file>] [-load <file>]"
+               [-stop_at_first_viol] [-load <file>]"
 
 
 
@@ -177,7 +177,6 @@ let _ =
     "-ignore_parse_errors", Arg.Set Misc.ignore_parse_errors, "\tIgnore log parse errors";
     "-stop_at_out_of_order_ts", Arg.Set Misc.stop_at_out_of_order_ts, "\tStop monitoring when out-of-order timestamps encountered, otherwise issue warning";
     "-stop_at_first_viol", Arg.Set Misc.stop_at_first_viol, "\tStop at first encountered violation";
-    "-save", Arg.Set_string Algorithm.dumpfile, "\tSave monitor state to file";
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
   ]
     (fun _ -> ())

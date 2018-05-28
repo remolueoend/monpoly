@@ -91,8 +91,8 @@ rule
   | "<"                      { f "CMD" lexbuf; EOC }
   | "("                      { f "LPA" lexbuf; LPA }
   | ")"                      { f "RPA" lexbuf; RPA }
-  | "{"                      { f "LPA" lexbuf; LCU }
-  | "}"                      { f "RPA" lexbuf; RCU }
+  | "{"                      { f "LBC" lexbuf; LCB }
+  | "}"                      { f "RCB" lexbuf; RCB }
   | ","                      { f "COM" lexbuf; COM }
 
   | string as lxm            { f "STR" lexbuf; STR (strip lxm) }

@@ -87,7 +87,6 @@ module NEval = Dllist
 module Sk = Dllist
 module Sj = Dllist
 
-
 (* For the sake of clarity, think about merging these types and all
    related functions. Some fields will be redundant, but we will not lose
    that much. *)
@@ -506,12 +505,8 @@ let print_extf str ff =
   print_string str;
   print_f_rec 0 ff
 
-
-
-
-
-
-
+  let make_db db =
+    Db.make_db (List.map (fun (s,r) -> Table.make_table s r) db)
 
 let mqueue_add_last auxrels tsq rel2 =
   if Mqueue.is_empty auxrels then
@@ -533,10 +528,6 @@ let dllist_add_last auxrels tsq rel2 =
       Dllist.add_last (tsq, Relation.union rellast rel2) auxrels
     else
       Dllist.add_last (tsq,rel2) auxrels
-
-
-
-
 
 (* [saauxrels] consists of those relations that are outside of the
    relevant time window *)
@@ -1703,12 +1694,6 @@ let rec eval f neval crt discard =
     in
     e_update ()
 
-
-
-
-
-
-
 let add_index f i tsi db =
   let rec update = function
     | EPred (p, comp, inf) ->
@@ -1756,12 +1741,7 @@ let add_index f i tsi db =
       update f2
   in
   update f
-
-
-
-
-
-
+  
 (** This function displays the "results" (if any) obtained after
     analyzing event index [i]. The results are those tuples satisfying
     the formula for some index [q<=i]. *)
@@ -2746,19 +2726,30 @@ let check_log lexbuf ff closed neval i =
   let rec loop ffl i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
+    let checkParameter p = match p with 
+      | Argument str -> 
+        dumpfile := str;
+        marshal !dumpfile i !lastts ff closed neval
+      | _ -> Printf.printf "No filename specified, continuing with index %d" i;   
+    in
+    let save_and_exit c params =  match params with
+    | Some p -> checkParameter p
+    | None -> Printf.printf "No filename specified, continuing with index %d" i;
+    in 
     match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c} ->
+    | MonpolyCommand {c; parameters} ->
         let process_command c = match c with
             | "terminate" ->
-               Printf.printf "Dumping to file \n";
-               marshal !dumpfile i !lastts ff closed neval
+               Printf.printf "Terminated at index: %d \n" i;
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
                 loop ffl i
+            | "save_and_exit" -> save_and_exit c parameters;
             | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
                 loop ffl i
         in
+        print_endline c;
         process_command c;
 
     | MonpolyData {tp; ts; db} ->

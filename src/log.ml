@@ -199,8 +199,8 @@ let get_next_entry lexbuf =
       else
          MonpolyData {tp = !tp - 1; ts; db; }
 
-    | CommandTuple { c; split } ->
-        MonpolyCommand { c; split }
+    | CommandTuple { c; parameters } ->
+        MonpolyCommand { c; parameters }
 
     | ErrorTuple s ->
       if Misc.debugging Dbg_filter then
