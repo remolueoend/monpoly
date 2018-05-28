@@ -91,7 +91,7 @@ module Sj = Dllist
    related functions. Some fields will be redundant, but we will not lose
    that much. *)
 
-type info = (int * timestamp * relation) Queue.t
+type info  = (int * timestamp * relation) Queue.t
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable ptsq: timestamp}
 type ninfo = {mutable init: bool}
@@ -2830,3 +2830,171 @@ let resume logfile =
       lastts := last_ts;
   let lexbuf = Log.log_open logfile in
   check_log lexbuf ff closed neval i
+
+(*
+type oinfo = {mutable otree: (timestamp, relation) Sliding.stree;
+              mutable olast: (timestamp * relation) Dllist.cell;
+              oauxrels: (timestamp * relation) Dllist.dllist}
+type ezinfo = {mutable ezlastev:  _
+               mutable eztree: (int, relation) Sliding.stree;
+               mutable ezlast: (int * timestamp * relation) Dllist.cell;
+               ezauxrels: (int * timestamp * relation) Dllist.dllist}
+type einfo = {mutable elastev:  _
+              mutable etree: (timestamp, relation) Sliding.stree;
+              mutable elast: (timestamp * relation) Dllist.cell;
+              eauxrels: (timestamp * relation) Dllist.dllist}
+type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
+               mutable ozlast: (int * timestamp * relation) Dllist.cell;
+               ozauxrels: (int * timestamp * relation) Dllist.dllist}
+types without relation: pinfo, ninfo, t_agg
+*)
+
+(* Splitting Stuff *)
+let split_relations f cset =
+  (*TODO: implement relation splitting according to constraint set; *)
+  (* How do I know which constraint set is relevant? *)
+  let split rel = 
+    rel
+  in
+  let split_info inf nq = 
+    Queue.iter (
+     fun e -> let i, ts, r  = e in
+      Queue.add (i, ts, (split r)) nq
+      ) inf;
+    nq
+  in  
+  let split_ainfo ainf =
+    let urel = match ainf.arel with 
+    | Some r -> Some (split r)
+    | None -> None
+    in 
+    { arel = urel; }
+  in
+  let split_agg   agg =
+    let nq = Queue.create() in
+    Queue.iter (
+      fun e -> let ts, r  = e in
+       Queue.add (ts, (split r)) nq
+       ) agg.other_rels;
+    {tw_rels = agg.tw_rels; other_rels = nq; mset = agg.mset; hres = agg.hres }
+  in
+  let split_aggMM agg = 
+    let nq = Queue.create() in
+    Queue.iter (
+      fun e -> let ts, r  = e in
+       Queue.add (ts, (split r)) nq
+       ) agg.non_tw_rels;
+    {non_tw_rels = nq; tbl = agg.tbl }
+  in
+  let split_sainfo sainf =
+    let sarel2 = match sainf.sarel2 with
+      | Some r -> Some (split r)
+      | None -> None
+    in
+    let nq = Mqueue.create() in
+    Mqueue.iter (
+      fun e -> let ts, r  = e in
+      Mqueue.add (ts, (split r)) nq
+      ) sainf.saauxrels;
+
+    {sres = (split sainf.sres); sarel2 = sarel2; saauxrels = nq} 
+  in  
+  let split_sinfo sinf =
+    let srel2 = match sinf.srel2 with
+      | Some r -> Some (split r)
+      | None -> None
+    in
+    let nq = Mqueue.create() in
+    Mqueue.iter (
+      fun e -> let ts, r  = e in
+      Mqueue.add (ts, (split r)) nq
+      ) sinf.sauxrels;
+
+    {srel2 = (split srel2); sauxrels = nq} 
+  in
+  let split_oainfo oainf =
+    { ores = (split oainf.ores); oaauxrels = oainf.oaauxrels }
+  in
+  let split_ozinfo ozinf =
+   (* let ozauxrels = 
+      let nl = Dllist.empty() in
+      Sj.iter (fun e ->
+        let i, ts, r = e in
+        Sj.add_last (i, ts, (split r)) nl
+      ) ozinf.ozauxrels;
+      nl
+    in  
+    let (i, ts, r) = ozinf.ozlast.contents in 
+    { oztree = ozinf.oztree; ozlast = (Dllist.new_cell (i, ts, (split r) nl)); ozauxrels = ozauxrels; }*)
+    ozinf
+  in
+  let split_oinfo oinf =
+    oinf
+  in
+  let split_uninfo uninf =
+    let listrel l = 
+      let nl = Dllist.empty() in
+      Dllist.iter (fun e ->
+        let i, ts, r = e in
+        Dllist.add_last (i, ts, (split r)) nl
+      ) l;
+      nl
+    in  
+    { last1 = uninf.last1; last2 = uninf.last2; listrel1 = (listrel uninf.listrel1);  listrel2 = (listrel uninf.listrel2) }
+  in
+  let split_uinfo uinf =
+    (* Helper function for raux and saux fields, creates split Sk.dllist *)
+    let sklist l = 
+      let nl = Sk.empty() in
+      Sk.iter (fun e ->
+        let i, r = e in
+        Sk.add_last (i, (split r)) nl
+      ) l;
+      nl
+    in  
+    let raux = 
+      let nl = Sj.empty() in
+      Sj.iter (fun e ->
+        let (i, ts, l) = e in
+        Sj.add_last (i, ts, (sklist l)) nl
+      ) uinf.raux;
+      nl
+    in
+    let urel2 = match uinf.urel2 with
+      | Some r  -> Some (split r)
+      | None -> None
+    in
+    { ulast = uinf.ulast; ufirst = uinf.ufirst; ures = (split uinf.ures); 
+      urel2 = urel2; raux = raux; saux = (sklist uinf.saux) }
+  in
+  let split_ezinfo ezinf =
+    ezinf
+  in
+  let split_einfo einf =
+    einf
+  in
+  let rec split_f = function
+  | ERel           (rel)                                                  -> ERel         (split rel)                                                               
+  | EPred          (p, comp, inf)                                         -> EPred        (p, comp, (split_info inf (Queue.create())))                                   
+  | ENeg           (f1)                                                   -> ENeg         (split_f f1)                              
+  | EAnd           (c, f1, f2, ainf)                                      -> EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf))
+  | EOr            (c, f1, f2, ainf)                                      -> EOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf)) 
+  | EExists        (c, f1)                                                -> EExists      (c, (split_f f1))
+  | EAggreg        (c, f1)                                                -> EAggreg      (c, (split_f f1))
+  | EAggOnce       (f1, dt, agg, update_old, update_new, get_result)      -> EAggOnce     ((split_f f1), dt, (split_agg agg), update_old, update_new, get_result)  
+  | EAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> EAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM), update_old, update_new, get_result)
+  | EPrev          (dt, f1, pinf)                                         -> EPrev        (dt, (split_f f1), pinf) 
+  | ENext          (dt, f1, ninf)                                         -> ENext        (dt, (split_f f1), ninf)     
+  | ESinceA        (c2, dt, f1, f2, sainf)                                -> ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf))    
+  | ESince         (c2, dt, f1, f2, sinf)                                 -> ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf))
+  | EOnceA         (dt, f1, oainf)                                        -> EOnceA       (dt, (split_f f1), (split_oainfo oainf))    
+  | EOnceZ         (dt, f1, ozinf)                                        -> EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf))           
+  | EOnce          (dt, f1, oinf)                                         -> EOnce        (dt, (split_f f1), (split_oinfo oinf))   
+  | ENUntil        (c1, dt, f1, f2, uninf)                                -> ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf))                 
+  | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf))            
+  | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf))    
+  | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf))    
+  in
+  split f
+
+  

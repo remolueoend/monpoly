@@ -200,6 +200,11 @@ let make_subgroup relname values =
   in  
   let cstlists = List.map2 convert_lists attr values in
   { relname = relname; values = cstlists } 
+
+  let make_tuple l1 l2 = 
+    match l1 with
+    | [[]] -> [l2]
+    | _ -> List.append l1 [l2]
 %}
 
 
@@ -292,6 +297,8 @@ group:
     
 subgroup:
       | LCB STR COM LPA tuple RPA RCB  { make_subgroup $2 [$5] }    
-
 tuple:
       | RPA fields LPA          { $2 }
+/*tuple:
+      | RPA fields LPA tuple    { make_tuple $4 $2 }
+      |                         { [[]] }*/
