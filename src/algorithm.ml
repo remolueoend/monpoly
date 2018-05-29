@@ -2713,36 +2713,44 @@ let unmarshal resumefile =
 
 (* SPLITTING STATE *)
 let get_predicate f =
-  let rec get_pred = function                                                              
-  | EPred          (p, _, _)              -> p                                   
-  | ENeg           (f1)                   -> get_pred f1                                
-  | EAnd           (_, f1, f2, _)         -> get_pred f1                                
-  | EOr            (_, f1, f2, _)         -> get_pred f1                                
-  | EExists        (_, f1)                -> get_pred f1                                   
-  | EAggreg        (_, f1)                -> get_pred f1                                   
+  let p2s p = Predicate.get_name p in
+  let combine_preds p1 p2 = List.append p1 p2 in
+  let rec get_pred = function                                                         
+  | EPred          (p, _, _)              -> [(p2s p)]                                
+  | ENeg           (f1)                   -> get_pred f1                             
+  | EAnd           (_, f1, f2, _)         -> combine_preds (get_pred f1) (get_pred f2)
+  | EOr            (_, f1, f2, _)         -> combine_preds (get_pred f1) (get_pred f2)
+  | EExists        (_, f1)                -> get_pred f1                              
+  | EAggreg        (_, f1)                -> get_pred f1                              
   | EAggOnce       (f1, _, _, _, _, _)    -> get_pred f1    
   | EAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1    
-  | EPrev          (_, f1, _)             -> get_pred f1                               
-  | ENext          (_, f1, _)             -> get_pred f1                               
-  | ESinceA        (_, _, f1, f2, _)      -> get_pred f1                             
-  | ESince         (_, _, f1, f2, _)      -> get_pred f1                             
-  | EOnceA         (_, f1, _)             -> get_pred f1                              
-  | EOnceZ         (_, f1, _)             -> get_pred f1                              
-  | EOnce          (_, f1, _)             -> get_pred f1                                
-  | ENUntil        (_, _, f1, f2, _)      -> get_pred f1                             
-  | EUntil         (_, _, f1, f2, _)      -> get_pred f1                              
-  | EEventuallyZ   (_, f1, _)             -> get_pred f1                              
+  | EPrev          (_, f1, _)             -> get_pred f1                              
+  | ENext          (_, f1, _)             -> get_pred f1                              
+  | ESinceA        (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
+  | ESince         (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
+  | EOnceA         (_, f1, _)             -> get_pred f1                             
+  | EOnceZ         (_, f1, _)             -> get_pred f1                             
+  | EOnce          (_, f1, _)             -> get_pred f1                              
+  | ENUntil        (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
+  | EUntil         (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
+  | EEventuallyZ   (_, f1, _)             -> get_pred f1                             
   | EEventually    (_, f1, _)             -> get_pred f1          
   in
   get_pred f
 
+  
+let list_to_string l =
+  let str = ref "" in
+  let append s = str := !str ^ s ^ ", " in
+  List.iter (fun s -> append s ) l;
+  !str
+
 let split_debug f op =
-  let p2s p = Predicate.get_name p in
-  Printf.printf "Predicate Names: '%s' for formula: '%s' \n" (p2s (get_predicate f)) op
+  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (get_predicate f)) op
 
 let split_debug2 f1 f2 op =
   let p2s p = Predicate.get_name p in
-  Printf.printf "Predicate Names: ('%s', '%s') for formula: '%s' \n" (p2s (get_predicate f1)) (p2s (get_predicate f2)) op
+  Printf.printf "Predicate Names: (%s %s) for formula: '%s' \n" (list_to_string (get_predicate f1)) (list_to_string (get_predicate f2)) op
 
 
 let split_state f =
