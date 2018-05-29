@@ -2693,7 +2693,6 @@ let resumefile = ref ""
 let dumpfile = ref ""
 let lastts = ref MFOTL.ts_invalid
 
-
 let marshal dumpfile i lastts ff closed neval =
   let ch = open_out_bin dumpfile in
   let a,mf = ext_to_m ff neval in
@@ -2732,7 +2731,7 @@ let check_log lexbuf ff closed neval i =
         marshal !dumpfile i !lastts ff closed neval
       | _ -> Printf.printf "No filename specified, continuing with index %d" i;   
     in
-    let save_and_exit c params =  match params with
+    let save_and_exit params =  match params with
     | Some p -> checkParameter p
     | None -> Printf.printf "No filename specified, continuing with index %d" i;
     in 
@@ -2744,7 +2743,8 @@ let check_log lexbuf ff closed neval i =
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
                 loop ffl i
-            | "save_and_exit" -> save_and_exit c parameters;
+            | "save_and_exit" ->  save_and_exit parameters;
+            | "split_state" -> save_and_exit (Some (Argument "testfile"));
             | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
                 loop ffl i
@@ -2831,26 +2831,8 @@ let resume logfile =
   let lexbuf = Log.log_open logfile in
   check_log lexbuf ff closed neval i
 
-(*
-type oinfo = {mutable otree: (timestamp, relation) Sliding.stree;
-              mutable olast: (timestamp * relation) Dllist.cell;
-              oauxrels: (timestamp * relation) Dllist.dllist}
-type ezinfo = {mutable ezlastev:  _
-               mutable eztree: (int, relation) Sliding.stree;
-               mutable ezlast: (int * timestamp * relation) Dllist.cell;
-               ezauxrels: (int * timestamp * relation) Dllist.dllist}
-type einfo = {mutable elastev:  _
-              mutable etree: (timestamp, relation) Sliding.stree;
-              mutable elast: (timestamp * relation) Dllist.cell;
-              eauxrels: (timestamp * relation) Dllist.dllist}
-type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
-               mutable ozlast: (int * timestamp * relation) Dllist.cell;
-               ozauxrels: (int * timestamp * relation) Dllist.dllist}
-types without relation: pinfo, ninfo, t_agg
-*)
-
 (* Splitting Stuff *)
-let split_relations f cset =
+let split_relations f =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
   let split rel = 
@@ -2916,20 +2898,46 @@ let split_relations f cset =
     { ores = (split oainf.ores); oaauxrels = oainf.oaauxrels }
   in
   let split_ozinfo ozinf =
-   (* let ozauxrels = 
-      let nl = Dllist.empty() in
-      Sj.iter (fun e ->
-        let i, ts, r = e in
-        Sj.add_last (i, ts, (split r)) nl
-      ) ozinf.ozauxrels;
-      nl
+    let split_res n = 
+      match n with
+      | Some r -> Some (split r)
+      | None -> None 
     in  
-    let (i, ts, r) = ozinf.ozlast.contents in 
-    { oztree = ozinf.oztree; ozlast = (Dllist.new_cell (i, ts, (split r) nl)); ozauxrels = ozauxrels; }*)
-    ozinf
+    let split_tree tree = 
+      let rec split_t t = match t with
+        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
+        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
+      in split_t tree  
+    in
+   let ozauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let i, ts, r  = e in
+        Dllist.add_last (i, ts, (split r)) ozauxrels
+    ) ozinf.ozauxrels;
+    (* TODO(FB) Is this sufficient? *)
+    let ozlast = Dllist.get_first_cell ozauxrels in
+    {oztree = (split_tree ozinf.oztree); ozlast = ozlast; ozauxrels = ozauxrels }
   in
   let split_oinfo oinf =
-    oinf
+    let split_res n = 
+      match n with
+      | Some r -> Some (split r)
+      | None -> None 
+    in  
+    let split_tree tree = 
+      let rec split_t t = match t with
+        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
+        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
+      in split_t tree  
+    in
+    let oauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let ts, r  = e in
+        Dllist.add_last (ts, (split r)) oauxrels
+      ) oinf.oauxrels;
+    (* TODO(FB) Is this sufficient? *)
+    let olast = Dllist.get_first_cell oauxrels in
+    {otree = (split_tree oinf.otree); olast = olast; oauxrels = oauxrels }
   in
   let split_uninfo uninf =
     let listrel l = 
@@ -2968,10 +2976,41 @@ let split_relations f cset =
       urel2 = urel2; raux = raux; saux = (sklist uinf.saux) }
   in
   let split_ezinfo ezinf =
-    ezinf
+    let split_res n = 
+      match n with
+      | Some r -> Some (split r)
+      | None -> None 
+    in  
+    let split_tree tree = 
+      let rec split_t t = match t with
+        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
+        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
+      in split_t tree  
+    in
+    let ezauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let i, ts, r  = e in
+        Dllist.add_last (i, ts, (split r)) ezauxrels
+    ) ezinf.ezauxrels;
+    (* TODO(FB) Is this sufficient? *)
+    let ezlast = Dllist.get_first_cell ezauxrels in
+    {ezlastev = ezinf.ezlastev; eztree = (split_tree ezinf.eztree); ezlast = ezlast; ezauxrels = ezauxrels }
   in
   let split_einfo einf =
-    einf
+    let split_tree tree = 
+      let rec split_t t = match t with
+        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split ln.res)}
+        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
+      in split_t tree  
+    in
+    let eauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let ts, r  = e in
+        Dllist.add_last (ts, (split r)) eauxrels
+      ) einf.eauxrels;
+    (* TODO(FB) Is this sufficient? *)
+    let elast = Dllist.get_first_cell eauxrels in
+    {elastev = einf.elastev; etree = (split_tree einf.etree); elast = elast; eauxrels = eauxrels }
   in
   let rec split_f = function
   | ERel           (rel)                                                  -> ERel         (split rel)                                                               
@@ -2995,6 +3034,12 @@ let split_relations f cset =
   | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf))    
   | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf))    
   in
-  split f
+  split_f f
 
-  
+let split dumpfile i lastts ff closed neval =
+  let sf = split_relations ff in
+  let ch = open_out_bin dumpfile in
+  let a,mf = ext_to_m sf neval in
+  let value = (i,lastts,closed,mf,a) in
+  Marshal.to_channel ch value [Marshal.Closures];
+  close_out ch

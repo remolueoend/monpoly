@@ -155,21 +155,15 @@
   (* let parse_error str = () *)
 
 
-  let make_split group = ConstraintSet group
-
-
- let make_group2 subgroup1 subgroup2 = 
-    let group = Helper.singleton subgroup2 in
-    Helper.add subgroup1 group
+let make_split group = match group with
+  | Some g -> ConstraintSet g
+  | None   -> raise Parsing.Parse_error
 
 let make_group group subgroup = 
-  if Helper.is_empty group then
-    Helper.singleton subgroup
-  else 
-    Helper.add subgroup group
+  match group with
+    | Some g ->  Some(Helper.add subgroup g)
+    | None   ->  Some(Helper.singleton subgroup)
 
-
-let get_1 (a, _) = a
 let get_2 (_, a) = a
 
 
@@ -200,11 +194,6 @@ let make_subgroup relname values =
   in  
   let cstlists = List.map2 convert_lists attr values in
   { relname = relname; values = cstlists } 
-
-  let make_tuple l1 l2 = 
-    match l1 with
-    | [[]] -> [l2]
-    | _ -> List.append l1 [l2]
 %}
 
 
@@ -293,12 +282,11 @@ parameters:
       | STR                     { Argument $1  }
       | LCB group RCB           { make_split $2}
 group:
-      | subgroup subgroup       { make_group2 $2 $1 } 
+      | subgroup group          { make_group $2 $1 } 
+      |                         { None }
     
 subgroup:
-      | LCB STR COM LPA tuple RPA RCB  { make_subgroup $2 [$5] }    
-tuple:
-      | RPA fields LPA          { $2 }
-/*tuple:
-      | RPA fields LPA tuple    { make_tuple $4 $2 }
-      |                         { [[]] }*/
+      | LCB STR COM LPA groupedTuple RPA RCB  { make_subgroup $2 $5 }    
+groupedTuple:
+      | tuple groupedTuple      { $1::$2  }
+      |                         { [] }
