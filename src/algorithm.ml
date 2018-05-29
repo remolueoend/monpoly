@@ -2461,9 +2461,11 @@ let rec add_ext f =
 
 
 
+(* 
+  SAVING AND LOADING STATE
+*)
 
-(* saving and loading state *)
-
+(* Immutable version of types used in eformula *)
 type mezinfo = { mezlastev :  int;
                  meztree   :  (int , relation) Sliding.stree;
                  mezlast   :  (int * timestamp * relation) Dllist.cell;
@@ -2485,8 +2487,7 @@ type muninfo = { mlast1   :  int;
                  mlistrel1:  (int * timestamp * relation) Dllist.dllist;
                  mlistrel2:  (int * timestamp * relation) Dllist.dllist;}
 
-     (* TODO: create immutable type for each of types in eFormula to use in mFormula *)
-
+(* Immutable version of eformula used for marshalling *)
 type mformula =
   | MRel of relation
   | MPred of predicate * comp_one * info
@@ -2708,131 +2709,43 @@ let unmarshal resumefile =
   let ff = m_to_ext mf neval in
   (i,last_ts,ff,closed,neval)
 
-(* The arguments are:
-   lexbuf - the lexer buffer (holds current state of the scanner)
-   ff - the extended MFOTL formula
-   closed - true iff [ff] is a ground formula
-   neval - the queue of no-yet evaluted indexes/entries
-   i - the index of current entry in the log file
-   ([i] may be different from the current time point when
-   filter_empty_tp is enabled)
-*)
-let check_log lexbuf ff closed neval i =
-  let finish () =
-    if Misc.debugging Dbg_perf then
-      Perf.check_log_end i !lastts
+(* END SAVING AND LOADING STATE *)  
+
+(* SPLITTING STATE *)
+let get_predicate f =
+  let rec get_pred = function                                                              
+  | EPred          (p, _, _)              -> p                                   
+  | ENeg           (f1)                   -> get_pred f1                                
+  | EAnd           (_, f1, f2, _)         -> get_pred f1                                
+  | EOr            (_, f1, f2, _)         -> get_pred f1                                
+  | EExists        (_, f1)                -> get_pred f1                                   
+  | EAggreg        (_, f1)                -> get_pred f1                                   
+  | EAggOnce       (f1, _, _, _, _, _)    -> get_pred f1    
+  | EAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1    
+  | EPrev          (_, f1, _)             -> get_pred f1                               
+  | ENext          (_, f1, _)             -> get_pred f1                               
+  | ESinceA        (_, _, f1, f2, _)      -> get_pred f1                             
+  | ESince         (_, _, f1, f2, _)      -> get_pred f1                             
+  | EOnceA         (_, f1, _)             -> get_pred f1                              
+  | EOnceZ         (_, f1, _)             -> get_pred f1                              
+  | EOnce          (_, f1, _)             -> get_pred f1                                
+  | ENUntil        (_, _, f1, f2, _)      -> get_pred f1                             
+  | EUntil         (_, _, f1, f2, _)      -> get_pred f1                              
+  | EEventuallyZ   (_, f1, _)             -> get_pred f1                              
+  | EEventually    (_, f1, _)             -> get_pred f1          
   in
-  let rec loop ffl i =
-    if Misc.debugging Dbg_perf then
-      Perf.check_log i !lastts;
-    let checkParameter p = match p with 
-      | Argument str -> 
-        dumpfile := str;
-        marshal !dumpfile i !lastts ff closed neval
-      | _ -> Printf.printf "No filename specified, continuing with index %d" i;   
-    in
-    let save_and_exit params =  match params with
-    | Some p -> checkParameter p
-    | None -> Printf.printf "No filename specified, continuing with index %d" i;
-    in 
-    match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c; parameters} ->
-        let process_command c = match c with
-            | "terminate" ->
-               Printf.printf "Terminated at index: %d \n" i;
-            | "get_pos"   ->
-                Printf.printf "Current index: %d \n" i;
-                loop ffl i
-            | "save_and_exit" ->  save_and_exit parameters;
-            | "split_state" -> save_and_exit (Some (Argument "testfile"));
-            | _ ->
-                Printf.printf "UNREGONIZED COMMAND: %s\n" c;
-                loop ffl i
-        in
-        print_endline c;
-        process_command c;
+  get_pred f
 
-    | MonpolyData {tp; ts; db} ->
-      if ts >= !lastts then
-        begin
-          crt_tp := tp;
-          crt_ts := ts;
-          add_index ff tp ts db;
-          NEval.add_last (tp, ts) neval;
-          let cont = process_index ff closed neval tp in
-          lastts := ts;
-          if cont then
-            loop ffl (i + 1)
-          else
-            finish ()
-        end
-      else
-      if !Misc.stop_at_out_of_order_ts then
-        let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
-                                  (last_ts: %s)" (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts) in
-        failwith msg
-      else
-        begin
-          Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
-                          (last_ts: %s)\n%!"
-            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts);
-          loop ffl i
-        end
-    | MonpolyError s -> finish ()
-  in
-  loop ff i
+let split_debug f op =
+  let p2s p = Predicate.get_name p in
+  Printf.printf "Predicate Names: '%s' for formula: '%s' \n" (p2s (get_predicate f)) op
+
+let split_debug2 f1 f2 op =
+  let p2s p = Predicate.get_name p in
+  Printf.printf "Predicate Names: ('%s', '%s') for formula: '%s' \n" (p2s (get_predicate f1)) (p2s (get_predicate f2)) op
 
 
-let monitor_lexbuf lexbuf f =
-  check_log lexbuf (add_ext f) (MFOTL.free_vars f = []) (NEval.empty()) 0
-
-let monitor_string log f =
-  (let lexbuf = Lexing.from_string log in
-   lastts := MFOTL.ts_invalid;
-   crt_tp := -1;
-   crt_ts := MFOTL.ts_invalid;
-   Log.tp := 0;
-   Log.skipped_tps := 0;
-   Log.last := false;
-   monitor_lexbuf lexbuf f;
-   Lexing.flush_input lexbuf;)
-
-let monitor logfile =
-  let lexbuf = Log.log_open logfile in
-  monitor_lexbuf lexbuf
-
-
-let test_filter logfile f =
-  let lexbuf = Log.log_open logfile in
-  let rec loop f i =
-    match Log.get_next_entry lexbuf with
-    | MonpolyData {tp;ts;db;} ->
-      loop f tp
-    | MonpolyError s ->
-      Printf.printf "%s, processed %d time points\n" s (i - 1)
-    | MonpolyCommand {c} ->
-          let process_command c = match c with
-              | "terminate" ->
-                Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
-              | "get_pos"   ->
-                Printf.printf "Current index: %d \n" i;
-                loop f i
-              | _ ->
-                Printf.printf "UNREGONIZED COMMAND: %s\n" c;
-                loop f i
-          in
-          process_command c;
-  in
-  loop f 0
-
-let resume logfile =
-  let (i,last_ts,ff,closed,neval) = unmarshal !resumefile in
-      lastts := last_ts;
-  let lexbuf = Log.log_open logfile in
-  check_log lexbuf ff closed neval i
-
-(* Splitting Stuff *)
-let split_relations f =
+let split_state f =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
   let split rel = 
@@ -3013,10 +2926,10 @@ let split_relations f =
     {elastev = einf.elastev; etree = (split_tree einf.etree); elast = elast; eauxrels = eauxrels }
   in
   let rec split_f = function
-  | ERel           (rel)                                                  -> ERel         (split rel)                                                               
+  | ERel           (rel)                                                  -> print_endline "ERel";       ERel         (split rel)                                                               
   | EPred          (p, comp, inf)                                         -> EPred        (p, comp, (split_info inf (Queue.create())))                                   
   | ENeg           (f1)                                                   -> ENeg         (split_f f1)                              
-  | EAnd           (c, f1, f2, ainf)                                      -> EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf))
+  | EAnd           (c, f1, f2, ainf)                                      -> split_debug2 f1 f2 "AND";    EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf))
   | EOr            (c, f1, f2, ainf)                                      -> EOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf)) 
   | EExists        (c, f1)                                                -> EExists      (c, (split_f f1))
   | EAggreg        (c, f1)                                                -> EAggreg      (c, (split_f f1))
@@ -3024,22 +2937,147 @@ let split_relations f =
   | EAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> EAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM), update_old, update_new, get_result)
   | EPrev          (dt, f1, pinf)                                         -> EPrev        (dt, (split_f f1), pinf) 
   | ENext          (dt, f1, ninf)                                         -> ENext        (dt, (split_f f1), ninf)     
-  | ESinceA        (c2, dt, f1, f2, sainf)                                -> ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf))    
-  | ESince         (c2, dt, f1, f2, sinf)                                 -> ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf))
-  | EOnceA         (dt, f1, oainf)                                        -> EOnceA       (dt, (split_f f1), (split_oainfo oainf))    
-  | EOnceZ         (dt, f1, ozinf)                                        -> EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf))           
-  | EOnce          (dt, f1, oinf)                                         -> EOnce        (dt, (split_f f1), (split_oinfo oinf))   
-  | ENUntil        (c1, dt, f1, f2, uninf)                                -> ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf))                 
+  | ESinceA        (c2, dt, f1, f2, sainf)                                -> split_debug2 f1 f2 "SINCE";  ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf))    
+  | ESince         (c2, dt, f1, f2, sinf)                                 -> split_debug2 f1 f2 "SINCE";  ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf))
+  | EOnceA         (dt, f1, oainf)                                        -> split_debug f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf))    
+  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf))           
+  | EOnce          (dt, f1, oinf)                                         -> split_debug f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf))   
+  | ENUntil        (c1, dt, f1, f2, uninf)                                -> split_debug2 f1 f2 "UNTIL";  ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf))                 
   | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf))            
   | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf))    
   | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf))    
   in
   split_f f
 
-let split dumpfile i lastts ff closed neval =
-  let sf = split_relations ff in
-  let ch = open_out_bin dumpfile in
-  let a,mf = ext_to_m sf neval in
-  let value = (i,lastts,closed,mf,a) in
-  Marshal.to_channel ch value [Marshal.Closures];
-  close_out ch
+let split_and_save dumpfile i lastts ff closed neval =
+  print_extf "\n[split] splitting formula\n" ff;
+  let sf = split_state ff in
+  marshal dumpfile i lastts sf closed neval
+
+(* END SPLITTING STATE *)  
+
+
+(* MONITORING FUNCTION *)
+
+(* The arguments are:
+   lexbuf - the lexer buffer (holds current state of the scanner)
+   ff - the extended MFOTL formula
+   closed - true iff [ff] is a ground formula
+   neval - the queue of no-yet evaluted indexes/entries
+   i - the index of current entry in the log file
+   ([i] may be different from the current time point when
+   filter_empty_tp is enabled)
+*)
+let check_log lexbuf ff closed neval i =
+  let finish () =
+    if Misc.debugging Dbg_perf then
+      Perf.check_log_end i !lastts
+  in
+  let rec loop ffl i =
+    if Misc.debugging Dbg_perf then
+      Perf.check_log i !lastts;
+    let checkParameter p = match p with 
+      | Argument str -> 
+        dumpfile := str;
+        marshal !dumpfile i !lastts ff closed neval
+      | _ -> Printf.printf "No filename specified, continuing with index %d" i;   
+    in
+    let save_and_exit params =  match params with
+    | Some p -> checkParameter p
+    | None -> Printf.printf "No filename specified, continuing with index %d" i;
+    in 
+    match Log.get_next_entry lexbuf with
+    | MonpolyCommand {c; parameters} ->
+        let process_command c = match c with
+            | "terminate" ->
+               Printf.printf "Terminated at index: %d \n" i;
+            | "get_pos"   ->
+                Printf.printf "Current index: %d \n" i;
+                loop ffl i
+            | "save_and_exit" ->  save_and_exit parameters;
+            | "split_state" ->    split_and_save "testfile" i !lastts ff closed neval;
+            | _ ->
+                Printf.printf "UNREGONIZED COMMAND: %s\n" c;
+                loop ffl i
+        in
+        print_endline c;
+        process_command c;
+
+    | MonpolyData {tp; ts; db} ->
+      if ts >= !lastts then
+        begin
+          crt_tp := tp;
+          crt_ts := ts;
+          add_index ff tp ts db;
+          NEval.add_last (tp, ts) neval;
+          let cont = process_index ff closed neval tp in
+          lastts := ts;
+          if cont then
+            loop ffl (i + 1)
+          else
+            finish ()
+        end
+      else
+      if !Misc.stop_at_out_of_order_ts then
+        let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
+                                  (last_ts: %s)" (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts) in
+        failwith msg
+      else
+        begin
+          Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
+                          (last_ts: %s)\n%!"
+            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts);
+          loop ffl i
+        end
+    | MonpolyError s -> finish ()
+  in
+  loop ff i
+
+
+let monitor_lexbuf lexbuf f =
+  check_log lexbuf (add_ext f) (MFOTL.free_vars f = []) (NEval.empty()) 0
+
+let monitor_string log f =
+  (let lexbuf = Lexing.from_string log in
+   lastts := MFOTL.ts_invalid;
+   crt_tp := -1;
+   crt_ts := MFOTL.ts_invalid;
+   Log.tp := 0;
+   Log.skipped_tps := 0;
+   Log.last := false;
+   monitor_lexbuf lexbuf f;
+   Lexing.flush_input lexbuf;)
+
+let monitor logfile =
+  let lexbuf = Log.log_open logfile in
+  monitor_lexbuf lexbuf
+
+
+let test_filter logfile f =
+  let lexbuf = Log.log_open logfile in
+  let rec loop f i =
+    match Log.get_next_entry lexbuf with
+    | MonpolyData {tp;ts;db;} ->
+      loop f tp
+    | MonpolyError s ->
+      Printf.printf "%s, processed %d time points\n" s (i - 1)
+    | MonpolyCommand {c} ->
+          let process_command c = match c with
+              | "terminate" ->
+                Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
+              | "get_pos"   ->
+                Printf.printf "Current index: %d \n" i;
+                loop f i
+              | _ ->
+                Printf.printf "UNREGONIZED COMMAND: %s\n" c;
+                loop f i
+          in
+          process_command c;
+  in
+  loop f 0
+
+let resume logfile =
+  let (i,last_ts,ff,closed,neval) = unmarshal !resumefile in
+      lastts := last_ts;
+  let lexbuf = Log.log_open logfile in
+  check_log lexbuf ff closed neval i
