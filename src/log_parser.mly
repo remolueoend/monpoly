@@ -155,19 +155,18 @@
   (* let parse_error str = () *)
 
 
-let make_split group = match group with
-  | Some g -> ConstraintSet g
+let make_split filename group  = match group with
+  | Some g -> SplitParameters(filename, g)
   | None   -> raise Parsing.Parse_error
-
+  
 let make_group group subgroup = 
   match group with
-    | Some g ->  Some(Helper.add subgroup g)
-    | None   ->  Some(Helper.singleton subgroup)
+    | Some g ->  Some(subgroup::g)
+    | None   ->  Some([subgroup])
 
 let get_2 (_, a) = a
 
-
-let make_subgroup relname values = 
+let make_subgroup relname listTuple = 
   let schema = get_schema relname in 
   (* attr is list of types belonging to list in values *)
   let pname, attr = schema in 
@@ -192,8 +191,16 @@ let make_subgroup relname values =
     )
     l
   in  
-  let cstlists = List.map2 convert_lists attr values in
-  { relname = relname; values = cstlists } 
+  let ls1 = listTuple.left in let ls2 = listTuple.right in 
+  let cstlists1 = List.map2 convert_lists attr ls1 in
+  let cstlists2 = List.map2 convert_lists attr ls2 in
+  let cs_list l acc = 
+      let cs = Helper.empty in
+      (List.fold_right Helper.add l cs)::acc
+  in
+  let cs1 = List.fold_right cs_list cstlists1 [] in
+  let cs2 = List.fold_right cs_list cstlists2 [] in
+  { relname = relname; values = (cs1, cs2) } 
 %}
 
 
@@ -279,14 +286,19 @@ fields:
       |                         { f "fields()"; [] }
 
 parameters:
-      | STR                     { Argument $1  }
-      | LCB group RCB           { make_split $2}
+      | STR                     { Argument   $1  }
+      | STR LCB group RCB       { make_split $1 $3}
 group:
       | subgroup group          { make_group $2 $1 } 
       |                         { None }
     
 subgroup:
-      | LCB STR COM LPA groupedTuple RPA RCB  { make_subgroup $2 $5 }    
-groupedTuple:
-      | tuple groupedTuple      { $1::$2  }
-      |                         { [] }
+      | LCB STR COM constraintTuple RCB { make_subgroup $2 $4 }
+
+constraintTuple:
+      | LPA constraintList RPA COM LPA constraintList RPA     { { left = $2; right = $6}  }
+constraintList:
+      | constraintSet constraintList      { $1::$2  }
+      |                                   { [] }
+constraintSet:
+      | LPA fields RPA                    { $2}

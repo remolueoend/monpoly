@@ -2,10 +2,8 @@ open MFOTL
 open Predicate
 open Db
 
-type sconstraint = { relname: string; values: Predicate.cst list list }
-
 module Constraint_Set = Set.Make (
-  struct type t = sconstraint
+  struct type t = cst
    let compare = Pervasives.compare
   end)
 
@@ -13,8 +11,16 @@ include Constraint_Set
 
 type constraintSet = Constraint_Set.t
 
+type listTuple     = { left: string list list; right: string list list }
+
+type sconstraint   = { relname: string; values: (constraintSet list * constraintSet list)}
+
+type constraintRelation = sconstraint list
+
+type splitParameters = (string * constraintRelation)
+
 type commandParameter = 
-    | ConstraintSet of constraintSet
+    | SplitParameters of splitParameters
     | Argument of string
 
 type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
@@ -34,6 +40,15 @@ type monpoly_feed =
     | MonpolyData    of monpolyData
     | MonpolyError   of string
 
+(*let split_constraints cs l = 
+    let get_e (a, b) = if l then a else b in
+    map (fun c -> { relname = c.relname; values = get_e c.values }) cs*)
+
+let empty = Constraint_Set.empty
+
+let map f set =
+    Constraint_Set.map f set
+    
 let is_empty set =
     Constraint_Set.is_empty set
 

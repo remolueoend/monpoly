@@ -7,7 +7,7 @@
    > get_pos <
    @1308477609 approve (163)
                publish (169) (150)
-   > split_state {{approve, ((1,3))} {publish, ((2, 4))} {publish, ((2, 4))}} <
+   > split_state filename {{approve,((1,3)),((1,3))}} <
    @1308477610 approve (150)
    @1308600000 approve (169)
    > save_and_exit testfile <

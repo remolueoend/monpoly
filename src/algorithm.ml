@@ -2752,25 +2752,25 @@ let split_debug2 f1 f2 op =
   let p2s p = Predicate.get_name p in
   Printf.printf "Predicate Names: (%s %s) for formula: '%s' \n" (list_to_string (get_predicate f1)) (list_to_string (get_predicate f2)) op
 
-
-let split_state f =
+let split_state f cs =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
+
   let split rel = 
     rel
   in
-  let split_info inf nq = 
+  let split_info inf nq =
     Queue.iter (
      fun e -> let i, ts, r  = e in
       Queue.add (i, ts, (split r)) nq
       ) inf;
     nq
-  in  
+  in
   let split_ainfo ainf =
-    let urel = match ainf.arel with 
+    let urel = match ainf.arel with
     | Some r -> Some (split r)
     | None -> None
-    in 
+    in
     { arel = urel; }
   in
   let split_agg   agg =
@@ -2781,7 +2781,7 @@ let split_state f =
        ) agg.other_rels;
     {tw_rels = agg.tw_rels; other_rels = nq; mset = agg.mset; hres = agg.hres }
   in
-  let split_aggMM agg = 
+  let split_aggMM agg =
     let nq = Queue.create() in
     Queue.iter (
       fun e -> let ts, r  = e in
@@ -2800,8 +2800,8 @@ let split_state f =
       Mqueue.add (ts, (split r)) nq
       ) sainf.saauxrels;
 
-    {sres = (split sainf.sres); sarel2 = sarel2; saauxrels = nq} 
-  in  
+    {sres = (split sainf.sres); sarel2 = sarel2; saauxrels = nq}
+  in
   let split_sinfo sinf =
     let srel2 = match sinf.srel2 with
       | Some r -> Some (split r)
@@ -2813,22 +2813,22 @@ let split_state f =
       Mqueue.add (ts, (split r)) nq
       ) sinf.sauxrels;
 
-    {srel2 = (split srel2); sauxrels = nq} 
+    {srel2 = (split srel2); sauxrels = nq}
   in
   let split_oainfo oainf =
     { ores = (split oainf.ores); oaauxrels = oainf.oaauxrels }
   in
   let split_ozinfo ozinf =
-    let split_res n = 
+    let split_res n =
       match n with
       | Some r -> Some (split r)
-      | None -> None 
-    in  
-    let split_tree tree = 
+      | None -> None
+    in
+    let split_tree tree =
       let rec split_t t = match t with
         | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
         | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree  
+      in split_t tree
     in
    let ozauxrels = Dllist.empty() in
       Dllist.iter (
@@ -2840,16 +2840,16 @@ let split_state f =
     {oztree = (split_tree ozinf.oztree); ozlast = ozlast; ozauxrels = ozauxrels }
   in
   let split_oinfo oinf =
-    let split_res n = 
+    let split_res n =
       match n with
       | Some r -> Some (split r)
-      | None -> None 
-    in  
-    let split_tree tree = 
+      | None -> None
+    in
+    let split_tree tree =
       let rec split_t t = match t with
         | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
         | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree  
+      in split_t tree
     in
     let oauxrels = Dllist.empty() in
       Dllist.iter (
@@ -2861,27 +2861,27 @@ let split_state f =
     {otree = (split_tree oinf.otree); olast = olast; oauxrels = oauxrels }
   in
   let split_uninfo uninf =
-    let listrel l = 
+    let listrel l =
       let nl = Dllist.empty() in
       Dllist.iter (fun e ->
         let i, ts, r = e in
         Dllist.add_last (i, ts, (split r)) nl
       ) l;
       nl
-    in  
+    in
     { last1 = uninf.last1; last2 = uninf.last2; listrel1 = (listrel uninf.listrel1);  listrel2 = (listrel uninf.listrel2) }
   in
   let split_uinfo uinf =
     (* Helper function for raux and saux fields, creates split Sk.dllist *)
-    let sklist l = 
+    let sklist l =
       let nl = Sk.empty() in
       Sk.iter (fun e ->
         let i, r = e in
         Sk.add_last (i, (split r)) nl
       ) l;
       nl
-    in  
-    let raux = 
+    in
+    let raux =
       let nl = Sj.empty() in
       Sj.iter (fun e ->
         let (i, ts, l) = e in
@@ -2893,20 +2893,20 @@ let split_state f =
       | Some r  -> Some (split r)
       | None -> None
     in
-    { ulast = uinf.ulast; ufirst = uinf.ufirst; ures = (split uinf.ures); 
+    { ulast = uinf.ulast; ufirst = uinf.ufirst; ures = (split uinf.ures);
       urel2 = urel2; raux = raux; saux = (sklist uinf.saux) }
   in
   let split_ezinfo ezinf =
-    let split_res n = 
+    let split_res n =
       match n with
       | Some r -> Some (split r)
-      | None -> None 
-    in  
-    let split_tree tree = 
+      | None -> None
+    in
+    let split_tree tree =
       let rec split_t t = match t with
         | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
         | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree  
+      in split_t tree
     in
     let ezauxrels = Dllist.empty() in
       Dllist.iter (
@@ -2918,11 +2918,11 @@ let split_state f =
     {ezlastev = ezinf.ezlastev; eztree = (split_tree ezinf.eztree); ezlast = ezlast; ezauxrels = ezauxrels }
   in
   let split_einfo einf =
-    let split_tree tree = 
+    let split_tree tree =
       let rec split_t t = match t with
         | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split ln.res)}
         | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree  
+      in split_t tree
     in
     let eauxrels = Dllist.empty() in
       Dllist.iter (
@@ -2947,9 +2947,9 @@ let split_state f =
   | ENext          (dt, f1, ninf)                                         -> ENext        (dt, (split_f f1), ninf)     
   | ESinceA        (c2, dt, f1, f2, sainf)                                -> split_debug2 f1 f2 "SINCE";  ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf))    
   | ESince         (c2, dt, f1, f2, sinf)                                 -> split_debug2 f1 f2 "SINCE";  ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf))
-  | EOnceA         (dt, f1, oainf)                                        -> split_debug f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf))    
-  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf))           
-  | EOnce          (dt, f1, oinf)                                         -> split_debug f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf))   
+  | EOnceA         (dt, f1, oainf)                                        -> split_debug  f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf))    
+  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug  f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf))           
+  | EOnce          (dt, f1, oinf)                                         -> split_debug  f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf))   
   | ENUntil        (c1, dt, f1, f2, uninf)                                -> split_debug2 f1 f2 "UNTIL";  ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf))                 
   | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf))            
   | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf))    
@@ -2957,15 +2957,28 @@ let split_state f =
   in
   split_f f
 
-let split_and_save dumpfile i lastts ff closed neval =
+let split_and_save cs dumpfile i lastts ff closed neval =
   print_extf "\n[split] splitting formula\n" ff;
-  let sf = split_state ff in
+  let sf = split_state ff cs in
+  print_extf "\n[split] splitting formula\n" sf;
   marshal dumpfile i lastts sf closed neval
 
 (* END SPLITTING STATE *)  
 
 
 (* MONITORING FUNCTION *)
+
+let checkExitParam p = match p with 
+  | Argument str -> 
+    dumpfile := str;
+    true
+  | _ -> false
+
+let checkSplitParam p = match p with 
+  | SplitParameters (str, cs) -> 
+    dumpfile := str;
+    true
+  | _ -> false
 
 (* The arguments are:
    lexbuf - the lexer buffer (holds current state of the scanner)
@@ -2984,16 +2997,15 @@ let check_log lexbuf ff closed neval i =
   let rec loop ffl i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
-    let checkParameter p = match p with 
-      | Argument str -> 
-        dumpfile := str;
-        marshal !dumpfile i !lastts ff closed neval
-      | _ -> Printf.printf "No filename specified, continuing with index %d" i;   
+    let save_and_exit c params =  match params with
+    | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
     in
-    let save_and_exit params =  match params with
-    | Some p -> checkParameter p
-    | None -> Printf.printf "No filename specified, continuing with index %d" i;
+    let split_state   c params = match params with
+    | Some p -> if (checkSplitParam p = true) then split_and_save  p !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
     in 
+
     match Log.get_next_entry lexbuf with
     | MonpolyCommand {c; parameters} ->
         let process_command c = match c with
@@ -3002,8 +3014,8 @@ let check_log lexbuf ff closed neval i =
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
                 loop ffl i
-            | "save_and_exit" ->  save_and_exit parameters;
-            | "split_state" ->    split_and_save "testfile" i !lastts ff closed neval;
+            | "save_and_exit" ->  save_and_exit c parameters;
+            | "split_state" ->    split_state   c parameters;
             | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
                 loop ffl i

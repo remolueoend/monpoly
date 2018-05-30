@@ -2,17 +2,24 @@ open MFOTL
 open Predicate
 open Db
 
-type sconstraint = { relname: string; values: Predicate.cst list list }
-
 type constraintSet
 
+type listTuple     = { left: string list list; right: string list list }
+
+type sconstraint   = { relname: string; values: (constraintSet list * constraintSet list)}
+
+type constraintRelation = sconstraint list
+
+val empty: constraintSet
 val is_empty: constraintSet -> bool
-val add: sconstraint -> constraintSet -> constraintSet
-val singleton: sconstraint -> constraintSet
+val add: cst -> constraintSet -> constraintSet
+val singleton: cst -> constraintSet
+
+type splitParameters = (string * constraintRelation)
 
 type commandParameter = 
-    | ConstraintSet of constraintSet
-    | Argument of string
+    | SplitParameters of splitParameters
+    | Argument        of string
 
 type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
 type commandTuple = { c: string;  parameters: commandParameter option; }
