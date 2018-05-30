@@ -5,6 +5,6 @@
    @1307955600 approve (Merlin,163)
                publish (Alice,160)
 	           mgr_F (Merlin,Charlie)
-    > split_state filename {{approve, ((Mallory)(1,3)),((Merlin)(7,90))}} <
    @1308477599 approve (Merlin,187)
                publish (Bob,163) (Alice,163) (Charlie,163) (Charlie,152)
+    > split_state filename {{approve, ((Mallory)(1,163)),((Merlin)(7,90))}{publish, ((Alice, Bob)(163,3)),((Merlin)(7,90))}} <

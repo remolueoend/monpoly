@@ -2752,76 +2752,105 @@ let split_debug2 f1 f2 op =
   let p2s p = Predicate.get_name p in
   Printf.printf "Predicate Names: (%s %s) for formula: '%s' \n" (list_to_string (get_predicate f1)) (list_to_string (get_predicate f2)) op
 
-let split_state f cs =
+let get_1 (a,_) = a
+let get_2 (_,b) = b
+
+let comb_preds preds1 preds2 = List.append preds1 preds2
+
+let split_state f cs l  =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
 
-  let split rel = 
-    rel
+  let split rel preds = 
+    let filter_entries cslist tuples = 
+      let i = ref 0 in
+      let iterTuple (t: cst) =
+        let cs = List.nth cslist !i in
+        i := !i + 1;
+        let res = Helper.find_opt t cs in 
+        match res with
+        | Some r -> true
+        | None   -> false
+      in
+      let iterTuples (t : cst list) =
+        i := 0; 
+        List.exists iterTuple t
+      in
+      Relation.filter iterTuples tuples
+    in
+    let rcs = List.filter (fun a -> List.exists (fun b -> b = a.relname ) preds ) cs in
+    let buildFilterList sconst acc = 
+      let constTuple = sconst.values in
+      let const = if l then get_1 constTuple else get_2 constTuple in
+      const::acc
+    in   
+    let filterLists = List.fold_right buildFilterList rcs [] in
+    let nrel = List.fold_right filter_entries filterLists rel in
+    nrel
   in
-  let split_info inf nq =
+  let split_info inf nq p =
     Queue.iter (
      fun e -> let i, ts, r  = e in
-      Queue.add (i, ts, (split r)) nq
+      Queue.add (i, ts, (split r p)) nq
       ) inf;
     nq
   in
-  let split_ainfo ainf =
+  let split_ainfo ainf pred =
     let urel = match ainf.arel with
-    | Some r -> Some (split r)
+    | Some r -> Some (split r pred)
     | None -> None
     in
     { arel = urel; }
   in
-  let split_agg   agg =
+  let split_agg   agg pred =
     let nq = Queue.create() in
     Queue.iter (
       fun e -> let ts, r  = e in
-       Queue.add (ts, (split r)) nq
+       Queue.add (ts, (split r pred)) nq
        ) agg.other_rels;
     {tw_rels = agg.tw_rels; other_rels = nq; mset = agg.mset; hres = agg.hres }
   in
-  let split_aggMM agg =
+  let split_aggMM agg pred =
     let nq = Queue.create() in
     Queue.iter (
       fun e -> let ts, r  = e in
-       Queue.add (ts, (split r)) nq
+       Queue.add (ts, (split r pred)) nq
        ) agg.non_tw_rels;
     {non_tw_rels = nq; tbl = agg.tbl }
   in
-  let split_sainfo sainf =
+  let split_sainfo sainf pred =
     let sarel2 = match sainf.sarel2 with
-      | Some r -> Some (split r)
+      | Some r -> Some (split r pred)
       | None -> None
     in
     let nq = Mqueue.create() in
     Mqueue.iter (
       fun e -> let ts, r  = e in
-      Mqueue.add (ts, (split r)) nq
+      Mqueue.add (ts, (split r pred)) nq
       ) sainf.saauxrels;
 
-    {sres = (split sainf.sres); sarel2 = sarel2; saauxrels = nq}
+    {sres = (split sainf.sres pred); sarel2 = sarel2; saauxrels = nq}
   in
-  let split_sinfo sinf =
+  let split_sinfo sinf pred =
     let srel2 = match sinf.srel2 with
-      | Some r -> Some (split r)
+      | Some r -> Some (split r pred)
       | None -> None
     in
     let nq = Mqueue.create() in
     Mqueue.iter (
       fun e -> let ts, r  = e in
-      Mqueue.add (ts, (split r)) nq
+      Mqueue.add (ts, (split r pred)) nq
       ) sinf.sauxrels;
 
-    {srel2 = (split srel2); sauxrels = nq}
+    {srel2 = srel2; sauxrels = nq}
   in
-  let split_oainfo oainf =
-    { ores = (split oainf.ores); oaauxrels = oainf.oaauxrels }
+  let split_oainfo oainf pred =
+    { ores = (split oainf.ores pred); oaauxrels = oainf.oaauxrels }
   in
-  let split_ozinfo ozinf =
+  let split_ozinfo ozinf pred =
     let split_res n =
       match n with
-      | Some r -> Some (split r)
+      | Some r -> Some (split r pred)
       | None -> None
     in
     let split_tree tree =
@@ -2833,16 +2862,16 @@ let split_state f cs =
    let ozauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r)) ozauxrels
+        Dllist.add_last (i, ts, (split r pred)) ozauxrels
     ) ozinf.ozauxrels;
     (* TODO(FB) Is this sufficient? *)
     let ozlast = Dllist.get_first_cell ozauxrels in
     {oztree = (split_tree ozinf.oztree); ozlast = ozlast; ozauxrels = ozauxrels }
   in
-  let split_oinfo oinf =
+  let split_oinfo oinf pred =
     let split_res n =
       match n with
-      | Some r -> Some (split r)
+      | Some r -> Some (split r pred)
       | None -> None
     in
     let split_tree tree =
@@ -2854,30 +2883,30 @@ let split_state f cs =
     let oauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r)) oauxrels
+        Dllist.add_last (ts, (split r pred)) oauxrels
       ) oinf.oauxrels;
     (* TODO(FB) Is this sufficient? *)
     let olast = Dllist.get_first_cell oauxrels in
     {otree = (split_tree oinf.otree); olast = olast; oauxrels = oauxrels }
   in
-  let split_uninfo uninf =
+  let split_uninfo uninf pred =
     let listrel l =
       let nl = Dllist.empty() in
       Dllist.iter (fun e ->
         let i, ts, r = e in
-        Dllist.add_last (i, ts, (split r)) nl
+        Dllist.add_last (i, ts, (split r pred)) nl
       ) l;
       nl
     in
     { last1 = uninf.last1; last2 = uninf.last2; listrel1 = (listrel uninf.listrel1);  listrel2 = (listrel uninf.listrel2) }
   in
-  let split_uinfo uinf =
+  let split_uinfo uinf pred =
     (* Helper function for raux and saux fields, creates split Sk.dllist *)
     let sklist l =
       let nl = Sk.empty() in
       Sk.iter (fun e ->
         let i, r = e in
-        Sk.add_last (i, (split r)) nl
+        Sk.add_last (i, (split r pred)) nl
       ) l;
       nl
     in
@@ -2890,16 +2919,16 @@ let split_state f cs =
       nl
     in
     let urel2 = match uinf.urel2 with
-      | Some r  -> Some (split r)
+      | Some r  -> Some (split r pred)
       | None -> None
     in
-    { ulast = uinf.ulast; ufirst = uinf.ufirst; ures = (split uinf.ures);
+    { ulast = uinf.ulast; ufirst = uinf.ufirst; ures = (split uinf.ures pred);
       urel2 = urel2; raux = raux; saux = (sklist uinf.saux) }
   in
-  let split_ezinfo ezinf =
+  let split_ezinfo ezinf pred =
     let split_res n =
       match n with
-      | Some r -> Some (split r)
+      | Some r -> Some (split r pred)
       | None -> None
     in
     let split_tree tree =
@@ -2911,55 +2940,63 @@ let split_state f cs =
     let ezauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r)) ezauxrels
+        Dllist.add_last (i, ts, (split r pred)) ezauxrels
     ) ezinf.ezauxrels;
     (* TODO(FB) Is this sufficient? *)
     let ezlast = Dllist.get_first_cell ezauxrels in
     {ezlastev = ezinf.ezlastev; eztree = (split_tree ezinf.eztree); ezlast = ezlast; ezauxrels = ezauxrels }
   in
-  let split_einfo einf =
+  let split_einfo einf pred =
+    let split_res n =
+      match n with
+      | Some r -> Some (split r pred)
+      | None -> None
+    in
     let split_tree tree =
       let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split ln.res)}
+        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
         | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
       in split_t tree
     in
     let eauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r)) eauxrels
+        Dllist.add_last (ts, (split r pred)) eauxrels
       ) einf.eauxrels;
     (* TODO(FB) Is this sufficient? *)
     let elast = Dllist.get_first_cell eauxrels in
     {elastev = einf.elastev; etree = (split_tree einf.etree); elast = elast; eauxrels = eauxrels }
   in
+  let p1 f1 = get_predicate f1 in
+  let p2 f1 f2 = comb_preds (p1 f1) (get_predicate f2) in
   let rec split_f = function
-  | ERel           (rel)                                                  -> print_endline "ERel";       ERel         (split rel)                                                               
-  | EPred          (p, comp, inf)                                         -> EPred        (p, comp, (split_info inf (Queue.create())))                                   
-  | ENeg           (f1)                                                   -> ENeg         (split_f f1)                              
-  | EAnd           (c, f1, f2, ainf)                                      -> split_debug2 f1 f2 "AND";    EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf))
-  | EOr            (c, f1, f2, ainf)                                      -> EOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf)) 
+  (* Don't think ERel is relevant *)
+  | ERel           (rel)                                                  -> ERel         (rel)                                                           
+  | EPred          (p, comp, inf)                                         -> EPred        (p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))                                   
+  | ENeg           (f1)                                                   -> ENeg         (split_f f1)                             
+  | EAnd           (c, f1, f2, ainf)                                      -> split_debug2 f1 f2 "AND";  EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2)))
+  | EOr            (c, f1, f2, ainf)                                      -> EOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2))) 
   | EExists        (c, f1)                                                -> EExists      (c, (split_f f1))
   | EAggreg        (c, f1)                                                -> EAggreg      (c, (split_f f1))
-  | EAggOnce       (f1, dt, agg, update_old, update_new, get_result)      -> EAggOnce     ((split_f f1), dt, (split_agg agg), update_old, update_new, get_result)  
-  | EAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> EAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM), update_old, update_new, get_result)
+  | EAggOnce       (f1, dt, agg, update_old, update_new, get_result)      -> EAggOnce     ((split_f f1), dt, (split_agg agg (p1 f1)), update_old, update_new, get_result)  
+  | EAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> EAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM (p1 f1)), update_old, update_new, get_result)
   | EPrev          (dt, f1, pinf)                                         -> EPrev        (dt, (split_f f1), pinf) 
   | ENext          (dt, f1, ninf)                                         -> ENext        (dt, (split_f f1), ninf)     
-  | ESinceA        (c2, dt, f1, f2, sainf)                                -> split_debug2 f1 f2 "SINCE";  ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf))    
-  | ESince         (c2, dt, f1, f2, sinf)                                 -> split_debug2 f1 f2 "SINCE";  ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf))
-  | EOnceA         (dt, f1, oainf)                                        -> split_debug  f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf))    
-  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug  f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf))           
-  | EOnce          (dt, f1, oinf)                                         -> split_debug  f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf))   
-  | ENUntil        (c1, dt, f1, f2, uninf)                                -> split_debug2 f1 f2 "UNTIL";  ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf))                 
-  | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf))            
-  | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf))    
-  | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf))    
+  | ESinceA        (c2, dt, f1, f2, sainf)                                -> split_debug2 f1 f2 "SINCE";  ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf (p2 f1 f2)))    
+  | ESince         (c2, dt, f1, f2, sinf)                                 -> split_debug2 f1 f2 "SINCE";  ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf (p2 f1 f2)))
+  | EOnceA         (dt, f1, oainf)                                        -> split_debug  f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf (p1 f1)))    
+  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug  f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf (p1 f1)))           
+  | EOnce          (dt, f1, oinf)                                         -> split_debug  f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf (p1 f1)))   
+  | ENUntil        (c1, dt, f1, f2, uninf)                                -> split_debug2 f1 f2 "UNTIL";  ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf (p2 f1 f2)))                 
+  | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf (p2 f1 f2)))            
+  | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf (p1 f1)))    
+  | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf (p1 f1)))    
   in
   split_f f
 
-let split_and_save cs dumpfile i lastts ff closed neval =
+let split_and_save sconsts dumpfile i lastts ff closed neval =
   print_extf "\n[split] splitting formula\n" ff;
-  let sf = split_state ff cs in
+  let sf = split_state ff sconsts true in
   print_extf "\n[split] splitting formula\n" sf;
   marshal dumpfile i lastts sf closed neval
 
@@ -3001,8 +3038,12 @@ let check_log lexbuf ff closed neval i =
     | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
     in
+    let getConstraints p = match p with 
+    (* Other case already handle by check split param *)
+    | SplitParameters (str, cs) -> cs
+     in
     let split_state   c params = match params with
-    | Some p -> if (checkSplitParam p = true) then split_and_save  p !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
     in 
 

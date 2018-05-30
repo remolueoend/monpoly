@@ -14,6 +14,7 @@ val empty: constraintSet
 val is_empty: constraintSet -> bool
 val add: cst -> constraintSet -> constraintSet
 val singleton: cst -> constraintSet
+val find_opt: cst -> constraintSet -> cst option
 
 type splitParameters = (string * constraintRelation)
 

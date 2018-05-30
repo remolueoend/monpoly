@@ -57,3 +57,6 @@ let add c set =
     
 let singleton c =
     Constraint_Set.singleton c
+
+let find_opt e set =
+    Constraint_Set.find_opt e set

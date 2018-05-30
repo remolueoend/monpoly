@@ -50,7 +50,7 @@ open MFOTL
 
 
 
-type tuple
+type tuple = cst list
   (** Tuples are currently implemented as lists of constants
       (see {!type:Predicate.cst}). *)
 
