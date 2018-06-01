@@ -7,6 +7,6 @@
 	           mgr_F (Merlin,Charlie)
    @1308477599 approve (Merlin,187)
                publish (Bob,163) (Alice,163) (Charlie,163) (Charlie,152)
-    > split_state (a:string)(r:int)(m:string)   Alice,5,Mallory (1,2,3)
-                                                Bob,15,Merlin (4,5,6)
+    > split_state (a:string)(r:int)(m:string)   Alice,152,Mallory (0)
+                                                Bob,163,Merlin    (1)
     <

@@ -16,7 +16,7 @@ type constraintSet = Constraint_Set.t
 
 type valueTuple = (string list * int list)
 
-type sconstraint   = { values: constraintSet; partitions: int list}
+type sconstraint   = { values: cst list; partitions: int list}
 
 type constraintRelation = sconstraint list
 
@@ -74,3 +74,5 @@ let singleton c =
 
 let find_opt e set =
     Constraint_Set.find_opt e set
+
+    

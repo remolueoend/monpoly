@@ -2745,10 +2745,21 @@ let get_predicate f =
 let get_predicate2 f1 f2 =
   Misc.union (get_predicate f1) (get_predicate f2)
 
-  
 let list_to_string l =
   let str = ref "" in
   let append s = str := !str ^ s ^ ", " in
+  List.iter (fun s -> append s ) l;
+  !str
+
+let int_list_to_string l =
+  let str = ref "" in
+  let append s = str := !str ^ (string_of_int s) ^ ", " in
+  List.iter (fun s -> append s ) l;
+  !str
+
+let pred_list_to_string l =
+  let str = ref "" in
+  let append s = str := !str ^ (Predicate.string_of_cst false s) ^ ", " in
   List.iter (fun s -> append s ) l;
   !str
 
@@ -2763,11 +2774,38 @@ let get_2 (_,b) = b
 
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
+let check_tuple t vl mapping =
+  (* Tuple list should always be greater than value list *)
+  let eval = List.map2 (fun e m -> ((List.nth t m) = e)) vl mapping in
+  List.fold_right (fun a agg -> (a || agg)) eval false
+
 let split_state f cs p  =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
-
+  let keys = cs.keys in
   let split rel preds = 
+    (* determine positions of relation column keys in cs.keys *)
+    let pos = List.map (fun k -> try Misc.get_pos k preds with e -> -1 ) keys in
+    Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string keys);
+    print_endline (int_list_to_string pos);
+    let pos = List.filter (fun e -> e >= 0) pos in
+    print_endline (int_list_to_string pos);
+    let mapping t = List.map (fun e -> List.nth t e) pos in
+    Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string keys);
+    let len = List.length preds in 
+    (* create complement of position array *)
+    let rec remove_pos l i = 
+     if i > len then l else
+     if List.exists (fun e -> e = i) pos then remove_pos l (i+1) else remove_pos (i::l) (i+1)
+    in  
+    (* remove columns listed in sorted complement from all contraint value lists*)
+    let remove_pos l = Misc.remove_positions (List.sort Pervasives.compare (remove_pos [] 0)) l in
+    let trimmed_constraint_list = List.map (fun t -> { partitions = t.partitions; values = (remove_pos t.values)}) cs.constraints in     
+    let cs = List.nth trimmed_constraint_list 0 in
+    Printf.printf "Trimmed constraints: %s; Partition: %d \n" (pred_list_to_string cs.values) p;
+    let mapping = List.map (fun k -> Misc.get_pos k preds) (remove_pos keys) in
+    Relation.filter (fun t -> check_tuple t cs.values mapping) rel
+   
     (*let filter_entries cslist tuples = 
       let i = ref 0 in
       let iterTuple (t: cst) =
@@ -2793,8 +2831,23 @@ let split_state f cs p  =
     let filterLists = List.fold_right buildFilterList rcs [] in
     let nrel = List.fold_right filter_entries filterLists rel in
     nrel*)
-    rel
   in
+  (*helper function to split tree states *)
+  let split_tree tree pred =
+    let split_res n =
+      match n with
+      | Some r -> Some (split r pred)
+      | None -> None
+    in
+    let handle_node n = { l = n.l; r = n.r; res = (split_res n.res)} in
+    let rec split_t t = match t with
+    | LNode ln      -> LNode (handle_node ln)
+    | INode (a,l,r) -> INode ((handle_node a), (split_t l), (split_t r))
+    in 
+    split_t tree
+  in
+
+
   let split_info inf nq p =
     Queue.iter (
      fun e -> let i, ts, r  = e in
@@ -2855,46 +2908,24 @@ let split_state f cs p  =
     { ores = (split oainf.ores pred); oaauxrels = oainf.oaauxrels }
   in
   let split_ozinfo ozinf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
    let ozauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
         Dllist.add_last (i, ts, (split r pred)) ozauxrels
     ) ozinf.ozauxrels;
     (* TODO(FB) Is this sufficient? *)
-    let ozlast = Dllist.get_first_cell ozauxrels in
-    {oztree = (split_tree ozinf.oztree); ozlast = ozlast; ozauxrels = ozauxrels }
+    let ozlast = Dllist.get_last_cell ozauxrels in
+    {oztree = (split_tree ozinf.oztree pred); ozlast = ozlast; ozauxrels = ozauxrels }
   in
   let split_oinfo oinf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
     let oauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
         Dllist.add_last (ts, (split r pred)) oauxrels
       ) oinf.oauxrels;
     (* TODO(FB) Is this sufficient? *)
-    let olast = Dllist.get_first_cell oauxrels in
-    {otree = (split_tree oinf.otree); olast = olast; oauxrels = oauxrels }
+    let olast = Dllist.get_last_cell oauxrels in
+    {otree = (split_tree oinf.otree pred); olast = olast; oauxrels = oauxrels }
   in
   let split_uninfo uninf pred =
     let listrel l =
@@ -2933,18 +2964,6 @@ let split_state f cs p  =
       urel2 = urel2; raux = raux; saux = (sklist uinf.saux) }
   in
   let split_ezinfo ezinf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        (*TODO*)
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
     let ezauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
@@ -2952,20 +2971,9 @@ let split_state f cs p  =
     ) ezinf.ezauxrels;
     (* TODO(FB) Is this sufficient? *)
     let ezlast = Dllist.get_first_cell ezauxrels in
-    {ezlastev = ezinf.ezlastev; eztree = (split_tree ezinf.eztree); ezlast = ezlast; ezauxrels = ezauxrels }
+    {ezlastev = ezinf.ezlastev; eztree = (split_tree ezinf.eztree pred); ezlast = ezlast; ezauxrels = ezauxrels }
   in
   let split_einfo einf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
     let eauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
@@ -2973,7 +2981,7 @@ let split_state f cs p  =
       ) einf.eauxrels;
     (* TODO(FB) Is this sufficient? *)
     let elast = Dllist.get_first_cell eauxrels in
-    {elastev = einf.elastev; etree = (split_tree einf.etree); elast = elast; eauxrels = eauxrels }
+    {elastev = einf.elastev; etree = (split_tree einf.etree pred); elast = elast; eauxrels = eauxrels }
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
@@ -3002,11 +3010,20 @@ let split_state f cs p  =
   in
   split_f f
 
-let split_and_save sconsts dumpfile i lastts ff closed neval =
-  print_extf "\n[split] splitting formula\n" ff;
-  let sf = split_state ff sconsts true in
-  print_extf "\n[split] splitting formula\n" sf;
-  marshal dumpfile i lastts sf closed neval
+let split_and_save sconsts dumpfile i lastts ff closed neval numparts=
+  print_extf "\n[split] Original formula\n" ff;
+  let filter_constraintsets p = 
+    let csrels = sconsts.constraints in
+    let constraints = List.filter (fun csrel -> List.exists (fun i -> i = p) csrel.partitions) csrels in
+    { keys = sconsts.keys; constraints = constraints } 
+  in
+  let nf i = split_state ff (filter_constraintsets i) i in
+  let rec create_partitions formulas i =
+      print_endline (string_of_int i);
+      if i+1 < numparts then create_partitions ((nf (i))::formulas) (i+1)
+      else ((nf i)::formulas)
+  in 
+  List.iter (fun f ->  print_extf "\n[split] split formula\n" f; marshal dumpfile i lastts f closed neval) (create_partitions [] 0)
 
 (* END SPLITTING STATE *)  
 
@@ -3048,10 +3065,10 @@ let check_log lexbuf ff closed neval i =
     in
     let getConstraints p = match p with 
     (* Other case already handle by check split param *)
-    | SplitParameters sp -> sp.constraints
+    | SplitParameters sp -> sp
      in
     let split_state   c params = match params with
-    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval 2 else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
     in 
 
