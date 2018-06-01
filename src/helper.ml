@@ -1,5 +1,6 @@
 open MFOTL
 open Predicate
+open Log_parser
 open Db
 
 exception Type_error of string
@@ -13,13 +14,13 @@ include Constraint_Set
 
 type constraintSet = Constraint_Set.t
 
-type listTuple     = { left: string list list; right: string list list }
+type valueTuple = (string list * int list)
 
-type sconstraint   = { relname: string; values: (constraintSet list * constraintSet list)}
+type sconstraint   = { values: constraintSet; partitions: int list}
 
 type constraintRelation = sconstraint list
 
-type splitParameters = (string * constraintRelation)
+type splitParameters = {keys: string list; constraints: constraintRelation}
 
 type commandParameter = 
     | SplitParameters of splitParameters
@@ -33,9 +34,8 @@ type parser_feed =
     | DataTuple    of dataTuple
     | ErrorTuple   of string
 
-type monpolyData    = { tp: int; ts: MFOTL.timestamp; db: Db.db; }
-type monpolyCommand = { c: string; parameters: commandParameter option}
-
+type monpolyData    = { tp: int; ts: MFOTL.timestamp; db: Db.db;       }
+type monpolyCommand = { c: string; parameters: commandParameter option }
 
 type monpoly_feed =
     | MonpolyCommand of commandTuple
@@ -43,6 +43,7 @@ type monpoly_feed =
     | MonpolyError   of string
 
 (*let split_constraints cs l = 
+
     let get_e (a, b) = if l then a else b in
     map (fun c -> { relname = c.relname; values = get_e c.values }) cs*)
 

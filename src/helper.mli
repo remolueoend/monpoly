@@ -4,11 +4,14 @@ open Db
 
 type constraintSet
 
-type listTuple     = { left: string list list; right: string list list }
+type valueTuple = (string list * int list)
 
-type sconstraint   = { relname: string; values: (constraintSet list * constraintSet list)}
+type sconstraint   = { values: constraintSet; partitions: int list}
 
 type constraintRelation = sconstraint list
+
+type splitParameters = {keys: string list; constraints: constraintRelation}
+
 
 val empty: constraintSet
 val is_empty: constraintSet -> bool
@@ -19,8 +22,6 @@ val find_opt: cst -> constraintSet -> cst option
 (* Enables using the compare function in EExists to project away unwanted free vars *)
 val pvars_to_rel: string list -> Relation.relation
 val rel_to_pvars: Relation.relation -> string list
-
-type splitParameters = (string * constraintRelation)
 
 type commandParameter = 
     | SplitParameters of splitParameters

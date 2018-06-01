@@ -150,9 +150,6 @@ let log_open logfile =
   in
   Lexing.from_channel ic
 
-
-
-
 let update lexbuf =
   if Misc.debugging Dbg_log then
     Printf.eprintf "[Log.update] curr=%d\n%!" lexbuf.lex_curr_pos;

@@ -155,8 +155,34 @@
   (* let parse_error str = () *)
 
 
-let make_split filename group  = match group with
-  | Some g -> SplitParameters(filename, g)
+let get_2 (_, a) = a
+
+let make_split kwt group  = match group with
+  | Some g -> 
+    let convert_lists vals = 
+      let pos = ref 0 in
+      List.map2
+      (fun k v ->
+        incr pos;
+        let t = get_2 k in 
+        match t with
+        | TInt ->
+          (try Int (int_of_string v)
+            with Failure _ ->
+              raise (Type_error ("Expected type int for field number "
+                                ^ (string_of_int !pos))))
+        | TStr -> Str v
+        | TFloat ->
+          (try Float (float_of_string v)
+            with Failure _ ->
+              raise (Type_error ("Expected type float for field number "
+                                ^ (string_of_int !pos))))
+      )
+      kwt vals in
+      let cs = Helper.empty in 
+      let g =    List.map (fun sb  -> let vals, parts = sb in {values = (List.fold_right Helper.add (convert_lists vals) cs); partitions = parts}) g in
+      let keys = List.map (fun kwt -> let k, t = kwt in k) kwt in
+      SplitParameters { keys = keys; constraints = g}
   | None   -> raise Parsing.Parse_error
   
 let make_group group subgroup = 
@@ -164,43 +190,13 @@ let make_group group subgroup =
     | Some g ->  Some(subgroup::g)
     | None   ->  Some([subgroup])
 
-let get_2 (_, a) = a
+let make_subgroup values partitions = (values, List.map (fun p -> try (int_of_string p) with Failure _ -> raise (Type_error ("Partitions list expects integers"))) partitions)
 
-let make_subgroup relname listTuple = 
-  let schema = get_schema relname in 
-  (* attr is list of types belonging to list in values *)
-  let pname, attr = schema in 
-  let convert_lists p l = 
-    let t = get_2 p in
-    let pos = ref 0 in
-    List.map
-    (fun s ->
-       incr pos;
-       match t with
-       | TInt ->
-         (try Int (int_of_string s)
-          with Failure _ ->
-            raise (Type_error ("Expected type int for field number "
-                               ^ (string_of_int !pos))))
-       | TStr -> Str s
-       | TFloat ->
-         (try Float (float_of_string s)
-          with Failure _ ->
-            raise (Type_error ("Expected type float for field number "
-                               ^ (string_of_int !pos))))
-    )
-    l
-  in  
-  let ls1 = listTuple.left in let ls2 = listTuple.right in 
-  let cstlists1 = List.map2 convert_lists attr ls1 in
-  let cstlists2 = List.map2 convert_lists attr ls2 in
-  let cs_list l acc = 
-      let cs = Helper.empty in
-      (List.fold_right Helper.add l cs)::acc
-  in
-  let cs1 = List.fold_right cs_list cstlists1 [] in
-  let cs2 = List.fold_right cs_list cstlists2 [] in
-  { relname = relname; values = (cs1, cs2) } 
+let make_key str = match Misc.nsplit str ":" with
+        | [] -> failwith "[Log_parser.make_predicate] internal error"
+        | [type_str] -> "", get_type type_str
+        | var_name :: type_str :: _ ->
+            var_name, get_type type_str
 %}
 
 
@@ -233,9 +229,9 @@ predicate:
 tsdb:
       | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
       | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
-      | AT STR db AT            { f "tsdb(next)";  DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
-      | AT STR db CMD           { f "tsdb(next)";  DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
-      | AT STR db EOF           { f "tsdb(last)";  DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
+      | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
+      | AT STR db CMD           { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
+      | AT STR db EOF           { f "tsdb(last)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
       | AT EOF                  { f "tsdb(ts eof)"; ErrorTuple "end of file" }
       | CMD EOF                 { f "tsdb(ts eof)"; ErrorTuple "end of file" }
       | EOF                     { f "tsdb(eof)";    ErrorTuple "enf of file" }
@@ -286,19 +282,25 @@ fields:
       |                         { f "fields()"; [] }
 
 parameters:
-      | STR                     { Argument   $1  }
-      | STR LCB group RCB       { make_split $1 $3}
+      | STR                     { Argument   $1    }
+      | keys group              { make_split $1 $2 }
+keys: 
+      | key     keys            { (make_key $1)::$2}
+      |                         { [] }
+key:
+      | LPA STR RPA             { $2 }
+
 group:
       | subgroup group          { make_group $2 $1 } 
       |                         { None }
     
 subgroup:
-      | LCB STR COM constraintTuple RCB { make_subgroup $2 $4 }
+      | fields LPA fields RPA   { make_subgroup $1 $3 }
 
-constraintTuple:
+/*constraintTuple:
       | LPA constraintList RPA COM LPA constraintList RPA     { { left = $2; right = $6}  }
 constraintList:
       | constraintSet constraintList      { $1::$2  }
       |                                   { [] }
 constraintSet:
-      | LPA fields RPA                    { $2}
+      | LPA fields RPA                    { $2}*/

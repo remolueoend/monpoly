@@ -2763,12 +2763,12 @@ let get_2 (_,b) = b
 
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
-let split_state f cs l  =
+let split_state f cs p  =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
 
   let split rel preds = 
-    let filter_entries cslist tuples = 
+    (*let filter_entries cslist tuples = 
       let i = ref 0 in
       let iterTuple (t: cst) =
         let cs = List.nth cslist !i in
@@ -2792,7 +2792,8 @@ let split_state f cs l  =
     in   
     let filterLists = List.fold_right buildFilterList rcs [] in
     let nrel = List.fold_right filter_entries filterLists rel in
-    nrel
+    nrel*)
+    rel
   in
   let split_info inf nq p =
     Queue.iter (
@@ -3019,8 +3020,8 @@ let checkExitParam p = match p with
   | _ -> false
 
 let checkSplitParam p = match p with 
-  | SplitParameters (str, cs) -> 
-    dumpfile := str;
+  | SplitParameters sp -> 
+    dumpfile := "testfile";
     true
   | _ -> false
 
@@ -3047,7 +3048,7 @@ let check_log lexbuf ff closed neval i =
     in
     let getConstraints p = match p with 
     (* Other case already handle by check split param *)
-    | SplitParameters (str, cs) -> cs
+    | SplitParameters sp -> sp.constraints
      in
     let split_state   c params = match params with
     | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
