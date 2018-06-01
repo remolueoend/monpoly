@@ -2774,9 +2774,9 @@ let get_2 (_,b) = b
 
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
-let check_tuple t vl mapping =
+let check_tuple t vl =
   (* Tuple list should always be greater than value list *)
-  let eval = List.map2 (fun e m -> ((List.nth t m) = e)) vl mapping in
+  let eval = List.mapi (fun i e -> ((List.nth t i) = e)) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false
 
 let split_state f cs p  =
@@ -2785,7 +2785,13 @@ let split_state f cs p  =
   let keys = cs.keys in
   let split rel preds = 
     (* determine positions of relation column keys in cs.keys *)
-    let pos = List.map (fun k -> try Misc.get_pos k preds with e -> -1 ) keys in
+    let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) preds in
+    Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string keys);
+    let pos = List.filter (fun e -> e >= 0) pos in
+    if List.length pos = 0 then rel else 
+    let mapping t = List.map (fun e -> List.nth t e) pos in
+    Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));
+    (*let pos = List.map (fun k -> try Misc.get_pos k preds with e -> -1 ) keys in
     Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string keys);
     print_endline (int_list_to_string pos);
     let pos = List.filter (fun e -> e >= 0) pos in
@@ -2804,33 +2810,12 @@ let split_state f cs p  =
     let cs = List.nth trimmed_constraint_list 0 in
     Printf.printf "Trimmed constraints: %s; Partition: %d \n" (pred_list_to_string cs.values) p;
     let mapping = List.map (fun k -> Misc.get_pos k preds) (remove_pos keys) in
-    Relation.filter (fun t -> check_tuple t cs.values mapping) rel
-   
-    (*let filter_entries cslist tuples = 
-      let i = ref 0 in
-      let iterTuple (t: cst) =
-        let cs = List.nth cslist !i in
-        i := !i + 1;
-        let res = Helper.find_opt t cs in 
-        match res with
-        | Some r -> true
-        | None   -> false
-      in
-      let iterTuples (t : cst list) =
-        i := 0; 
-        List.exists iterTuple t
-      in
-      Relation.filter iterTuples tuples
-    in
-    let rcs = List.filter (fun a -> List.exists (fun b -> b = a.relname ) preds ) cs in
-    let buildFilterList sconst acc = 
-      let constTuple = sconst.values in
-      let const = if l then get_1 constTuple else get_2 constTuple in
-      const::acc
-    in   
-    let filterLists = List.fold_right buildFilterList rcs [] in
-    let nrel = List.fold_right filter_entries filterLists rel in
-    nrel*)
+    Relation.filter (fun t -> check_tuple t cs.values mapping) rel*)
+    let trimmed_cs = List.map (fun t -> { partitions = t.partitions; values = (mapping t.values)}) cs.constraints in     
+    Printf.printf "Before fold, length of relevant cs: %d \n" (List.length trimmed_cs);
+    List.fold_left (fun acc cs -> 
+    Printf.printf "Trimmed constraints: %s; Partition: %d \n" (pred_list_to_string cs.values) p;
+    (Relation.union (Relation.filter (fun t -> check_tuple t cs.values) rel) acc)) Relation.empty trimmed_cs
   in
   (*helper function to split tree states *)
   let split_tree tree pred =
@@ -2990,7 +2975,7 @@ let split_state f cs p  =
   | ERel           (rel)                                                  -> ERel         (rel)                                                           
   | EPred          (p, comp, inf)                                         -> EPred        (p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))                                   
   | ENeg           (f1)                                                   -> ENeg         (split_f f1)                             
-  | EAnd           (c, f1, f2, ainf)                                      -> split_debug2 f1 f2 "AND";  EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2)))
+  | EAnd           (c, f1, f2, ainf)                                      -> EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2)))
   | EOr            (c, f1, f2, ainf)                                      -> EOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2))) 
   | EExists        (c, f1)                                                -> EExists      (c, (split_f f1))
   | EAggreg        (c, f1)                                                -> EAggreg      (c, (split_f f1))
@@ -2998,12 +2983,12 @@ let split_state f cs p  =
   | EAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> EAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM (p1 f1)), update_old, update_new, get_result)
   | EPrev          (dt, f1, pinf)                                         -> EPrev        (dt, (split_f f1), pinf) 
   | ENext          (dt, f1, ninf)                                         -> ENext        (dt, (split_f f1), ninf)     
-  | ESinceA        (c2, dt, f1, f2, sainf)                                -> split_debug2 f1 f2 "SINCE";  ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf (p2 f1 f2)))    
-  | ESince         (c2, dt, f1, f2, sinf)                                 -> split_debug2 f1 f2 "SINCE";  ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf (p2 f1 f2)))
-  | EOnceA         (dt, f1, oainf)                                        -> split_debug  f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf (p1 f1)))    
-  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug  f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf (p1 f1)))           
-  | EOnce          (dt, f1, oinf)                                         -> split_debug  f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf (p1 f1)))   
-  | ENUntil        (c1, dt, f1, f2, uninf)                                -> split_debug2 f1 f2 "UNTIL";  ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf (p2 f1 f2)))                 
+  | ESinceA        (c2, dt, f1, f2, sainf)                                -> ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf (p2 f1 f2)))    
+  | ESince         (c2, dt, f1, f2, sinf)                                 -> ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf (p2 f1 f2)))
+  | EOnceA         (dt, f1, oainf)                                        -> EOnceA       (dt, (split_f f1), (split_oainfo oainf (p1 f1)))    
+  | EOnceZ         (dt, f1, ozinf)                                        -> EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf (p1 f1)))           
+  | EOnce          (dt, f1, oinf)                                         -> EOnce        (dt, (split_f f1), (split_oinfo oinf (p1 f1)))   
+  | ENUntil        (c1, dt, f1, f2, uninf)                                -> ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf (p2 f1 f2)))                 
   | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf (p2 f1 f2)))            
   | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf (p1 f1)))    
   | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf (p1 f1)))    
@@ -3019,7 +3004,6 @@ let split_and_save sconsts dumpfile i lastts ff closed neval numparts=
   in
   let nf i = split_state ff (filter_constraintsets i) i in
   let rec create_partitions formulas i =
-      print_endline (string_of_int i);
       if i+1 < numparts then create_partitions ((nf (i))::formulas) (i+1)
       else ((nf i)::formulas)
   in 

@@ -8,5 +8,5 @@
    @1308477599 approve (Merlin,187)
                publish (Bob,163) (Alice,163) (Charlie,163) (Charlie,152)
     > split_state (a:string)(r:int)(m:string)   Alice,152,Mallory (0)
-                                                Bob,163,Merlin    (1)
+                                                Bob,163,Merlin    (0,1)
     <
