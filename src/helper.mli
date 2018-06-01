@@ -16,6 +16,10 @@ val add: cst -> constraintSet -> constraintSet
 val singleton: cst -> constraintSet
 val find_opt: cst -> constraintSet -> cst option
 
+(* Enables using the compare function in EExists to project away unwanted free vars *)
+val pvars_to_rel: string list -> Relation.relation
+val rel_to_pvars: Relation.relation -> string list
+
 type splitParameters = (string * constraintRelation)
 
 type commandParameter = 

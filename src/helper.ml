@@ -2,6 +2,8 @@ open MFOTL
 open Predicate
 open Db
 
+exception Type_error of string
+
 module Constraint_Set = Set.Make (
   struct type t = cst
    let compare = Pervasives.compare
@@ -43,6 +45,17 @@ type monpoly_feed =
 (*let split_constraints cs l = 
     let get_e (a, b) = if l then a else b in
     map (fun c -> { relname = c.relname; values = get_e c.values }) cs*)
+
+let pvars_to_rel pvars = 
+    Relation.singleton (List.map (fun v -> Str v) pvars)
+
+let rel_to_pvars rel   =
+    List.map (fun e -> match e with
+        | Str   s   -> s
+        | Float f   -> raise (Type_error ("rel_to_pvars helper funtion only accepts strings"))
+        | Int   i   -> raise (Type_error ("rel_to_pvars helper funtion only accepts strings")))
+    (Relation.min_elt rel) 
+
 
 let empty = Constraint_Set.empty
 

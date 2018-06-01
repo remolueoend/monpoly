@@ -2711,32 +2711,39 @@ let unmarshal resumefile =
 
 (* END SAVING AND LOADING STATE *)  
 
+exception Type_error of string
+
 (* SPLITTING STATE *)
+
 let get_predicate f =
-  let p2s p = Predicate.get_name p in
-  let combine_preds p1 p2 = List.append p1 p2 in
-  let rec get_pred = function                                                         
-  | EPred          (p, _, _)              -> [(p2s p)]                                
+  let pvars p = Predicate.pvars p in
+  let rec get_pred = function        
+    (* Equal, Less, LessEq all mapped to free vars;  ForAll not used *)    
+  | ERel           (_)                    -> raise (Type_error ("Predicate function should not be entering ERel"))                                       
+  | EPred          (p, _, _)              -> pvars p                              
   | ENeg           (f1)                   -> get_pred f1                             
-  | EAnd           (_, f1, f2, _)         -> combine_preds (get_pred f1) (get_pred f2)
-  | EOr            (_, f1, f2, _)         -> combine_preds (get_pred f1) (get_pred f2)
-  | EExists        (_, f1)                -> get_pred f1                              
+  | EAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2) 
+  | EOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
+  | EExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )                           
   | EAggreg        (_, f1)                -> get_pred f1                              
   | EAggOnce       (f1, _, _, _, _, _)    -> get_pred f1    
   | EAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1    
   | EPrev          (_, f1, _)             -> get_pred f1                              
   | ENext          (_, f1, _)             -> get_pred f1                              
-  | ESinceA        (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
-  | ESince         (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
+  | ESinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
+  | ESince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
   | EOnceA         (_, f1, _)             -> get_pred f1                             
   | EOnceZ         (_, f1, _)             -> get_pred f1                             
   | EOnce          (_, f1, _)             -> get_pred f1                              
-  | ENUntil        (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
-  | EUntil         (_, _, f1, f2, _)      -> combine_preds (get_pred f1) (get_pred f2)
+  | ENUntil        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | EUntil         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
   | EEventuallyZ   (_, f1, _)             -> get_pred f1                             
   | EEventually    (_, f1, _)             -> get_pred f1          
   in
   get_pred f
+
+let get_predicate2 f1 f2 =
+  Misc.union (get_predicate f1) (get_predicate f2)
 
   
 let list_to_string l =
@@ -2749,8 +2756,7 @@ let split_debug f op =
   Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (get_predicate f)) op
 
 let split_debug2 f1 f2 op =
-  let p2s p = Predicate.get_name p in
-  Printf.printf "Predicate Names: (%s %s) for formula: '%s' \n" (list_to_string (get_predicate f1)) (list_to_string (get_predicate f2)) op
+  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (get_predicate2 f1 f2)) op
 
 let get_1 (a,_) = a
 let get_2 (_,b) = b
@@ -2934,6 +2940,7 @@ let split_state f cs l  =
     let split_tree tree =
       let rec split_t t = match t with
         | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
+        (*TODO*)
         | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
       in split_t tree
     in
@@ -2968,7 +2975,7 @@ let split_state f cs l  =
     {elastev = einf.elastev; etree = (split_tree einf.etree); elast = elast; eauxrels = eauxrels }
   in
   let p1 f1 = get_predicate f1 in
-  let p2 f1 f2 = comb_preds (p1 f1) (get_predicate f2) in
+  let p2 f1 f2 = get_predicate2 f1 f2 in
   let rec split_f = function
   (* Don't think ERel is relevant *)
   | ERel           (rel)                                                  -> ERel         (rel)                                                           

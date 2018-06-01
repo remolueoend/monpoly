@@ -2,12 +2,11 @@
    @1307532861 approve (152)
    @1307955600 approve (163)
                publish (160)
+   > get_pos <
    @1308477599 approve (187)
                publish (163) (152)
-   > get_pos <
+   > save_and_exit testfile <
    @1308477609 approve (163)
                publish (169) (150)
-   > split_state filename {{approve,((1,3)),((1,3))}} <
    @1308477610 approve (150)
    @1308600000 approve (169)
-   > save_and_exit testfile <
