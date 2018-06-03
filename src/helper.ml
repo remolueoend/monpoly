@@ -16,7 +16,7 @@ type constraintSet = Constraint_Set.t
 
 type valueTuple = (string list * int list)
 
-type sconstraint   = { values: cst list; partitions: int list}
+type sconstraint   = { values: cst list list; partitions: int list}
 
 type constraintRelation = sconstraint list
 

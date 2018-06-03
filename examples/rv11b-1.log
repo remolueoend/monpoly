@@ -1,0 +1,7 @@
+   @1307532861 mgr_S (Merlin,Bob)
+               mgr_S (Merlin,Charlie)
+   @1307532861
+   @1307955600 approve (Merlin,163)
+	           mgr_F (Merlin,Charlie)
+   @1308477599 approve (Merlin,187)
+               publish (Bob,163) (Alice,163) (Charlie,163)

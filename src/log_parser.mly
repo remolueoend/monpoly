@@ -158,26 +158,28 @@
 let get_2 (_, a) = a
 
 let make_split kwt group  =
-  let convert_lists vals = 
+  let convert_lists valueLists = 
     let pos = ref 0 in
     List.map2
-    (fun k v ->
-      incr pos;
-      let t = get_2 k in 
-      match t with
-      | TInt ->
-        (try Int (int_of_string v)
-          with Failure _ ->
-            raise (Type_error ("Expected type int for field number "
-                              ^ (string_of_int !pos))))
-      | TStr -> Str v
-      | TFloat ->
-        (try Float (float_of_string v)
-          with Failure _ ->
-            raise (Type_error ("Expected type float for field number "
-                              ^ (string_of_int !pos))))
+    (fun k values ->
+      List.map (fun v ->
+        incr pos;
+        let t = get_2 k in 
+        match t with
+        | TInt ->
+          (try Int (int_of_string v)
+            with Failure _ ->
+              raise (Type_error ("Expected type int for field number "
+                                ^ (string_of_int !pos))))
+        | TStr -> Str v
+        | TFloat ->
+          (try Float (float_of_string v)
+            with Failure _ ->
+              raise (Type_error ("Expected type float for field number "
+                                ^ (string_of_int !pos))))
+      ) values
     )
-    kwt vals
+    kwt valueLists
   in
   let g    = List.map (fun sb  -> let vals, parts = sb in {values = (convert_lists vals); partitions = parts}) group in
   let keys = List.map (fun kwt -> let k, t = kwt in k) kwt in
@@ -185,7 +187,7 @@ let make_split kwt group  =
   
 let make_group group subgroup = subgroup::group
 
-let make_subgroup values partitions = (values, List.map (fun p -> try (int_of_string p) with Failure _ -> raise (Type_error ("Partitions list expects integers"))) partitions)
+let make_subgroup valueLists partitions = (valueLists, List.map (fun p -> try (int_of_string p) with Failure _ -> raise (Type_error ("Partitions list expects integers"))) partitions)
 
 let make_key str = match Misc.nsplit str ":" with
         | [] -> failwith "[Log_parser.make_predicate] internal error"
@@ -278,9 +280,9 @@ fields:
 
 parameters:
       | STR                     { Argument   $1    }
-      | keys group              { make_split $1 $2 }
+      | keys COM group          { make_split $1 $3 }
 keys: 
-      | key     keys            { (make_key $1)::$2}
+      | key      keys           { (make_key $1)::$2}
       |                         { [] }
 key:
       | LPA STR RPA             { $2 }
@@ -290,12 +292,10 @@ group:
       |                         { [] }
     
 subgroup:
-      | fields LPA fields RPA   { make_subgroup $1 $3 }
+      | constraintList COM LPA fields RPA   { make_subgroup $1 $4 }
 
-/*constraintTuple:
-      | LPA constraintList RPA COM LPA constraintList RPA     { { left = $2; right = $6}  }
 constraintList:
       | constraintSet constraintList      { $1::$2  }
       |                                   { [] }
 constraintSet:
-      | LPA fields RPA                    { $2}*/
+      | LPA fields RPA                    { $2 }
