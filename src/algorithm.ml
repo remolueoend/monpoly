@@ -2517,7 +2517,6 @@ type mformula =
   | MEventually of interval * mformula * meinfo
 
 let ext_to_m ff neval =
-  let a = NEval.to_array neval in
   let eze2m ezinf =
       let ilast = if ezinf.ezlastev == NEval.void then -2
       else (* note that neval is not empty in this case *)
@@ -2588,6 +2587,7 @@ let ext_to_m ff neval =
           mlistrel2 = uninf.listrel2;
         }
   in
+  let a = NEval.to_array neval in
   let rec e2m = function
     | ERel           (rel)                                                -> MRel           (rel)
     | EPred          (pred, c1, inf)                                      -> MPred          (pred, c1, inf)
@@ -2694,12 +2694,15 @@ let resumefile = ref ""
 let dumpfile = ref ""
 let lastts = ref MFOTL.ts_invalid
 
-let marshal dumpfile i lastts ff closed neval =
+let dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
-  let a,mf = ext_to_m ff neval in
-  let value = (i,lastts,closed,mf,a) in
   Marshal.to_channel ch value [Marshal.Closures];
   close_out ch
+
+let marshal dumpfile i lastts ff closed neval =
+  let a, mf = ext_to_m ff neval in
+  let value = (i,lastts,closed,mf,a) in
+  dump_to_file dumpfile value
 
 let unmarshal resumefile =
   let ch = open_in_bin resumefile in
@@ -3044,7 +3047,7 @@ let check_log lexbuf ff closed neval i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
     let save_and_exit c params =  match params with
-    | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
     in
     let getConstraints p = match p with 
