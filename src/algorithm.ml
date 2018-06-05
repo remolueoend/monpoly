@@ -3034,7 +3034,7 @@ let checkSplitParam p = match p with
    ([i] may be different from the current time point when
    filter_empty_tp is enabled)
 *)
-let check_log lexbuf ff closed neval i =
+let rec check_log lexbuf ff closed neval i =
   let finish () =
     if Misc.debugging Dbg_perf then
       Perf.check_log_end i !lastts
@@ -3042,6 +3042,22 @@ let check_log lexbuf ff closed neval i =
   let rec loop ffl i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
+    let save_state c params = match params with
+    | Some (Argument filename) ->
+        marshal filename i lastts ff closed neval;
+        Printf.printf "save_state OK\n";
+        flush stdout;
+    | None -> Printf.printf "%s: No filename specified\n" c;
+    in
+    let restore_state c params = match params with
+    | Some (Argument filename) ->
+        let (i,last_ts,ff,closed,neval) = unmarshal filename in
+            lastts := last_ts;
+        Printf.printf "restore_state OK\n";
+        flush stdout;
+        check_log lexbuf ff closed neval i;
+    | None -> Printf.printf "%s: No filename specified\n" c;
+    in
     let save_and_exit c params =  match params with
     | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
@@ -3062,14 +3078,19 @@ let check_log lexbuf ff closed neval i =
                Printf.printf "Terminated at index: %d \n" i;
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
-                loop ffl i
+                flush stdout;
+                loop ffl i;
+            | "save_state" ->
+                save_state c parameters;
+                loop ffl i;
+            | "restore_state" ->  restore_state c parameters;
             | "save_and_exit" ->  save_and_exit c parameters;
             | "split_state" ->    split_state   c parameters;
             | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
                 loop ffl i
         in
-        print_endline c;
+        (* print_endline c; *)
         process_command c;
 
     | MonpolyData {tp; ts; db} ->
