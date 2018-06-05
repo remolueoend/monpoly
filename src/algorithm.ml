@@ -2466,14 +2466,28 @@ let rec add_ext f =
 *)
 
 (* Immutable version of types used in eformula *)
+type mozinfo = { moztree: (int, relation) Sliding.stree;
+                 mozlast: int;
+                 mozauxrels: (int * timestamp * relation) Dllist.dllist}
+
+type moinfo  = { motree: (timestamp, relation) Sliding.stree;
+                 molast: int;
+                 moauxrels: (timestamp * relation) Dllist.dllist}        
+                 
+type msainfo = { msres: relation;
+                 msarel2: relation option;
+                 msaauxrels: (timestamp * relation) Mqueue.t}
+type msinfo  = { msrel2: relation option;
+                 msauxrels: (timestamp * relation) Mqueue.t}
+
 type mezinfo = { mezlastev :  int;
                  meztree   :  (int , relation) Sliding.stree;
-                 mezlast   :  (int * timestamp * relation) Dllist.cell;
+                 mezlast   :  int;
                  mezauxrels:  (int * timestamp * relation) Dllist.dllist}
 
 type meinfo  = { melastev :  int;
                  metree   :  (timestamp, relation) Sliding.stree;
-                 melast   :  (timestamp * relation) Dllist.cell;
+                 melast   :  int;
                  meauxrels:  (timestamp * relation) Dllist.dllist}
 
 type muinfo  = { mulast   :  int;
@@ -2509,8 +2523,8 @@ type mformula =
   | MSinceA of comp_two * interval * mformula * mformula * sainfo
   | MSince of comp_two * interval * mformula * mformula * sinfo
   | MOnceA of interval * mformula * oainfo
-  | MOnceZ of interval * mformula * ozinfo
-  | MOnce of interval * mformula * oinfo
+  | MOnceZ of interval * mformula * mozinfo
+  | MOnce of interval * mformula  * moinfo
   | MNUntil of comp_two * interval * mformula * mformula * muninfo
   | MUntil of comp_two * interval * mformula * mformula * muinfo
   | MEventuallyZ of interval * mformula * mezinfo
@@ -2526,10 +2540,11 @@ let ext_to_m ff neval =
   	  -1
   	else NEval.get_index ezinf.ezlastev neval
     in
+    let mezlast = if ezinf.ezlast == Dllist.void then -1 else Dllist.get_index ezinf.ezlast ezinf.ezauxrels in
     assert(ilast < NEval.length neval);
       {mezlastev = ilast;
        meztree = ezinf.eztree;
-       mezlast = ezinf.ezlast;
+       mezlast = mezlast;
        mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
@@ -2539,12 +2554,13 @@ let ext_to_m ff neval =
 	  (* in this case inf.last does not point to an element of
 	     neval; however, it points to the first element of neval *)
 	  -1
-	else NEval.get_index einf.elastev neval
+  else NEval.get_index einf.elastev neval
     in
+    let melast = if einf.elast == Dllist.void then -1 else Dllist.get_index einf.elast einf.eauxrels in
     assert(ilast < NEval.length neval);
     {melastev = ilast;
      metree = einf.etree;
-     melast = einf.elast;
+     melast = melast;
      meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
@@ -2587,6 +2603,14 @@ let ext_to_m ff neval =
           mlistrel2 = uninf.listrel2;
         }
   in
+  let o2m oinf = 
+    let molast = if oinf.olast = Dllist.void then -1 else 0 in
+    { motree = oinf.otree; molast = molast; moauxrels = oinf.oauxrels }
+  in
+  let oz2m ozinf = 
+    let mozlast = if ozinf.ozlast = Dllist.void then -1 else 0 in
+    { moztree = ozinf.oztree; mozlast = mozlast; mozauxrels = ozinf.ozauxrels}
+  in  
   let a = NEval.to_array neval in
   let rec e2m = function
     | ERel           (rel)                                                -> MRel           (rel)
@@ -2603,8 +2627,8 @@ let ext_to_m ff neval =
     | ESinceA        (c2, dt, ext1, ext2, sainf)                          -> MSinceA        (c2, dt, (e2m ext1), (e2m ext2), sainf)
     | ESince         (c2, dt, ext1, ext2, sinf)                           -> MSince         (c2, dt, (e2m ext1), (e2m ext2), sinf)
     | EOnceA         (dt, ext, oainf)                                     -> MOnceA         (dt, (e2m ext), oainf)
-    | EOnceZ         (dt, ext, ozinf)                                     -> MOnceZ         (dt, (e2m ext), ozinf)
-    | EOnce          (dt, ext, oinf)                                      -> MOnce          (dt, (e2m ext), oinf)
+    | EOnceZ         (dt, ext, ozinf)                                     -> MOnceZ         (dt, (e2m ext), (oz2m ozinf))
+    | EOnce          (dt, ext, oinf)                                      -> MOnce          (dt, (e2m ext), (o2m oinf))
     | ENUntil        (c1, dt, ext1, ext2, uninf)                          -> MNUntil        (c1, dt, (e2m ext1), (e2m ext2), (mune2m uninf))
     | EUntil         (c1, dt, ext1, ext2, uinf)                           -> MUntil         (c1, dt, (e2m ext1), (e2m ext2), (mue2m uinf))
     | EEventuallyZ   (dt, ext, ezinf)                                     -> MEventuallyZ   (dt, (e2m ext), (eze2m ezinf))
@@ -2619,9 +2643,13 @@ let m_to_ext mf neval =
       else if mezinf.mezlastev = -1 then NEval.new_cell (-1,MFOTL.ts_invalid) neval
       else                               NEval.get_cell_at_index mezinf.mezlastev neval
     in
+    let ezlast =
+       if mezinf.mezlast = -1 then Dllist.void
+       else Dllist.get_last_cell mezinf.mezauxrels
+    in  
     {ezlastev   = cell;
      eztree     = mezinf.meztree;
-     ezlast     = mezinf.mezlast;
+     ezlast     = ezlast;
      ezauxrels  = mezinf.mezauxrels}
   in
   let me2e meinf =
@@ -2630,9 +2658,13 @@ let m_to_ext mf neval =
       else if meinf.melastev = -1  then NEval.new_cell (-1,MFOTL.ts_invalid) neval
       else                              NEval.get_cell_at_index meinf.melastev neval
     in
+    let elast =
+      if meinf.melast = -1 then Dllist.void
+      else Dllist.get_cell_at_index meinf.melast meinf.meauxrels
+    in  
     {elastev    = cell;
      etree      = meinf.metree;
-     elast      = meinf.melast;
+     elast      = elast;
      eauxrels   = meinf.meauxrels}
   in
   let mu2e muinf =
@@ -2666,6 +2698,20 @@ let m_to_ext mf neval =
      listrel2 = muninf.mlistrel2;
     }
   in
+  let mo2e moinf = 
+    let olast = 
+      if moinf.molast = -1 then Dllist.void
+      else Dllist.get_last_cell moinf.moauxrels
+    in
+    { otree = moinf.motree; olast = olast; oauxrels = moinf.moauxrels }  
+  in
+  let moz2e mozinf =  
+    let ozlast = 
+      if mozinf.mozlast = -1 then Dllist.void
+      else Dllist.get_last_cell mozinf.mozauxrels
+    in
+    { oztree = mozinf.moztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }  
+  in   
   let rec m2e = function
     | MRel           (rel)                                                    ->      ERel           (rel)
     | MPred          (pred, c1, inf)                                          ->      EPred          (pred, c1, inf)
@@ -2681,8 +2727,8 @@ let m_to_ext mf neval =
     | MSinceA        (c2, dt, mf1, mf2, sainf)                                ->      ESinceA        (c2, dt, (m2e mf1), (m2e mf2), sainf)
     | MSince         (c2, dt, mf1, mf2, sinf)                                 ->      ESince         (c2, dt, (m2e mf1), (m2e mf2), sinf)
     | MOnceA         (dt, mf, oainf)                                          ->      EOnceA         (dt, (m2e mf), oainf)
-    | MOnceZ         (dt, mf, ozinf)                                          ->      EOnceZ         (dt, (m2e mf), ozinf)
-    | MOnce          (dt, mf, oinf)                                           ->      EOnce          (dt, (m2e mf),  oinf)
+    | MOnceZ         (dt, mf, ozinf)                                          ->      EOnceZ         (dt, (m2e mf), (moz2e ozinf))
+    | MOnce          (dt, mf, oinf)                                           ->      EOnce          (dt, (m2e mf), (mo2e oinf))
     | MNUntil        (c1, dt, mf1, mf2, muninf)                               ->      ENUntil        (c1, dt, (m2e mf1), (m2e mf2), (mun2e muninf))
     | MUntil         (c1, dt, mf1, mf2, muinf)                                ->      EUntil         (c1, dt, (m2e mf1), (m2e mf2), (mu2e muinf))
     | MEventuallyZ   (dt, mf, mezinf)                                         ->      EEventuallyZ   (dt, (m2e mf), (mez2e mezinf))
@@ -2778,21 +2824,25 @@ let get_2 (_,b) = b
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
 let check_tuple t vl =
+  (*Printf.printf "Tlength: %d; VLength: %d \n" (List.length t) (List.length vl);*)
   (* Lists always have same length due to filtering in split function *)
   let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false
   
 
 let split_relation rel cs mapping =  
-  (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
   (* mapping used to reorder values *)
   let trimmed_cs = List.map (fun t -> { partitions = t.partitions; values = (mapping t.values)}) cs.constraints in     
-  (*Printf.printf "Before fold, length of relevant cs: %d \n" (List.length trimmed_cs);*)
 
   (* Fold_Left over constraint sets, filtering irrelevant tuples *)
+  (*Relation.print_rel "Relation" rel;*)
+  let nrel = 
   List.fold_left (fun acc cs -> 
-  (*Printf.printf "Trimmed constraints: %s; Partition: %d \n" (pred_list_to_string cs.values) p;*)
-  (Relation.union (Relation.filter (fun t -> check_tuple t cs.values) rel) acc)) Relation.empty trimmed_cs
+  (*Printf.printf "\nTrimmed constraints: %s \n" (list_to_string (List.map (fun s -> pred_list_to_string s) cs.values));*)
+  (Relation.union (Relation.filter (fun t -> check_tuple t cs.values) rel) acc)) Relation.empty trimmed_cs in
+  (*Relation.print_rel "Filtered Relation" nrel;
+  print_endline "\n";*)
+  nrel
 
 let split_state mf cs p  =
   (*TODO: implement relation splitting according to constraint set; *)
@@ -2808,6 +2858,7 @@ let split_state mf cs p  =
     if List.length pos = 0 then rel else 
     (* Else we create a mapping to reorder our partition input values *)
     let mapping t = List.map (fun e -> List.nth t e) pos in
+    (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
     split_relation rel cs mapping
   in
   (*helper function to split tree states *)
@@ -2885,25 +2936,21 @@ let split_state mf cs p  =
   let split_oainfo oainf pred =
     { ores = (split oainf.ores pred); oaauxrels = oainf.oaauxrels }
   in
-  let split_ozinfo ozinf pred =
-   let ozauxrels = Dllist.empty() in
+  let split_mozinfo mozinf pred =
+   let mozauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) ozauxrels
-    ) ozinf.ozauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let ozlast = Dllist.get_last_cell ozauxrels in
-    {oztree = (split_tree ozinf.oztree pred); ozlast = ozlast; ozauxrels = ozauxrels }
+        Dllist.add_last (i, ts, (split r pred)) mozauxrels
+    ) mozinf.mozauxrels;
+    {moztree = (split_tree mozinf.moztree pred); mozlast = mozinf.mozlast; mozauxrels = mozauxrels }
   in
-  let split_oinfo oinf pred =
-    let oauxrels = Dllist.empty() in
+  let split_moinfo moinf pred =
+    let moauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) oauxrels
-      ) oinf.oauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let olast = Dllist.get_last_cell oauxrels in
-    {otree = (split_tree oinf.otree pred); olast = olast; oauxrels = oauxrels }
+        Dllist.add_last (ts, (split r pred)) moauxrels
+      ) moinf.moauxrels;
+    {motree = (split_tree moinf.motree pred); molast = moinf.molast; moauxrels = moauxrels }
   in
   let split_muninfo muninf pred =
     let listrel l =
@@ -2947,9 +2994,7 @@ let split_state mf cs p  =
         fun e -> let i, ts, r  = e in
         Dllist.add_last (i, ts, (split r pred)) mezauxrels
     ) mezinf.mezauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let mezlast = Dllist.get_last_cell mezauxrels in
-    {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezlast; mezauxrels = mezauxrels }
+    {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezinf.mezlast; mezauxrels = mezauxrels }
   in
   let split_meinfo meinf pred =
     let meauxrels = Dllist.empty() in
@@ -2957,9 +3002,7 @@ let split_state mf cs p  =
         fun e -> let ts, r  = e in
         Dllist.add_last (ts, (split r pred)) meauxrels
       ) meinf.meauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let melast = Dllist.get_last_cell meauxrels in
-    {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = melast; meauxrels = meauxrels }
+    {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
@@ -2979,8 +3022,8 @@ let split_state mf cs p  =
   | MSinceA        (c2, dt, f1, f2, sainf)                                -> MSinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf (p2 f1 f2)))    
   | MSince         (c2, dt, f1, f2, sinf)                                 -> MSince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf (p2 f1 f2)))
   | MOnceA         (dt, f1, oainf)                                        -> MOnceA       (dt, (split_f f1), (split_oainfo oainf (p1 f1)))    
-  | MOnceZ         (dt, f1, ozinf)                                        -> MOnceZ       (dt, (split_f f1), (split_ozinfo ozinf (p1 f1)))           
-  | MOnce          (dt, f1, oinf)                                         -> MOnce        (dt, (split_f f1), (split_oinfo oinf (p1 f1)))   
+  | MOnceZ         (dt, f1, ozinf)                                        -> MOnceZ       (dt, (split_f f1), (split_mozinfo ozinf (p1 f1)))           
+  | MOnce          (dt, f1, oinf)                                         -> MOnce        (dt, (split_f f1), (split_moinfo oinf (p1 f1)))   
   | MNUntil        (c1, dt, f1, f2, muninf)                               -> MNUntil      (c1, dt, (split_f f1), (split_f f2), (split_muninfo muninf (p2 f1 f2)))                 
   | MUntil         (c1, dt, f1, f2, muinf)                                -> MUntil       (c1, dt, (split_f f1), (split_f f2), (split_muinfo muinf (p2 f1 f2)))            
   | MEventuallyZ   (dt, f1, mezinf)                                       -> MEventuallyZ (dt, (split_f f1), (split_mezinfo mezinf (p1 f1)))    
@@ -3002,7 +3045,7 @@ let split_and_save sconsts dumpfile i lastts ff closed neval =
       if i < numparts then create_partitions ((nf (i))::formulas) (i+1)
       else ((nf i)::formulas)
   in 
-  List.iteri (fun i f -> dump_to_file (dumpfile ^ (string_of_int i)) (i,lastts,closed,f,a)) (create_partitions [] 0)
+  List.iteri (fun i f -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,f,a)) (create_partitions [] 0)
 
 (* END SPLITTING STATE *)  
 
@@ -3047,15 +3090,21 @@ let check_log lexbuf ff closed neval i =
     | SplitParameters sp -> sp
      in
     let split_state   c params = match params with
-    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
     in 
 
     match Log.get_next_entry lexbuf with
     | MonpolyCommand {c; parameters} ->
         let process_command c = match c with
+            | "print" ->
+               print_extf "Printing" ff; 
+               loop ffl i
             | "terminate" ->
                Printf.printf "Terminated at index: %d \n" i;
+            | "print_and_exit" ->
+               print_extf "Exiting" ff; 
+               Printf.printf "Terminated at index: %d \n" i;   
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
                 loop ffl i

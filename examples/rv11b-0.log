@@ -1,6 +1,9 @@
    @1307532861 mgr_S (Mallory,Alice)
+               mgr_S (Merlin,Bob)
                mgr_S (Merlin,Charlie)
    @1307532861 approve (Mallory,152)
    @1307955600 publish (Alice,160)
 	           mgr_F (Merlin,Charlie)
+   >print<            
    @1308477599 publish (Alice,163) (Charlie,163) (Charlie,152)
+   >terminate<
