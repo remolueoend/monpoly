@@ -183,7 +183,8 @@ let make_split kwt group  =
   in
   let g    = List.map (fun sb  -> let vals, parts = sb in {values = (convert_lists vals); partitions = parts}) group in
   let keys = List.map (fun kwt -> let k, t = kwt in k) kwt in
-  SplitParameters { keys = keys; constraints = g}
+  let max  = Helper.get_max g in
+  SplitParameters { keys = keys; constraints = g; num_partitions = max }
   
 let make_group group subgroup = subgroup::group
 

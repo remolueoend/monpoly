@@ -20,7 +20,7 @@ type sconstraint   = { values: cst list list; partitions: int list}
 
 type constraintRelation = sconstraint list
 
-type splitParameters = {keys: string list; constraints: constraintRelation}
+type splitParameters = {keys: string list; constraints: constraintRelation; num_partitions: int }
 
 type commandParameter = 
     | SplitParameters of splitParameters
@@ -75,4 +75,7 @@ let singleton c =
 let find_opt e set =
     Constraint_Set.find_opt e set
 
-    
+let get_max csrel = 
+    let max = ref 0 in
+    List.iter (fun cs -> List.iter (fun p -> if p > !max then max := p; print_endline (string_of_int !max)) cs.partitions) csrel;
+    !max

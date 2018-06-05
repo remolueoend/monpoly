@@ -10,7 +10,7 @@ type sconstraint   = { values: cst list list; partitions: int list}
 
 type constraintRelation = sconstraint list
 
-type splitParameters = {keys: string list; constraints: constraintRelation}
+type splitParameters = {keys: string list; constraints: constraintRelation; num_partitions: int}
 
 
 val empty: constraintSet
@@ -18,6 +18,7 @@ val is_empty: constraintSet -> bool
 val add: cst -> constraintSet -> constraintSet
 val singleton: cst -> constraintSet
 val find_opt: cst -> constraintSet -> cst option
+val get_max: constraintRelation -> int
 
 (* Enables using the compare function in EExists to project away unwanted free vars *)
 val pvars_to_rel: string list -> Relation.relation

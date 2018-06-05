@@ -2778,28 +2778,37 @@ let get_2 (_,b) = b
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
 let check_tuple t vl =
-  (* Tuple list should always be greater than value list *)
+  (* Lists always have same length due to filtering in split function *)
   let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false
+  
 
-let split_state f cs p  =
+let split_relation rel cs mapping =  
+  (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
+  (* mapping used to reorder values *)
+  let trimmed_cs = List.map (fun t -> { partitions = t.partitions; values = (mapping t.values)}) cs.constraints in     
+  (*Printf.printf "Before fold, length of relevant cs: %d \n" (List.length trimmed_cs);*)
+
+  (* Fold_Left over constraint sets, filtering irrelevant tuples *)
+  List.fold_left (fun acc cs -> 
+  (*Printf.printf "Trimmed constraints: %s; Partition: %d \n" (pred_list_to_string cs.values) p;*)
+  (Relation.union (Relation.filter (fun t -> check_tuple t cs.values) rel) acc)) Relation.empty trimmed_cs
+
+let split_state mf cs p  =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
   let keys = cs.keys in
   let split rel preds = 
     (* determine positions of relation column keys in cs.keys *)
     let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) preds in
-    (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string keys);*)
+    (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
     let pos = List.filter (fun e -> e >= 0) pos in
-    if List.length pos = 0 then rel else 
-    let mapping t = List.map (fun e -> List.nth t e) pos in
-    (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
 
-    let trimmed_cs = List.map (fun t -> { partitions = t.partitions; values = (mapping t.values)}) cs.constraints in     
-    (*Printf.printf "Before fold, length of relevant cs: %d \n" (List.length trimmed_cs);*)
-    List.fold_left (fun acc cs -> 
-    (*Printf.printf "Trimmed constraints: %s; Partition: %d \n" (pred_list_to_string cs.values) p;*)
-    (Relation.union (Relation.filter (fun t -> check_tuple t cs.values) rel) acc)) Relation.empty trimmed_cs
+    (* If no specified keys are in the predicate list, return the whole relation *)
+    if List.length pos = 0 then rel else 
+    (* Else we create a mapping to reorder our partition input values *)
+    let mapping t = List.map (fun e -> List.nth t e) pos in
+    split_relation rel cs mapping
   in
   (*helper function to split tree states *)
   let split_tree tree pred =
@@ -2977,19 +2986,20 @@ let split_state f cs p  =
   | MEventuallyZ   (dt, f1, mezinf)                                       -> MEventuallyZ (dt, (split_f f1), (split_mezinfo mezinf (p1 f1)))    
   | MEventually    (dt, f1, meinf)                                        -> MEventually  (dt, (split_f f1), (split_meinfo meinf (p1 f1)))    
   in
-  split_f f
+  split_f mf
 
-let split_and_save sconsts dumpfile i lastts ff closed neval numparts=
+let split_and_save sconsts dumpfile i lastts ff closed neval =
   let a, mf = ext_to_m ff neval in
   print_extf "\n[split] Original formula\n" ff;
+  let numparts = sconsts.num_partitions in
   let filter_constraintsets p = 
     let csrels = sconsts.constraints in
     let constraints = List.filter (fun csrel -> List.exists (fun i -> i = p) csrel.partitions) csrels in
-    { keys = sconsts.keys; constraints = constraints } 
+    { keys = sconsts.keys; constraints = constraints; num_partitions = numparts } 
   in
   let nf i = split_state mf (filter_constraintsets i) i in
   let rec create_partitions formulas i =
-      if i+1 < numparts then create_partitions ((nf (i))::formulas) (i+1)
+      if i < numparts then create_partitions ((nf (i))::formulas) (i+1)
       else ((nf i)::formulas)
   in 
   List.iteri (fun i f -> dump_to_file (dumpfile ^ (string_of_int i)) (i,lastts,closed,f,a)) (create_partitions [] 0)
@@ -3007,7 +3017,7 @@ let checkExitParam p = match p with
 
 let checkSplitParam p = match p with 
   | SplitParameters sp -> 
-    dumpfile := "testfile";
+    dumpfile := "partition-";
     true
   | _ -> false
 
@@ -3037,7 +3047,7 @@ let check_log lexbuf ff closed neval i =
     | SplitParameters sp -> sp
      in
     let split_state   c params = match params with
-    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval 2 else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
     in 
 
