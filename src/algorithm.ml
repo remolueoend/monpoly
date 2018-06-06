@@ -2466,14 +2466,28 @@ let rec add_ext f =
 *)
 
 (* Immutable version of types used in eformula *)
+type mozinfo = { moztree: (int, relation) Sliding.stree;
+                 mozlast: int;
+                 mozauxrels: (int * timestamp * relation) Dllist.dllist}
+
+type moinfo  = { motree: (timestamp, relation) Sliding.stree;
+                 molast: int;
+                 moauxrels: (timestamp * relation) Dllist.dllist}        
+                 
+type msainfo = { msres: relation;
+                 msarel2: relation option;
+                 msaauxrels: (timestamp * relation) Mqueue.t}
+type msinfo  = { msrel2: relation option;
+                 msauxrels: (timestamp * relation) Mqueue.t}
+
 type mezinfo = { mezlastev :  int;
                  meztree   :  (int , relation) Sliding.stree;
-                 mezlast   :  (int * timestamp * relation) Dllist.cell;
+                 mezlast   :  int;
                  mezauxrels:  (int * timestamp * relation) Dllist.dllist}
 
 type meinfo  = { melastev :  int;
                  metree   :  (timestamp, relation) Sliding.stree;
-                 melast   :  (timestamp * relation) Dllist.cell;
+                 melast   :  int;
                  meauxrels:  (timestamp * relation) Dllist.dllist}
 
 type muinfo  = { mulast   :  int;
@@ -2509,15 +2523,14 @@ type mformula =
   | MSinceA of comp_two * interval * mformula * mformula * sainfo
   | MSince of comp_two * interval * mformula * mformula * sinfo
   | MOnceA of interval * mformula * oainfo
-  | MOnceZ of interval * mformula * ozinfo
-  | MOnce of interval * mformula * oinfo
+  | MOnceZ of interval * mformula * mozinfo
+  | MOnce of interval * mformula  * moinfo
   | MNUntil of comp_two * interval * mformula * mformula * muninfo
   | MUntil of comp_two * interval * mformula * mformula * muinfo
   | MEventuallyZ of interval * mformula * mezinfo
   | MEventually of interval * mformula * meinfo
 
 let ext_to_m ff neval =
-  let a = NEval.to_array neval in
   let eze2m ezinf =
       let ilast = if ezinf.ezlastev == NEval.void then -2
       else (* note that neval is not empty in this case *)
@@ -2527,10 +2540,11 @@ let ext_to_m ff neval =
   	  -1
   	else NEval.get_index ezinf.ezlastev neval
     in
+    let mezlast = if ezinf.ezlast == Dllist.void then -1 else Dllist.get_index ezinf.ezlast ezinf.ezauxrels in
     assert(ilast < NEval.length neval);
       {mezlastev = ilast;
        meztree = ezinf.eztree;
-       mezlast = ezinf.ezlast;
+       mezlast = mezlast;
        mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
@@ -2540,12 +2554,13 @@ let ext_to_m ff neval =
 	  (* in this case inf.last does not point to an element of
 	     neval; however, it points to the first element of neval *)
 	  -1
-	else NEval.get_index einf.elastev neval
+  else NEval.get_index einf.elastev neval
     in
+    let melast = if einf.elast == Dllist.void then -1 else Dllist.get_index einf.elast einf.eauxrels in
     assert(ilast < NEval.length neval);
     {melastev = ilast;
      metree = einf.etree;
-     melast = einf.elast;
+     melast = melast;
      meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
@@ -2588,6 +2603,15 @@ let ext_to_m ff neval =
           mlistrel2 = uninf.listrel2;
         }
   in
+  let o2m oinf = 
+    let molast = if oinf.olast = Dllist.void then -1 else 0 in
+    { motree = oinf.otree; molast = molast; moauxrels = oinf.oauxrels }
+  in
+  let oz2m ozinf = 
+    let mozlast = if ozinf.ozlast = Dllist.void then -1 else 0 in
+    { moztree = ozinf.oztree; mozlast = mozlast; mozauxrels = ozinf.ozauxrels}
+  in  
+  let a = NEval.to_array neval in
   let rec e2m = function
     | ERel           (rel)                                                -> MRel           (rel)
     | EPred          (pred, c1, inf)                                      -> MPred          (pred, c1, inf)
@@ -2603,8 +2627,8 @@ let ext_to_m ff neval =
     | ESinceA        (c2, dt, ext1, ext2, sainf)                          -> MSinceA        (c2, dt, (e2m ext1), (e2m ext2), sainf)
     | ESince         (c2, dt, ext1, ext2, sinf)                           -> MSince         (c2, dt, (e2m ext1), (e2m ext2), sinf)
     | EOnceA         (dt, ext, oainf)                                     -> MOnceA         (dt, (e2m ext), oainf)
-    | EOnceZ         (dt, ext, ozinf)                                     -> MOnceZ         (dt, (e2m ext), ozinf)
-    | EOnce          (dt, ext, oinf)                                      -> MOnce          (dt, (e2m ext), oinf)
+    | EOnceZ         (dt, ext, ozinf)                                     -> MOnceZ         (dt, (e2m ext), (oz2m ozinf))
+    | EOnce          (dt, ext, oinf)                                      -> MOnce          (dt, (e2m ext), (o2m oinf))
     | ENUntil        (c1, dt, ext1, ext2, uninf)                          -> MNUntil        (c1, dt, (e2m ext1), (e2m ext2), (mune2m uninf))
     | EUntil         (c1, dt, ext1, ext2, uinf)                           -> MUntil         (c1, dt, (e2m ext1), (e2m ext2), (mue2m uinf))
     | EEventuallyZ   (dt, ext, ezinf)                                     -> MEventuallyZ   (dt, (e2m ext), (eze2m ezinf))
@@ -2619,9 +2643,13 @@ let m_to_ext mf neval =
       else if mezinf.mezlastev = -1 then NEval.new_cell (-1,MFOTL.ts_invalid) neval
       else                               NEval.get_cell_at_index mezinf.mezlastev neval
     in
+    let ezlast =
+       if mezinf.mezlast = -1 then Dllist.void
+       else Dllist.get_last_cell mezinf.mezauxrels
+    in  
     {ezlastev   = cell;
      eztree     = mezinf.meztree;
-     ezlast     = mezinf.mezlast;
+     ezlast     = ezlast;
      ezauxrels  = mezinf.mezauxrels}
   in
   let me2e meinf =
@@ -2630,9 +2658,13 @@ let m_to_ext mf neval =
       else if meinf.melastev = -1  then NEval.new_cell (-1,MFOTL.ts_invalid) neval
       else                              NEval.get_cell_at_index meinf.melastev neval
     in
+    let elast =
+      if meinf.melast = -1 then Dllist.void
+      else Dllist.get_cell_at_index meinf.melast meinf.meauxrels
+    in  
     {elastev    = cell;
      etree      = meinf.metree;
-     elast      = meinf.melast;
+     elast      = elast;
      eauxrels   = meinf.meauxrels}
   in
   let mu2e muinf =
@@ -2652,7 +2684,7 @@ let m_to_ext mf neval =
   let mun2e muninf =
      let cell1 =
           if      muninf.mlast1 = -2 then NEval.void
-          else if muninf.mlast1 = -2 then NEval.new_cell (-1,MFOTL.ts_invalid) neval
+          else if muninf.mlast1 = -2 then NEval.new_cell (-1,MFOTL.ts_invalid)  neval
           else                            NEval.get_cell_at_index muninf.mlast1 neval
     in
      let cell2 =
@@ -2666,6 +2698,20 @@ let m_to_ext mf neval =
      listrel2 = muninf.mlistrel2;
     }
   in
+  let mo2e moinf = 
+    let olast = 
+      if moinf.molast = -1 then Dllist.void
+      else Dllist.get_last_cell moinf.moauxrels
+    in
+    { otree = moinf.motree; olast = olast; oauxrels = moinf.moauxrels }  
+  in
+  let moz2e mozinf =  
+    let ozlast = 
+      if mozinf.mozlast = -1 then Dllist.void
+      else Dllist.get_last_cell mozinf.mozauxrels
+    in
+    { oztree = mozinf.moztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }  
+  in   
   let rec m2e = function
     | MRel           (rel)                                                    ->      ERel           (rel)
     | MPred          (pred, c1, inf)                                          ->      EPred          (pred, c1, inf)
@@ -2681,8 +2727,8 @@ let m_to_ext mf neval =
     | MSinceA        (c2, dt, mf1, mf2, sainf)                                ->      ESinceA        (c2, dt, (m2e mf1), (m2e mf2), sainf)
     | MSince         (c2, dt, mf1, mf2, sinf)                                 ->      ESince         (c2, dt, (m2e mf1), (m2e mf2), sinf)
     | MOnceA         (dt, mf, oainf)                                          ->      EOnceA         (dt, (m2e mf), oainf)
-    | MOnceZ         (dt, mf, ozinf)                                          ->      EOnceZ         (dt, (m2e mf), ozinf)
-    | MOnce          (dt, mf, oinf)                                           ->      EOnce          (dt, (m2e mf),  oinf)
+    | MOnceZ         (dt, mf, ozinf)                                          ->      EOnceZ         (dt, (m2e mf), (moz2e ozinf))
+    | MOnce          (dt, mf, oinf)                                           ->      EOnce          (dt, (m2e mf), (mo2e oinf))
     | MNUntil        (c1, dt, mf1, mf2, muninf)                               ->      ENUntil        (c1, dt, (m2e mf1), (m2e mf2), (mun2e muninf))
     | MUntil         (c1, dt, mf1, mf2, muinf)                                ->      EUntil         (c1, dt, (m2e mf1), (m2e mf2), (mu2e muinf))
     | MEventuallyZ   (dt, mf, mezinf)                                         ->      EEventuallyZ   (dt, (m2e mf), (mez2e mezinf))
@@ -2694,12 +2740,15 @@ let resumefile = ref ""
 let dumpfile = ref ""
 let lastts = ref MFOTL.ts_invalid
 
-let marshal dumpfile i lastts ff closed neval =
+let dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
-  let a,mf = ext_to_m ff neval in
-  let value = (i,lastts,closed,mf,a) in
   Marshal.to_channel ch value [Marshal.Closures];
   close_out ch
+
+let marshal dumpfile i lastts ff closed neval =
+  let a, mf = ext_to_m ff neval in
+  let value = (i,lastts,closed,mf,a) in
+  dump_to_file dumpfile value
 
 let unmarshal resumefile =
   let ch = open_in_bin resumefile in
@@ -2720,36 +2769,47 @@ let get_predicate f =
   let pvars p = Predicate.pvars p in
   let rec get_pred = function        
     (* Equal, Less, LessEq all mapped to free vars;  ForAll not used *)    
-  | ERel           (_)                    -> raise (Type_error ("Predicate function should not be entering ERel"))                                       
-  | EPred          (p, _, _)              -> pvars p                              
-  | ENeg           (f1)                   -> get_pred f1                             
-  | EAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2) 
-  | EOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
-  | EExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )                           
-  | EAggreg        (_, f1)                -> get_pred f1                              
-  | EAggOnce       (f1, _, _, _, _, _)    -> get_pred f1    
-  | EAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1    
-  | EPrev          (_, f1, _)             -> get_pred f1                              
-  | ENext          (_, f1, _)             -> get_pred f1                              
-  | ESinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
-  | ESince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
-  | EOnceA         (_, f1, _)             -> get_pred f1                             
-  | EOnceZ         (_, f1, _)             -> get_pred f1                             
-  | EOnce          (_, f1, _)             -> get_pred f1                              
-  | ENUntil        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | EUntil         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | EEventuallyZ   (_, f1, _)             -> get_pred f1                             
-  | EEventually    (_, f1, _)             -> get_pred f1          
+  | MRel           (_)                    -> raise (Type_error ("Predicate function should not be entering ERel"))                                       
+  | MPred          (p, _, _)              -> pvars p                              
+  | MNeg           (f1)                   -> get_pred f1                             
+  | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2) 
+  | MOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
+  | MExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )                           
+  | MAggreg        (_, f1)                -> get_pred f1                              
+  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1    
+  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1    
+  | MPrev          (_, f1, _)             -> get_pred f1                              
+  | MNext          (_, f1, _)             -> get_pred f1                              
+  | MSinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
+  | MSince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
+  | MOnceA         (_, f1, _)             -> get_pred f1                             
+  | MOnceZ         (_, f1, _)             -> get_pred f1                             
+  | MOnce          (_, f1, _)             -> get_pred f1                              
+  | MNUntil        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MUntil         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MEventuallyZ   (_, f1, _)             -> get_pred f1                             
+  | MEventually    (_, f1, _)             -> get_pred f1          
   in
   get_pred f
 
 let get_predicate2 f1 f2 =
   Misc.union (get_predicate f1) (get_predicate f2)
 
-  
 let list_to_string l =
   let str = ref "" in
   let append s = str := !str ^ s ^ ", " in
+  List.iter (fun s -> append s ) l;
+  !str
+
+let int_list_to_string l =
+  let str = ref "" in
+  let append s = str := !str ^ (string_of_int s) ^ ", " in
+  List.iter (fun s -> append s ) l;
+  !str
+
+let pred_list_to_string l =
+  let str = ref "" in
+  let append s = str := !str ^ (Predicate.string_of_cst false s) ^ ", " in
   List.iter (fun s -> append s ) l;
   !str
 
@@ -2764,38 +2824,60 @@ let get_2 (_,b) = b
 
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
-let split_state f cs p  =
+let check_tuple t vl =
+  (*Printf.printf "Tlength: %d; VLength: %d \n" (List.length t) (List.length vl);*)
+  (* Lists always have same length due to filtering in split function *)
+  let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
+  List.fold_right (fun a agg -> (a || agg)) eval false
+  
+
+let split_relation rel cs mapping =  
+  (* mapping used to reorder values *)
+  let trimmed_cs = List.map (fun t -> { partitions = t.partitions; values = (mapping t.values)}) cs.constraints in     
+
+  (* Fold_Left over constraint sets, filtering irrelevant tuples *)
+  (*Relation.print_rel "Relation" rel;*)
+  let nrel = 
+  List.fold_left (fun acc cs -> 
+  (*Printf.printf "\nTrimmed constraints: %s \n" (list_to_string (List.map (fun s -> pred_list_to_string s) cs.values));*)
+  (Relation.union (Relation.filter (fun t -> check_tuple t cs.values) rel) acc)) Relation.empty trimmed_cs in
+  (*Relation.print_rel "Filtered Relation" nrel;
+  print_endline "\n";*)
+  nrel
+
+let split_state mf cs p  =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
-
+  let keys = cs.keys in
   let split rel preds = 
-    (*let filter_entries cslist tuples = 
-      let i = ref 0 in
-      let iterTuple (t: cst) =
-        let cs = List.nth cslist !i in
-        i := !i + 1;
-        let res = Helper.find_opt t cs in 
-        match res with
-        | Some r -> true
-        | None   -> false
-      in
-      let iterTuples (t : cst list) =
-        i := 0; 
-        List.exists iterTuple t
-      in
-      Relation.filter iterTuples tuples
-    in
-    let rcs = List.filter (fun a -> List.exists (fun b -> b = a.relname ) preds ) cs in
-    let buildFilterList sconst acc = 
-      let constTuple = sconst.values in
-      let const = if l then get_1 constTuple else get_2 constTuple in
-      const::acc
-    in   
-    let filterLists = List.fold_right buildFilterList rcs [] in
-    let nrel = List.fold_right filter_entries filterLists rel in
-    nrel*)
-    rel
+    (* determine positions of relation column keys in cs.keys *)
+    let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) preds in
+    (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
+    let pos = List.filter (fun e -> e >= 0) pos in
+
+    (* If no specified keys are in the predicate list, return the whole relation *)
+    if List.length pos = 0 then rel else 
+    (* Else we create a mapping to reorder our partition input values *)
+    let mapping t = List.map (fun e -> List.nth t e) pos in
+    (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
+    split_relation rel cs mapping
   in
+  (*helper function to split tree states *)
+  let split_tree tree pred =
+    let split_res n =
+      match n with
+      | Some r -> Some (split r pred)
+      | None -> None
+    in
+    let handle_node n = { l = n.l; r = n.r; res = (split_res n.res)} in
+    let rec split_t t = match t with
+    | LNode ln      -> LNode (handle_node ln)
+    | INode (a,l,r) -> INode ((handle_node a), (split_t l), (split_t r))
+    in 
+    split_t tree
+  in
+
+
   let split_info inf nq p =
     Queue.iter (
      fun e -> let i, ts, r  = e in
@@ -2855,49 +2937,23 @@ let split_state f cs p  =
   let split_oainfo oainf pred =
     { ores = (split oainf.ores pred); oaauxrels = oainf.oaauxrels }
   in
-  let split_ozinfo ozinf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
-   let ozauxrels = Dllist.empty() in
+  let split_mozinfo mozinf pred =
+   let mozauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) ozauxrels
-    ) ozinf.ozauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let ozlast = Dllist.get_first_cell ozauxrels in
-    {oztree = (split_tree ozinf.oztree); ozlast = ozlast; ozauxrels = ozauxrels }
+        Dllist.add_last (i, ts, (split r pred)) mozauxrels
+    ) mozinf.mozauxrels;
+    {moztree = (split_tree mozinf.moztree pred); mozlast = mozinf.mozlast; mozauxrels = mozauxrels }
   in
-  let split_oinfo oinf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
-    let oauxrels = Dllist.empty() in
+  let split_moinfo moinf pred =
+    let moauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) oauxrels
-      ) oinf.oauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let olast = Dllist.get_first_cell oauxrels in
-    {otree = (split_tree oinf.otree); olast = olast; oauxrels = oauxrels }
+        Dllist.add_last (ts, (split r pred)) moauxrels
+      ) moinf.moauxrels;
+    {motree = (split_tree moinf.motree pred); molast = moinf.molast; moauxrels = moauxrels }
   in
-  let split_uninfo uninf pred =
+  let split_muninfo muninf pred =
     let listrel l =
       let nl = Dllist.empty() in
       Dllist.iter (fun e ->
@@ -2906,9 +2962,9 @@ let split_state f cs p  =
       ) l;
       nl
     in
-    { last1 = uninf.last1; last2 = uninf.last2; listrel1 = (listrel uninf.listrel1);  listrel2 = (listrel uninf.listrel2) }
+    { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = (listrel muninf.mlistrel1);  mlistrel2 = (listrel muninf.mlistrel2) }
   in
-  let split_uinfo uinf pred =
+  let split_muinfo muinf pred =
     (* Helper function for raux and saux fields, creates split Sk.dllist *)
     let sklist l =
       let nl = Sk.empty() in
@@ -2918,96 +2974,79 @@ let split_state f cs p  =
       ) l;
       nl
     in
-    let raux =
+    let mraux =
       let nl = Sj.empty() in
       Sj.iter (fun e ->
         let (i, ts, l) = e in
         Sj.add_last (i, ts, (sklist l)) nl
-      ) uinf.raux;
+      ) muinf.mraux;
       nl
     in
-    let urel2 = match uinf.urel2 with
+    let murel2 = match muinf.murel2 with
       | Some r  -> Some (split r pred)
       | None -> None
     in
-    { ulast = uinf.ulast; ufirst = uinf.ufirst; ures = (split uinf.ures pred);
-      urel2 = urel2; raux = raux; saux = (sklist uinf.saux) }
+    { mulast = muinf.mulast; mufirst = muinf.mufirst; mures = (split muinf.mures pred);
+      murel2 = murel2; mraux = mraux; msaux = (sklist muinf.msaux) }
   in
-  let split_ezinfo ezinf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        (*TODO*)
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
-    let ezauxrels = Dllist.empty() in
+  let split_mezinfo mezinf pred =
+    let mezauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) ezauxrels
-    ) ezinf.ezauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let ezlast = Dllist.get_first_cell ezauxrels in
-    {ezlastev = ezinf.ezlastev; eztree = (split_tree ezinf.eztree); ezlast = ezlast; ezauxrels = ezauxrels }
+        Dllist.add_last (i, ts, (split r pred)) mezauxrels
+    ) mezinf.mezauxrels;
+    {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezinf.mezlast; mezauxrels = mezauxrels }
   in
-  let split_einfo einf pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let split_tree tree =
-      let rec split_t t = match t with
-        | LNode ln      -> LNode { l = ln.l; r = ln.r; res = (split_res ln.res)}
-        | INode (a,l,r) -> INode (a, (split_t l), (split_t r))
-      in split_t tree
-    in
-    let eauxrels = Dllist.empty() in
+  let split_meinfo meinf pred =
+    let meauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) eauxrels
-      ) einf.eauxrels;
-    (* TODO(FB) Is this sufficient? *)
-    let elast = Dllist.get_first_cell eauxrels in
-    {elastev = einf.elastev; etree = (split_tree einf.etree); elast = elast; eauxrels = eauxrels }
+        Dllist.add_last (ts, (split r pred)) meauxrels
+      ) meinf.meauxrels;
+    {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
   let rec split_f = function
   (* Don't think ERel is relevant *)
-  | ERel           (rel)                                                  -> ERel         (rel)                                                           
-  | EPred          (p, comp, inf)                                         -> EPred        (p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))                                   
-  | ENeg           (f1)                                                   -> ENeg         (split_f f1)                             
-  | EAnd           (c, f1, f2, ainf)                                      -> split_debug2 f1 f2 "AND";  EAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2)))
-  | EOr            (c, f1, f2, ainf)                                      -> EOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2))) 
-  | EExists        (c, f1)                                                -> EExists      (c, (split_f f1))
-  | EAggreg        (c, f1)                                                -> EAggreg      (c, (split_f f1))
-  | EAggOnce       (f1, dt, agg, update_old, update_new, get_result)      -> EAggOnce     ((split_f f1), dt, (split_agg agg (p1 f1)), update_old, update_new, get_result)  
-  | EAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> EAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM (p1 f1)), update_old, update_new, get_result)
-  | EPrev          (dt, f1, pinf)                                         -> EPrev        (dt, (split_f f1), pinf) 
-  | ENext          (dt, f1, ninf)                                         -> ENext        (dt, (split_f f1), ninf)     
-  | ESinceA        (c2, dt, f1, f2, sainf)                                -> split_debug2 f1 f2 "SINCE";  ESinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf (p2 f1 f2)))    
-  | ESince         (c2, dt, f1, f2, sinf)                                 -> split_debug2 f1 f2 "SINCE";  ESince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf (p2 f1 f2)))
-  | EOnceA         (dt, f1, oainf)                                        -> split_debug  f1 "ONCE";       EOnceA       (dt, (split_f f1), (split_oainfo oainf (p1 f1)))    
-  | EOnceZ         (dt, f1, ozinf)                                        -> split_debug  f1 "ONCE";       EOnceZ       (dt, (split_f f1), (split_ozinfo ozinf (p1 f1)))           
-  | EOnce          (dt, f1, oinf)                                         -> split_debug  f1 "ONCE";       EOnce        (dt, (split_f f1), (split_oinfo oinf (p1 f1)))   
-  | ENUntil        (c1, dt, f1, f2, uninf)                                -> split_debug2 f1 f2 "UNTIL";  ENUntil      (c1, dt, (split_f f1), (split_f f2), (split_uninfo uninf (p2 f1 f2)))                 
-  | EUntil         (c1, dt, f1, f2, uinf)                                 -> EUntil       (c1, dt, (split_f f1), (split_f f2), (split_uinfo uinf (p2 f1 f2)))            
-  | EEventuallyZ   (dt, f1, ezinf)                                        -> EEventuallyZ (dt, (split_f f1), (split_ezinfo ezinf (p1 f1)))    
-  | EEventually    (dt, f1, einf)                                         -> EEventually  (dt, (split_f f1), (split_einfo einf (p1 f1)))    
+  | MRel           (rel)                                                  -> MRel         (rel)                                                           
+  | MPred          (p, comp, inf)                                         -> MPred        (p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))                                   
+  | MNeg           (f1)                                                   -> MNeg         (split_f f1)                             
+  | MAnd           (c, f1, f2, ainf)                                      -> MAnd         (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2)))
+  | MOr            (c, f1, f2, ainf)                                      -> MOr          (c, (split_f f1), (split_f f2), (split_ainfo ainf (p2 f1 f2))) 
+  | MExists        (c, f1)                                                -> MExists      (c, (split_f f1))
+  | MAggreg        (c, f1)                                                -> MAggreg      (c, (split_f f1))
+  | MAggOnce       (f1, dt, agg, update_old, update_new, get_result)      -> MAggOnce     ((split_f f1), dt, (split_agg agg (p1 f1)), update_old, update_new, get_result)  
+  | MAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> MAggMMOnce   ((split_f f1), dt, (split_aggMM aggMM (p1 f1)), update_old, update_new, get_result)
+  | MPrev          (dt, f1, pinf)                                         -> MPrev        (dt, (split_f f1), pinf) 
+  | MNext          (dt, f1, ninf)                                         -> MNext        (dt, (split_f f1), ninf)     
+  | MSinceA        (c2, dt, f1, f2, sainf)                                -> MSinceA      (c2, dt, (split_f f1), (split_f f2), (split_sainfo sainf (p2 f1 f2)))    
+  | MSince         (c2, dt, f1, f2, sinf)                                 -> MSince       (c2, dt, (split_f f1), (split_f f2), (split_sinfo sinf (p2 f1 f2)))
+  | MOnceA         (dt, f1, oainf)                                        -> MOnceA       (dt, (split_f f1), (split_oainfo oainf (p1 f1)))    
+  | MOnceZ         (dt, f1, ozinf)                                        -> MOnceZ       (dt, (split_f f1), (split_mozinfo ozinf (p1 f1)))           
+  | MOnce          (dt, f1, oinf)                                         -> MOnce        (dt, (split_f f1), (split_moinfo oinf (p1 f1)))   
+  | MNUntil        (c1, dt, f1, f2, muninf)                               -> MNUntil      (c1, dt, (split_f f1), (split_f f2), (split_muninfo muninf (p2 f1 f2)))                 
+  | MUntil         (c1, dt, f1, f2, muinf)                                -> MUntil       (c1, dt, (split_f f1), (split_f f2), (split_muinfo muinf (p2 f1 f2)))            
+  | MEventuallyZ   (dt, f1, mezinf)                                       -> MEventuallyZ (dt, (split_f f1), (split_mezinfo mezinf (p1 f1)))    
+  | MEventually    (dt, f1, meinf)                                        -> MEventually  (dt, (split_f f1), (split_meinfo meinf (p1 f1)))    
   in
-  split_f f
+  split_f mf
 
 let split_and_save sconsts dumpfile i lastts ff closed neval =
-  print_extf "\n[split] splitting formula\n" ff;
-  let sf = split_state ff sconsts true in
-  print_extf "\n[split] splitting formula\n" sf;
-  marshal dumpfile i lastts sf closed neval
+  let a, mf = ext_to_m ff neval in
+  print_extf "\n[split] Original formula\n" ff;
+  let numparts = sconsts.num_partitions in
+  let filter_constraintsets p = 
+    let csrels = sconsts.constraints in
+    let constraints = List.filter (fun csrel -> List.exists (fun i -> i = p) csrel.partitions) csrels in
+    { keys = sconsts.keys; constraints = constraints; num_partitions = numparts } 
+  in
+  let nf i = split_state mf (filter_constraintsets i) i in
+  let rec create_partitions formulas i =
+      if i < numparts then create_partitions ((nf (i))::formulas) (i+1)
+      else ((nf i)::formulas)
+  in 
+  List.iteri (fun i f -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,f,a)) (create_partitions [] 0)
 
 (* END SPLITTING STATE *)  
 
@@ -3022,7 +3061,7 @@ let checkExitParam p = match p with
 
 let checkSplitParam p = match p with 
   | SplitParameters sp -> 
-    dumpfile := "testfile";
+    dumpfile := "partition-";
     true
   | _ -> false
 
@@ -3060,23 +3099,29 @@ let rec check_log lexbuf ff closed neval i =
     | None -> Printf.printf "%s: No filename specified\n" c;
     in
     let save_and_exit c params =  match params with
-    | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
     in
     let getConstraints p = match p with 
     (* Other case already handle by check split param *)
-    | SplitParameters sp -> sp.constraints
+    | SplitParameters sp -> sp
      in
     let split_state   c params = match params with
-    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
     in 
 
     match Log.get_next_entry lexbuf with
     | MonpolyCommand {c; parameters} ->
         let process_command c = match c with
+            | "print" ->
+               print_extf "Printing" ff; 
+               loop ffl i
             | "terminate" ->
                Printf.printf "Terminated at index: %d \n" i;
+            | "print_and_exit" ->
+               print_extf "Exiting" ff; 
+               Printf.printf "Terminated at index: %d \n" i;   
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
                 flush stdout;

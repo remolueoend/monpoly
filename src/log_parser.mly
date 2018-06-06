@@ -157,12 +157,12 @@
 
 let get_2 (_, a) = a
 
-let make_split kwt group  = match group with
-  | Some g -> 
-    let convert_lists vals = 
-      let pos = ref 0 in
-      List.map2
-      (fun k v ->
+let make_split kwt group  =
+  let convert_lists valueLists = 
+    let pos = ref 0 in
+    List.map2
+    (fun k values ->
+      List.map (fun v ->
         incr pos;
         let t = get_2 k in 
         match t with
@@ -177,20 +177,18 @@ let make_split kwt group  = match group with
             with Failure _ ->
               raise (Type_error ("Expected type float for field number "
                                 ^ (string_of_int !pos))))
-      )
-      kwt vals in
-      let cs = Helper.empty in 
-      let g =    List.map (fun sb  -> let vals, parts = sb in {values = (List.fold_right Helper.add (convert_lists vals) cs); partitions = parts}) g in
-      let keys = List.map (fun kwt -> let k, t = kwt in k) kwt in
-      SplitParameters { keys = keys; constraints = g}
-  | None   -> raise Parsing.Parse_error
+      ) values
+    )
+    kwt valueLists
+  in
+  let g    = List.map (fun sb  -> let vals, parts = sb in {values = (convert_lists vals); partitions = parts}) group in
+  let keys = List.map (fun kwt -> let k, t = kwt in k) kwt in
+  let max  = Helper.get_max g in
+  SplitParameters { keys = keys; constraints = g; num_partitions = max }
   
-let make_group group subgroup = 
-  match group with
-    | Some g ->  Some(subgroup::g)
-    | None   ->  Some([subgroup])
+let make_group group subgroup = subgroup::group
 
-let make_subgroup values partitions = (values, List.map (fun p -> try (int_of_string p) with Failure _ -> raise (Type_error ("Partitions list expects integers"))) partitions)
+let make_subgroup valueLists partitions = (valueLists, List.map (fun p -> try (int_of_string p) with Failure _ -> raise (Type_error ("Partitions list expects integers"))) partitions)
 
 let make_key str = match Misc.nsplit str ":" with
         | [] -> failwith "[Log_parser.make_predicate] internal error"
@@ -283,24 +281,22 @@ fields:
 
 parameters:
       | STR                     { Argument   $1    }
-      | keys group              { make_split $1 $2 }
+      | keys COM group          { make_split $1 $3 }
 keys: 
-      | key     keys            { (make_key $1)::$2}
+      | key      keys           { (make_key $1)::$2}
       |                         { [] }
 key:
       | LPA STR RPA             { $2 }
 
 group:
       | subgroup group          { make_group $2 $1 } 
-      |                         { None }
+      |                         { [] }
     
 subgroup:
-      | fields LPA fields RPA   { make_subgroup $1 $3 }
+      | constraintList COM LPA fields RPA   { make_subgroup $1 $4 }
 
-/*constraintTuple:
-      | LPA constraintList RPA COM LPA constraintList RPA     { { left = $2; right = $6}  }
 constraintList:
       | constraintSet constraintList      { $1::$2  }
       |                                   { [] }
 constraintSet:
-      | LPA fields RPA                    { $2}*/
+      | LPA fields RPA                    { $2 }
