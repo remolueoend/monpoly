@@ -3045,7 +3045,7 @@ let rec check_log lexbuf ff closed neval i =
       Perf.check_log i !lastts;
     let save_state c params = match params with
     | Some (Argument filename) ->
-        marshal filename i lastts ff closed neval;
+        marshal filename i !lastts ff closed neval;
         Printf.printf "save_state OK\n";
         flush stdout;
     | None -> Printf.printf "%s: No filename specified\n" c;
@@ -3053,14 +3053,14 @@ let rec check_log lexbuf ff closed neval i =
     let restore_state c params = match params with
     | Some (Argument filename) ->
         let (i,last_ts,ff,closed,neval) = unmarshal filename in
-            lastts := last_ts;
+        lastts := last_ts;
         Printf.printf "restore_state OK\n";
         flush stdout;
         check_log lexbuf ff closed neval i;
     | None -> Printf.printf "%s: No filename specified\n" c;
     in
     let save_and_exit c params =  match params with
-    | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
+    | Some p -> if (checkExitParam p = true)  then marshal !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
     in
     let getConstraints p = match p with 
