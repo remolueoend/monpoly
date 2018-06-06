@@ -2766,6 +2766,14 @@ exception Type_error of string
 
 (* SPLITTING & COMBINING STATE *)
 
+type 'a tree =
+  | ALNode of 'a
+  | AINode of ('a * int * int)  
+
+let print_atree = function 
+  | ALNode (a)          -> print_endline "ALNODE"  
+  | AINode (a, l1 , l2) -> Printf.printf "AINODE, l1: %i, l2: %i \n" l1 l2  
+
 type array_representation = 
   | ARel of  relation
   | APred of predicate * comp_one * info
@@ -2797,26 +2805,26 @@ type array_representation =
 let a_to_m af =
   print_endline "A_TO_M";
   let rec sf i = match af.(i) with
-    | ARel           (rel)                                                     ->  print_endline ("MRel        :"^string_of_int i); MRel(rel)
-    | APred          (p, comp, inf)                                            ->  print_endline ("MPred       :"^string_of_int i); MPred(p, comp, inf)   
-    | ANeg           (i, l1)                                                   ->  print_endline ("MNeg        :"^string_of_int i); let sf1 = sf (i+1)in                           MNeg(sf1)
-    | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("MAnd        :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)
-    | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("MOr         :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)
-    | AExists        (i, c, l1)                                                ->  print_endline ("MExists     :"^string_of_int i); let sf1 = sf (i+1)in                           MExists        (c, sf1)
-    | AAggreg        (i, c, l1)                                                ->  print_endline ("MAggreg     :"^string_of_int i); let sf1 = sf (i+1)in                           MAggreg        (c, sf1)
-    | AAggOnce       (i, l1, dt, agg, update_old, update_new, get_result)      ->  print_endline ("MAggOnce    :"^string_of_int i); let sf1 = sf (i+1)in                           MAggOnce       (sf1, dt, agg, update_old, update_new, get_result)
-    | AAggMMOnce     (i, l1, dt, aggMM, update_old, update_new, get_result)    ->  print_endline ("MAggMMOnce  :"^string_of_int i); let sf1 = sf (i+1)in                           MAggMMOnce     (sf1, dt, aggMM, update_old, update_new, get_result)
-    | APrev          (i, dt, l1, pinf)                                         ->  print_endline ("MPrev       :"^string_of_int i); let sf1 = sf (i+1)in                           MPrev          (dt, sf1, pinf)
-    | ANext          (i, dt, l1, ninf)                                         ->  print_endline ("MNext       :"^string_of_int i); let sf1 = sf (i+1)in                           MNext          (dt, sf1, ninf)
-    | ASinceA        (i, c2, dt, l1, l2, sainf)                                ->  print_endline ("MSinceA     :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSinceA        (c2, dt, sf1, sf2, sainf)
-    | ASince         (i, c2, dt, l1, l2, sinf)                                 ->  print_endline ("MSince      :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSince         (c2, dt, sf1, sf2, sinf)
-    | AOnceA         (i, dt, l1, oainf)                                        ->  print_endline ("MOnceA      :"^string_of_int i); let sf1 = sf (i+1)in                           MOnceA         (dt, sf1, oainf)
-    | AOnceZ         (i, dt, l1, ozinf)                                        ->  print_endline ("MOnceZ      :"^string_of_int i); let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, ozinf)
-    | AOnce          (i, dt, l1, oinf)                                         ->  print_endline ("MOnce       :"^string_of_int i); let sf1 = sf (i+1)in                           MOnce          (dt, sf1, oinf)
-    | ANUntil        (i, c1, dt, l1, l2, muninf)                               ->  print_endline ("MNUntil     :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MNUntil        (c1, dt, sf1, sf2, muninf)
-    | AUntil         (i, c1, dt, l1, l2, muinf)                                ->  print_endline ("MUntil      :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MUntil         (c1, dt, sf1, sf2, muinf)
-    | AEventuallyZ   (i, dt, l1, mezinf)                                       ->  print_endline ("MEventuallyZ:"^string_of_int i); let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, mezinf)
-    | AEventually    (i, dt, l1, meinf)                                        ->  print_endline ("MEventually :"^string_of_int i); let sf1 = sf (i+1)in                           MEventually    (dt, sf1, meinf)
+    | ARel           (rel)                                                     -> MRel(rel)
+    | APred          (p, comp, inf)                                            -> MPred(p, comp, inf)   
+    | ANeg           (i, l1)                                                   -> let sf1 = sf (i+1)in                           MNeg(sf1)
+    | AAnd           (i, c, l1, l2, ainf)                                      -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)
+    | AOr            (i, c, l1, l2, ainf)                                      -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)
+    | AExists        (i, c, l1)                                                -> let sf1 = sf (i+1)in                           MExists        (c, sf1)
+    | AAggreg        (i, c, l1)                                                -> let sf1 = sf (i+1)in                           MAggreg        (c, sf1)
+    | AAggOnce       (i, l1, dt, agg, update_old, update_new, get_result)      -> let sf1 = sf (i+1)in                           MAggOnce       (sf1, dt, agg, update_old, update_new, get_result)
+    | AAggMMOnce     (i, l1, dt, aggMM, update_old, update_new, get_result)    -> let sf1 = sf (i+1)in                           MAggMMOnce     (sf1, dt, aggMM, update_old, update_new, get_result)
+    | APrev          (i, dt, l1, pinf)                                         -> let sf1 = sf (i+1)in                           MPrev          (dt, sf1, pinf)
+    | ANext          (i, dt, l1, ninf)                                         -> let sf1 = sf (i+1)in                           MNext          (dt, sf1, ninf)
+    | ASinceA        (i, c2, dt, l1, l2, sainf)                                -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSinceA        (c2, dt, sf1, sf2, sainf)
+    | ASince         (i, c2, dt, l1, l2, sinf)                                 -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSince         (c2, dt, sf1, sf2, sinf)
+    | AOnceA         (i, dt, l1, oainf)                                        -> let sf1 = sf (i+1)in                           MOnceA         (dt, sf1, oainf)
+    | AOnceZ         (i, dt, l1, ozinf)                                        -> let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, ozinf)
+    | AOnce          (i, dt, l1, oinf)                                         -> let sf1 = sf (i+1)in                           MOnce          (dt, sf1, oinf)
+    | ANUntil        (i, c1, dt, l1, l2, muninf)                               -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MNUntil        (c1, dt, sf1, sf2, muninf)
+    | AUntil         (i, c1, dt, l1, l2, muinf)                                -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MUntil         (c1, dt, sf1, sf2, muinf)
+    | AEventuallyZ   (i, dt, l1, mezinf)                                       -> let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, mezinf)
+    | AEventually    (i, dt, l1, meinf)                                        -> let sf1 = sf (i+1)in                           MEventually    (dt, sf1, meinf)
   in sf 0
 
 (* COMBINING STATES *)
@@ -3123,7 +3131,6 @@ let split_relation rel values mapping =
   nrel
 
 let split_state mf keys values size =
-  print_endline (string_of_int size);
   let init = ARel (Relation.make_relation [(Tuple.make_tuple [])]) in
   let fa = Array.make size init in
   (*TODO: implement relation splitting according to constraint set; *)
@@ -3142,6 +3149,7 @@ let split_state mf keys values size =
     (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
     split_relation rel values mapping
   in
+
   (*helper function to split tree states *)
   let split_tree tree pred =
     let split_res n =
@@ -3150,14 +3158,23 @@ let split_state mf keys values size =
       | None -> None
     in
     let handle_node n = { l = n.l; r = n.r; res = (split_res n.res)} in
+
+    let l = ref [] in
+    let rec create_list t i = match t with
+    | LNode ln             -> l :=  ALNode  (handle_node ln)::!l; i+1
+    (* computing len2 so the nodes contained on the right side of the subtree will be on the right in the list *)
+    | INode (a,left,right) -> let len2 = (create_list right 0) in let len1 = (create_list left 0) in l := AINode  (handle_node a, len1, len2)::!l; i+len1+len2+1
+    in
+    ignore(create_list tree 0);
+    let arr = Array.of_list !l in 
+    (*Array.iter print_atree arr;*)
+
     let rec split_t t = match t with
     | LNode ln      -> LNode (handle_node ln)
     | INode (a,l,r) -> INode ((handle_node a), (split_t l), (split_t r))
     in
-    split_t tree
+    split_t tree 
   in
-
-
   let split_info inf nq p =
     Queue.iter (
      fun e -> let i, ts, r  = e in
@@ -3317,8 +3334,7 @@ let split_state mf keys values size =
     | MEventuallyZ   (dt, f1, mezinf)                                       -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AEventuallyZ (tmp, dt, (l1), (split_mezinfo mezinf (p1 f1)))                                   in fa.(tmp) <- af; (l1+l+1)
     | MEventually    (dt, f1, meinf)                                        -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AEventually  (tmp, dt, (l1), (split_meinfo meinf (p1 f1)))                                     in fa.(tmp) <- af; (l1+l+1)
     in
-  print_endline ("Length: "^string_of_int (split_f mf 0));
-  Array.iter print_af fa;
+  ignore(split_f mf 0);
   fa
 
 let get_mf_size mf =
