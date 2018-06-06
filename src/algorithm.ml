@@ -2797,8 +2797,9 @@ type array_representation =
 let a_to_m af =
   print_endline "A_TO_M";
   let rec sf i = match af.(i) with
-    | ARel           (rel)                                                  ->  print_endline ("MRel        :"^string_of_int i); MRel(rel)
-    | APred          (p, comp, inf)                                ->  print_endline ("MPred       :"^string_of_int i); MPred(p, comp, inf)                                               ->  print_endline ("MNeg        :"^string_of_int i); let sf1 = sf (i+1)in                           MNeg(sf1)
+    | ARel           (rel)                                                     ->  print_endline ("MRel        :"^string_of_int i); MRel(rel)
+    | APred          (p, comp, inf)                                            ->  print_endline ("MPred       :"^string_of_int i); MPred(p, comp, inf)   
+    | ANeg           (i, l1)                                                   ->  print_endline ("MNeg        :"^string_of_int i); let sf1 = sf (i+1)in                           MNeg(sf1)
     | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("MAnd        :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)
     | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("MOr         :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)
     | AExists        (i, c, l1)                                                ->  print_endline ("MExists     :"^string_of_int i); let sf1 = sf (i+1)in                           MExists        (c, sf1)
@@ -2821,7 +2822,7 @@ let a_to_m af =
 (* COMBINING STATES *)
 
 (* Used for Array.iter over mformula serialized into array *)
-let print_af = function                                    ->  print_endline ("APred       :"^string_of_int 0)
+let print_af = function                                    
   | ARel           (rel)                                                     ->  print_endline ("ARel        :"^string_of_int 0)
   | APred          (p, comp, inf)                                            ->  print_endline ("APred       :"^string_of_int 0)
   | ANeg           (i, l1)                                                   ->  print_endline ("ANeg        :"^string_of_int l1)
