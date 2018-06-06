@@ -2604,11 +2604,11 @@ let ext_to_m ff neval =
         }
   in
   let o2m oinf =
-    let molast = if oinf.olast = Dllist.void then -1 else 0 in
+    let molast = if oinf.olast = Dllist.void then -1 else Dllist.get_index oinf.olast oinf.oauxrels in
     { motree = oinf.otree; molast = molast; moauxrels = oinf.oauxrels }
   in
   let oz2m ozinf =
-    let mozlast = if ozinf.ozlast = Dllist.void then -1 else 0 in
+    let mozlast = if ozinf.ozlast = Dllist.void then -1 else Dllist.get_index ozinf.ozlast ozinf.ozauxrels in
     { moztree = ozinf.oztree; mozlast = mozlast; mozauxrels = ozinf.ozauxrels}
   in
   let a = NEval.to_array neval in
@@ -2645,7 +2645,7 @@ let m_to_ext mf neval =
     in
     let ezlast =
        if mezinf.mezlast = -1 then Dllist.void
-       else Dllist.get_last_cell mezinf.mezauxrels
+       else Dllist.get_cell_at_index mezinf.mezlast mezinf.mezauxrels
     in
     {ezlastev   = cell;
      eztree     = mezinf.meztree;
@@ -2701,14 +2701,14 @@ let m_to_ext mf neval =
   let mo2e moinf =
     let olast =
       if moinf.molast = -1 then Dllist.void
-      else Dllist.get_last_cell moinf.moauxrels
+      else Dllist.get_cell_at_index moinf.molast moinf.moauxrels
     in
     { otree = moinf.motree; olast = olast; oauxrels = moinf.moauxrels }
   in
   let moz2e mozinf =
     let ozlast =
       if mozinf.mozlast = -1 then Dllist.void
-      else Dllist.get_last_cell mozinf.mozauxrels
+      else Dllist.get_cell_at_index mozinf.mozlast mozinf.mozauxrels
     in
     { oztree = mozinf.moztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
   in
