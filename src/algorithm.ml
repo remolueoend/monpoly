@@ -811,7 +811,7 @@ let update_old_until q tsq i intv inf discard  =
           elim_old_raux()
         end
   in
-  
+
   elim_old_raux ();
 
   Sj.iter (
@@ -1009,7 +1009,7 @@ let neval_is_last neval last =
   (not (last == NEval.void)) && NEval.is_last neval last
 
 (* get the current position to be evaluated (for some subformula) *)
-let neval_get_crt neval last crt q = 
+let neval_get_crt neval last crt q =
   if last == NEval.void then
     begin
       assert(q=0);
@@ -1444,7 +1444,7 @@ let rec eval f neval crt discard =
              satisfies the temporal constraint relative to q *)
           let f1union = ref Relation.empty in
           let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
-          let rec iter1 () =          
+          let rec iter1 () =
             let j,tsj,relj = Dllist.get_data !crt1_j in
             if j < q then
               begin (* clean up from previous evaluation *)
@@ -1741,7 +1741,7 @@ let add_index f i tsi db =
       update f2
   in
   update f
-  
+
 (** This function displays the "results" (if any) obtained after
     analyzing event index [i]. The results are those tuples satisfying
     the formula for some index [q<=i]. *)
@@ -2412,7 +2412,7 @@ let rec add_ext f =
     let ff1 = add_ext ef1 in
     let ff2 = add_ext f2 in
     if neg then
-      let comp =        
+      let comp =
         let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
         assert(Misc.subset attr1 attr2);
         fun relj rel1 -> Relation.minus posl relj rel1
@@ -2425,7 +2425,7 @@ let rec add_ext f =
       in
       ENUntil (comp,intv,ff1,ff2,inf)
     else
-      let comp = 
+      let comp =
         let matches2 = Table.get_matches attr2 attr1 in
         let matches1 = Table.get_matches attr1 attr2 in
         fun relj rel1 -> Relation.natural_join matches2 matches1 relj rel1
@@ -2461,7 +2461,7 @@ let rec add_ext f =
 
 
 
-(* 
+(*
   SAVING AND LOADING STATE
 *)
 
@@ -2472,8 +2472,8 @@ type mozinfo = { moztree: (int, relation) Sliding.stree;
 
 type moinfo  = { motree: (timestamp, relation) Sliding.stree;
                  molast: int;
-                 moauxrels: (timestamp * relation) Dllist.dllist}        
-                 
+                 moauxrels: (timestamp * relation) Dllist.dllist}
+
 type msainfo = { msres: relation;
                  msarel2: relation option;
                  msaauxrels: (timestamp * relation) Mqueue.t}
@@ -2603,14 +2603,14 @@ let ext_to_m ff neval =
           mlistrel2 = uninf.listrel2;
         }
   in
-  let o2m oinf = 
+  let o2m oinf =
     let molast = if oinf.olast = Dllist.void then -1 else 0 in
     { motree = oinf.otree; molast = molast; moauxrels = oinf.oauxrels }
   in
-  let oz2m ozinf = 
+  let oz2m ozinf =
     let mozlast = if ozinf.ozlast = Dllist.void then -1 else 0 in
     { moztree = ozinf.oztree; mozlast = mozlast; mozauxrels = ozinf.ozauxrels}
-  in  
+  in
   let a = NEval.to_array neval in
   let rec e2m = function
     | ERel           (rel)                                                -> MRel           (rel)
@@ -2646,7 +2646,7 @@ let m_to_ext mf neval =
     let ezlast =
        if mezinf.mezlast = -1 then Dllist.void
        else Dllist.get_last_cell mezinf.mezauxrels
-    in  
+    in
     {ezlastev   = cell;
      eztree     = mezinf.meztree;
      ezlast     = ezlast;
@@ -2661,7 +2661,7 @@ let m_to_ext mf neval =
     let elast =
       if meinf.melast = -1 then Dllist.void
       else Dllist.get_cell_at_index meinf.melast meinf.meauxrels
-    in  
+    in
     {elastev    = cell;
      etree      = meinf.metree;
      elast      = elast;
@@ -2698,20 +2698,20 @@ let m_to_ext mf neval =
      listrel2 = muninf.mlistrel2;
     }
   in
-  let mo2e moinf = 
-    let olast = 
+  let mo2e moinf =
+    let olast =
       if moinf.molast = -1 then Dllist.void
       else Dllist.get_last_cell moinf.moauxrels
     in
-    { otree = moinf.motree; olast = olast; oauxrels = moinf.moauxrels }  
+    { otree = moinf.motree; olast = olast; oauxrels = moinf.moauxrels }
   in
-  let moz2e mozinf =  
-    let ozlast = 
+  let moz2e mozinf =
+    let ozlast =
       if mozinf.mozlast = -1 then Dllist.void
       else Dllist.get_last_cell mozinf.mozauxrels
     in
-    { oztree = mozinf.moztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }  
-  in   
+    { oztree = mozinf.moztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
+  in
   let rec m2e = function
     | MRel           (rel)                                                    ->      ERel           (rel)
     | MPred          (pred, c1, inf)                                          ->      EPred          (pred, c1, inf)
@@ -2745,26 +2745,28 @@ let dump_to_file dumpfile value =
   Marshal.to_channel ch value [Marshal.Closures];
   close_out ch
 
+type state = (int * timestamp * bool * mformula * (int * timestamp) array * int * int * bool)
+
 let marshal dumpfile i lastts ff closed neval =
   let a, mf = ext_to_m ff neval in
-  let value = (i,lastts,closed,mf,a) in
+  let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
   dump_to_file dumpfile value
 
 let unmarshal resumefile =
   let ch = open_in_bin resumefile in
-  let value = (Marshal.from_channel ch : (int * timestamp * bool * mformula * (int * timestamp) array)) in
-  let (i,last_ts,closed,mf,a) = value in
+  let value = (Marshal.from_channel ch : state) in
+  let (i,last_ts,closed,mf,a,tp,skipped_tps,last) = value in
   let neval = NEval.from_array a in
   let ff = m_to_ext mf neval in
-  (i,last_ts,ff,closed,neval)
+  (i,last_ts,ff,closed,neval,tp,skipped_tps,last)
 
-(* END SAVING AND LOADING STATE *)  
+(* END SAVING AND LOADING STATE *)
 
 exception Type_error of string
 
 (* SPLITTING & COMBINING STATE *)
 
-type array_representation = 
+type array_representation =
   | ARel of  int * relation
   | APred of int * predicate * comp_one * info
   | ANeg of int * int
@@ -2790,55 +2792,55 @@ type array_representation =
   | ANUntil of int * comp_two * interval * int * int * muninfo
   | AUntil of int * comp_two * interval * int * int * muinfo
   | AEventuallyZ of int * interval * int * mezinfo
-  | AEventually of int * interval * int * meinfo 
+  | AEventually of int * interval * int * meinfo
 
-let a_to_m af = 
+let a_to_m af =
   print_endline "A_TO_M";
-  let rec sf i = match af.(i) with  
+  let rec sf i = match af.(i) with
     | ARel           (i, rel)                                                  ->  print_endline ("MRel        :"^string_of_int i); MRel(rel)
     | APred          (i, p, comp, inf)                                         ->  print_endline ("MPred       :"^string_of_int i); MPred(p, comp, inf)
     | ANeg           (i, l1)                                                   ->  print_endline ("MNeg        :"^string_of_int i); let sf1 = sf (i+1)in                           MNeg(sf1)
-    | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("MAnd        :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)                                      
-    | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("MOr         :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)                                      
-    | AExists        (i, c, l1)                                                ->  print_endline ("MExists     :"^string_of_int i); let sf1 = sf (i+1)in                           MExists        (c, sf1)                                                  
-    | AAggreg        (i, c, l1)                                                ->  print_endline ("MAggreg     :"^string_of_int i); let sf1 = sf (i+1)in                           MAggreg        (c, sf1)                                                  
-    | AAggOnce       (i, l1, dt, agg, update_old, update_new, get_result)      ->  print_endline ("MAggOnce    :"^string_of_int i); let sf1 = sf (i+1)in                           MAggOnce       (sf1, dt, agg, update_old, update_new, get_result)        
-    | AAggMMOnce     (i, l1, dt, aggMM, update_old, update_new, get_result)    ->  print_endline ("MAggMMOnce  :"^string_of_int i); let sf1 = sf (i+1)in                           MAggMMOnce     (sf1, dt, aggMM, update_old, update_new, get_result)      
-    | APrev          (i, dt, l1, pinf)                                         ->  print_endline ("MPrev       :"^string_of_int i); let sf1 = sf (i+1)in                           MPrev          (dt, sf1, pinf)                                           
-    | ANext          (i, dt, l1, ninf)                                         ->  print_endline ("MNext       :"^string_of_int i); let sf1 = sf (i+1)in                           MNext          (dt, sf1, ninf)                                           
-    | ASinceA        (i, c2, dt, l1, l2, sainf)                                ->  print_endline ("MSinceA     :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSinceA        (c2, dt, sf1, sf2, sainf)                                  
-    | ASince         (i, c2, dt, l1, l2, sinf)                                 ->  print_endline ("MSince      :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSince         (c2, dt, sf1, sf2, sinf)                                   
-    | AOnceA         (i, dt, l1, oainf)                                        ->  print_endline ("MOnceA      :"^string_of_int i); let sf1 = sf (i+1)in                           MOnceA         (dt, sf1, oainf)                                          
-    | AOnceZ         (i, dt, l1, ozinf)                                        ->  print_endline ("MOnceZ      :"^string_of_int i); let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, ozinf)                                          
-    | AOnce          (i, dt, l1, oinf)                                         ->  print_endline ("MOnce       :"^string_of_int i); let sf1 = sf (i+1)in                           MOnce          (dt, sf1, oinf)                                           
-    | ANUntil        (i, c1, dt, l1, l2, muninf)                               ->  print_endline ("MNUntil     :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MNUntil        (c1, dt, sf1, sf2, muninf)                                 
-    | AUntil         (i, c1, dt, l1, l2, muinf)                                ->  print_endline ("MUntil      :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MUntil         (c1, dt, sf1, sf2, muinf)                                  
-    | AEventuallyZ   (i, dt, l1, mezinf)                                       ->  print_endline ("MEventuallyZ:"^string_of_int i); let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, mezinf)                                         
-    | AEventually    (i, dt, l1, meinf)                                        ->  print_endline ("MEventually :"^string_of_int i); let sf1 = sf (i+1)in                           MEventually    (dt, sf1, meinf)                                          
+    | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("MAnd        :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)
+    | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("MOr         :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)
+    | AExists        (i, c, l1)                                                ->  print_endline ("MExists     :"^string_of_int i); let sf1 = sf (i+1)in                           MExists        (c, sf1)
+    | AAggreg        (i, c, l1)                                                ->  print_endline ("MAggreg     :"^string_of_int i); let sf1 = sf (i+1)in                           MAggreg        (c, sf1)
+    | AAggOnce       (i, l1, dt, agg, update_old, update_new, get_result)      ->  print_endline ("MAggOnce    :"^string_of_int i); let sf1 = sf (i+1)in                           MAggOnce       (sf1, dt, agg, update_old, update_new, get_result)
+    | AAggMMOnce     (i, l1, dt, aggMM, update_old, update_new, get_result)    ->  print_endline ("MAggMMOnce  :"^string_of_int i); let sf1 = sf (i+1)in                           MAggMMOnce     (sf1, dt, aggMM, update_old, update_new, get_result)
+    | APrev          (i, dt, l1, pinf)                                         ->  print_endline ("MPrev       :"^string_of_int i); let sf1 = sf (i+1)in                           MPrev          (dt, sf1, pinf)
+    | ANext          (i, dt, l1, ninf)                                         ->  print_endline ("MNext       :"^string_of_int i); let sf1 = sf (i+1)in                           MNext          (dt, sf1, ninf)
+    | ASinceA        (i, c2, dt, l1, l2, sainf)                                ->  print_endline ("MSinceA     :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSinceA        (c2, dt, sf1, sf2, sainf)
+    | ASince         (i, c2, dt, l1, l2, sinf)                                 ->  print_endline ("MSince      :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSince         (c2, dt, sf1, sf2, sinf)
+    | AOnceA         (i, dt, l1, oainf)                                        ->  print_endline ("MOnceA      :"^string_of_int i); let sf1 = sf (i+1)in                           MOnceA         (dt, sf1, oainf)
+    | AOnceZ         (i, dt, l1, ozinf)                                        ->  print_endline ("MOnceZ      :"^string_of_int i); let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, ozinf)
+    | AOnce          (i, dt, l1, oinf)                                         ->  print_endline ("MOnce       :"^string_of_int i); let sf1 = sf (i+1)in                           MOnce          (dt, sf1, oinf)
+    | ANUntil        (i, c1, dt, l1, l2, muninf)                               ->  print_endline ("MNUntil     :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MNUntil        (c1, dt, sf1, sf2, muninf)
+    | AUntil         (i, c1, dt, l1, l2, muinf)                                ->  print_endline ("MUntil      :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MUntil         (c1, dt, sf1, sf2, muinf)
+    | AEventuallyZ   (i, dt, l1, mezinf)                                       ->  print_endline ("MEventuallyZ:"^string_of_int i); let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, mezinf)
+    | AEventually    (i, dt, l1, meinf)                                        ->  print_endline ("MEventually :"^string_of_int i); let sf1 = sf (i+1)in                           MEventually    (dt, sf1, meinf)
   in sf 0
 
 (* COMBINING STATES *)
 
 let print_af = function
-  | ARel           (i, rel)                                                  ->  print_endline ("ARel        :"^string_of_int 0)  
-  | APred          (i, p, comp, inf)                                         ->  print_endline ("APred       :"^string_of_int 0)  
+  | ARel           (i, rel)                                                  ->  print_endline ("ARel        :"^string_of_int 0)
+  | APred          (i, p, comp, inf)                                         ->  print_endline ("APred       :"^string_of_int 0)
   | ANeg           (i, l1)                                                   ->  print_endline ("ANeg        :"^string_of_int l1)
-  | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("AAnd        :"^string_of_int (l1 + l2)) 
-  | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("AOr         :"^string_of_int (l1 + l2)) 
-  | AExists        (i, c, l1)                                                ->  print_endline ("AExists     :"^string_of_int l1) 
-  | AAggreg        (i, c, l1)                                                ->  print_endline ("AAggreg     :"^string_of_int l1) 
-  | AAggOnce       (i, l1, dt, agg, update_old, update_new, get_result)      ->  print_endline ("AAggOnce    :"^string_of_int l1) 
-  | AAggMMOnce     (i, l1, dt, aggMM, update_old, update_new, get_result)    ->  print_endline ("AAggMMOnce  :"^string_of_int l1) 
-  | APrev          (i, dt, l1, pinf)                                         ->  print_endline ("APrev       :"^string_of_int l1) 
+  | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("AAnd        :"^string_of_int (l1 + l2))
+  | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("AOr         :"^string_of_int (l1 + l2))
+  | AExists        (i, c, l1)                                                ->  print_endline ("AExists     :"^string_of_int l1)
+  | AAggreg        (i, c, l1)                                                ->  print_endline ("AAggreg     :"^string_of_int l1)
+  | AAggOnce       (i, l1, dt, agg, update_old, update_new, get_result)      ->  print_endline ("AAggOnce    :"^string_of_int l1)
+  | AAggMMOnce     (i, l1, dt, aggMM, update_old, update_new, get_result)    ->  print_endline ("AAggMMOnce  :"^string_of_int l1)
+  | APrev          (i, dt, l1, pinf)                                         ->  print_endline ("APrev       :"^string_of_int l1)
   | ANext          (i, dt, l1, ninf)                                         ->  print_endline ("ANext       :"^string_of_int l1)
-  | ASinceA        (i, c2, dt, l1, l2, sainf)                                ->  print_endline ("ASinceA     :"^string_of_int (l1 + l2))  
-  | ASince         (i, c2, dt, l1, l2, sinf)                                 ->  print_endline ("ASince      :"^string_of_int (l1 + l2))  
-  | AOnceA         (i, dt, l1, oainf)                                        ->  print_endline ("AOnceA      :"^string_of_int l1) 
-  | AOnceZ         (i, dt, l1, ozinf)                                        ->  print_endline ("AOnceZ      :"^string_of_int l1) 
+  | ASinceA        (i, c2, dt, l1, l2, sainf)                                ->  print_endline ("ASinceA     :"^string_of_int (l1 + l2))
+  | ASince         (i, c2, dt, l1, l2, sinf)                                 ->  print_endline ("ASince      :"^string_of_int (l1 + l2))
+  | AOnceA         (i, dt, l1, oainf)                                        ->  print_endline ("AOnceA      :"^string_of_int l1)
+  | AOnceZ         (i, dt, l1, ozinf)                                        ->  print_endline ("AOnceZ      :"^string_of_int l1)
   | AOnce          (i, dt, l1, oinf)                                         ->  print_endline ("AOnce       :"^string_of_int l1)
-  | ANUntil        (i, c1, dt, l1, l2, muninf)                               ->  print_endline ("ANUntil     :"^string_of_int (l1 + l2)) 
-  | AUntil         (i, c1, dt, l1, l2, muinf)                                ->  print_endline ("AUntil      :"^string_of_int (l1 + l2)) 
-  | AEventuallyZ   (i, dt, l1, mezinf)                                       ->  print_endline ("AEventuallyZ:"^string_of_int l1) 
+  | ANUntil        (i, c1, dt, l1, l2, muninf)                               ->  print_endline ("ANUntil     :"^string_of_int (l1 + l2))
+  | AUntil         (i, c1, dt, l1, l2, muinf)                                ->  print_endline ("AUntil      :"^string_of_int (l1 + l2))
+  | AEventuallyZ   (i, dt, l1, mezinf)                                       ->  print_endline ("AEventuallyZ:"^string_of_int l1)
   | AEventually    (i, dt, l1, meinf)                                        ->  print_endline ("AEventually :"^string_of_int l1)
 
 let combine_states f1 f2  =
@@ -2850,30 +2852,30 @@ let combine_states f1 f2  =
 (* SPLITTING STATE *)
 let get_predicate f =
   let pvars p = Predicate.pvars p in
-  let rec get_pred = function        
-    (* Equal, Less, LessEq all mapped to free vars;  ForAll not used *)    
-  | MRel           (_)                    -> raise (Type_error ("Predicate function should not be entering ERel"))                                       
-  | MPred          (p, _, _)              -> pvars p                              
-  | MNeg           (f1)                   -> get_pred f1                             
-  | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2) 
+  let rec get_pred = function
+    (* Equal, Less, LessEq all mapped to free vars;  ForAll not used *)
+  | MRel           (_)                    -> raise (Type_error ("Predicate function should not be entering ERel"))
+  | MPred          (p, _, _)              -> pvars p
+  | MNeg           (f1)                   -> get_pred f1
+  | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
   | MOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
-  | MExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )                           
-  | MAggreg        (_, f1)                -> get_pred f1                              
-  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1    
-  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1    
-  | MPrev          (_, f1, _)             -> get_pred f1                              
-  | MNext          (_, f1, _)             -> get_pred f1                              
-  | MSinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
-  | MSince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2) 
-  | MOnceA         (_, f1, _)             -> get_pred f1                             
-  | MOnceZ         (_, f1, _)             -> get_pred f1                             
-  | MOnce          (_, f1, _)             -> get_pred f1                              
+  | MExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )
+  | MAggreg        (_, f1)                -> get_pred f1
+  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1
+  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1
+  | MPrev          (_, f1, _)             -> get_pred f1
+  | MNext          (_, f1, _)             -> get_pred f1
+  | MSinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MSince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MOnceA         (_, f1, _)             -> get_pred f1
+  | MOnceZ         (_, f1, _)             -> get_pred f1
+  | MOnce          (_, f1, _)             -> get_pred f1
   | MNUntil        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
   | MUntil         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MEventuallyZ   (_, f1, _)             -> get_pred f1                             
-  | MEventually    (_, f1, _)             -> get_pred f1          
+  | MEventuallyZ   (_, f1, _)             -> get_pred f1
+  | MEventually    (_, f1, _)             -> get_pred f1
   in
-  get_pred f  
+  get_pred f
 
 let get_predicate2 f1 f2 =
   Misc.union (get_predicate f1) (get_predicate f2)
@@ -2912,9 +2914,9 @@ let check_tuple t vl =
   (* Lists always have same length due to filtering in split function *)
   let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false
-  
 
-let split_relation rel values mapping =  
+
+let split_relation rel values mapping =
   (* mapping used to reorder values *)
   let vals = mapping values in
 
@@ -2923,7 +2925,7 @@ let split_relation rel values mapping =
   let nrel = Relation.filter (fun t -> check_tuple t vals) rel in
   (*Relation.print_rel "Filtered Relation" nrel;
   print_endline "\n";*)
-  nrel 
+  nrel
 
 let split_state mf keys values size =
   print_endline (string_of_int size);
@@ -2932,14 +2934,14 @@ let split_state mf keys values size =
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
 
-  let split rel preds = 
+  let split rel preds =
     (* determine positions of relation column keys in cs.keys *)
     let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) preds in
     (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
     let pos = List.filter (fun e -> e >= 0) pos in
 
     (* If no specified keys are in the predicate list, return the whole relation *)
-    if List.length pos = 0 then rel else 
+    if List.length pos = 0 then rel else
     (* Else we create a mapping to reorder our partition input values *)
     let mapping t = List.map (fun e -> List.nth t e) pos in
     (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
@@ -2956,7 +2958,7 @@ let split_state mf keys values size =
     let rec split_t t = match t with
     | LNode ln      -> LNode (handle_node ln)
     | INode (a,l,r) -> INode ((handle_node a), (split_t l), (split_t r))
-    in 
+    in
     split_t tree
   in
 
@@ -3115,7 +3117,7 @@ let split_state mf keys values size =
     | MEventuallyZ   (dt, f1, mezinf)                                       -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AEventuallyZ (tmp, dt, (l1), (split_mezinfo mezinf (p1 f1)))                                   in fa.(tmp) <- af; (l1+l+1)
     | MEventually    (dt, f1, meinf)                                        -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AEventually  (tmp, dt, (l1), (split_meinfo meinf (p1 f1)))                                     in fa.(tmp) <- af; (l1+l+1)
     in
-  print_endline ("Length: "^string_of_int (split_f mf 0)); 
+  print_endline ("Length: "^string_of_int (split_f mf 0));
   Array.iter print_af fa;
   fa
 
@@ -3124,8 +3126,8 @@ let get_mf_size mf =
   let rec get_size = function
   (* Don't think ERel is relevant *)
   | MRel           (rel)                                                  ->  i := (!i+1)
-  | MPred          (p, comp, inf)                                         ->  i := (!i+1)           
-  | MNeg           (f1)                                                   ->  get_size f1; i := (!i+1) 
+  | MPred          (p, comp, inf)                                         ->  i := (!i+1)
+  | MNeg           (f1)                                                   ->  get_size f1; i := (!i+1)
   | MAnd           (c, f1, f2, ainf)                                      ->  get_size f1; get_size f2; i := (!i+1)
   | MOr            (c, f1, f2, ainf)                                      ->  get_size f1; get_size f2; i := (!i+1)
   | MExists        (c, f1)                                                ->  get_size f1; i := (!i+1)
@@ -3150,7 +3152,7 @@ let get_mf_size mf =
 let split_and_save sconsts dumpfile i lastts ff closed neval =
   let numparts = (sconsts.num_partitions+1) in
   let result = Array.make numparts [||] in
-  
+
   let keys = sconsts.keys in
   let a, mf = ext_to_m ff neval in
   let msize = get_mf_size mf in
@@ -3162,18 +3164,18 @@ let split_and_save sconsts dumpfile i lastts ff closed neval =
   print_extf "TEST \n" (m_to_ext (a_to_m result.(0)) neval);
   Array.iteri (fun i af -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,af,a)) result
 
-(* END SPLITTING STATE *)  
+(* END SPLITTING STATE *)
 
 (* MONITORING FUNCTION *)
 
-let checkExitParam p = match p with 
-  | Argument str -> 
+let checkExitParam p = match p with
+  | Argument str ->
     dumpfile := str;
     true
   | _ -> false
 
-let checkSplitParam p = match p with 
-  | SplitParameters sp -> 
+let checkSplitParam p = match p with
+  | SplitParameters sp ->
     dumpfile := "partition-";
     true
   | _ -> false
@@ -3199,26 +3201,26 @@ let check_log lexbuf ff closed neval i =
     | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No filename specified, continuing with index %d" c i;
     in
-    let getConstraints p = match p with 
+    let getConstraints p = match p with
     (* Other case already handle by check split param *)
     | SplitParameters sp -> sp
      in
     let split_state   c params = match params with
     | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i !lastts ff closed neval else Printf.printf "Invalid parameters supplied, continuing with index %d" i;
     | None -> Printf.printf "%s: No parameters specified, continuing with index %d" c i;
-    in 
+    in
 
     match Log.get_next_entry lexbuf with
     | MonpolyCommand {c; parameters} ->
         let process_command c = match c with
             | "print" ->
-               print_extf "Printing" ff; 
+               print_extf "Printing" ff;
                loop ffl i
             | "terminate" ->
                Printf.printf "Terminated at index: %d \n" i;
             | "print_and_exit" ->
-               print_extf "Exiting" ff; 
-               Printf.printf "Terminated at index: %d \n" i;   
+               print_extf "Exiting" ff;
+               Printf.printf "Terminated at index: %d \n" i;
             | "get_pos"   ->
                 Printf.printf "Current index: %d \n" i;
                 loop ffl i
@@ -3305,7 +3307,10 @@ let test_filter logfile f =
   loop f 0
 
 let resume logfile =
-  let (i,last_ts,ff,closed,neval) = unmarshal !resumefile in
-      lastts := last_ts;
+  let (i,last_ts,ff,closed,neval,tp,skipped_tps,last) = unmarshal !resumefile in
+  lastts := last_ts;
+  Log.tp := tp;
+  Log.skipped_tps := skipped_tps;
+  Log.last := last;
   let lexbuf = Log.log_open logfile in
   check_log lexbuf ff closed neval i
