@@ -2704,6 +2704,7 @@ let marshal dumpfile i lastts ff closed neval =
 let unmarshal resumefile =
   let ch = open_in_bin resumefile in
   let value = (Marshal.from_channel ch : (int * timestamp * bool * mformula * (int * timestamp) array)) in
+  close_in ch;
   let (i,last_ts,closed,mf,a) = value in
   let neval = NEval.from_array a in
   let ff = m_to_ext mf neval in
