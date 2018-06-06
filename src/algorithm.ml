@@ -2765,8 +2765,8 @@ exception Type_error of string
 (* SPLITTING & COMBINING STATE *)
 
 type array_representation = 
-  | ARel of  int * relation
-  | APred of int * predicate * comp_one * info
+  | ARel of  relation
+  | APred of predicate * comp_one * info
   | ANeg of int * int
   | AAnd of int * comp_two * int * int * ainfo
   | AOr of int * comp_two * int * int * ainfo
@@ -2795,8 +2795,8 @@ type array_representation =
 let a_to_m af = 
   print_endline "A_TO_M";
   let rec sf i = match af.(i) with  
-    | ARel           (i, rel)                                                  ->  print_endline ("MRel        :"^string_of_int i); MRel(rel)
-    | APred          (i, p, comp, inf)                                         ->  print_endline ("MPred       :"^string_of_int i); MPred(p, comp, inf)
+    | ARel           (rel)                                                     ->  print_endline ("MRel        :"^string_of_int i); MRel(rel)
+    | APred          (p, comp, inf)                                            ->  print_endline ("MPred       :"^string_of_int i); MPred(p, comp, inf)
     | ANeg           (i, l1)                                                   ->  print_endline ("MNeg        :"^string_of_int i); let sf1 = sf (i+1)in                           MNeg(sf1)
     | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("MAnd        :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)                                      
     | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("MOr         :"^string_of_int i); let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)                                      
@@ -2819,9 +2819,10 @@ let a_to_m af =
 
 (* COMBINING STATES *)
 
+(* Used for Array.iter over mformula serialized into array *)
 let print_af = function
-  | ARel           (i, rel)                                                  ->  print_endline ("ARel        :"^string_of_int 0)  
-  | APred          (i, p, comp, inf)                                         ->  print_endline ("APred       :"^string_of_int 0)  
+  | ARel           (rel)                                                     ->  print_endline ("ARel        :"^string_of_int 0)  
+  | APred          (p, comp, inf)                                            ->  print_endline ("APred       :"^string_of_int 0)  
   | ANeg           (i, l1)                                                   ->  print_endline ("ANeg        :"^string_of_int l1)
   | AAnd           (i, c, l1, l2, ainf)                                      ->  print_endline ("AAnd        :"^string_of_int (l1 + l2)) 
   | AOr            (i, c, l1, l2, ainf)                                      ->  print_endline ("AOr         :"^string_of_int (l1 + l2)) 
@@ -2841,8 +2842,202 @@ let print_af = function
   | AEventuallyZ   (i, dt, l1, mezinf)                                       ->  print_endline ("AEventuallyZ:"^string_of_int l1) 
   | AEventually    (i, dt, l1, meinf)                                        ->  print_endline ("AEventually :"^string_of_int l1)
 
+let rel_u r1 r2 = Relation.union r1 r2
+
+let combine_info  inf1 inf2 = 
+  let tmp = Queue.create() in 
+  let nq = Queue.create() in 
+  Queue.iter (fun _ -> 
+    let i, ts, r1 = Queue.pop inf1 in
+    let _, _,  r2 = Queue.pop inf2 in
+    Queue.add (i, ts, (rel_u r1 r2)) tmp;
+  ) inf1;
+  (* Need to reverse the queue *)
+  Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+  nq
+
+let combine_ainfo ainf1 ainf2 =
+  let urel = match (ainf1.arel, ainf2.arel) with
+  | (Some r1, Some r2) -> Some (rel_u r1 r2)
+  | (None, None) -> None
+  | _ -> raise (Type_error ("Mismatched states in ainfo"))   
+  in
+  { arel = urel; }
+
+let combine_agg  agg1 agg2 =
+  let tmp = Queue.create() in 
+  let nq = Queue.create() in 
+  Queue.iter (fun _ -> 
+    let ts, r1 = Queue.pop agg1.other_rels in
+    let _,  r2 = Queue.pop agg2.other_rels in
+    Queue.add (ts, (rel_u r1 r2)) tmp;
+  ) agg1.other_rels;
+  Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+ 
+  {tw_rels = agg1.tw_rels; other_rels = nq; mset = agg1.mset; hres = agg1.hres }
+  
+  let combine_aggMM agg1 agg2 =
+    let tmp = Queue.create() in 
+    let nq = Queue.create() in 
+    Queue.iter (fun _ -> 
+      let ts, r1 = Queue.pop agg1.non_tw_rels in
+      let _,  r2 = Queue.pop agg2.non_tw_rels in
+      Queue.add (ts, (rel_u r1 r2)) tmp;
+    ) agg1.non_tw_rels;
+    Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+    {non_tw_rels = nq; tbl = agg1.tbl }
+  
+  let combine_sainfo sainf1 sainf2 =
+    let sarel2 = match (sainf1.sarel2, sainf2.sarel2) with
+    | (Some r1, Some r2) -> Some (rel_u r1 r2)
+    | (None, None) -> None
+    | _ -> raise (Type_error ("Mismatched states in ainfo"))   
+    in
+    (* Verify correctness *)
+    Mqueue.update (fun e ->
+     let ts, r1  = e in
+     let _,  r2  = Mqueue.pop sainf2.saauxrels in (ts, (rel_u r1 r2))) sainf1.saauxrels;
+    {sres = (rel_u sainf1.sres sainf2.sres); sarel2 = sarel2; saauxrels = sainf1.saauxrels}
+  
+  let combine_sinfo sinf1 sinf2  =
+    let srel2 = match (sinf1.srel2, sinf2.srel2) with
+    | (Some r1, Some r2) -> Some (rel_u r1 r2)
+    | (None, None) -> None
+    | _ -> raise (Type_error ("Mismatched states in ainfo"))   
+    in
+    (* Verify correctness *)
+    Mqueue.update (fun e ->
+    let ts, r1  = e in
+    let _,  r2  = Mqueue.pop sinf2.sauxrels in (ts, (rel_u r1 r2))) sinf1.sauxrels;
+    {srel2 = srel2; sauxrels = sinf1.sauxrels}
+  
+  let combine_oainfo oainf1 oainf2 =
+    Mqueue.update (fun e ->
+    let ts, r1  = e in
+    let _,  r2  = Mqueue.pop oainf2.oaauxrels in (ts, (rel_u r1 r2))) oainf1.oaauxrels;
+    { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oainf1.oaauxrels }
+  
+  let combine_muninfo muninf1 muninf2 =
+     (* Verify correctness *)
+    let listrel l1 l2 =
+      let nl = Dllist.empty() in
+      Dllist.iter (fun e ->
+        let i, ts, r1 = e in
+        let _, _,  r2 = Dllist.pop_first l2 in
+        Dllist.add_last (i, ts, (rel_u r1 r2)) nl
+      ) l1;
+      nl
+    in
+    { mlast1 = muninf1.mlast1; mlast2 = muninf1.mlast2; mlistrel1 = (listrel muninf1.mlistrel1 muninf2.mlistrel1);  mlistrel2 = (listrel muninf1.mlistrel2 muninf2.mlistrel2) }
+    
+  let combine_muinfo muinf1 muinf2 =
+    (* Helper function to combine raux and saux fields *)
+    let sklist l1 l2 =
+      let nl = Sk.empty() in
+      Sk.iter (fun e ->
+        let i, r1 = e in
+        (* Verify correctness *)
+        let _, r2 = Sk.pop_first l2 in
+        Sk.add_last (i, (rel_u r1 r2)) nl
+      ) l1;
+      nl
+    in
+    let mraux =
+      let nl = Sj.empty() in
+      Sj.iter (fun e ->
+        let (i, ts, l1) = e in
+        let (_, _,  l2) = Sj.pop_first muinf2.mraux in
+        Sj.add_last (i, ts, (sklist l1 l2)) nl
+      ) muinf1.mraux;
+      nl
+    in
+    let murel2 = match (muinf1.murel2, muinf2.murel2) with
+    | (Some r1, Some r2) -> Some (rel_u r1 r2)
+    | (None, None) -> None
+    | _ -> raise (Type_error ("Mismatched states in ainfo"))   
+    in
+    { mulast = muinf1.mulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
+      murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
+
+(*
+  let combine_tree tree pred =
+    let split_res n =
+      match n with
+      | Some r -> Some (split r pred)
+      | None -> None
+    in
+    let handle_node n = { l = n.l; r = n.r; res = (split_res n.res)} in
+    let nl = Dllist.empty() in 
+    let rec split_t t i = match t with
+    | LNode ln      -> LNode (handle_node ln)
+    | INode (a,l,r) -> INode ((handle_node a), (split_t l 0), (split_t r 0))
+    in 
+    split_t tree 0
+  in
+
+  let split_mozinfo mozinf pred =
+   let mozauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let i, ts, r  = e in
+        Dllist.add_last (i, ts, (split r pred)) mozauxrels
+    ) mozinf.mozauxrels;
+    {moztree = (split_tree mozinf.moztree pred); mozlast = mozinf.mozlast; mozauxrels = mozauxrels }
+  in
+  let split_moinfo moinf pred =
+    let moauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let ts, r  = e in
+        Dllist.add_last (ts, (split r pred)) moauxrels
+      ) moinf.moauxrels;
+    {motree = (split_tree moinf.motree pred); molast = moinf.molast; moauxrels = moauxrels }
+  in
+
+  let split_mezinfo mezinf pred =
+    let mezauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let i, ts, r  = e in
+        Dllist.add_last (i, ts, (split r pred)) mezauxrels
+    ) mezinf.mezauxrels;
+    {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezinf.mezlast; mezauxrels = mezauxrels }
+  in
+  let split_meinfo meinf pred =
+    let meauxrels = Dllist.empty() in
+      Dllist.iter (
+        fun e -> let ts, r  = e in
+        Dllist.add_last (ts, (split r pred)) meauxrels
+      ) meinf.meauxrels;
+    {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
+  in
+*)
+
+
 let combine_states f1 f2  =
-  Array.iter2 (fun e1 e2 -> e1) f1 f2
+  print_endline "Combining states";
+  Array.map2 (fun e1 e2 -> 
+  match (e1,e2) with
+    | (ARel  (rel1),         ARel(rel2))                    -> ARel((Relation.union rel1 rel2))
+    | (APred (p, comp, inf1), APred(_, _, inf2))            -> APred(p, comp, (combine_info inf1 inf2))
+    | (ANeg  (i, l1), ANeg(_, _))                           -> ANeg           (i, l1)             
+    | (AAnd  (i, c, l1, l2, ainf1), AAnd(_,_,_,_,ainf2))    -> AAnd           (i, c, l1, l2, (combine_ainfo ainf1 ainf2))
+    | (AOr   (i, c, l1, l2, ainf1), AOr (_,_,_,_,ainf2))    -> AOr            (i, c, l1, l2, (combine_ainfo ainf1 ainf2))
+    | (AExists (i, c, l1), AExists(_,_,_))                  -> AExists        (i, c, l1)          
+    | (AAggreg (i, c, l1), AAggreg(_,_,_))                  -> AAggreg        (i, c, l1)            
+    | (AAggOnce (i, l1, dt, agg1, update_old, update_new, get_result), AAggOnce (_, _, _, agg2, _, _, _)) -> AAggOnce  (i, l1, dt, combine_agg agg1 agg2, update_old, update_new, get_result) 
+    | (AAggMMOnce (i, l1, dt, aggMM1, update_old, update_new, get_result), AAggMMOnce (_, _, _, aggMM2, _, _, _)) -> AAggMMOnce (i, l1, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)  
+    | (APrev (i, dt, l1, pinf1), APrev (_, _, _, pinf2)) -> APrev          (i, dt, l1, pinf1)           
+    | (ANext (i, dt, l1, ninf1), ANext (_, _, _, ninf2)) -> ANext          (i, dt, l1, ninf1)           
+    | (ASinceA (i, c2, dt, l1, l2, sainf1), ASinceA(_, _, _, _, _, sainf2)) -> ASinceA        (i, c2, dt, l1, l2, combine_sainfo sainf1 sainf2) 
+    | (ASince (i, c2, dt, l1, l2, sinf1), ASince(_, _, _, _, _, sinf2)) -> ASince         (i, c2, dt, l1, l2, combine_sinfo sinf1 sinf2)    
+    | (AOnceA (i, dt, l1, oainf1), AOnceA (_, _, _, oainf2)) -> AOnceA         (i, dt, l1, oainf1)         
+    | (AOnceZ (i, dt, l1, ozinf1), AOnceZ (_, _, _, ozinf2)) -> AOnceZ         (i, dt, l1, ozinf1)         
+    | (AOnce (i, dt, l1, oinf1), AOnce (_, _, _, oinf2)) -> AOnce        (i, dt, l1, oinf1)                
+    | (ANUntil (i, c1, dt, l1, l2, muninf1), ANUntil  (_, _, _, _, _, muninf2)) ->ANUntil        (i, c1, dt, l1, l2, combine_muninfo muninf1 muninf2)
+    | (AUntil (i, c1, dt, l1, l2, muinf1), AUntil (_, _, _, _, _, muinf2)) -> AUntil         (i, c1, dt, l1, l2, combine_muinfo muinf1 muinf2) 
+    | (AEventuallyZ (i, dt, l1, mezinf1), AEventuallyZ (_,_,_, mezinf2)) -> AEventuallyZ   (i, dt, l1, mezinf1)         
+    | (AEventually (i, dt, l1, meinf1), AEventually (_,_,_, meinf2)) -> AEventually   (i, dt, l1, meinf1)          
+    | _ -> raise (Type_error ("Mismatched AF in combine_states"))   
+
+  ) f1 f2
 
 (* END COMBINING STATES *)
 
@@ -2927,7 +3122,7 @@ let split_relation rel values mapping =
 
 let split_state mf keys values size =
   print_endline (string_of_int size);
-  let init = ARel (0, Relation.make_relation [(Tuple.make_tuple [])]) in
+  let init = ARel (Relation.make_relation [(Tuple.make_tuple [])]) in
   let fa = Array.make size init in
   (*TODO: implement relation splitting according to constraint set; *)
   (* How do I know which constraint set is relevant? *)
@@ -3018,7 +3213,12 @@ let split_state mf keys values size =
     {srel2 = srel2; sauxrels = nq}
   in
   let split_oainfo oainf pred =
-    { ores = (split oainf.ores pred); oaauxrels = oainf.oaauxrels }
+    let nq = Mqueue.create() in
+    Mqueue.iter (
+      fun e -> let ts, r  = e in
+      Mqueue.add (ts, (split r pred)) nq
+      ) oainf.oaauxrels;
+    { ores = (split oainf.ores pred); oaauxrels = nq }
   in
   let split_mozinfo mozinf pred =
    let mozauxrels = Dllist.empty() in
@@ -3093,9 +3293,9 @@ let split_state mf keys values size =
   let i = ref 0 in
   let rec split_f f l =
     match f with
-    (* Don't think ERel is relevant *)
-    | MRel           (rel)                                                  -> let tmp = !i in i := (!i + 1);                                                       let af = ARel         (tmp, rel)                                                                        in fa.(tmp) <- af; (l+1)
-    | MPred          (p, comp, inf)                                         -> let tmp = !i in i := (!i + 1);                                                       let af = APred        (tmp, p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))          in fa.(tmp) <- af; (l+1)
+    (* Don't think MRel is relevant *)
+    | MRel           (rel)                                                  -> let tmp = !i in i := (!i + 1);                                                       let af = ARel         (rel)                                                                        in fa.(tmp) <- af; (l+1)
+    | MPred          (p, comp, inf)                                         -> let tmp = !i in i := (!i + 1);                                                       let af = APred        (p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))          in fa.(tmp) <- af; (l+1)
     | MNeg           (f1)                                                   -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = ANeg         (tmp, l1)                                                                         in fa.(tmp) <- af; (l1+l+1)
     | MAnd           (c, f1, f2, ainf)                                      -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = AAnd         (tmp, c, (l1), (l2), (split_ainfo ainf (p2 f1 f2)))                               in fa.(tmp) <- af; (l1+l2+l+1)
     | MOr            (c, f1, f2, ainf)                                      -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = AOr          (tmp, c, (l1), (l2), (split_ainfo ainf (p2 f1 f2)))                               in fa.(tmp) <- af; (l1+l2+l+1)
@@ -3149,17 +3349,26 @@ let get_mf_size mf =
 
 let split_and_save sconsts dumpfile i lastts ff closed neval =
   let numparts = (sconsts.num_partitions+1) in
+  let updated = Array.make numparts false in
   let result = Array.make numparts [||] in
-  
   let keys = sconsts.keys in
   let a, mf = ext_to_m ff neval in
   let msize = get_mf_size mf in
 
   print_extf "\n[split] Original formula\n" ff;
-  (* Compute *)
-  (* TODO: update in case already set to array elem *)
-  List.iter (fun c -> let nf = split_state mf keys c.values msize in List.iter (fun i -> result.(i) <- nf) c.partitions) sconsts.constraints;
+  (* Compute Splits *)
+  (* Update result array at relevant partition indices, containing the formulas as array *)
+  let update_result i nf = if updated.(i) = true then result.(i) <- combine_states result.(i) nf else result.(i) <- nf; updated.(i) <- true in
+  (* Create split formula, containing values pertaining to relevant inputs *)
+  let create_split c = 
+    let nf = split_state mf keys c.values msize in
+    List.iter (fun i -> update_result i nf) c.partitions
+  in
+  (* Iterate over all inputs, creating splits and updating results *)
+  List.iter (fun c -> create_split c) sconsts.constraints;
+
   print_extf "TEST \n" (m_to_ext (a_to_m result.(0)) neval);
+  (* Iterator over result and dump to file *)
   Array.iteri (fun i af -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,af,a)) result
 
 (* END SPLITTING STATE *)  
