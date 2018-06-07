@@ -3,7 +3,7 @@ OCAMLC = ocamlfind ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
-FLAGS = -noassert -unsafe-string # -w A
+FLAGS = -noassert # -w A
 JSFLAGS = -package str -package unix -package js_of_ocaml -package lwt -package js_of_ocaml.syntax -syntax camlp4o
 # FLAGS = -ccopt -static
 
