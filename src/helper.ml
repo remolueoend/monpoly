@@ -42,6 +42,13 @@ type monpoly_feed =
     | MonpolyData    of monpolyData
     | MonpolyError   of string
 
+type 'a atree =
+    | ALNode of 'a
+    | AINode of ('a * int * int)  
+    
+type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree    
+
+
 (*let split_constraints cs l = 
 
     let get_e (a, b) = if l then a else b in

@@ -44,3 +44,10 @@ type monpoly_feed =
     | MonpolyCommand of commandTuple
     | MonpolyData    of monpolyData
     | MonpolyError   of string
+
+
+type 'a atree =
+    | ALNode of 'a
+    | AINode of ('a * int * int)  
+    
+type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree

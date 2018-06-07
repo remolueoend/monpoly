@@ -2766,9 +2766,23 @@ exception Type_error of string
 
 (* SPLITTING & COMBINING STATE *)
 
-type 'a tree =
-  | ALNode of 'a
-  | AINode of ('a * int * int)  
+type aozinfo = { aoztree: (int, relation) Helper.stree array;
+                 aozlast: int;
+                 aozauxrels: (int * timestamp * relation) Dllist.dllist}
+
+type aoinfo  = { aotree: (timestamp, relation) Helper.stree array;
+                 aolast: int;
+                 aoauxrels: (timestamp * relation) Dllist.dllist}
+
+type aezinfo = { aezlastev :  int;
+                 aeztree   :  (int , relation) Helper.stree array;
+                 aezlast   :  int;
+                 aezauxrels:  (int * timestamp * relation) Dllist.dllist}
+
+type aeinfo  = { aelastev :  int;
+                 aetree   :  (timestamp, relation) Helper.stree array;
+                 aelast   :  int;
+                 aeauxrels:  (timestamp * relation) Dllist.dllist}
 
 let print_atree = function 
   | ALNode (a)          -> print_endline "ALNODE"  
@@ -2795,18 +2809,38 @@ type array_representation =
   | ASinceA of comp_two * interval * int * int * sainfo
   | ASince of comp_two * interval * int * int * sinfo
   | AOnceA of interval * int * oainfo
-  | AOnceZ of interval * int * mozinfo
-  | AOnce of interval * int * moinfo
+  | AOnceZ of interval * int * aozinfo
+  | AOnce of interval * int * aoinfo
   | ANUntil of comp_two * interval * int * int * muninfo
   | AUntil of comp_two * interval * int * int * muinfo
-  | AEventuallyZ of interval * int * mezinfo
-  | AEventually of interval * int * meinfo
+  | AEventuallyZ of interval * int * aezinfo
+  | AEventually of interval * int * aeinfo
 
 let a_to_m af =
+  let build_tree arr =
+    let handle_node n = { l = n.l; r = n.r; res = n.res } in
+    let rec build_tree i = match arr.(i) with
+    | ALNode (n)            -> LNode n
+    | AINode (n, l1, l2)    -> let l = build_tree (i+1) in let r = build_tree (i+1+l1) in  INode(handle_node n, l, r)
+    in
+    build_tree 0
+  in  
+  let a2moz aozinf =
+     { moztree = build_tree aozinf.aoztree; mozlast = aozinf.aozlast; mozauxrels = aozinf.aozauxrels }
+  in
+  let a2mo aoinf =
+    { motree = build_tree aoinf.aotree; molast = aoinf.aolast; moauxrels = aoinf.aoauxrels }
+  in
+  let a2mez aezinf =
+    { mezlastev = aezinf.aezlastev; meztree = build_tree aezinf.aeztree; mezlast = aezinf.aezlast; mezauxrels = aezinf.aezauxrels }
+  in   
+  let a2me aeinf =
+    { melastev = aeinf.aelastev; metree = build_tree aeinf.aetree; melast = aeinf.aelast; meauxrels = aeinf.aeauxrels }
+  in   
   print_endline "A_TO_M";
   let rec sf i = match af.(i) with
-    | ARel           (rel)                                                     -> MRel(rel)
-    | APred          (p, comp, inf)                                            -> MPred(p, comp, inf)   
+    | ARel           (rel)                                                  -> MRel(rel)
+    | APred          (p, comp, inf)                                         -> MPred(p, comp, inf)   
     | ANeg           (l1)                                                   -> let sf1 = sf (i+1)in                           MNeg(sf1)
     | AAnd           (c, l1, l2, ainf)                                      -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)
     | AOr            (c, l1, l2, ainf)                                      -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)
@@ -2819,12 +2853,12 @@ let a_to_m af =
     | ASinceA        (c2, dt, l1, l2, sainf)                                -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSinceA        (c2, dt, sf1, sf2, sainf)
     | ASince         (c2, dt, l1, l2, sinf)                                 -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSince         (c2, dt, sf1, sf2, sinf)
     | AOnceA         (dt, l1, oainf)                                        -> let sf1 = sf (i+1)in                           MOnceA         (dt, sf1, oainf)
-    | AOnceZ         (dt, l1, ozinf)                                        -> let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, ozinf)
-    | AOnce          (dt, l1, oinf)                                         -> let sf1 = sf (i+1)in                           MOnce          (dt, sf1, oinf)
+    | AOnceZ         (dt, l1, ozinf)                                        -> let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, a2moz ozinf)
+    | AOnce          (dt, l1, oinf)                                         -> let sf1 = sf (i+1)in                           MOnce          (dt, sf1, a2mo oinf)
     | ANUntil        (c1, dt, l1, l2, muninf)                               -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MNUntil        (c1, dt, sf1, sf2, muninf)
     | AUntil         (c1, dt, l1, l2, muinf)                                -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MUntil         (c1, dt, sf1, sf2, muinf)
-    | AEventuallyZ   (dt, l1, mezinf)                                       -> let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, mezinf)
-    | AEventually    (dt, l1, meinf)                                        -> let sf1 = sf (i+1)in                           MEventually    (dt, sf1, meinf)
+    | AEventuallyZ   (dt, l1, mezinf)                                       -> let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, a2mez mezinf)
+    | AEventually    (dt, l1, meinf)                                        -> let sf1 = sf (i+1)in                           MEventually    (dt, sf1, a2me  meinf)
   in sf 0
 
 (* COMBINING STATES *)
@@ -2969,55 +3003,49 @@ let combine_agg  agg1 agg2 =
     { mulast = muinf1.mulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
       murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
 
-(*
-  let combine_tree tree pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let handle_node n = { l = n.l; r = n.r; res = (split_res n.res)} in
-    let nl = Dllist.empty() in
-    let rec split_t t i = match t with
-    | LNode ln      -> LNode (handle_node ln)
-    | INode (a,l,r) -> INode ((handle_node a), (split_t l 0), (split_t r 0))
-    in
-    split_t tree 0
-  in
 
-  let split_mozinfo mozinf pred =
+  let combine_tree tree1 tree2 =
+    let combine_node n1 n2 = { l = n1.l; r = n1.r; res = (rel_u n1.res n2.res)} in
+
+    let combine e1 e2 = match (e1, e2) with
+      | (ALNode (n1), ALNode(n2)) -> ALNode (combine_node n1 n2) 
+      | (AINode (n1, l1, l2), AINode(n2, _, _)) -> AINode(combine_node n1 n2, l1,l2)
+      | (_, _ ) -> raise (Type_error ("Mismatched nodes in combine_tree"))
+    in  
+    Array.map2 (fun e1 e2 -> combine e1 e2 ) tree1 tree2
+
+ (* let combine_mozinfo mozinf1 mozinf2 =
    let mozauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
         Dllist.add_last (i, ts, (split r pred)) mozauxrels
     ) mozinf.mozauxrels;
     {moztree = (split_tree mozinf.moztree pred); mozlast = mozinf.mozlast; mozauxrels = mozauxrels }
-  in
-  let split_moinfo moinf pred =
+
+  let combine_moinfo moinf1 moinf2 =
     let moauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
         Dllist.add_last (ts, (split r pred)) moauxrels
       ) moinf.moauxrels;
     {motree = (split_tree moinf.motree pred); molast = moinf.molast; moauxrels = moauxrels }
-  in
 
-  let split_mezinfo mezinf pred =
+  let combine_mezinfo mezinf1 mezinf2 =
     let mezauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let i, ts, r  = e in
         Dllist.add_last (i, ts, (split r pred)) mezauxrels
     ) mezinf.mezauxrels;
     {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezinf.mezlast; mezauxrels = mezauxrels }
-  in
-  let split_meinfo meinf pred =
+
+  let combine_meinfo meinf1 meinf2 =
     let meauxrels = Dllist.empty() in
       Dllist.iter (
         fun e -> let ts, r  = e in
         Dllist.add_last (ts, (split r pred)) meauxrels
       ) meinf.meauxrels;
     {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
-  in
+
 *)
 
 
@@ -3168,12 +3196,12 @@ let split_state mf keys values size =
     ignore(create_list tree 0);
     let arr = Array.of_list !l in
     (*Array.iter print_atree arr;*)
-
-    let rec build_tree i = match arr.(i) with
+    arr
+    (*let rec build_tree i = match arr.(i) with
     | ALNode (n)            -> LNode n
     | AINode (n, l1, l2)    -> let l = build_tree (i+1) in let r = build_tree (i+1+l1) in  INode(handle_node n, l, r)
     in
-    build_tree 0
+    build_tree 0*)
     
 
 
@@ -3253,7 +3281,7 @@ let split_state mf keys values size =
         fun e -> let i, ts, r  = e in
         Dllist.add_last (i, ts, (split r pred)) mozauxrels
     ) mozinf.mozauxrels;
-    {moztree = (split_tree mozinf.moztree pred); mozlast = mozinf.mozlast; mozauxrels = mozauxrels }
+    {aoztree = (split_tree mozinf.moztree pred); aozlast = mozinf.mozlast; aozauxrels = mozauxrels }
   in
   let split_moinfo moinf pred =
     let moauxrels = Dllist.empty() in
@@ -3261,7 +3289,7 @@ let split_state mf keys values size =
         fun e -> let ts, r  = e in
         Dllist.add_last (ts, (split r pred)) moauxrels
       ) moinf.moauxrels;
-    {motree = (split_tree moinf.motree pred); molast = moinf.molast; moauxrels = moauxrels }
+    {aotree = (split_tree moinf.motree pred); aolast = moinf.molast; aoauxrels = moauxrels }
   in
   let split_muninfo muninf pred =
     let listrel l =
@@ -3305,7 +3333,7 @@ let split_state mf keys values size =
         fun e -> let i, ts, r  = e in
         Dllist.add_last (i, ts, (split r pred)) mezauxrels
     ) mezinf.mezauxrels;
-    {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezinf.mezlast; mezauxrels = mezauxrels }
+    {aezlastev = mezinf.mezlastev; aeztree = (split_tree mezinf.meztree pred); aezlast = mezinf.mezlast; aezauxrels = mezauxrels }
   in
   let split_meinfo meinf pred =
     let meauxrels = Dllist.empty() in
@@ -3313,7 +3341,7 @@ let split_state mf keys values size =
         fun e -> let ts, r  = e in
         Dllist.add_last (ts, (split r pred)) meauxrels
       ) meinf.meauxrels;
-    {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
+    {aelastev = meinf.melastev; aetree = (split_tree meinf.metree pred); aelast = meinf.melast; aeauxrels = meauxrels }
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
