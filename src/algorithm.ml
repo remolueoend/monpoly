@@ -3078,6 +3078,31 @@ let combine_states f1 f2  =
 
   ) f1 f2
 
+
+  let rec comb_m f1 f2  =
+    match (f1,f2) with
+      | (MRel  (rel1),          MRel(rel2))                     -> MRel (Relation.union rel1 rel2)
+      | (MPred (p, comp, inf1), MPred(_, _, inf2))              -> MPred(p, comp, combine_info inf1 inf2)
+      | (MNeg  (f11), MNeg(f21))                                -> MNeg (comb_m f11 f21)
+      | (MAnd  (c, f11, f12, ainf1), MAnd(_, f21, f22, ainf2))  -> MAnd (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
+      | (MOr   (c, f11, f12, ainf1), MOr (_, f21, f22, ainf2))  -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
+      | (MExists (c, f11), MExists(_,f21))                      -> MExists        (c, comb_m f11 f21)
+      | (MAggreg (c, f11), MAggreg(_,f21))                      -> MAggreg        (c, comb_m f11 f21)
+      | (MAggOnce (f11, dt, agg1, update_old, update_new, get_result), MAggOnce (f21, _, agg2, _, _, _)) -> MAggOnce  (comb_m f11 f21, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
+      | (MAggMMOnce (f11, dt, aggMM1, update_old, update_new, get_result), MAggMMOnce (f21, _, aggMM2, _, _, _)) -> MAggMMOnce (comb_m f11 f21, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
+      | (MPrev (dt, f11, pinf1), MPrev ( _, f21, pinf2)) -> MPrev          (dt, comb_m f11 f21, pinf1)
+      | (MNext (dt, f11, ninf1), MNext ( _, f21, ninf2)) -> MNext          (dt, comb_m f11 f21, ninf1)
+      | (MSinceA (c2, dt, f11, f12, sainf1), MSinceA( _, _, f21, f22, sainf2)) -> MSinceA        (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sainfo sainf1 sainf2)
+      | (MSince (c2, dt, f11, f12, sinf1), MSince( _, _, f21, f22, sinf2)) -> MSince         (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2)
+      | (MOnceA (dt, f11, oainf1), MOnceA ( _, f21, oainf2)) -> MOnceA         (dt, comb_m f11 f21, oainf1)
+      | (MOnceZ (dt, f11, ozinf1), MOnceZ ( _, f21, ozinf2)) -> MOnceZ         (dt, comb_m f11 f21, ozinf1)
+      | (MOnce (dt, f11, oinf1), MOnce ( _, f21, oinf2)) -> MOnce        (dt, comb_m f11 f21, oinf1)
+      | (MNUntil (c1, dt, f11, f12, muninf1), MNUntil  ( _, _, f21, f22, muninf2)) -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo muninf1 muninf2)
+      | (MUntil (c1, dt, f11, f12, muinf1), MUntil ( _, _, f21, f22, muinf2)) -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo muinf1 muinf2)
+      | (MEventuallyZ (dt, f11, mezinf1), MEventuallyZ (_, f21, mezinf2)) -> MEventuallyZ   (dt, comb_m f11 f21, mezinf1)
+      | (MEventually (dt, f11, meinf1), MEventually (_, f21, meinf2)) -> MEventually   (dt, comb_m f11 f21, meinf1)
+      | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
+
 (* END COMBINING STATES *)
 
 
