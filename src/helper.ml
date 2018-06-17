@@ -86,3 +86,18 @@ let get_max csrel =
     let max = ref 0 in
     List.iter (fun cs -> List.iter (fun p -> if p > !max then max := p;) cs.partitions) csrel;
     !max
+
+let convert_dll l last f =
+    let rec get crt new_last acc =
+        let v = Dllist.get_data crt in
+        if Dllist.is_last l crt then
+            (f v) :: acc
+        else
+            get (Dllist.get_next l crt) crt ((f v) :: acc)
+    in
+    if last == Dllist.void then
+        get (Dllist.get_first_cell l) Dllist.void []
+    else if not (Dllist.is_last l last) then
+        get (Dllist.get_next l last) last []
+    else
+        []

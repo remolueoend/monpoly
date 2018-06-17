@@ -51,3 +51,5 @@ type 'a atree =
     | AINode of ('a * int * int)  
     
 type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree
+
+val convert_dll: 'a Dllist.dllist -> 'a Dllist.cell -> ('a -> 'b) -> 'b list

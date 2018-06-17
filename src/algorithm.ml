@@ -2647,8 +2647,12 @@ let m_to_ext mf neval =
        if mezinf.mezlast = -1 then Dllist.void
        else Dllist.get_cell_at_index mezinf.mezlast mezinf.mezauxrels
     in
+    let f = fun (j,_,rel) -> (j,rel) in
+    (* Pass void as last element, forcing rebuild over whole list *)
+    let tree_list = Helper.convert_dll mezinf.mezauxrels Dllist.void f in
+    let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {ezlastev   = cell;
-     eztree     = mezinf.meztree;
+     eztree     = meztree;
      ezlast     = ezlast;
      ezauxrels  = mezinf.mezauxrels}
   in
@@ -2662,8 +2666,11 @@ let m_to_ext mf neval =
       if meinf.melast = -1 then Dllist.void
       else Dllist.get_cell_at_index meinf.melast meinf.meauxrels
     in
+    (* Pass void as last element, forcing rebuild over whole list *)
+    let tree_list = Helper.convert_dll meinf.meauxrels Dllist.void (fun x -> x) in
+    let metree    = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {elastev    = cell;
-     etree      = meinf.metree;
+     etree      = metree;
      elast      = elast;
      eauxrels   = meinf.meauxrels}
   in
@@ -2703,14 +2710,24 @@ let m_to_ext mf neval =
       if moinf.molast = -1 then Dllist.void
       else Dllist.get_cell_at_index moinf.molast moinf.moauxrels
     in
-    { otree = moinf.motree; olast = olast; oauxrels = moinf.moauxrels }
+    (* Pass void as last element, forcing rebuild over whole list *)
+    let tree_list = Helper.convert_dll moinf.moauxrels Dllist.void (fun x -> x) in
+    let otree = Sliding.build_rl_tree_from_seq Relation.union tree_list in
+    { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
   in
   let moz2e mozinf =
     let ozlast =
       if mozinf.mozlast = -1 then Dllist.void
       else Dllist.get_cell_at_index mozinf.mozlast mozinf.mozauxrels
     in
-    { oztree = mozinf.moztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
+    let f = fun (j,_,rel) -> (j,rel) in
+    (* Converts dlllist to normal list, using structure of get_new_elements *)
+    (* Pass void as last element, forcing rebuild over whole list *)
+    let tree_list = Helper.convert_dll mozinf.mozauxrels Dllist.void f in
+    (* Build tree from whole auxrels relation list *)
+    let oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list in
+    (* Last element is still saved, should ensure that the tree can be reused wholly*)
+    { oztree = oztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
   in
   let rec m2e = function
     | MRel           (rel)                                                    ->      ERel           (rel)
@@ -3149,6 +3166,13 @@ let int_list_to_string l =
   List.iter (fun s -> append s ) l;
   !str
 
+let int_arr_to_string l =
+  let str = ref "" in
+  let append s = str := !str ^ (string_of_int s) ^ ", " in
+  Array.iter (fun s -> append s ) l;
+  !str
+  
+
 let pred_list_to_string l =
   let str = ref "" in
   let append s = str := !str ^ (Predicate.string_of_cst false s) ^ ", " in
@@ -3409,7 +3433,7 @@ let split_state mf keys values size =
     in
 
     let split_info inf p =
-      let res = Array.make size (Queue.create()) in 
+      let res = Array.init size (fun i -> Queue.create()) in 
       Queue.iter (
        fun e -> 
         let i, ts, r  = e in
@@ -3427,7 +3451,7 @@ let split_state mf keys values size =
       res
     in
     let split_agg  agg p =
-      let res = Array.make size (Queue.create()) in 
+      let res = Array.init size (fun i -> Queue.create()) in 
         Queue.iter (
         fun e -> 
           let ts, r  = e in
@@ -3437,7 +3461,7 @@ let split_state mf keys values size =
       Array.map (fun e ->   {tw_rels = agg.tw_rels; other_rels = e; mset = agg.mset; hres = agg.hres }) res   
     in
     let split_aggMM agg p =
-      let res = Array.make size (Queue.create()) in 
+      let res = Array.init size (fun i -> Queue.create()) in 
       Queue.iter (
       fun e -> 
         let ts, r  = e in
@@ -3447,12 +3471,12 @@ let split_state mf keys values size =
       Array.map (fun e -> {non_tw_rels = e; tbl = agg.tbl }) res
     in
     let split_sainfo sainf p =
-      let arr = Array.make size None in 
+      let arr = Array.init size (fun i -> None) in 
       let sarels = match sainf.sarel2 with
       | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
       | None -> arr
       in
-      let queues = Array.make size (Mqueue.create()) in 
+      let queues = Array.init size (fun i -> Mqueue.create()) in 
       Mqueue.iter (
       fun e -> 
         let ts, r  = e in
@@ -3463,12 +3487,12 @@ let split_state mf keys values size =
       Array.mapi (fun i e ->  {sres = e; sarel2 = sarels.(i); saauxrels = queues.(i)}) sres
     in
     let split_sinfo sinf p =
-      let arr = Array.make size None in 
+      let arr = Array.init size (fun i -> None) in 
       let srels = match sinf.srel2 with
       | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
       | None -> arr
       in
-      let queues = Array.make size (Mqueue.create()) in 
+      let queues = Array.init size (fun i -> Mqueue.create()) in 
       Mqueue.iter (
       fun e -> 
         let ts, r  = e in
@@ -3478,7 +3502,7 @@ let split_state mf keys values size =
       Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues
     in
     let split_oainfo oainf p =
-      let queues = Array.make size (Mqueue.create()) in 
+      let queues = Array.init size (fun i -> Mqueue.create()) in 
       Mqueue.iter (
       fun e -> 
         let ts, r  = e in
@@ -3489,17 +3513,20 @@ let split_state mf keys values size =
       Array.map2 (fun ores nq ->  {ores = ores; oaauxrels = nq}) ores queues
     in
     let split_mozinfo mozinf p =
-     let dllists = Array.make size (Dllist.empty()) in 
+     print_endline "Splitting mozinfo:";
+     let dllists = Array.init size (fun i -> Dllist.empty()) in 
         Dllist.iter (
           fun e -> let i, ts, r  = e in
           let states = split r p in 
           Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-      ) mozinf.mozauxrels;
+        ) mozinf.mozauxrels;
+      Printf.printf "%d \n" mozinf.mozlast;
+      Array.iteri (fun index l -> Printf.printf "%d: " index; Dllist.iter (fun e -> let i,ts,r = e in Relation.print_rel "'" r) l; print_endline "") dllists;
       (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
       Array.map (fun e -> {moztree = mozinf.moztree; mozlast = mozinf.mozlast; mozauxrels = e }) dllists
     in
     let split_moinfo moinf p =
-      let dllists = Array.make size (Dllist.empty()) in 
+      let dllists = Array.init size (fun i -> Dllist.empty()) in 
       Dllist.iter (
         fun e -> let ts, r  = e in
         let states = split r p in 
@@ -3510,7 +3537,7 @@ let split_state mf keys values size =
     in
     let split_muninfo muninf p =
       let listrel l =
-        let dllists = Array.make size (Dllist.empty()) in 
+        let dllists = Array.init size (fun i -> Dllist.empty()) in 
         Dllist.iter (
           fun e -> let i, ts, r  = e in
           let states = split r p in 
@@ -3525,7 +3552,7 @@ let split_state mf keys values size =
     let split_muinfo muinf p =
       (* Helper function for raux and saux fields, creates split Sk.dllist *)
       let sklist l =
-        let sklists = Array.make size (Sk.empty()) in 
+        let sklists = Array.init size (fun i -> Sk.empty()) in 
         Sk.iter (fun e ->
           let i, r = e in
           let states = split r p in 
@@ -3533,7 +3560,7 @@ let split_state mf keys values size =
         ) l;
         sklists
       in
-      let mraux = Array.make size (Sj.empty()) in 
+      let mraux = Array.init size (fun i -> Sj.empty()) in 
         Sj.iter (fun e ->
           let (i, ts, l) = e in
           let lists = sklist l in
@@ -3552,7 +3579,7 @@ let split_state mf keys values size =
      murels   
     in
     let split_mezinfo mezinf p =
-      let dllists = Array.make size (Dllist.empty()) in 
+      let dllists = Array.init size (fun i -> Dllist.empty()) in 
       Dllist.iter (
         fun e -> let i, ts, r  = e in
         let states = split r p in 
@@ -3562,7 +3589,7 @@ let split_state mf keys values size =
       Array.map (fun e -> {mezlastev = mezinf.mezlastev; meztree = mezinf.meztree; mezlast = mezinf.mezlast; mezauxrels = e }) dllists
     in
     let split_meinfo meinf p =
-      let dllists = Array.make size (Dllist.empty()) in 
+      let dllists = Array.init size (fun i -> Dllist.empty()) in 
       Dllist.iter (
         fun e -> let ts, r  = e in
         let states = split r p in 
@@ -3598,6 +3625,7 @@ let split_state mf keys values size =
       in
     split_f mf
     
+
 let split_and_save_new sconsts dumpfile i lastts ff closed neval =
   let numparts = (sconsts.num_partitions+1) in
 
@@ -3606,6 +3634,7 @@ let split_and_save_new sconsts dumpfile i lastts ff closed neval =
   let a, mf = ext_to_m ff neval in
 
   let split_paramater_function t p = 
+    Printf.printf "Tuple: %s    -> " (pred_list_to_string t);
     let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) p in
     (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
     let pos = List.filter (fun e -> e >= 0) pos in
@@ -3613,7 +3642,9 @@ let split_and_save_new sconsts dumpfile i lastts ff closed neval =
     if List.length pos = 0 then let res = Array.make numparts 0 in Array.mapi (fun i e -> i) res else
     (* Else we create a mapping to reorder our partition input values *)
     let mapping t = List.map (fun e -> List.nth t e) pos in
-    Array.of_list (List.flatten (List.map (fun cs -> if check_tuple t (mapping cs.values) then cs.partitions else []) constraints))
+    let output = Array.of_list (List.flatten (List.map (fun cs -> if check_tuple t (mapping cs.values) then cs.partitions else []) constraints)) in
+    Printf.printf "Partitions: %s \n" (int_arr_to_string output);
+    output
   in  
   let result = split_state_new split_paramater_function mf numparts in
 
