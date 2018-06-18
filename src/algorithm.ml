@@ -3053,15 +3053,56 @@ let split_state mapping mf size =
     res
   in
 
-  let split_info inf p =
+  let split_queue1 q p =
     let res = Array.init size (fun i -> Queue.create()) in 
     Queue.iter (
       fun e -> 
       let i, ts, r  = e in
       let states = split r p in 
       Array.iteri (fun index s -> Queue.add (i, ts, s) res.(index)) states
-    ) inf;
+    ) q;
     res
+  in  
+  let split_queue2 q p =
+    let res = Array.init size (fun i -> Queue.create()) in 
+    Queue.iter (
+    fun e -> 
+      let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Queue.add (ts, s) res.(index)) states
+    ) q;   
+    res
+  in  
+  let split_mqueue q p =
+    let res = Array.init size (fun i -> Mqueue.create()) in 
+    Mqueue.iter (
+    fun e -> 
+      let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Mqueue.add (ts, s) res.(index)) states
+    ) q;    
+    res
+  in  
+  let split_dll1 l p = 
+    let res = Array.init size (fun i -> Dllist.empty()) in 
+    Dllist.iter (
+      fun e -> let i, ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Dllist.add_last (i, ts, s) res.(index)) states
+    ) l;
+    res
+  in
+  let split_dll2 l p = 
+    let res = Array.init size (fun i -> Dllist.empty()) in 
+    Dllist.iter (
+      fun e -> let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Dllist.add_last (ts, s) res.(index)) states
+    ) l;
+    res
+  in
+  let split_info inf p =
+    split_queue1 inf p
   in
   let split_ainfo ainf p =
     let arr = Array.make size { arel = None } in 
@@ -3072,23 +3113,11 @@ let split_state mapping mf size =
     res
   in
   let split_agg  agg p =
-    let res = Array.init size (fun i -> Queue.create()) in 
-      Queue.iter (
-      fun e -> 
-        let ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Queue.add (ts, s) res.(index)) states
-      ) agg.other_rels;   
+    let res = split_queue2 agg.other_rels p in
     Array.map (fun e ->   {tw_rels = agg.tw_rels; other_rels = e; mset = agg.mset; hres = agg.hres }) res   
   in
   let split_aggMM agg p =
-    let res = Array.init size (fun i -> Queue.create()) in 
-    Queue.iter (
-    fun e -> 
-      let ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Queue.add (ts, s) res.(index)) states
-    ) agg.non_tw_rels;      
+    let res = split_queue2 agg.non_tw_rels p in      
     Array.map (fun e -> {non_tw_rels = e; tbl = agg.tbl }) res
   in
   let split_sainfo sainf p =
@@ -3097,13 +3126,7 @@ let split_state mapping mf size =
     | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
     | None -> arr
     in
-    let queues = Array.init size (fun i -> Mqueue.create()) in 
-    Mqueue.iter (
-    fun e -> 
-      let ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
-    ) sainf.saauxrels;    
+    let queues = split_mqueue sainf.saauxrels p in    
     let sres = split sainf.sres p in 
     Array.mapi (fun i e ->  {sres = e; sarel2 = sarels.(i); saauxrels = queues.(i)}) sres
   in
@@ -3113,23 +3136,11 @@ let split_state mapping mf size =
     | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
     | None -> arr
     in
-    let queues = Array.init size (fun i -> Mqueue.create()) in 
-    Mqueue.iter (
-    fun e -> 
-      let ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
-    ) sinf.sauxrels;    
+    let queues = split_mqueue sinf.sauxrels p in    
     Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues
   in
   let split_oainfo oainf p =
-    let queues = Array.init size (fun i -> Mqueue.create()) in 
-    Mqueue.iter (
-    fun e -> 
-      let ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
-    ) oainf.oaauxrels;    
+    let queues = split_mqueue oainf.oaauxrels p in   
     let ores = split oainf.ores p in 
     Array.map2 (fun ores nq ->  {ores = ores; oaauxrels = nq}) ores queues
   in
@@ -3147,27 +3158,13 @@ let split_state mapping mf size =
     Array.map (fun e -> {moztree = mozinf.moztree; mozlast = mozinf.mozlast; mozauxrels = e }) dllists
   in
   let split_moinfo moinf p =
-    let dllists = Array.init size (fun i -> Dllist.empty()) in 
-    Dllist.iter (
-      fun e -> let ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Dllist.add_last (ts, s) dllists.(index)) states
-    ) moinf.moauxrels;
+    let dllists = split_dll2 moinf.moauxrels p in
     (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
     Array.map (fun e -> {motree = moinf.motree; molast = moinf.molast; moauxrels = e }) dllists
   in
   let split_muninfo muninf p =
-    let listrel l =
-      let dllists = Array.init size (fun i -> Dllist.empty()) in 
-      Dllist.iter (
-        fun e -> let i, ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-      ) l;
-      dllists
-    in  
-    let listrels1 = listrel muninf.mlistrel1 in
-    let listrels2 = listrel muninf.mlistrel2 in
+    let listrels1 = split_dll1 muninf.mlistrel1 p in
+    let listrels2 = split_dll1 muninf.mlistrel2 p in
     Array.map2 (fun listrel1 listrel2 -> { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }) listrels1 listrels2
   in
   let split_muinfo muinf p =
@@ -3200,22 +3197,12 @@ let split_state mapping mf size =
     murels   
   in
   let split_mezinfo mezinf p =
-    let dllists = Array.init size (fun i -> Dllist.empty()) in 
-    Dllist.iter (
-      fun e -> let i, ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-    ) mezinf.mezauxrels;
+    let dllists = split_dll1 mezinf.mezauxrels p in
     (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
     Array.map (fun e -> {mezlastev = mezinf.mezlastev; meztree = mezinf.meztree; mezlast = mezinf.mezlast; mezauxrels = e }) dllists
   in
   let split_meinfo meinf p =
-    let dllists = Array.init size (fun i -> Dllist.empty()) in 
-    Dllist.iter (
-      fun e -> let ts, r  = e in
-      let states = split r p in 
-      Array.iteri (fun index s -> Dllist.add_last (ts, s) dllists.(index)) states
-    ) meinf.meauxrels;
+    let dllists = split_dll2 meinf.meauxrels p in
     (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
     Array.map (fun e -> {melastev = meinf.melastev; metree = meinf.metree; melast = meinf.melast; meauxrels = e }) dllists
   in
