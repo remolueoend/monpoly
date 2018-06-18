@@ -2784,126 +2784,6 @@ exception Type_error of string
 
 (* SPLITTING & COMBINING STATE *)
 
-type aozinfo = { aoztree: (int, relation) Helper.stree array;
-                 aozlast: int;
-                 aozauxrels: (int * timestamp * relation) Dllist.dllist}
-
-type aoinfo  = { aotree: (timestamp, relation) Helper.stree array;
-                 aolast: int;
-                 aoauxrels: (timestamp * relation) Dllist.dllist}
-
-type aezinfo = { aezlastev :  int;
-                 aeztree   :  (int , relation) Helper.stree array;
-                 aezlast   :  int;
-                 aezauxrels:  (int * timestamp * relation) Dllist.dllist}
-
-type aeinfo  = { aelastev :  int;
-                 aetree   :  (timestamp, relation) Helper.stree array;
-                 aelast   :  int;
-                 aeauxrels:  (timestamp * relation) Dllist.dllist}
-
-let print_atree = function 
-  | ALNode (a)          -> print_endline "ALNODE"  
-  | AINode (a, l1 , l2) -> Printf.printf "AINODE, l1: %i, l2: %i \n" l1 l2  
-
-type array_representation = 
-  | ARel of  relation
-  | APred of predicate * comp_one * info
-  | ANeg of int
-  | AAnd of comp_two * int * int * ainfo
-  | AOr of comp_two * int * int * ainfo
-  | AExists of comp_one * int
-  | AAggreg of comp_one * int
-  | AAggOnce of int * interval * agg_once_state *
-                (agg_once_state -> (tuple * tuple * cst) list -> unit) *
-                (agg_once_state -> relation -> (tuple * tuple * cst) list) *
-                (agg_once_state -> relation)
-  | AAggMMOnce of  int * interval * aggMM_once_state *
-                  (aggMM_once_state -> timestamp -> unit) *
-                  (aggMM_once_state -> timestamp -> relation -> unit) *
-                  (aggMM_once_state -> relation)
-  | APrev of interval * int * pinfo
-  | ANext of interval * int * ninfo
-  | ASinceA of comp_two * interval * int * int * sainfo
-  | ASince of comp_two * interval * int * int * sinfo
-  | AOnceA of interval * int * oainfo
-  | AOnceZ of interval * int * aozinfo
-  | AOnce of interval * int * aoinfo
-  | ANUntil of comp_two * interval * int * int * muninfo
-  | AUntil of comp_two * interval * int * int * muinfo
-  | AEventuallyZ of interval * int * aezinfo
-  | AEventually of interval * int * aeinfo
-
-let a_to_m af =
-  let build_tree arr =
-    let handle_node n = { l = n.l; r = n.r; res = n.res } in
-    let rec build_tree i = match arr.(i) with
-    | ALNode (n)            -> LNode n
-    | AINode (n, l1, l2)    -> let l = build_tree (i+1) in let r = build_tree (i+1+l1) in  INode(handle_node n, l, r)
-    in
-    build_tree 0
-  in  
-  let a2moz aozinf =
-     { moztree = build_tree aozinf.aoztree; mozlast = aozinf.aozlast; mozauxrels = aozinf.aozauxrels }
-  in
-  let a2mo aoinf =
-    { motree = build_tree aoinf.aotree; molast = aoinf.aolast; moauxrels = aoinf.aoauxrels }
-  in
-  let a2mez aezinf =
-    { mezlastev = aezinf.aezlastev; meztree = build_tree aezinf.aeztree; mezlast = aezinf.aezlast; mezauxrels = aezinf.aezauxrels }
-  in   
-  let a2me aeinf =
-    { melastev = aeinf.aelastev; metree = build_tree aeinf.aetree; melast = aeinf.aelast; meauxrels = aeinf.aeauxrels }
-  in   
-  print_endline "A_TO_M";
-  let rec sf i = match af.(i) with
-    | ARel           (rel)                                                  -> MRel(rel)
-    | APred          (p, comp, inf)                                         -> MPred(p, comp, inf)   
-    | ANeg           (l1)                                                   -> let sf1 = sf (i+1)in                           MNeg(sf1)
-    | AAnd           (c, l1, l2, ainf)                                      -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MAnd           (c, sf1, sf2, ainf)
-    | AOr            (c, l1, l2, ainf)                                      -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MOr            (c, sf1, sf2, ainf)
-    | AExists        (c, l1)                                                -> let sf1 = sf (i+1)in                           MExists        (c, sf1)
-    | AAggreg        (c, l1)                                                -> let sf1 = sf (i+1)in                           MAggreg        (c, sf1)
-    | AAggOnce       (l1, dt, agg, update_old, update_new, get_result)      -> let sf1 = sf (i+1)in                           MAggOnce       (sf1, dt, agg, update_old, update_new, get_result)
-    | AAggMMOnce     (l1, dt, aggMM, update_old, update_new, get_result)    -> let sf1 = sf (i+1)in                           MAggMMOnce     (sf1, dt, aggMM, update_old, update_new, get_result)
-    | APrev          (dt, l1, pinf)                                         -> let sf1 = sf (i+1)in                           MPrev          (dt, sf1, pinf)
-    | ANext          (dt, l1, ninf)                                         -> let sf1 = sf (i+1)in                           MNext          (dt, sf1, ninf)
-    | ASinceA        (c2, dt, l1, l2, sainf)                                -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSinceA        (c2, dt, sf1, sf2, sainf)
-    | ASince         (c2, dt, l1, l2, sinf)                                 -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MSince         (c2, dt, sf1, sf2, sinf)
-    | AOnceA         (dt, l1, oainf)                                        -> let sf1 = sf (i+1)in                           MOnceA         (dt, sf1, oainf)
-    | AOnceZ         (dt, l1, ozinf)                                        -> let sf1 = sf (i+1)in                           MOnceZ         (dt, sf1, a2moz ozinf)
-    | AOnce          (dt, l1, oinf)                                         -> let sf1 = sf (i+1)in                           MOnce          (dt, sf1, a2mo oinf)
-    | ANUntil        (c1, dt, l1, l2, muninf)                               -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MNUntil        (c1, dt, sf1, sf2, muninf)
-    | AUntil         (c1, dt, l1, l2, muinf)                                -> let sf1 = sf (i+1)in let sf2 = sf (i+1+l1) in  MUntil         (c1, dt, sf1, sf2, muinf)
-    | AEventuallyZ   (dt, l1, mezinf)                                       -> let sf1 = sf (i+1)in                           MEventuallyZ   (dt, sf1, a2mez mezinf)
-    | AEventually    (dt, l1, meinf)                                        -> let sf1 = sf (i+1)in                           MEventually    (dt, sf1, a2me  meinf)
-  in sf 0
-
-(* COMBINING STATES *)
-
-(* Used for Array.iter over mformula serialized into array *)
-let print_af = function                                    
-  | ARel           (rel)                                                     ->  print_endline ("ARel        :"^string_of_int 0)
-  | APred          (p, comp, inf)                                            ->  print_endline ("APred       :"^string_of_int 0)
-  | ANeg           (l1)                                                   ->  print_endline ("ANeg        :"^string_of_int l1)
-  | AAnd           (c, l1, l2, ainf)                                      ->  print_endline ("AAnd        :"^string_of_int (l1 + l2))
-  | AOr            (c, l1, l2, ainf)                                      ->  print_endline ("AOr         :"^string_of_int (l1 + l2))
-  | AExists        (c, l1)                                                ->  print_endline ("AExists     :"^string_of_int l1)
-  | AAggreg        (c, l1)                                                ->  print_endline ("AAggreg     :"^string_of_int l1)
-  | AAggOnce       (l1, dt, agg, update_old, update_new, get_result)      ->  print_endline ("AAggOnce    :"^string_of_int l1)
-  | AAggMMOnce     (l1, dt, aggMM, update_old, update_new, get_result)    ->  print_endline ("AAggMMOnce  :"^string_of_int l1)
-  | APrev          (dt, l1, pinf)                                         ->  print_endline ("APrev       :"^string_of_int l1)
-  | ANext          (dt, l1, ninf)                                         ->  print_endline ("ANext       :"^string_of_int l1)
-  | ASinceA        (c2, dt, l1, l2, sainf)                                ->  print_endline ("ASinceA     :"^string_of_int (l1 + l2))
-  | ASince         (c2, dt, l1, l2, sinf)                                 ->  print_endline ("ASince      :"^string_of_int (l1 + l2))
-  | AOnceA         (dt, l1, oainf)                                        ->  print_endline ("AOnceA      :"^string_of_int l1)
-  | AOnceZ         (dt, l1, ozinf)                                        ->  print_endline ("AOnceZ      :"^string_of_int l1)
-  | AOnce          (dt, l1, oinf)                                         ->  print_endline ("AOnce       :"^string_of_int l1)
-  | ANUntil        (c1, dt, l1, l2, muninf)                               ->  print_endline ("ANUntil     :"^string_of_int (l1 + l2))
-  | AUntil         (c1, dt, l1, l2, muinf)                                ->  print_endline ("AUntil      :"^string_of_int (l1 + l2))
-  | AEventuallyZ   (dt, l1, mezinf)                                       ->  print_endline ("AEventuallyZ:"^string_of_int l1)
-  | AEventually    (dt, l1, meinf)                                        ->  print_endline ("AEventually :"^string_of_int l1)
-
 let rel_u r1 r2 = Relation.union r1 r2
 
 let combine_info  inf1 inf2 =
@@ -3065,60 +2945,29 @@ let combine_agg  agg1 agg2 =
     {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
 
 *)
-
-
-let combine_states f1 f2  =
-  print_endline "Combining states";
-  Array.map2 (fun e1 e2 ->
-  match (e1,e2) with
-    | (ARel  (rel1),         ARel(rel2))                    -> ARel((Relation.union rel1 rel2))
-    | (APred (p, comp, inf1), APred(_, _, inf2))            -> APred(p, comp, (combine_info inf1 inf2))
-    | (ANeg  (l1), ANeg(_))                           -> ANeg           (l1)
-    | (AAnd  (c, l1, l2, ainf1), AAnd(_,_,_,ainf2))    -> AAnd           (c, l1, l2, (combine_ainfo ainf1 ainf2))
-    | (AOr   (c, l1, l2, ainf1), AOr (_,_,_,ainf2))    -> AOr            (c, l1, l2, (combine_ainfo ainf1 ainf2))
-    | (AExists (c, l1), AExists(_,_))                  -> AExists        (c, l1)
-    | (AAggreg (c, l1), AAggreg(_,_))                  -> AAggreg        (c, l1)
-    | (AAggOnce (l1, dt, agg1, update_old, update_new, get_result), AAggOnce (_, _, agg2, _, _, _)) -> AAggOnce  (l1, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
-    | (AAggMMOnce (l1, dt, aggMM1, update_old, update_new, get_result), AAggMMOnce (_, _, aggMM2, _, _, _)) -> AAggMMOnce (l1, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
-    | (APrev (dt, l1, pinf1), APrev ( _, _, pinf2)) -> APrev          (dt, l1, pinf1)
-    | (ANext (dt, l1, ninf1), ANext ( _, _, ninf2)) -> ANext          (dt, l1, ninf1)
-    | (ASinceA (c2, dt, l1, l2, sainf1), ASinceA( _, _, _, _, sainf2)) -> ASinceA        (c2, dt, l1, l2, combine_sainfo sainf1 sainf2)
-    | (ASince (c2, dt, l1, l2, sinf1), ASince( _, _, _, _, sinf2)) -> ASince         (c2, dt, l1, l2, combine_sinfo sinf1 sinf2)
-    | (AOnceA (dt, l1, oainf1), AOnceA ( _, _, oainf2)) -> AOnceA         (dt, l1, oainf1)
-    | (AOnceZ (dt, l1, ozinf1), AOnceZ ( _, _, ozinf2)) -> AOnceZ         (dt, l1, ozinf1)
-    | (AOnce (dt, l1, oinf1), AOnce ( _, _, oinf2)) -> AOnce        (dt, l1, oinf1)
-    | (ANUntil (c1, dt, l1, l2, muninf1), ANUntil  ( _, _, _, _, muninf2)) ->ANUntil        (c1, dt, l1, l2, combine_muninfo muninf1 muninf2)
-    | (AUntil (c1, dt, l1, l2, muinf1), AUntil ( _, _, _, _, muinf2)) -> AUntil         (c1, dt, l1, l2, combine_muinfo muinf1 muinf2)
-    | (AEventuallyZ (dt, l1, mezinf1), AEventuallyZ (_,_, mezinf2)) -> AEventuallyZ   (dt, l1, mezinf1)
-    | (AEventually (dt, l1, meinf1), AEventually (_,_, meinf2)) -> AEventually   (dt, l1, meinf1)
-    | _ -> raise (Type_error ("Mismatched AF in combine_states"))
-
-  ) f1 f2
-
-
-  let rec comb_m f1 f2  =
-    match (f1,f2) with
-      | (MRel  (rel1),          MRel(rel2))                     -> MRel (Relation.union rel1 rel2)
-      | (MPred (p, comp, inf1), MPred(_, _, inf2))              -> MPred(p, comp, combine_info inf1 inf2)
-      | (MNeg  (f11), MNeg(f21))                                -> MNeg (comb_m f11 f21)
-      | (MAnd  (c, f11, f12, ainf1), MAnd(_, f21, f22, ainf2))  -> MAnd (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
-      | (MOr   (c, f11, f12, ainf1), MOr (_, f21, f22, ainf2))  -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
-      | (MExists (c, f11), MExists(_,f21))                      -> MExists        (c, comb_m f11 f21)
-      | (MAggreg (c, f11), MAggreg(_,f21))                      -> MAggreg        (c, comb_m f11 f21)
-      | (MAggOnce (f11, dt, agg1, update_old, update_new, get_result), MAggOnce (f21, _, agg2, _, _, _)) -> MAggOnce  (comb_m f11 f21, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
-      | (MAggMMOnce (f11, dt, aggMM1, update_old, update_new, get_result), MAggMMOnce (f21, _, aggMM2, _, _, _)) -> MAggMMOnce (comb_m f11 f21, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
-      | (MPrev (dt, f11, pinf1), MPrev ( _, f21, pinf2)) -> MPrev          (dt, comb_m f11 f21, pinf1)
-      | (MNext (dt, f11, ninf1), MNext ( _, f21, ninf2)) -> MNext          (dt, comb_m f11 f21, ninf1)
-      | (MSinceA (c2, dt, f11, f12, sainf1), MSinceA( _, _, f21, f22, sainf2)) -> MSinceA        (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sainfo sainf1 sainf2)
-      | (MSince (c2, dt, f11, f12, sinf1), MSince( _, _, f21, f22, sinf2)) -> MSince         (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2)
-      | (MOnceA (dt, f11, oainf1), MOnceA ( _, f21, oainf2)) -> MOnceA         (dt, comb_m f11 f21, oainf1)
-      | (MOnceZ (dt, f11, ozinf1), MOnceZ ( _, f21, ozinf2)) -> MOnceZ         (dt, comb_m f11 f21, ozinf1)
-      | (MOnce (dt, f11, oinf1), MOnce ( _, f21, oinf2)) -> MOnce        (dt, comb_m f11 f21, oinf1)
-      | (MNUntil (c1, dt, f11, f12, muninf1), MNUntil  ( _, _, f21, f22, muninf2)) -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo muninf1 muninf2)
-      | (MUntil (c1, dt, f11, f12, muinf1), MUntil ( _, _, f21, f22, muinf2)) -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo muinf1 muinf2)
-      | (MEventuallyZ (dt, f11, mezinf1), MEventuallyZ (_, f21, mezinf2)) -> MEventuallyZ   (dt, comb_m f11 f21, mezinf1)
-      | (MEventually (dt, f11, meinf1), MEventually (_, f21, meinf2)) -> MEventually   (dt, comb_m f11 f21, meinf1)
-      | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
+let rec comb_m f1 f2  =
+  match (f1,f2) with
+    | (MRel  (rel1),          MRel(rel2))                     -> MRel (Relation.union rel1 rel2)
+    | (MPred (p, comp, inf1), MPred(_, _, inf2))              -> MPred(p, comp, combine_info inf1 inf2)
+    | (MNeg  (f11), MNeg(f21))                                -> MNeg (comb_m f11 f21)
+    | (MAnd  (c, f11, f12, ainf1), MAnd(_, f21, f22, ainf2))  -> MAnd (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
+    | (MOr   (c, f11, f12, ainf1), MOr (_, f21, f22, ainf2))  -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
+    | (MExists (c, f11), MExists(_,f21))                      -> MExists        (c, comb_m f11 f21)
+    | (MAggreg (c, f11), MAggreg(_,f21))                      -> MAggreg        (c, comb_m f11 f21)
+    | (MAggOnce (f11, dt, agg1, update_old, update_new, get_result), MAggOnce (f21, _, agg2, _, _, _)) -> MAggOnce  (comb_m f11 f21, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
+    | (MAggMMOnce (f11, dt, aggMM1, update_old, update_new, get_result), MAggMMOnce (f21, _, aggMM2, _, _, _)) -> MAggMMOnce (comb_m f11 f21, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
+    | (MPrev (dt, f11, pinf1), MPrev ( _, f21, pinf2)) -> MPrev          (dt, comb_m f11 f21, pinf1)
+    | (MNext (dt, f11, ninf1), MNext ( _, f21, ninf2)) -> MNext          (dt, comb_m f11 f21, ninf1)
+    | (MSinceA (c2, dt, f11, f12, sainf1), MSinceA( _, _, f21, f22, sainf2)) -> MSinceA        (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sainfo sainf1 sainf2)
+    | (MSince (c2, dt, f11, f12, sinf1), MSince( _, _, f21, f22, sinf2)) -> MSince         (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2)
+    | (MOnceA (dt, f11, oainf1), MOnceA ( _, f21, oainf2)) -> MOnceA         (dt, comb_m f11 f21, oainf1)
+    | (MOnceZ (dt, f11, ozinf1), MOnceZ ( _, f21, ozinf2)) -> MOnceZ         (dt, comb_m f11 f21, ozinf1)
+    | (MOnce (dt, f11, oinf1), MOnce ( _, f21, oinf2)) -> MOnce        (dt, comb_m f11 f21, oinf1)
+    | (MNUntil (c1, dt, f11, f12, muninf1), MNUntil  ( _, _, f21, f22, muninf2)) -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo muninf1 muninf2)
+    | (MUntil (c1, dt, f11, f12, muinf1), MUntil ( _, _, f21, f22, muinf2)) -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo muinf1 muinf2)
+    | (MEventuallyZ (dt, f11, mezinf1), MEventuallyZ (_, f21, mezinf2)) -> MEventuallyZ   (dt, comb_m f11 f21, mezinf1)
+    | (MEventually (dt, f11, meinf1), MEventually (_, f21, meinf2)) -> MEventually   (dt, comb_m f11 f21, meinf1)
+    | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
 
 (* END COMBINING STATES *)
 
@@ -3196,437 +3045,209 @@ let check_tuple t vl =
   let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false
 
-
-let split_relation rel values mapping =
-  (* mapping used to reorder values *)
-  let vals = mapping values in
-
-  (*Relation.print_rel "Relation" rel;*)
-  (*Printf.printf "\nTrimmed constraints: %s \n" (pred_list_to_string va,s));*)
-  let nrel = Relation.filter (fun t -> check_tuple t vals) rel in
-  (*Relation.print_rel "Filtered Relation" nrel;
-  print_endline "\n";*)
-  nrel
-
-let split_state mf keys values size =
-  let init = ARel (Relation.make_relation [(Tuple.make_tuple [])]) in
-  let fa = Array.make size init in
-  (*TODO: implement relation splitting according to constraint set; *)
-  (* How do I know which constraint set is relevant? *)
-
+let split_state mapping mf size =
   let split rel preds =
-    (* determine positions of relation column keys in cs.keys *)
-    let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) preds in
-    (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
-    let pos = List.filter (fun e -> e >= 0) pos in
-
-    (* If no specified keys are in the predicate list, return the whole relation *)
-    if List.length pos = 0 then rel else
-    (* Else we create a mapping to reorder our partition input values *)
-    let mapping t = List.map (fun e -> List.nth t e) pos in
-    (*Printf.printf "Preds: %s; Keys: %s \n" (list_to_string preds) (list_to_string (mapping keys));*)
-    split_relation rel values mapping
+    let res = Array.make size Relation.empty in
+    (* Iterate over relation, adding tuples to relations of partitions where they are relevant *)
+    Relation.iter (fun t -> let parts = mapping t preds in Array.iter (fun p -> res.(p) <- Relation.add t res.(p)) parts) rel;
+    res
   in
 
-  (*helper function to split tree states *)
-  let split_tree tree pred =
-    let split_res n =
-      match n with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let handle_node n = { l = n.l; r = n.r; res = (split_res n.res)} in
-
-    let l = ref [] in
-    let rec create_list t i = match t with
-    | LNode ln             -> l :=  ALNode  (handle_node ln)::!l; i+1
-    (* computing len2 so the nodes contained on the right side of the subtree will be on the right in the list *)
-    | INode (a,left,right) -> let len2 = (create_list right 0) in let len1 = (create_list left 0) in l := AINode  (handle_node a, len1, len2)::!l; i+len1+len2+1
-    in
-    ignore(create_list tree 0);
-    let arr = Array.of_list !l in
-    (*Array.iter print_atree arr;*)
-    arr
-    (*let rec build_tree i = match arr.(i) with
-    | ALNode (n)            -> LNode n
-    | AINode (n, l1, l2)    -> let l = build_tree (i+1) in let r = build_tree (i+1+l1) in  INode(handle_node n, l, r)
-    in
-    build_tree 0*)
-    
-
-
-    (*let rec split_t t = match t with
-    | LNode ln      -> LNode (handle_node ln)
-    | INode (a,l,r) -> INode ((handle_node a), (split_t l), (split_t r))
-    in
-    split_t tree *)
-  in
-  let split_info inf nq p =
+  let split_info inf p =
+    let res = Array.init size (fun i -> Queue.create()) in 
     Queue.iter (
-     fun e -> let i, ts, r  = e in
-      Queue.add (i, ts, (split r p)) nq
-      ) inf;
-    nq
+      fun e -> 
+      let i, ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Queue.add (i, ts, s) res.(index)) states
+    ) inf;
+    res
   in
-  let split_ainfo ainf pred =
-    let urel = match ainf.arel with
-    | Some r -> Some (split r pred)
-    | None -> None
+  let split_ainfo ainf p =
+    let arr = Array.make size { arel = None } in 
+    let res = match ainf.arel with
+    | Some r -> let states = (split r p) in Array.map (fun s -> {arel = Some s}) states
+    | None -> arr
     in
-    { arel = urel; }
+    res
   in
-  let split_agg   agg pred =
-    let nq = Queue.create() in
-    Queue.iter (
-      fun e -> let ts, r  = e in
-       Queue.add (ts, (split r pred)) nq
-       ) agg.other_rels;
-    {tw_rels = agg.tw_rels; other_rels = nq; mset = agg.mset; hres = agg.hres }
-  in
-  let split_aggMM agg pred =
-    let nq = Queue.create() in
-    Queue.iter (
-      fun e -> let ts, r  = e in
-       Queue.add (ts, (split r pred)) nq
-       ) agg.non_tw_rels;
-    {non_tw_rels = nq; tbl = agg.tbl }
-  in
-  let split_sainfo sainf pred =
-    let sarel2 = match sainf.sarel2 with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let nq = Mqueue.create() in
-    Mqueue.iter (
-      fun e -> let ts, r  = e in
-      Mqueue.add (ts, (split r pred)) nq
-      ) sainf.saauxrels;
-
-    {sres = (split sainf.sres pred); sarel2 = sarel2; saauxrels = nq}
-  in
-  let split_sinfo sinf pred =
-    let srel2 = match sinf.srel2 with
-      | Some r -> Some (split r pred)
-      | None -> None
-    in
-    let nq = Mqueue.create() in
-    Mqueue.iter (
-      fun e -> let ts, r  = e in
-      Mqueue.add (ts, (split r pred)) nq
-      ) sinf.sauxrels;
-
-    {srel2 = srel2; sauxrels = nq}
-  in
-  let split_oainfo oainf pred =
-    let nq = Mqueue.create() in
-    Mqueue.iter (
-      fun e -> let ts, r  = e in
-      Mqueue.add (ts, (split r pred)) nq
-      ) oainf.oaauxrels;
-    { ores = (split oainf.ores pred); oaauxrels = nq }
-  in
-  let split_mozinfo mozinf pred =
-   let mozauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) mozauxrels
-    ) mozinf.mozauxrels;
-    {aoztree = (split_tree mozinf.moztree pred); aozlast = mozinf.mozlast; aozauxrels = mozauxrels }
-  in
-  let split_moinfo moinf pred =
-    let moauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) moauxrels
-      ) moinf.moauxrels;
-    {aotree = (split_tree moinf.motree pred); aolast = moinf.molast; aoauxrels = moauxrels }
-  in
-  let split_muninfo muninf pred =
-    let listrel l =
-      let nl = Dllist.empty() in
-      Dllist.iter (fun e ->
-        let i, ts, r = e in
-        Dllist.add_last (i, ts, (split r pred)) nl
-      ) l;
-      nl
-    in
-    { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = (listrel muninf.mlistrel1);  mlistrel2 = (listrel muninf.mlistrel2) }
-  in
-  let split_muinfo muinf pred =
-    (* Helper function for raux and saux fields, creates split Sk.dllist *)
-    let sklist l =
-      let nl = Sk.empty() in
-      Sk.iter (fun e ->
-        let i, r = e in
-        Sk.add_last (i, (split r pred)) nl
-      ) l;
-      nl
-    in
-    let mraux =
-      let nl = Sj.empty() in
-      Sj.iter (fun e ->
-        let (i, ts, l) = e in
-        Sj.add_last (i, ts, (sklist l)) nl
-      ) muinf.mraux;
-      nl
-    in
-    let murel2 = match muinf.murel2 with
-      | Some r  -> Some (split r pred)
-      | None -> None
-    in
-    { mulast = muinf.mulast; mufirst = muinf.mufirst; mures = (split muinf.mures pred);
-      murel2 = murel2; mraux = mraux; msaux = (sklist muinf.msaux) }
-  in
-  let split_mezinfo mezinf pred =
-    let mezauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) mezauxrels
-    ) mezinf.mezauxrels;
-    {aezlastev = mezinf.mezlastev; aeztree = (split_tree mezinf.meztree pred); aezlast = mezinf.mezlast; aezauxrels = mezauxrels }
-  in
-  let split_meinfo meinf pred =
-    let meauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) meauxrels
-      ) meinf.meauxrels;
-    {aelastev = meinf.melastev; aetree = (split_tree meinf.metree pred); aelast = meinf.melast; aeauxrels = meauxrels }
-  in
-  let p1 f1 = get_predicate f1 in
-  let p2 f1 f2 = get_predicate2 f1 f2 in
-  let i = ref 0 in
-  let rec split_f f l =
-    match f with
-    (* Don't think MRel is relevant *)
-    | MRel           (rel)                                                  -> let tmp = !i in i := (!i + 1);                                                       let af = ARel         (rel)                                                                        in fa.(tmp) <- af; (l+1)
-    | MPred          (p, comp, inf)                                         -> let tmp = !i in i := (!i + 1);                                                       let af = APred        (p, comp, (split_info inf (Queue.create()) [Predicate.get_name p]))          in fa.(tmp) <- af; (l+1)
-    | MNeg           (f1)                                                   -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = ANeg         (l1)                                                                         in fa.(tmp) <- af; (l1+l+1)
-    | MAnd           (c, f1, f2, ainf)                                      -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = AAnd         (c, (l1), (l2), (split_ainfo ainf (p2 f1 f2)))                               in fa.(tmp) <- af; (l1+l2+l+1)
-    | MOr            (c, f1, f2, ainf)                                      -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = AOr          (c, (l1), (l2), (split_ainfo ainf (p2 f1 f2)))                               in fa.(tmp) <- af; (l1+l2+l+1)
-    | MExists        (c, f1)                                                -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AExists      (c, (l1))                                                                    in fa.(tmp) <- af; (l1+l+1)
-    | MAggreg        (c, f1)                                                -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AAggreg      (c, (l1))                                                                    in fa.(tmp) <- af; (l1+l+1)
-    | MAggOnce       (f1, dt, agg, update_old, update_new, get_result)      -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AAggOnce     ((l1), dt, (split_agg agg (p1 f1)), update_old, update_new, get_result)      in fa.(tmp) <- af; (l1+l+1)
-    | MAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AAggMMOnce   ((l1), dt, (split_aggMM aggMM (p1 f1)), update_old, update_new, get_result)  in fa.(tmp) <- af; (l1+l+1)
-    | MPrev          (dt, f1, pinf)                                         -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = APrev        (dt, (l1), pinf)                                                             in fa.(tmp) <- af; (l1+l+1)
-    | MNext          (dt, f1, ninf)                                         -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = ANext        (dt, (l1), ninf)                                                             in fa.(tmp) <- af; (l1+l+1)
-    | MSinceA        (c2, dt, f1, f2, sainf)                                -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = ASinceA      (c2, dt, (l1), (l2), (split_sainfo sainf (p2 f1 f2)))                        in fa.(tmp) <- af; (l1+l2+l+1)
-    | MSince         (c2, dt, f1, f2, sinf)                                 -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = ASince       (c2, dt, (l1), (l2), (split_sinfo sinf (p2 f1 f2)))                          in fa.(tmp) <- af; (l1+l2+l+1)
-    | MOnceA         (dt, f1, oainf)                                        -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AOnceA       (dt, (l1), (split_oainfo oainf (p1 f1)))                                     in fa.(tmp) <- af; (l1+l+1)
-    | MOnceZ         (dt, f1, ozinf)                                        -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AOnceZ       (dt, (l1), (split_mozinfo ozinf (p1 f1)))                                    in fa.(tmp) <- af; (l1+l+1)
-    | MOnce          (dt, f1, oinf)                                         -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AOnce        (dt, (l1), (split_moinfo oinf (p1 f1)))                                      in fa.(tmp) <- af; (l1+l+1)
-    | MNUntil        (c1, dt, f1, f2, muninf)                               -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = ANUntil      (c1, dt, (l1), (l2), (split_muninfo muninf (p2 f1 f2)))                      in fa.(tmp) <- af; (l1+l2+l+1)
-    | MUntil         (c1, dt, f1, f2, muinf)                                -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in let l2 = (split_f f2 0) in let af = AUntil       (c1, dt, (l1), (l2), (split_muinfo muinf (p2 f1 f2)))                        in fa.(tmp) <- af; (l1+l2+l+1)
-    | MEventuallyZ   (dt, f1, mezinf)                                       -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AEventuallyZ (dt, (l1), (split_mezinfo mezinf (p1 f1)))                                   in fa.(tmp) <- af; (l1+l+1)
-    | MEventually    (dt, f1, meinf)                                        -> let tmp = !i in i := (!i + 1); let l1 = (split_f f1 0) in                            let af = AEventually  (dt, (l1), (split_meinfo meinf (p1 f1)))                                     in fa.(tmp) <- af; (l1+l+1)
-    in
-  ignore(split_f mf 0);
-  fa
-
-
-  let split_state_new mapping mf size =
-    let split rel preds =
-      let res = Array.make size Relation.empty in
-      (* Iterate over relation, adding tuples to relations of partitions where they are relevant *)
-      Relation.iter (fun t -> let parts = mapping t preds in Array.iter (fun p -> res.(p) <- Relation.add t res.(p)) parts) rel;
-      res
-    in
-
-    let split_info inf p =
-      let res = Array.init size (fun i -> Queue.create()) in 
-      Queue.iter (
-       fun e -> 
-        let i, ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Queue.add (i, ts, s) res.(index)) states
-      ) inf;
-      res
-    in
-    let split_ainfo ainf p =
-      let arr = Array.make size { arel = None } in 
-      let res = match ainf.arel with
-      | Some r -> let states = (split r p) in Array.map (fun s -> {arel = Some s}) states
-      | None -> arr
-      in
-      res
-    in
-    let split_agg  agg p =
-      let res = Array.init size (fun i -> Queue.create()) in 
-        Queue.iter (
-        fun e -> 
-          let ts, r  = e in
-          let states = split r p in 
-          Array.iteri (fun index s -> Queue.add (ts, s) res.(index)) states
-        ) agg.other_rels;   
-      Array.map (fun e ->   {tw_rels = agg.tw_rels; other_rels = e; mset = agg.mset; hres = agg.hres }) res   
-    in
-    let split_aggMM agg p =
-      let res = Array.init size (fun i -> Queue.create()) in 
+  let split_agg  agg p =
+    let res = Array.init size (fun i -> Queue.create()) in 
       Queue.iter (
       fun e -> 
         let ts, r  = e in
         let states = split r p in 
         Array.iteri (fun index s -> Queue.add (ts, s) res.(index)) states
-      ) agg.non_tw_rels;      
-      Array.map (fun e -> {non_tw_rels = e; tbl = agg.tbl }) res
+      ) agg.other_rels;   
+    Array.map (fun e ->   {tw_rels = agg.tw_rels; other_rels = e; mset = agg.mset; hres = agg.hres }) res   
+  in
+  let split_aggMM agg p =
+    let res = Array.init size (fun i -> Queue.create()) in 
+    Queue.iter (
+    fun e -> 
+      let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Queue.add (ts, s) res.(index)) states
+    ) agg.non_tw_rels;      
+    Array.map (fun e -> {non_tw_rels = e; tbl = agg.tbl }) res
+  in
+  let split_sainfo sainf p =
+    let arr = Array.init size (fun i -> None) in 
+    let sarels = match sainf.sarel2 with
+    | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
+    | None -> arr
     in
-    let split_sainfo sainf p =
-      let arr = Array.init size (fun i -> None) in 
-      let sarels = match sainf.sarel2 with
-      | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
-      | None -> arr
-      in
-      let queues = Array.init size (fun i -> Mqueue.create()) in 
-      Mqueue.iter (
-      fun e -> 
-        let ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
-      ) sainf.saauxrels;    
-      let sres = split sainf.sres p in 
-      Array.mapi (fun i e ->  {sres = e; sarel2 = sarels.(i); saauxrels = queues.(i)}) sres
+    let queues = Array.init size (fun i -> Mqueue.create()) in 
+    Mqueue.iter (
+    fun e -> 
+      let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
+    ) sainf.saauxrels;    
+    let sres = split sainf.sres p in 
+    Array.mapi (fun i e ->  {sres = e; sarel2 = sarels.(i); saauxrels = queues.(i)}) sres
+  in
+  let split_sinfo sinf p =
+    let arr = Array.init size (fun i -> None) in 
+    let srels = match sinf.srel2 with
+    | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
+    | None -> arr
     in
-    let split_sinfo sinf p =
-      let arr = Array.init size (fun i -> None) in 
-      let srels = match sinf.srel2 with
-      | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
-      | None -> arr
-      in
-      let queues = Array.init size (fun i -> Mqueue.create()) in 
-      Mqueue.iter (
-      fun e -> 
-        let ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
-      ) sinf.sauxrels;    
-      Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues
-    in
-    let split_oainfo oainf p =
-      let queues = Array.init size (fun i -> Mqueue.create()) in 
-      Mqueue.iter (
-      fun e -> 
-        let ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
-      ) oainf.oaauxrels;    
-      let ores = split oainf.ores p in 
-      Array.map2 (fun ores nq ->  {ores = ores; oaauxrels = nq}) ores queues
-    in
-    let split_mozinfo mozinf p =
-     print_endline "Splitting mozinfo:";
-     let dllists = Array.init size (fun i -> Dllist.empty()) in 
-        Dllist.iter (
-          fun e -> let i, ts, r  = e in
-          let states = split r p in 
-          Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-        ) mozinf.mozauxrels;
-      Printf.printf "%d \n" mozinf.mozlast;
-      Array.iteri (fun index l -> Printf.printf "%d: " index; Dllist.iter (fun e -> let i,ts,r = e in Relation.print_rel "'" r) l; print_endline "") dllists;
-      (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
-      Array.map (fun e -> {moztree = mozinf.moztree; mozlast = mozinf.mozlast; mozauxrels = e }) dllists
-    in
-    let split_moinfo moinf p =
-      let dllists = Array.init size (fun i -> Dllist.empty()) in 
+    let queues = Array.init size (fun i -> Mqueue.create()) in 
+    Mqueue.iter (
+    fun e -> 
+      let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
+    ) sinf.sauxrels;    
+    Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues
+  in
+  let split_oainfo oainf p =
+    let queues = Array.init size (fun i -> Mqueue.create()) in 
+    Mqueue.iter (
+    fun e -> 
+      let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Mqueue.add (ts, s) queues.(index)) states
+    ) oainf.oaauxrels;    
+    let ores = split oainf.ores p in 
+    Array.map2 (fun ores nq ->  {ores = ores; oaauxrels = nq}) ores queues
+  in
+  let split_mozinfo mozinf p =
+    print_endline "Splitting mozinfo:";
+    let dllists = Array.init size (fun i -> Dllist.empty()) in 
       Dllist.iter (
-        fun e -> let ts, r  = e in
+        fun e -> let i, ts, r  = e in
         let states = split r p in 
-        Array.iteri (fun index s -> Dllist.add_last (ts, s) dllists.(index)) states
-      ) moinf.moauxrels;
-      (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
-      Array.map (fun e -> {motree = moinf.motree; molast = moinf.molast; moauxrels = e }) dllists
-    in
-    let split_muninfo muninf p =
-      let listrel l =
-        let dllists = Array.init size (fun i -> Dllist.empty()) in 
-        Dllist.iter (
-          fun e -> let i, ts, r  = e in
-          let states = split r p in 
-          Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-        ) l;
-        dllists
-      in  
-      let listrels1 = listrel muninf.mlistrel1 in
-      let listrels2 = listrel muninf.mlistrel2 in
-      Array.map2 (fun listrel1 listrel2 -> { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }) listrels1 listrels2
-    in
-    let split_muinfo muinf p =
-      (* Helper function for raux and saux fields, creates split Sk.dllist *)
-      let sklist l =
-        let sklists = Array.init size (fun i -> Sk.empty()) in 
-        Sk.iter (fun e ->
-          let i, r = e in
-          let states = split r p in 
-          Array.iteri (fun index s -> Sk.add_last (i, s) sklists.(i)) states
-        ) l;
-        sklists
-      in
-      let mraux = Array.init size (fun i -> Sj.empty()) in 
-        Sj.iter (fun e ->
-          let (i, ts, l) = e in
-          let lists = sklist l in
-          Array.iteri (fun index l -> Sj.add_last (i, ts, l) mraux.(i)) lists
-        ) muinf.mraux;
-      let arr = Array.make size None in 
-      let murels = match muinf.murel2 with
-      | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
-      | None -> arr
-      in
-      let msaux = sklist muinf.msaux in
-      let mures = split muinf.mures p in
-      Array.mapi (fun i e -> 
-      { mulast = muinf.mulast; mufirst = muinf.mufirst; mures = mures.(i);
-        murel2 = e; mraux = mraux.(i); msaux = msaux.(i) })
-     murels   
-    in
-    let split_mezinfo mezinf p =
+        Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
+      ) mozinf.mozauxrels;
+    Printf.printf "%d \n" mozinf.mozlast;
+    Array.iteri (fun index l -> Printf.printf "%d: " index; Dllist.iter (fun e -> let i,ts,r = e in Relation.print_rel "'" r) l; print_endline "") dllists;
+    (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
+    Array.map (fun e -> {moztree = mozinf.moztree; mozlast = mozinf.mozlast; mozauxrels = e }) dllists
+  in
+  let split_moinfo moinf p =
+    let dllists = Array.init size (fun i -> Dllist.empty()) in 
+    Dllist.iter (
+      fun e -> let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Dllist.add_last (ts, s) dllists.(index)) states
+    ) moinf.moauxrels;
+    (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
+    Array.map (fun e -> {motree = moinf.motree; molast = moinf.molast; moauxrels = e }) dllists
+  in
+  let split_muninfo muninf p =
+    let listrel l =
       let dllists = Array.init size (fun i -> Dllist.empty()) in 
       Dllist.iter (
         fun e -> let i, ts, r  = e in
         let states = split r p in 
         Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-      ) mezinf.mezauxrels;
-      (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
-      Array.map (fun e -> {mezlastev = mezinf.mezlastev; meztree = mezinf.meztree; mezlast = mezinf.mezlast; mezauxrels = e }) dllists
-    in
-    let split_meinfo meinf p =
-      let dllists = Array.init size (fun i -> Dllist.empty()) in 
-      Dllist.iter (
-        fun e -> let ts, r  = e in
+      ) l;
+      dllists
+    in  
+    let listrels1 = listrel muninf.mlistrel1 in
+    let listrels2 = listrel muninf.mlistrel2 in
+    Array.map2 (fun listrel1 listrel2 -> { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }) listrels1 listrels2
+  in
+  let split_muinfo muinf p =
+    (* Helper function for raux and saux fields, creates split Sk.dllist *)
+    let sklist l =
+      let sklists = Array.init size (fun i -> Sk.empty()) in 
+      Sk.iter (fun e ->
+        let i, r = e in
         let states = split r p in 
-        Array.iteri (fun index s -> Dllist.add_last (ts, s) dllists.(index)) states
-      ) meinf.meauxrels;
-      (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
-      Array.map (fun e -> {melastev = meinf.melastev; metree = meinf.metree; melast = meinf.melast; meauxrels = e }) dllists
+        Array.iteri (fun index s -> Sk.add_last (i, s) sklists.(i)) states
+      ) l;
+      sklists
     in
-    let p1 f1 = get_predicate f1 in
-    let p2 f1 f2 = get_predicate2 f1 f2 in
-    let rec split_f = function
-      (* Don't think MRel is relevant *)
-      | MRel           (rel)                                      -> Array.make size (MRel(rel)) 
-      | MPred          (p, comp, inf)                             -> let arr = split_info inf [Predicate.get_name p] in Array.map (fun e -> MPred(p, comp, e)) arr
-      | MNeg           (f1)                                       -> Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
-      | MAnd           (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
-      | MOr            (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
-      | MExists        (c, f1)                                    -> Array.map (fun e -> MExists(c, e)) (split_f f1)                                                                    
-      | MAggreg        (c, f1)                                    -> Array.map (fun e -> MAggreg(c, e)) (split_f f1)  
-      | MAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_agg agg (p1 f1))   
-      | MAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggMMOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_aggMM aggMM (p1 f1))
-      | MPrev          (dt, f1, pinf)                             -> Array.map (fun e -> MPrev(dt, e, pinf)) (split_f f1)
-      | MNext          (dt, f1, ninf)                             -> Array.map (fun e -> MNext(dt, e, ninf)) (split_f f1)
-      | MSinceA        (c2, dt, f1, f2, sainf)                    -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSinceA(c2, dt, a1.(i), a2.(i), e)) (split_sainfo sainf (p2 f1 f2))
-      | MSince         (c2, dt, f1, f2, sinf)                     -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c2, dt, a1.(i), a2.(i), e)) (split_sinfo sinf (p2 f1 f2))
-      | MOnceA         (dt, f1, oainf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e)) (split_oainfo oainf (p1 f1))                      
-      | MOnceZ         (dt, f1, ozinf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e)) (split_mozinfo ozinf (p1 f1))                                
-      | MOnce          (dt, f1, oinf)                             -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e)) (split_moinfo oinf (p1 f1)) 
-      | MNUntil        (c1, dt, f1, f2, muninf)                   -> let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c1, dt, a1.(i), a2.(i), e)) (split_muninfo muninf (p2 f1 f2))   
-      | MUntil         (c1, dt, f1, f2, muinf)                    -> let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c1, dt, a1.(i), a2.(i), e)) (split_muinfo muinf (p2 f1 f2))   
-      | MEventuallyZ   (dt, f1, mezinf)                           -> let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e)) (split_mezinfo mezinf (p1 f1))            
-      | MEventually    (dt, f1, meinf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e)) (split_meinfo meinf (p1 f1))
-      in
-    split_f mf
+    let mraux = Array.init size (fun i -> Sj.empty()) in 
+      Sj.iter (fun e ->
+        let (i, ts, l) = e in
+        let lists = sklist l in
+        Array.iteri (fun index l -> Sj.add_last (i, ts, l) mraux.(i)) lists
+      ) muinf.mraux;
+    let arr = Array.make size None in 
+    let murels = match muinf.murel2 with
+    | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
+    | None -> arr
+    in
+    let msaux = sklist muinf.msaux in
+    let mures = split muinf.mures p in
+    Array.mapi (fun i e -> 
+    { mulast = muinf.mulast; mufirst = muinf.mufirst; mures = mures.(i);
+      murel2 = e; mraux = mraux.(i); msaux = msaux.(i) })
+    murels   
+  in
+  let split_mezinfo mezinf p =
+    let dllists = Array.init size (fun i -> Dllist.empty()) in 
+    Dllist.iter (
+      fun e -> let i, ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
+    ) mezinf.mezauxrels;
+    (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
+    Array.map (fun e -> {mezlastev = mezinf.mezlastev; meztree = mezinf.meztree; mezlast = mezinf.mezlast; mezauxrels = e }) dllists
+  in
+  let split_meinfo meinf p =
+    let dllists = Array.init size (fun i -> Dllist.empty()) in 
+    Dllist.iter (
+      fun e -> let ts, r  = e in
+      let states = split r p in 
+      Array.iteri (fun index s -> Dllist.add_last (ts, s) dllists.(index)) states
+    ) meinf.meauxrels;
+    (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
+    Array.map (fun e -> {melastev = meinf.melastev; metree = meinf.metree; melast = meinf.melast; meauxrels = e }) dllists
+  in
+  let p1 f1 = get_predicate f1 in
+  let p2 f1 f2 = get_predicate2 f1 f2 in
+  let rec split_f = function
+    (* Don't think MRel is relevant *)
+    | MRel           (rel)                                      -> Array.make size (MRel(rel)) 
+    | MPred          (p, comp, inf)                             -> let arr = split_info inf [Predicate.get_name p] in Array.map (fun e -> MPred(p, comp, e)) arr
+    | MNeg           (f1)                                       -> Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
+    | MAnd           (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
+    | MOr            (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
+    | MExists        (c, f1)                                    -> Array.map (fun e -> MExists(c, e)) (split_f f1)                                                                    
+    | MAggreg        (c, f1)                                    -> Array.map (fun e -> MAggreg(c, e)) (split_f f1)  
+    | MAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_agg agg (p1 f1))   
+    | MAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggMMOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_aggMM aggMM (p1 f1))
+    | MPrev          (dt, f1, pinf)                             -> Array.map (fun e -> MPrev(dt, e, pinf)) (split_f f1)
+    | MNext          (dt, f1, ninf)                             -> Array.map (fun e -> MNext(dt, e, ninf)) (split_f f1)
+    | MSinceA        (c2, dt, f1, f2, sainf)                    -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSinceA(c2, dt, a1.(i), a2.(i), e)) (split_sainfo sainf (p2 f1 f2))
+    | MSince         (c2, dt, f1, f2, sinf)                     -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c2, dt, a1.(i), a2.(i), e)) (split_sinfo sinf (p2 f1 f2))
+    | MOnceA         (dt, f1, oainf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e)) (split_oainfo oainf (p1 f1))                      
+    | MOnceZ         (dt, f1, ozinf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e)) (split_mozinfo ozinf (p1 f1))                                
+    | MOnce          (dt, f1, oinf)                             -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e)) (split_moinfo oinf (p1 f1)) 
+    | MNUntil        (c1, dt, f1, f2, muninf)                   -> let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c1, dt, a1.(i), a2.(i), e)) (split_muninfo muninf (p2 f1 f2))   
+    | MUntil         (c1, dt, f1, f2, muinf)                    -> let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c1, dt, a1.(i), a2.(i), e)) (split_muinfo muinf (p2 f1 f2))   
+    | MEventuallyZ   (dt, f1, mezinf)                           -> let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e)) (split_mezinfo mezinf (p1 f1))            
+    | MEventually    (dt, f1, meinf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e)) (split_meinfo meinf (p1 f1))
+    in
+  split_f mf
     
 
-let split_and_save_new sconsts dumpfile i lastts ff closed neval =
+let split_and_save sconsts dumpfile i lastts ff closed neval =
   let numparts = (sconsts.num_partitions+1) in
 
   let keys = sconsts.keys in
@@ -3646,64 +3267,10 @@ let split_and_save_new sconsts dumpfile i lastts ff closed neval =
     Printf.printf "Partitions: %s \n" (int_arr_to_string output);
     output
   in  
-  let result = split_state_new split_paramater_function mf numparts in
+  let result = split_state split_paramater_function mf numparts in
 
   print_extf "Result 1: \n" (m_to_ext result.(0) neval);
   print_extf "Result 2: \n" (m_to_ext result.(1) neval);
-  (* Iterator over result and dump to file *)
-  Array.iteri (fun i af -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,af,a)) result
-
-
-let get_mf_size mf =
-  let i = ref 0 in
-  let rec get_size = function
-  (* Don't think ERel is relevant *)
-  | MRel           (rel)                                                  ->  i := (!i+1)
-  | MPred          (p, comp, inf)                                         ->  i := (!i+1)
-  | MNeg           (f1)                                                   ->  get_size f1; i := (!i+1)
-  | MAnd           (c, f1, f2, ainf)                                      ->  get_size f1; get_size f2; i := (!i+1)
-  | MOr            (c, f1, f2, ainf)                                      ->  get_size f1; get_size f2; i := (!i+1)
-  | MExists        (c, f1)                                                ->  get_size f1; i := (!i+1)
-  | MAggreg        (c, f1)                                                ->  get_size f1; i := (!i+1)
-  | MAggOnce       (f1, dt, agg, update_old, update_new, get_result)      ->  get_size f1; i := (!i+1)
-  | MAggMMOnce     (f1, dt, aggMM, update_old, update_new, get_result)    ->  get_size f1; i := (!i+1)
-  | MPrev          (dt, f1, pinf)                                         ->  get_size f1; i := (!i+1)
-  | MNext          (dt, f1, ninf)                                         ->  get_size f1; i := (!i+1)
-  | MSinceA        (c2, dt, f1, f2, sainf)                                ->  get_size f1; get_size f2; i := (!i+1)
-  | MSince         (c2, dt, f1, f2, sinf)                                 ->  get_size f1; get_size f2; i := (!i+1)
-  | MOnceA         (dt, f1, oainf)                                        ->  get_size f1; i := (!i+1)
-  | MOnceZ         (dt, f1, ozinf)                                        ->  get_size f1; i := (!i+1)
-  | MOnce          (dt, f1, oinf)                                         ->  get_size f1; i := (!i+1)
-  | MNUntil        (c1, dt, f1, f2, muninf)                               ->  get_size f1; get_size f2; i := (!i+1)
-  | MUntil         (c1, dt, f1, f2, muinf)                                ->  get_size f1; get_size f2; i := (!i+1)
-  | MEventuallyZ   (dt, f1, mezinf)                                       ->  get_size f1; i := (!i+1)
-  | MEventually    (dt, f1, meinf)                                        ->  get_size f1; i := (!i+1)
-  in
-  get_size mf;
-  !i
-
-let split_and_save sconsts dumpfile i lastts ff closed neval =
-  let numparts = (sconsts.num_partitions+1) in
-  let updated = Array.make numparts false in
-  let result = Array.make numparts [||] in
-
-  let keys = sconsts.keys in
-  let a, mf = ext_to_m ff neval in
-  let msize = get_mf_size mf in
-
-  print_extf "\n[split] Original formula\n" ff;
-  (* Compute Splits *)
-  (* Update result array at relevant partition indices, containing the formulas as array *)
-  let update_result i nf = if updated.(i) = true then result.(i) <- combine_states result.(i) nf else result.(i) <- nf; updated.(i) <- true in
-  (* Create split formula, containing values pertaining to relevant inputs *)
-  let create_split c =
-    let nf = split_state mf keys c.values msize in
-    List.iter (fun i -> update_result i nf) c.partitions
-  in
-  (* Iterate over all inputs, creating splits and updating results *)
-  List.iter (fun c -> create_split c) sconsts.constraints;
-
-  print_extf "TEST \n" (m_to_ext (a_to_m result.(0)) neval);
   (* Iterator over result and dump to file *)
   Array.iteri (fun i af -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,af,a)) result
 
@@ -3755,7 +3322,7 @@ let rec check_log lexbuf ff closed neval i =
       | SplitParameters sp -> sp
     in
     let split_state   c params = match params with
-      | Some p -> if (checkSplitParam p = true) then split_and_save_new (getConstraints p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing with index %d\n%!" c i;
     in
 
