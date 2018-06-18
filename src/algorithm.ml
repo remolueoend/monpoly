@@ -2786,17 +2786,56 @@ exception Type_error of string
 
 let rel_u r1 r2 = Relation.union r1 r2
 
-let combine_info  inf1 inf2 =
+let combine_queues1 q1 q2 =  
   let tmp = Queue.create() in
   let nq = Queue.create() in
   Queue.iter (fun _ ->
-    let i, ts, r1 = Queue.pop inf1 in
-    let _, _,  r2 = Queue.pop inf2 in
+    let i, ts, r1 = Queue.pop q1 in
+    let _, _,  r2 = Queue.pop q2 in
     Queue.add (i, ts, (rel_u r1 r2)) tmp;
-  ) inf1;
+  ) q1;
   (* Need to reverse the queue *)
   Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
   nq
+
+let combine_queues2 q1 q2 =  
+  let tmp = Queue.create() in
+  let nq = Queue.create() in
+  Queue.iter (fun _ ->
+    let ts, r1 = Queue.pop q1 in
+    let _,  r2 = Queue.pop q2 in
+    Queue.add (ts, (rel_u r1 r2)) tmp;
+  ) q1;
+  (* Need to reverse the queue *)
+  Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+  nq
+
+let combine_mq q1 q2 =
+  Mqueue.update (fun e ->
+  let ts, r1  = e in
+  let _,  r2  = Mqueue.pop q2 in (ts, (rel_u r1 r2))) q1;
+  q1
+
+let combine_dll1 l1 l2 =  
+  let res = Dllist.empty() in
+    Dllist.iter (fun _ ->
+      let i, ts, r1 = Dllist.pop_first l1 in
+      let _, _,  r2 = Dllist.pop_first l2 in
+      Dllist.add_last (i, ts, (rel_u r1 r2)) res
+    ) l1;
+    res
+
+let combine_dll2 l1 l2 =  
+  let res = Dllist.empty() in
+    Dllist.iter (fun _ ->
+      let ts, r1 = Dllist.pop_first l1 in
+      let _,  r2 = Dllist.pop_first l2 in
+      Dllist.add_last (ts, (rel_u r1 r2)) res
+    ) l1;
+    res   
+
+let combine_info  inf1 inf2 =
+  combine_queues1 inf1 inf2
 
 let combine_ainfo ainf1 ainf2 =
   let urel = match (ainf1.arel, ainf2.arel) with
@@ -2807,144 +2846,88 @@ let combine_ainfo ainf1 ainf2 =
   { arel = urel; }
 
 let combine_agg  agg1 agg2 =
-  let tmp = Queue.create() in
-  let nq = Queue.create() in
-  Queue.iter (fun _ ->
-    let ts, r1 = Queue.pop agg1.other_rels in
-    let _,  r2 = Queue.pop agg2.other_rels in
-    Queue.add (ts, (rel_u r1 r2)) tmp;
-  ) agg1.other_rels;
-  Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+  let other_rels = combine_queues2 agg1.other_rels agg2.other_rels in
+  {tw_rels = agg1.tw_rels; other_rels = other_rels; mset = agg1.mset; hres = agg1.hres }
 
-  {tw_rels = agg1.tw_rels; other_rels = nq; mset = agg1.mset; hres = agg1.hres }
+let combine_aggMM agg1 agg2 =
+  let non_tw_rels = combine_queues2 agg1.non_tw_rels agg2.non_tw_rels in
+  {non_tw_rels = non_tw_rels; tbl = agg1.tbl }
 
-  let combine_aggMM agg1 agg2 =
-    let tmp = Queue.create() in
-    let nq = Queue.create() in
-    Queue.iter (fun _ ->
-      let ts, r1 = Queue.pop agg1.non_tw_rels in
-      let _,  r2 = Queue.pop agg2.non_tw_rels in
-      Queue.add (ts, (rel_u r1 r2)) tmp;
-    ) agg1.non_tw_rels;
-    Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
-    {non_tw_rels = nq; tbl = agg1.tbl }
+let combine_sainfo sainf1 sainf2 =
+  let sarel2 = match (sainf1.sarel2, sainf2.sarel2) with
+  | (Some r1, Some r2) -> Some (rel_u r1 r2)
+  | (None, None) -> None
+  | _ -> raise (Type_error ("Mismatched states in ainfo"))
+  in
+  (* Verify correctness *)
+  let saauxrels = combine_mq sainf1.saauxrels sainf2.saauxrels in
+  {sres = (rel_u sainf1.sres sainf2.sres); sarel2 = sarel2; saauxrels = saauxrels}
 
-  let combine_sainfo sainf1 sainf2 =
-    let sarel2 = match (sainf1.sarel2, sainf2.sarel2) with
-    | (Some r1, Some r2) -> Some (rel_u r1 r2)
-    | (None, None) -> None
-    | _ -> raise (Type_error ("Mismatched states in ainfo"))
-    in
+let combine_sinfo sinf1 sinf2  =
+  let srel2 = match (sinf1.srel2, sinf2.srel2) with
+  | (Some r1, Some r2) -> Some (rel_u r1 r2)
+  | (None, None) -> None
+  | _ -> raise (Type_error ("Mismatched states in ainfo"))
+  in
+  (* Verify correctness *)
+  let sauxrels = combine_mq sinf1.sauxrels sinf2.sauxrels in
+  {srel2 = srel2; sauxrels = sauxrels}
+
+let combine_oainfo oainf1 oainf2 =
+  let oaauxrels = combine_mq oainf1.oaauxrels oainf2.oaauxrels in
+  { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
+
+let combine_muninfo muninf1 muninf2 =
     (* Verify correctness *)
-    Mqueue.update (fun e ->
-     let ts, r1  = e in
-     let _,  r2  = Mqueue.pop sainf2.saauxrels in (ts, (rel_u r1 r2))) sainf1.saauxrels;
-    {sres = (rel_u sainf1.sres sainf2.sres); sarel2 = sarel2; saauxrels = sainf1.saauxrels}
+  let listrel1 = combine_dll1 muninf1.mlistrel1 muninf2.mlistrel1 in 
+  let listrel2 = combine_dll1 muninf1.mlistrel2 muninf2.mlistrel2 in 
+  { mlast1 = muninf1.mlast1; mlast2 = muninf1.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }
 
-  let combine_sinfo sinf1 sinf2  =
-    let srel2 = match (sinf1.srel2, sinf2.srel2) with
-    | (Some r1, Some r2) -> Some (rel_u r1 r2)
-    | (None, None) -> None
-    | _ -> raise (Type_error ("Mismatched states in ainfo"))
-    in
-    (* Verify correctness *)
-    Mqueue.update (fun e ->
-    let ts, r1  = e in
-    let _,  r2  = Mqueue.pop sinf2.sauxrels in (ts, (rel_u r1 r2))) sinf1.sauxrels;
-    {srel2 = srel2; sauxrels = sinf1.sauxrels}
+let combine_muinfo muinf1 muinf2 =
+  (* Helper function to combine raux and saux fields *)
+  let sklist l1 l2 =
+    let nl = Sk.empty() in
+    Sk.iter (fun e ->
+      let i, r1 = e in
+      (* Verify correctness *)
+      let _, r2 = Sk.pop_first l2 in
+      Sk.add_last (i, (rel_u r1 r2)) nl
+    ) l1;
+    nl
+  in
+  let mraux =
+    let nl = Sj.empty() in
+    Sj.iter (fun e ->
+      let (i, ts, l1) = e in
+      let (_, _,  l2) = Sj.pop_first muinf2.mraux in
+      Sj.add_last (i, ts, (sklist l1 l2)) nl
+    ) muinf1.mraux;
+    nl
+  in
+  let murel2 = match (muinf1.murel2, muinf2.murel2) with
+  | (Some r1, Some r2) -> Some (rel_u r1 r2)
+  | (None, None) -> None
+  | _ -> raise (Type_error ("Mismatched states in ainfo"))
+  in
+  { mulast = muinf1.mulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
+    murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
 
-  let combine_oainfo oainf1 oainf2 =
-    Mqueue.update (fun e ->
-    let ts, r1  = e in
-    let _,  r2  = Mqueue.pop oainf2.oaauxrels in (ts, (rel_u r1 r2))) oainf1.oaauxrels;
-    { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oainf1.oaauxrels }
+let combine_mozinfo mozinf1 mozinf2 =
+  let mozauxrels = combine_dll1 mozinf1.mozauxrels mozinf2.mozauxrels in
+  {moztree = mozinf1.moztree; mozlast = mozinf1.mozlast; mozauxrels = mozauxrels }
 
-  let combine_muninfo muninf1 muninf2 =
-     (* Verify correctness *)
-    let listrel l1 l2 =
-      let nl = Dllist.empty() in
-      Dllist.iter (fun e ->
-        let i, ts, r1 = e in
-        let _, _,  r2 = Dllist.pop_first l2 in
-        Dllist.add_last (i, ts, (rel_u r1 r2)) nl
-      ) l1;
-      nl
-    in
-    { mlast1 = muninf1.mlast1; mlast2 = muninf1.mlast2; mlistrel1 = (listrel muninf1.mlistrel1 muninf2.mlistrel1);  mlistrel2 = (listrel muninf1.mlistrel2 muninf2.mlistrel2) }
+let combine_moinfo moinf1 moinf2 =
+  let moauxrels = combine_dll2 moinf1.moauxrels moinf2.moauxrels in
+  {motree = moinf1.motree; molast = moinf1.molast; moauxrels = moauxrels }
 
-  let combine_muinfo muinf1 muinf2 =
-    (* Helper function to combine raux and saux fields *)
-    let sklist l1 l2 =
-      let nl = Sk.empty() in
-      Sk.iter (fun e ->
-        let i, r1 = e in
-        (* Verify correctness *)
-        let _, r2 = Sk.pop_first l2 in
-        Sk.add_last (i, (rel_u r1 r2)) nl
-      ) l1;
-      nl
-    in
-    let mraux =
-      let nl = Sj.empty() in
-      Sj.iter (fun e ->
-        let (i, ts, l1) = e in
-        let (_, _,  l2) = Sj.pop_first muinf2.mraux in
-        Sj.add_last (i, ts, (sklist l1 l2)) nl
-      ) muinf1.mraux;
-      nl
-    in
-    let murel2 = match (muinf1.murel2, muinf2.murel2) with
-    | (Some r1, Some r2) -> Some (rel_u r1 r2)
-    | (None, None) -> None
-    | _ -> raise (Type_error ("Mismatched states in ainfo"))
-    in
-    { mulast = muinf1.mulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
-      murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
+let combine_mezinfo mezinf1 mezinf2 =
+  let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
+  {mezlastev = mezinf1.mezlastev; meztree = mezinf1.meztree; mezlast = mezinf1.mezlast; mezauxrels = mezauxrels }
 
+let combine_meinfo meinf1 meinf2 =
+  let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
+  {melastev = meinf1.melastev; metree = meinf1.metree; melast = meinf1.melast; meauxrels = meauxrels }
 
-  let combine_tree tree1 tree2 =
-    let combine_node n1 n2 = { l = n1.l; r = n1.r; res = (rel_u n1.res n2.res)} in
-
-    let combine e1 e2 = match (e1, e2) with
-      | (ALNode (n1), ALNode(n2)) -> ALNode (combine_node n1 n2) 
-      | (AINode (n1, l1, l2), AINode(n2, _, _)) -> AINode(combine_node n1 n2, l1,l2)
-      | (_, _ ) -> raise (Type_error ("Mismatched nodes in combine_tree"))
-    in  
-    Array.map2 (fun e1 e2 -> combine e1 e2 ) tree1 tree2
-
- (* let combine_mozinfo mozinf1 mozinf2 =
-   let mozauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) mozauxrels
-    ) mozinf.mozauxrels;
-    {moztree = (split_tree mozinf.moztree pred); mozlast = mozinf.mozlast; mozauxrels = mozauxrels }
-
-  let combine_moinfo moinf1 moinf2 =
-    let moauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) moauxrels
-      ) moinf.moauxrels;
-    {motree = (split_tree moinf.motree pred); molast = moinf.molast; moauxrels = moauxrels }
-
-  let combine_mezinfo mezinf1 mezinf2 =
-    let mezauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let i, ts, r  = e in
-        Dllist.add_last (i, ts, (split r pred)) mezauxrels
-    ) mezinf.mezauxrels;
-    {mezlastev = mezinf.mezlastev; meztree = (split_tree mezinf.meztree pred); mezlast = mezinf.mezlast; mezauxrels = mezauxrels }
-
-  let combine_meinfo meinf1 meinf2 =
-    let meauxrels = Dllist.empty() in
-      Dllist.iter (
-        fun e -> let ts, r  = e in
-        Dllist.add_last (ts, (split r pred)) meauxrels
-      ) meinf.meauxrels;
-    {melastev = meinf.melastev; metree = (split_tree meinf.metree pred); melast = meinf.melast; meauxrels = meauxrels }
-
-*)
 let rec comb_m f1 f2  =
   match (f1,f2) with
     | (MRel  (rel1),          MRel(rel2))                     -> MRel (Relation.union rel1 rel2)
