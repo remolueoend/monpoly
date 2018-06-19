@@ -2831,17 +2831,11 @@ let combine_mq q1 q2 =
 
 let combine_dll1 l1 l2 =  
   let res = Dllist.empty() in
-  let a1 = Dllist.to_array l1 in
-  let a2 = Dllist.to_array l2 in
-  Array.iter2 (fun e1 e2 ->
-  let i, ts, r1 = e1 in
-  let _, _,  r2 = e2 in
-  Dllist.add_last (i, ts, (rel_u r1 r2)) res ) a1 a2;
-    (*Dllist.iter (fun e ->
+    Dllist.iter (fun e ->
       let i, ts, r1 = e in
       let _, _,  r2 = Dllist.pop_first l2 in
       Dllist.add_last (i, ts, (rel_u r1 r2)) res
-    ) l1;*)
+    ) l1;
     res
 
 let combine_dll2 l1 l2 =  
@@ -2947,16 +2941,32 @@ let combine_oainfo oainf1 oainf2 =
   { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
   
 let combine_oinfo oinf1 oinf2 =
+  (* Verify, see combine_ozinfo *)
+  let index = Dllist.get_index oinf1.olast oinf1.oauxrels in
   let oauxrels = combine_dll2 oinf1.oauxrels oinf2.oauxrels in
-  {otree = oinf1.otree; olast = oinf1.olast; oauxrels = oauxrels }
+  let olast = Dllist.get_cell_at_index index oauxrels in
+
+  let tree_list = Helper.convert_dll oauxrels Dllist.void (fun x -> x) in 
+  {otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = oauxrels }
 
 let combine_ezinfo ezinf1 ezinf2 =
+  (* Verify, see combine_ozinfo *)
+  let index = Dllist.get_index ezinf1.ezlast ezinf2.ezauxrels in
   let ezauxrels = combine_dll1 ezinf1.ezauxrels ezinf2.ezauxrels in
-  {ezlastev = ezinf1.ezlastev; eztree = ezinf1.eztree; ezlast = ezinf1.ezlast; ezauxrels = ezauxrels }
+  let ezlast = Dllist.get_cell_at_index index ezauxrels in
+
+  let f = fun (j,_,rel) -> (j,rel) in
+  let tree_list = Helper.convert_dll ezauxrels Dllist.void f in 
+  {ezlastev = ezinf1.ezlastev; eztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ezlast = ezlast; ezauxrels = ezauxrels }
 
 let combine_einfo einf1 einf2 =
-  let eauxrels = combine_dll2 einf1.eauxrels einf2.eauxrels in
-  {elastev = einf1.elastev; etree = einf1.etree; elast = einf1.elast; eauxrels = eauxrels }
+   (* Verify, see combine_ozinfo *)
+   let index = Dllist.get_index einf1.elast einf2.eauxrels in
+   let eauxrels = combine_dll2 einf1.eauxrels einf2.eauxrels in
+   let elast = Dllist.get_cell_at_index index eauxrels in
+ 
+   let tree_list = Helper.convert_dll eauxrels Dllist.void (fun x -> x) in 
+  {elastev = einf1.elastev; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast; eauxrels = eauxrels }
 
 let rec comb_e f1 f2  =
   match (f1,f2) with
