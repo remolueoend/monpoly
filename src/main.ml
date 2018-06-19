@@ -121,6 +121,9 @@ let main () =
 
   Misc.split_debug !debug;
 
+  print_endline !logfile;
+  print_endline !Algorithm.combine_files;
+
   if !displayver then
     print_endline ("MonPoly, version " ^ version)
   else if !Algorithm.resumefile <> "" then
@@ -128,6 +131,9 @@ let main () =
     Algorithm.resume !logfile
   else if !formulafile = "" then
     print_endline usage_string
+  else if !Algorithm.combine_files <> "" then
+    let _ = Log.get_signature !sigfile in
+    Algorithm.combine !logfile
   else
     (* read formula file *)
     let f = analyze_formulafile () in
@@ -178,6 +184,7 @@ let _ =
     "-stop_at_out_of_order_ts", Arg.Set Misc.stop_at_out_of_order_ts, "\tStop monitoring when out-of-order timestamps encountered, otherwise issue warning";
     "-stop_at_first_viol", Arg.Set Misc.stop_at_first_viol, "\tStop at first encountered violation";
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
+    "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
   ]
     (fun _ -> ())
     usage_string;

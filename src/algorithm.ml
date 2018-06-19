@@ -2755,7 +2755,12 @@ let m_to_ext mf neval =
 
 let resumefile = ref ""
 let dumpfile = ref ""
+let combine_files = ref ""
 let lastts = ref MFOTL.ts_invalid
+
+let files_to_list f = 
+  String.split_on_char ',' f   
+
 
 let dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
@@ -2768,6 +2773,14 @@ let marshal dumpfile i lastts ff closed neval =
   let a, mf = ext_to_m ff neval in
   let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
   dump_to_file dumpfile value
+
+let read_m_from_file file =   
+  let ch = open_in_bin file in
+  let value = (Marshal.from_channel ch : state) in
+  close_in ch;
+  let (i,last_ts,closed,mf,a,tp,skipped_tps,last) = value in
+  let neval = NEval.from_array a in
+  (i,last_ts,mf,closed,neval,tp,skipped_tps,last)
 
 let unmarshal resumefile =
   let ch = open_in_bin resumefile in
@@ -2789,8 +2802,8 @@ let rel_u r1 r2 = Relation.union r1 r2
 let combine_queues1 q1 q2 =  
   let tmp = Queue.create() in
   let nq = Queue.create() in
-  Queue.iter (fun _ ->
-    let i, ts, r1 = Queue.pop q1 in
+  Queue.iter (fun e ->
+    let i, ts, r1 = e in
     let _, _,  r2 = Queue.pop q2 in
     Queue.add (i, ts, (rel_u r1 r2)) tmp;
   ) q1;
@@ -2801,8 +2814,8 @@ let combine_queues1 q1 q2 =
 let combine_queues2 q1 q2 =  
   let tmp = Queue.create() in
   let nq = Queue.create() in
-  Queue.iter (fun _ ->
-    let ts, r1 = Queue.pop q1 in
+  Queue.iter (fun e ->
+    let ts, r1 = e in
     let _,  r2 = Queue.pop q2 in
     Queue.add (ts, (rel_u r1 r2)) tmp;
   ) q1;
@@ -2818,17 +2831,23 @@ let combine_mq q1 q2 =
 
 let combine_dll1 l1 l2 =  
   let res = Dllist.empty() in
-    Dllist.iter (fun _ ->
-      let i, ts, r1 = Dllist.pop_first l1 in
+  let a1 = Dllist.to_array l1 in
+  let a2 = Dllist.to_array l2 in
+  Array.iter2 (fun e1 e2 ->
+  let i, ts, r1 = e1 in
+  let _, _,  r2 = e2 in
+  Dllist.add_last (i, ts, (rel_u r1 r2)) res ) a1 a2;
+    (*Dllist.iter (fun e ->
+      let i, ts, r1 = e in
       let _, _,  r2 = Dllist.pop_first l2 in
       Dllist.add_last (i, ts, (rel_u r1 r2)) res
-    ) l1;
+    ) l1;*)
     res
 
 let combine_dll2 l1 l2 =  
   let res = Dllist.empty() in
-    Dllist.iter (fun _ ->
-      let ts, r1 = Dllist.pop_first l1 in
+    Dllist.iter (fun e ->
+      let ts, r1 = e in
       let _,  r2 = Dllist.pop_first l2 in
       Dllist.add_last (ts, (rel_u r1 r2)) res
     ) l1;
@@ -2873,17 +2892,13 @@ let combine_sinfo sinf1 sinf2  =
   let sauxrels = combine_mq sinf1.sauxrels sinf2.sauxrels in
   {srel2 = srel2; sauxrels = sauxrels}
 
-let combine_oainfo oainf1 oainf2 =
-  let oaauxrels = combine_mq oainf1.oaauxrels oainf2.oaauxrels in
-  { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
-
-let combine_muninfo muninf1 muninf2 =
+let combine_muninfo uninf1 uninf2 =
     (* Verify correctness *)
-  let listrel1 = combine_dll1 muninf1.mlistrel1 muninf2.mlistrel1 in 
-  let listrel2 = combine_dll1 muninf1.mlistrel2 muninf2.mlistrel2 in 
-  { mlast1 = muninf1.mlast1; mlast2 = muninf1.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }
+  let listrel1 = combine_dll1 uninf1.listrel1 uninf2.listrel1 in 
+  let listrel2 = combine_dll1 uninf1.listrel2 uninf2.listrel2 in 
+  { last1 = uninf1.last1; last2 = uninf1.last2; listrel1 = listrel1;  listrel2 = listrel2 }
 
-let combine_muinfo muinf1 muinf2 =
+let combine_muinfo uinf1 uinf2 =
   (* Helper function to combine raux and saux fields *)
   let sklist l1 l2 =
     let nl = Sk.empty() in
@@ -2895,61 +2910,96 @@ let combine_muinfo muinf1 muinf2 =
     ) l1;
     nl
   in
-  let mraux =
+  let raux =
     let nl = Sj.empty() in
     Sj.iter (fun e ->
       let (i, ts, l1) = e in
-      let (_, _,  l2) = Sj.pop_first muinf2.mraux in
+      let (_, _,  l2) = Sj.pop_first uinf2.raux in
       Sj.add_last (i, ts, (sklist l1 l2)) nl
-    ) muinf1.mraux;
+    ) uinf1.raux;
     nl
   in
-  let murel2 = match (muinf1.murel2, muinf2.murel2) with
+  let urel2 = match (uinf1.urel2, uinf2.urel2) with
   | (Some r1, Some r2) -> Some (rel_u r1 r2)
   | (None, None) -> None
   | _ -> raise (Type_error ("Mismatched states in ainfo"))
   in
-  { mulast = muinf1.mulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
-    murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
+  { ulast = uinf1.ulast; ufirst = uinf1.ufirst; ures = (rel_u uinf1.ures uinf2.ures);
+    urel2 = urel2; raux = raux; saux = (sklist uinf1.saux uinf2.saux) }
 
-let combine_mozinfo mozinf1 mozinf2 =
-  let mozauxrels = combine_dll1 mozinf1.mozauxrels mozinf2.mozauxrels in
-  {moztree = mozinf1.moztree; mozlast = mozinf1.mozlast; mozauxrels = mozauxrels }
+let combine_ozinfo ozinf1 ozinf2 =
+  (* Discuss this at meeting *)
 
-let combine_moinfo moinf1 moinf2 =
-  let moauxrels = combine_dll2 moinf1.moauxrels moinf2.moauxrels in
-  {motree = moinf1.motree; molast = moinf1.molast; moauxrels = moauxrels }
+  (* Need to get index, and get cell for that index on new combined auxrels
+     Would work better with mformula, however that might have issues with neval indices for different reasons
+    *)
+  let index = Dllist.get_index ozinf1.ozlast ozinf1.ozauxrels in
+  let ozauxrels = combine_dll1 ozinf1.ozauxrels ozinf2.ozauxrels in
+  let ozlast = Dllist.get_cell_at_index index ozauxrels in
 
-let combine_mezinfo mezinf1 mezinf2 =
-  let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
-  {mezlastev = mezinf1.mezlastev; meztree = mezinf1.meztree; mezlast = mezinf1.mezlast; mezauxrels = mezauxrels }
+  (*Should this be done on each union or rather at the end? *)
+  let f = fun (j,_,rel) -> (j,rel) in
+  let tree_list = Helper.convert_dll ozauxrels Dllist.void f in 
+  {oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = ozauxrels }
 
-let combine_meinfo meinf1 meinf2 =
-  let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
-  {melastev = meinf1.melastev; metree = meinf1.metree; melast = meinf1.melast; meauxrels = meauxrels }
+let combine_oainfo oainf1 oainf2 =
+  let oaauxrels = combine_mq oainf1.oaauxrels oainf2.oaauxrels in
+  { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
+  
+let combine_oinfo oinf1 oinf2 =
+  let oauxrels = combine_dll2 oinf1.oauxrels oinf2.oauxrels in
+  {otree = oinf1.otree; olast = oinf1.olast; oauxrels = oauxrels }
 
-let rec comb_m f1 f2  =
+let combine_ezinfo ezinf1 ezinf2 =
+  let ezauxrels = combine_dll1 ezinf1.ezauxrels ezinf2.ezauxrels in
+  {ezlastev = ezinf1.ezlastev; eztree = ezinf1.eztree; ezlast = ezinf1.ezlast; ezauxrels = ezauxrels }
+
+let combine_einfo einf1 einf2 =
+  let eauxrels = combine_dll2 einf1.eauxrels einf2.eauxrels in
+  {elastev = einf1.elastev; etree = einf1.etree; elast = einf1.elast; eauxrels = eauxrels }
+
+let rec comb_e f1 f2  =
   match (f1,f2) with
-    | (MRel  (rel1),          MRel(rel2))                     -> MRel (Relation.union rel1 rel2)
-    | (MPred (p, comp, inf1), MPred(_, _, inf2))              -> MPred(p, comp, combine_info inf1 inf2)
-    | (MNeg  (f11), MNeg(f21))                                -> MNeg (comb_m f11 f21)
-    | (MAnd  (c, f11, f12, ainf1), MAnd(_, f21, f22, ainf2))  -> MAnd (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
-    | (MOr   (c, f11, f12, ainf1), MOr (_, f21, f22, ainf2))  -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
-    | (MExists (c, f11), MExists(_,f21))                      -> MExists        (c, comb_m f11 f21)
-    | (MAggreg (c, f11), MAggreg(_,f21))                      -> MAggreg        (c, comb_m f11 f21)
-    | (MAggOnce (f11, dt, agg1, update_old, update_new, get_result), MAggOnce (f21, _, agg2, _, _, _)) -> MAggOnce  (comb_m f11 f21, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
-    | (MAggMMOnce (f11, dt, aggMM1, update_old, update_new, get_result), MAggMMOnce (f21, _, aggMM2, _, _, _)) -> MAggMMOnce (comb_m f11 f21, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
-    | (MPrev (dt, f11, pinf1), MPrev ( _, f21, pinf2)) -> MPrev          (dt, comb_m f11 f21, pinf1)
-    | (MNext (dt, f11, ninf1), MNext ( _, f21, ninf2)) -> MNext          (dt, comb_m f11 f21, ninf1)
-    | (MSinceA (c2, dt, f11, f12, sainf1), MSinceA( _, _, f21, f22, sainf2)) -> MSinceA        (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sainfo sainf1 sainf2)
-    | (MSince (c2, dt, f11, f12, sinf1), MSince( _, _, f21, f22, sinf2)) -> MSince         (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2)
-    | (MOnceA (dt, f11, oainf1), MOnceA ( _, f21, oainf2)) -> MOnceA         (dt, comb_m f11 f21, oainf1)
-    | (MOnceZ (dt, f11, ozinf1), MOnceZ ( _, f21, ozinf2)) -> MOnceZ         (dt, comb_m f11 f21, ozinf1)
-    | (MOnce (dt, f11, oinf1), MOnce ( _, f21, oinf2)) -> MOnce        (dt, comb_m f11 f21, oinf1)
-    | (MNUntil (c1, dt, f11, f12, muninf1), MNUntil  ( _, _, f21, f22, muninf2)) -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo muninf1 muninf2)
-    | (MUntil (c1, dt, f11, f12, muinf1), MUntil ( _, _, f21, f22, muinf2)) -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo muinf1 muinf2)
-    | (MEventuallyZ (dt, f11, mezinf1), MEventuallyZ (_, f21, mezinf2)) -> MEventuallyZ   (dt, comb_m f11 f21, mezinf1)
-    | (MEventually (dt, f11, meinf1), MEventually (_, f21, meinf2)) -> MEventually   (dt, comb_m f11 f21, meinf1)
+    | (ERel  (rel1),          ERel(rel2))
+      -> ERel (Relation.union rel1 rel2)
+    | (EPred (p, comp, inf1), EPred(_, _, inf2))
+      -> EPred(p, comp, combine_info inf1 inf2)
+    | (ENeg  (f11), ENeg(f21))
+      -> ENeg (comb_e f11 f21)
+    | (EAnd  (c, f11, f12, ainf1), EAnd(_, f21, f22, ainf2))
+      -> EAnd (c, comb_e f11 f21, comb_e f12 f22, (combine_ainfo ainf1 ainf2))
+    | (EOr   (c, f11, f12, ainf1), EOr (_, f21, f22, ainf2))
+      -> EOr  (c, comb_e f11 f21, comb_e f12 f22, (combine_ainfo ainf1 ainf2))
+    | (EExists (c, f11), EExists(_,f21))
+      -> EExists        (c, comb_e f11 f21)
+    | (EAggreg (c, f11), EAggreg(_,f21))
+      -> EAggreg        (c, comb_e f11 f21)
+    | (EAggOnce (f11, dt, agg1, update_old, update_new, get_result), EAggOnce (f21, _, agg2, _, _, _))
+      -> EAggOnce  (comb_e f11 f21, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
+    | (EAggMMOnce (f11, dt, aggMM1, update_old, update_new, get_result), EAggMMOnce (f21, _, aggMM2, _, _, _))
+      -> EAggMMOnce (comb_e f11 f21, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
+    | (EPrev (dt, f11, pinf1), EPrev ( _, f21, pinf2))
+      -> EPrev          (dt, comb_e f11 f21, pinf1)
+    | (ENext (dt, f11, ninf1), ENext ( _, f21, ninf2))
+      -> ENext          (dt, comb_e f11 f21, ninf1)
+    | (ESinceA (c2, dt, f11, f12, sainf1), ESinceA( _, _, f21, f22, sainf2))
+      -> ESinceA        (c2, dt, comb_e f11 f21, comb_e f12 f22, combine_sainfo sainf1 sainf2)
+    | (ESince (c2, dt, f11, f12, sinf1), ESince( _, _, f21, f22, sinf2))
+      -> ESince         (c2, dt, comb_e f11 f21, comb_e f12 f22, combine_sinfo sinf1 sinf2)
+    | (EOnceA (dt, f11, oainf1), EOnceA ( _, f21, oainf2))
+      -> EOnceA         (dt, comb_e f11 f21, combine_oainfo oainf1 oainf2)
+    | (EOnceZ (dt, f11, ozinf1), EOnceZ ( _, f21, ozinf2))
+      -> EOnceZ         (dt, comb_e f11 f21, combine_ozinfo ozinf1 ozinf2)
+    | (EOnce (dt, f11, oinf1), EOnce ( _, f21, oinf2))
+      -> EOnce        (dt, comb_e f11 f21, combine_oinfo oinf1 oinf2)
+    | (ENUntil (c1, dt, f11, f12, muninf1), ENUntil  ( _, _, f21, f22, muninf2))
+      -> ENUntil        (c1, dt, comb_e f11 f21, comb_e f12 f22, combine_muninfo muninf1 muninf2)
+    | (EUntil (c1, dt, f11, f12, muinf1), EUntil ( _, _, f21, f22, muinf2))
+      -> EUntil         (c1, dt, comb_e f11 f21, comb_e f12 f22, combine_muinfo muinf1 muinf2)
+    | (EEventuallyZ (dt, f11, ezinf1), EEventuallyZ (_, f21, ezinf2))
+      -> EEventuallyZ   (dt, comb_e f11 f21, combine_ezinfo ezinf1 ezinf2)
+    | (EEventually (dt, f11, einf1), EEventually (_, f21, einf2))
+      -> EEventually   (dt, comb_e f11 f21, combine_einfo einf1 einf2)
     | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
 
 (* END COMBINING STATES *)
@@ -3405,3 +3455,71 @@ let resume logfile =
   let lexbuf = Log.log_open logfile in
   Printf.printf "Loaded state\n%!";
   check_log lexbuf ff closed neval i
+
+let files_to_list f = 
+  String.split_on_char ',' f   
+  
+let rec pop_cond l nl c = 
+  let e = NEval.pop_first l in 
+  let i, ts = e in 
+  if c < ts then 
+    NEval.add_last e nl
+  else NEval.add_first e l
+  
+let combine_neval nv1 nv2 =
+  let n = NEval.empty() in
+  NEval.iter (fun e -> 
+    let _, ts = e in 
+    pop_cond nv2 n ts;
+  ) nv1;
+  n
+
+let rec print_ef = function
+  | ERel           (rel)                                      -> print_endline "Rel" 
+  | EPred          (p, comp, inf)                             -> print_endline "Pred"
+  | ENeg           (f1)                                       -> print_endline "Neg";print_ef f1
+  | EAnd           (c, f1, f2, ainf)                          -> print_endline "And";print_ef f1; print_ef f2
+  | EOr            (c, f1, f2, ainf)                          -> print_endline "Or";print_ef f1; print_ef f2
+  | EExists        (c, f1)                                    -> print_endline "Exists";print_ef f1
+  | EAggreg        (c, f1)                                    -> print_endline "Aggreg";print_ef f1
+  | EAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> print_endline "AggOnce";print_ef f1
+  | EAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> print_endline "AggMMOnce";print_ef f1
+  | EPrev          (dt, f1, pinf)                             -> print_endline "Prev";print_ef f1
+  | ENext          (dt, f1, ninf)                             -> print_endline "Next";print_ef f1
+  | ESinceA        (c2, dt, f1, f2, sainf)                    -> print_endline "SinceA";print_ef f1;print_ef f2
+  | ESince         (c2, dt, f1, f2, sinf)                     -> print_endline "Since";print_ef f1;print_ef f2
+  | EOnceA         (dt, f1, oainf)                            -> print_endline "OnceA";print_ef f1
+  | EOnceZ         (dt, f1, ozinf)                            -> print_endline "OnceZ";print_ef f1
+  | EOnce          (dt, f1, oinf)                             -> print_endline "Once";print_ef f1
+  | ENUntil        (c1, dt, f1, f2, muninf)                   -> print_endline "NUntil";print_ef f1;print_ef f2
+  | EUntil         (c1, dt, f1, f2, muinf)                    -> print_endline "Until";print_ef f1;print_ef f2
+  | EEventuallyZ   (dt, f1, mezinf)                           -> print_endline "EventuallyZ";print_ef f1
+  | EEventually    (dt, f1, meinf)                            -> print_endline "Eventually";print_ef f1
+
+
+  
+
+let combine logfile = 
+  let files = files_to_list !combine_files in
+  let (i,last_ts,ff,closed,neval,tp,skipped_tps,last) = List.fold_right (fun s (i,last_ts,ff1,closed,neval1,tp,skipped_tps,last) -> 
+    let (_,_,ff2,_,neval2,_,_,_) = unmarshal s in
+    (*Printf.printf "Length1: %d \n" (NEval.length neval1);
+    NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval1;
+    Printf.printf "Length2: %d \n" (NEval.length neval1);
+    NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval2;*)
+    lastts := last_ts;
+    Log.tp := tp;
+    Log.skipped_tps := skipped_tps;
+    Log.last := last;
+
+    let comb_ff = comb_e ff1 ff2 in
+    print_extf "Combined formula:" comb_ff;
+    let comb_nv = combine_neval neval1 neval2 in 
+    (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
+    ) (List.tl files) (unmarshal (List.hd files))
+  in
+  let lexbuf = Log.log_open logfile in
+  (*let _, mf = ext_to_m ff neval in
+  let ef = m_to_ext mf neval in*)
+  check_log lexbuf ff closed neval i
+  

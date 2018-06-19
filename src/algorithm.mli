@@ -43,11 +43,13 @@
 
 open MFOTL
 
+val combine_files: string ref
 val resumefile: string ref
 val dumpfile: string ref
 (** The names of the files used for state saving and state loading. *)
 
 val resume: string -> unit
+val combine: string -> unit
 
 (* val resume: string -> unit *)
 (** [resume log] loads the monitor state from file [resumefile] and
