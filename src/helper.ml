@@ -1,6 +1,5 @@
 open MFOTL
 open Predicate
-open Log_parser
 open Db
 
 exception Type_error of string

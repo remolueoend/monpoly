@@ -3342,17 +3342,19 @@ let rec check_log lexbuf ff closed neval i =
         marshal filename i !lastts ff closed neval;
         Printf.printf "Saved state\n%!"
       | None -> Printf.printf "%s: No filename specified\n%!" c;
+      | _ -> print_endline "Unsupported parameters to save_state";
     in
     let save_and_exit c params =  match params with
       | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No filename specified, continuing with index %d\n%!" c i;
     in
-    let getConstraints p = match p with
+    let get_constraints p = match p with
       (* Other case already handle by check split param *)
       | SplitParameters sp -> sp
+      | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
     in
     let split_state   c params = match params with
-      | Some p -> if (checkSplitParam p = true) then split_and_save (getConstraints p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkSplitParam p = true) then split_and_save (get_constraints p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing with index %d\n%!" c i;
     in
 
@@ -3469,18 +3471,25 @@ let resume logfile =
 let files_to_list f = 
   String.split_on_char ',' f   
   
-let rec pop_cond l nl c = 
-  let e = NEval.pop_first l in 
-  let i, ts = e in 
-  if c < ts then 
-    NEval.add_last e nl
-  else NEval.add_first e l
   
 let combine_neval nv1 nv2 =
+  (* What should be done with the i *)
+  let rec combine l nl c : unit = 
+    let e = NEval.pop_first l in 
+    let i, ts = e in 
+    (* l1 list element ts is < l2 ts2, pop from l2 and add to new list *)
+    if c < ts then 
+      NEval.add_last e nl
+    (* if timestamp already contained, skip *)
+    else if c = ts then () 
+    (* otherwise readd popped element *)
+    else NEval.add_first e l;
+    if c < ts then combine l nl c
+  in
   let n = NEval.empty() in
   NEval.iter (fun e -> 
     let _, ts = e in 
-    pop_cond nv2 n ts;
+    combine nv2 n ts;
   ) nv1;
   n
 
@@ -3523,13 +3532,11 @@ let combine logfile =
     Log.last := last;
 
     let comb_ff = comb_e ff1 ff2 in
-    print_extf "Combined formula:" comb_ff;
     let comb_nv = combine_neval neval1 neval2 in 
     (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
     ) (List.tl files) (unmarshal (List.hd files))
   in
   let lexbuf = Log.log_open logfile in
-  (*let _, mf = ext_to_m ff neval in
-  let ef = m_to_ext mf neval in*)
+  print_extf "Combined formula:" ff;
   check_log lexbuf ff closed neval i
   
