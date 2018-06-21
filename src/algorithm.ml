@@ -3302,7 +3302,9 @@ let split_and_save sconsts dumpfile i lastts ff closed neval =
   print_extf "Result 1: \n" (m_to_ext result.(0) neval);
   print_extf "Result 2: \n" (m_to_ext result.(1) neval);
   (* Iterator over result and dump to file *)
-  Array.iteri (fun i af -> dump_to_file (dumpfile ^ (string_of_int (numparts-i))) (i,lastts,closed,af,a)) result
+  Array.iteri (fun index mf ->
+    let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
+    dump_to_file (dumpfile ^ (string_of_int (numparts-index))) value) result
 
 (* END SPLITTING STATE *)
 
@@ -3526,16 +3528,16 @@ let combine logfile =
     NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval1;
     Printf.printf "Length2: %d \n" (NEval.length neval1);
     NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval2;*)
-    lastts := last_ts;
-    Log.tp := tp;
-    Log.skipped_tps := skipped_tps;
-    Log.last := last;
-
     let comb_ff = comb_e ff1 ff2 in
     let comb_nv = combine_neval neval1 neval2 in 
     (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
     ) (List.tl files) (unmarshal (List.hd files))
   in
+  lastts := last_ts;
+  Log.tp := tp;
+  Log.skipped_tps := skipped_tps;
+  Log.last := last;
+
   let lexbuf = Log.log_open logfile in
   print_extf "Combined formula:" ff;
   check_log lexbuf ff closed neval i
