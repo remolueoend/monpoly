@@ -84,7 +84,9 @@ open Sliding
 open Helper
 
 open Marshalling
-open Ext_formula
+open Splitting
+open Extformula
+open Mformula
 
 module NEval = Dllist
 module Sk = Dllist
@@ -2406,7 +2408,7 @@ let files_to_list f =
   String.split_on_char ',' f   
 
 let split_and_save  sconsts dumpfile i lastts ff closed neval  =
-  let result = Marshalling.split_formula sconsts dumpfile i lastts ff closed neval  in
+  let result = Splitting.split_formula sconsts dumpfile i lastts ff closed neval  in
   let a, mf = Marshalling.ext_to_m ff neval in
 
   Array.iteri (fun index mf ->
@@ -2420,8 +2422,8 @@ let merge_formulas files =
     NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval1;
     Printf.printf "Length2: %d \n" (NEval.length neval1);
     NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval2;*)
-    let comb_ff = Marshalling.comb_e ff1 ff2 in
-    let comb_nv = Marshalling.combine_neval neval1 neval2 in 
+    let comb_ff = Splitting.comb_e ff1 ff2 in
+    let comb_nv = Splitting.combine_neval neval1 neval2 in 
     (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
   ) (List.tl files) (unmarshal (List.hd files))
 (* MONITORING FUNCTION *)
