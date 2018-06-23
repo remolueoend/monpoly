@@ -2417,15 +2417,15 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
 
 let merge_formulas files = 
   List.fold_right (fun s (i,last_ts,ff1,closed,neval1,tp,skipped_tps,last) -> 
-    let (_,_,ff2,_,neval2,_,_,_) = unmarshal s in
+    let (_,_,ff2,_,neval2,_,_,_) = read_m_from_file s in
     (*Printf.printf "Length1: %d \n" (NEval.length neval1);
     NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval1;
     Printf.printf "Length2: %d \n" (NEval.length neval1);
     NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) neval2;*)
-    let comb_ff = Splitting.comb_e ff1 ff2 in
+    let comb_ff = Splitting.comb_m ff1 ff2 in
     let comb_nv = Splitting.combine_neval neval1 neval2 in 
     (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
-  ) (List.tl files) (unmarshal (List.hd files))
+  ) (List.tl files) (read_m_from_file (List.hd files))
 (* MONITORING FUNCTION *)
 
 let checkExitParam p = match p with
@@ -2590,7 +2590,8 @@ let resume logfile =
   
 let combine logfile = 
   let files = files_to_list !combine_files in
-  let (i,last_ts,ff,closed,neval,tp,skipped_tps,last) = merge_formulas files in 
+  let (i,last_ts,mf,closed,neval,tp,skipped_tps,last) = merge_formulas files in 
+  let ff = Marshalling.m_to_ext mf neval in
   lastts := last_ts;
   Log.tp := tp;
   Log.skipped_tps := skipped_tps;

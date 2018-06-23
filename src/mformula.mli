@@ -5,13 +5,9 @@ open Tuple
 open MFOTL
 
 (* Immutable version of types used in eformula *)
-type mozinfo = { moztree: (int, relation) Sliding.stree;
-                 mozlast: int;
-                 mozauxrels: (int * timestamp * relation) Dllist.dllist}
+type mozinfo = { mozauxrels: (int * timestamp * relation) Dllist.dllist}
 
-type moinfo  = { motree: (timestamp, relation) Sliding.stree;
-                 molast: int;
-                 moauxrels: (timestamp * relation) Dllist.dllist}
+type moinfo  = { moauxrels: (timestamp * relation) Dllist.dllist}
 
 type msainfo = { msres: relation;
                  msarel2: relation option;
@@ -19,15 +15,9 @@ type msainfo = { msres: relation;
 type msinfo  = { msrel2: relation option;
                  msauxrels: (timestamp * relation) Mqueue.t}
 
-type mezinfo = { mezlastev :  int;
-                 meztree   :  (int , relation) Sliding.stree;
-                 mezlast   :  int;
-                 mezauxrels:  (int * timestamp * relation) Dllist.dllist}
+type mezinfo = { mezauxrels:  (int * timestamp * relation) Dllist.dllist}
 
-type meinfo  = { melastev :  int;
-                 metree   :  (timestamp, relation) Sliding.stree;
-                 melast   :  int;
-                 meauxrels:  (timestamp * relation) Dllist.dllist}
+type meinfo  = { meauxrels:  (timestamp * relation) Dllist.dllist}
 
 type muinfo  = { mulast   :  int;
                  mufirst  :  bool;

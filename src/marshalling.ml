@@ -19,36 +19,10 @@ type state = (int * timestamp * bool * mformula * (int * timestamp) array * int 
 
 let ext_to_m ff neval =
   let eze2m ezinf =
-      let ilast = if ezinf.ezlastev == NEval.void then -2
-      else (* note that neval is not empty in this case *)
-  	if not (NEval.is_last neval ezinf.ezlastev) && NEval.get_next neval ezinf.ezlastev == NEval.get_first_cell neval then
-  	  (* in this case inf.last does not point to an element of
-  	     neval; however, it points to the first element of neval *)
-  	  -1
-  	else NEval.get_index ezinf.ezlastev neval
-    in
-    let mezlast = if ezinf.ezlast == Dllist.void then -1 else Dllist.get_index ezinf.ezlast ezinf.ezauxrels in
-    assert(ilast < NEval.length neval);
-      {mezlastev = ilast;
-       meztree = ezinf.eztree;
-       mezlast = mezlast;
-       mezauxrels = ezinf.ezauxrels}
+      {mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
-    let ilast = if einf.elastev == NEval.void then -2
-    else (* note that neval is not empty in this case *)
-	if not (NEval.is_last neval einf.elastev) && NEval.get_next neval einf.elastev == NEval.get_first_cell neval then
-	  (* in this case inf.last does not point to an element of
-	     neval; however, it points to the first element of neval *)
-	  -1
-  else NEval.get_index einf.elastev neval
-    in
-    let melast = if einf.elast == Dllist.void then -1 else Dllist.get_index einf.elast einf.eauxrels in
-    assert(ilast < NEval.length neval);
-    {melastev = ilast;
-     metree = einf.etree;
-     melast = melast;
-     meauxrels = einf.eauxrels}
+      {meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
     let ilast =
@@ -91,12 +65,10 @@ let ext_to_m ff neval =
         }
   in
   let o2m oinf =
-    let molast = if oinf.olast = Dllist.void then -1 else Dllist.get_index oinf.olast oinf.oauxrels in
-    { motree = oinf.otree; molast = molast; moauxrels = oinf.oauxrels }
+    { moauxrels = oinf.oauxrels }
   in
   let oz2m ozinf =
-    let mozlast = if ozinf.ozlast = Dllist.void then -1 else Dllist.get_index ozinf.ozlast ozinf.ozauxrels in
-    { moztree = ozinf.oztree; mozlast = mozlast; mozauxrels = ozinf.ozauxrels}
+    { mozauxrels = ozinf.ozauxrels}
   in
   let a = NEval.to_array neval in
   let rec e2m = function
@@ -126,17 +98,16 @@ let ext_to_m ff neval =
 let m_to_ext mf neval =
   let mez2e mezinf =
     let cell =
-      if      mezinf.mezlastev = -2 then NEval.void
-      else if mezinf.mezlastev = -1 then NEval.new_cell (-1,MFOTL.ts_invalid) neval
-      else                               NEval.get_cell_at_index mezinf.mezlastev neval
+      if NEval.is_empty neval then NEval.void
+      else (*TODO*) NEval.get_cell_at_index 0 neval
     in
     let ezlast =
-       if mezinf.mezlast = -1 then Dllist.void
-       else Dllist.get_cell_at_index mezinf.mezlast mezinf.mezauxrels
+      if Dllist.is_empty mezinf.mezauxrels then Dllist.void
+      else (*TODO*) Dllist.get_cell_at_index 0 mezinf.mezauxrels
     in
     let f = fun (j,_,rel) -> (j,rel) in
     (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll mezinf.mezauxrels Dllist.void f in
+    let tree_list = Helper.convert_dll mezinf.mezauxrels ezlast f in
     let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {ezlastev   = cell;
      eztree     = meztree;
@@ -145,16 +116,15 @@ let m_to_ext mf neval =
   in
   let me2e meinf =
     let cell =
-      if      meinf.melastev = -2  then NEval.void
-      else if meinf.melastev = -1  then NEval.new_cell (-1,MFOTL.ts_invalid) neval
-      else                              NEval.get_cell_at_index meinf.melastev neval
+      if NEval.is_empty neval then NEval.void
+      else (*TODO*) NEval.get_cell_at_index 0 neval
     in
     let elast =
-      if meinf.melast = -1 then Dllist.void
-      else Dllist.get_cell_at_index meinf.melast meinf.meauxrels
+      if Dllist.is_empty meinf.meauxrels then Dllist.void
+      else (*TODO*) Dllist.get_cell_at_index 0 meinf.meauxrels
     in
     (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll meinf.meauxrels Dllist.void (fun x -> x) in
+    let tree_list = Helper.convert_dll meinf.meauxrels elast (fun x -> x) in
     let metree    = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {elastev    = cell;
      etree      = metree;
@@ -194,23 +164,23 @@ let m_to_ext mf neval =
   in
   let mo2e moinf =
     let olast =
-      if moinf.molast = -1 then Dllist.void
-      else Dllist.get_cell_at_index moinf.molast moinf.moauxrels
+      if Dllist.is_empty moinf.moauxrels then Dllist.void
+      else (*TODO*) Dllist.get_cell_at_index 0 moinf.moauxrels
     in
     (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll moinf.moauxrels Dllist.void (fun x -> x) in
+    let tree_list = Helper.convert_dll moinf.moauxrels olast (fun x -> x) in
     let otree = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
   in
   let moz2e mozinf =
     let ozlast =
-      if mozinf.mozlast = -1 then Dllist.void
-      else Dllist.get_cell_at_index mozinf.mozlast mozinf.mozauxrels
+      if Dllist.is_empty mozinf.mozauxrels then Dllist.void
+      else (*TODO*) Dllist.get_cell_at_index 0 mozinf.mozauxrels
     in
     let f = fun (j,_,rel) -> (j,rel) in
     (* Converts dlllist to normal list, using structure of get_new_elements *)
     (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll mozinf.mozauxrels Dllist.void f in
+    let tree_list = Helper.convert_dll mozinf.mozauxrels ozlast f in
     (* Build tree from whole auxrels relation list *)
     let oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     (* Last element is still saved, should ensure that the tree can be reused wholly*)
