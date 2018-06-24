@@ -86,17 +86,31 @@ let get_max csrel =
     List.iter (fun cs -> List.iter (fun p -> if p > !max then max := p;) cs.partitions) csrel;
     !max
 
-let convert_dll l last f =
+(* It returns the list consisting of the new elements in the new time
+   window with respect to the old time window. It is used by once and
+   eventually evaluation functions.
+
+   Arguments:
+   - [l] the (doubly-linked) list of old elements
+   - [last] a pointer to the element of the list from which the
+   processing starts
+   - [cond] stopping condition
+   - [f] a function to be applied on each element
+*)
+let get_new_elements l last cond f =
     let rec get crt new_last acc =
         let v = Dllist.get_data crt in
-        if Dllist.is_last l crt then
-            (f v) :: acc
-        else
+        if cond v then
+          if Dllist.is_last l crt then
+            (f v) :: acc, crt
+          else
             get (Dllist.get_next l crt) crt ((f v) :: acc)
-    in
-    if last == Dllist.void then
+        else
+          acc, new_last
+      in
+      if last == Dllist.void then
         get (Dllist.get_first_cell l) Dllist.void []
-    else if not (Dllist.is_last l last) then
+      else if not (Dllist.is_last l last) then
         get (Dllist.get_next l last) last []
-    else
-        []
+      else
+        [], last

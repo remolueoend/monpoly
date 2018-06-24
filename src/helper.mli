@@ -52,4 +52,4 @@ type 'a atree =
     
 type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree
 
-val convert_dll: 'a Dllist.dllist -> 'a Dllist.cell -> ('a -> 'b) -> 'b list
+val get_new_elements: 'a Dllist.dllist -> 'a Dllist.cell -> ('a -> bool) -> ('a -> 'b) -> 'b list * 'a Dllist.cell

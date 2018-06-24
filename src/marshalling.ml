@@ -95,36 +95,56 @@ let ext_to_m ff neval =
   in a, e2m ff
 
 
-let m_to_ext mf neval =
-  let mez2e mezinf =
-    let cell =
-      if NEval.is_empty neval then NEval.void
-      else (*TODO*) NEval.get_cell_at_index 0 neval
+let m_to_ext mf neval = 
+  let mez2e dt mezinf =
+   (* contents of inf:
+       elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
+       eauxrels: info          the auxiliary relations (up to elastev)
+    *)
+    let _, cell =
+      if NEval.is_empty neval then [], NEval.void
+      else begin (*TODO*)
+        let _, tsl = NEval.get_first neval in 
+        Helper.get_new_elements neval NEval.void (fun (_, tsr) -> MFOTL.in_interval (MFOTL.ts_minus tsr tsl) dt) (fun x -> x)
+    end
     in
-    let ezlast =
-      if Dllist.is_empty mezinf.mezauxrels then Dllist.void
-      else (*TODO*) Dllist.get_cell_at_index 0 mezinf.mezauxrels
+    let tree_list, ezlast =
+      if Dllist.is_empty mezinf.mezauxrels then [], Dllist.void
+      else begin(*TODO*)
+      let f = fun (j,_,rel) -> (j,rel) in
+      let _, tsq = Dllist.get_data cell in
+      let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) dt in
+      Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
+    end
     in
-    let f = fun (j,_,rel) -> (j,rel) in
-    (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll mezinf.mezauxrels ezlast f in
     let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {ezlastev   = cell;
      eztree     = meztree;
      ezlast     = ezlast;
      ezauxrels  = mezinf.mezauxrels}
   in
-  let me2e meinf =
-    let cell =
-      if NEval.is_empty neval then NEval.void
-      else (*TODO*) NEval.get_cell_at_index 0 neval
+  let me2e dt meinf =
+    (* contents of inf:
+       elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
+       eauxrels: info          the auxiliary relations (up to elastev)
+    *)
+    let _, cell =
+      if NEval.is_empty neval then [], NEval.void
+      else begin (*TODO*)
+        let _, tsl = NEval.get_first neval in 
+        Helper.get_new_elements neval NEval.void (fun (_, tsr) -> MFOTL.in_interval (MFOTL.ts_minus tsr tsl) dt) (fun x -> x)
+    end
     in
-    let elast =
-      if Dllist.is_empty meinf.meauxrels then Dllist.void
-      else (*TODO*) Dllist.get_cell_at_index 0 meinf.meauxrels
+    let tree_list, elast =
+      if Dllist.is_empty meinf.meauxrels then [], Dllist.void
+      else begin(*TODO*)
+      let _, tsq = Dllist.get_data cell in
+      let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) dt in
+      Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
+    end
     in
     (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll meinf.meauxrels elast (fun x -> x) in
+    let tree_list, _ = Helper.get_new_elements meinf.meauxrels elast (fun x -> true) (fun x -> x) in
     let metree    = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {elastev    = cell;
      etree      = metree;
@@ -162,29 +182,34 @@ let m_to_ext mf neval =
      listrel2 = muninf.mlistrel2;
     }
   in
-  let mo2e moinf =
-    let olast =
-      if Dllist.is_empty moinf.moauxrels then Dllist.void
-      else (*TODO*) Dllist.get_cell_at_index 0 moinf.moauxrels
+  let mo2e dt moinf =
+    (* TODO: verify correctness *)
+    let moauxrels = moinf.moauxrels in
+    let rebuild =
+      if Dllist.is_empty moauxrels then [], Dllist.void
+      else begin 
+      let (tsl, arel) = Dllist.get_first moauxrels in
+      let cond = fun (tsr,_) ->  MFOTL.in_interval (MFOTL.ts_minus tsr tsl) dt in
+      Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
+    end
     in
-    (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll moinf.moauxrels olast (fun x -> x) in
-    let otree = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-    { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
+    let tree_list, olast = rebuild in
+    { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moinf.moauxrels }
   in
-  let moz2e mozinf =
-    let ozlast =
-      if Dllist.is_empty mozinf.mozauxrels then Dllist.void
-      else (*TODO*) Dllist.get_cell_at_index 0 mozinf.mozauxrels
+  let moz2e dt mozinf =
+    (* TODO: verify correctness *)
+    let mozauxrels = mozinf.mozauxrels in
+    let rebuild =
+      if Dllist.is_empty mozauxrels then [], Dllist.void
+      else begin
+      let (_, tsl, arel) = Dllist.get_first mozauxrels in
+      let f = fun (j,_,rel) -> (j,rel) in
+      let cond = fun (_,tsr,_) ->  MFOTL.in_interval (MFOTL.ts_minus tsr tsl) dt in
+      Helper.get_new_elements mozauxrels Dllist.void cond f
+    end
     in
-    let f = fun (j,_,rel) -> (j,rel) in
-    (* Converts dlllist to normal list, using structure of get_new_elements *)
-    (* Pass void as last element, forcing rebuild over whole list *)
-    let tree_list = Helper.convert_dll mozinf.mozauxrels ozlast f in
-    (* Build tree from whole auxrels relation list *)
-    let oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-    (* Last element is still saved, should ensure that the tree can be reused wholly*)
-    { oztree = oztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
+    let tree_list, ozlast = rebuild in
+    { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
   in
   let rec m2e = function
     | MRel           (rel)                                                    ->      ERel           (rel)
@@ -201,12 +226,12 @@ let m_to_ext mf neval =
     | MSinceA        (c2, dt, mf1, mf2, sainf)                                ->      ESinceA        (c2, dt, (m2e mf1), (m2e mf2), sainf)
     | MSince         (c2, dt, mf1, mf2, sinf)                                 ->      ESince         (c2, dt, (m2e mf1), (m2e mf2), sinf)
     | MOnceA         (dt, mf, oainf)                                          ->      EOnceA         (dt, (m2e mf), oainf)
-    | MOnceZ         (dt, mf, ozinf)                                          ->      EOnceZ         (dt, (m2e mf), (moz2e ozinf))
-    | MOnce          (dt, mf, oinf)                                           ->      EOnce          (dt, (m2e mf), (mo2e oinf))
+    | MOnceZ         (dt, mf, ozinf)                                          ->      EOnceZ         (dt, (m2e mf), (moz2e dt ozinf))
+    | MOnce          (dt, mf, oinf)                                           ->      EOnce          (dt, (m2e mf), (mo2e dt oinf))
     | MNUntil        (c1, dt, mf1, mf2, muninf)                               ->      ENUntil        (c1, dt, (m2e mf1), (m2e mf2), (mun2e muninf))
     | MUntil         (c1, dt, mf1, mf2, muinf)                                ->      EUntil         (c1, dt, (m2e mf1), (m2e mf2), (mu2e muinf))
-    | MEventuallyZ   (dt, mf, mezinf)                                         ->      EEventuallyZ   (dt, (m2e mf), (mez2e mezinf))
-    | MEventually    (dt, mf, meinf)                                          ->      EEventually    (dt, (m2e mf), (me2e  meinf))
+    | MEventuallyZ   (dt, mf, mezinf)                                         ->      EEventuallyZ   (dt, (m2e mf), (mez2e dt mezinf))
+    | MEventually    (dt, mf, meinf)                                          ->      EEventually    (dt, (m2e mf), (me2e  dt meinf))
   in m2e mf
 
 (* END SAVING AND LOADING STATE *)
