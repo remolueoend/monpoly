@@ -19,14 +19,68 @@ exception Type_error of string
 
 let rel_u r1 r2 = Relation.union r1 r2
 
+let rec comb_q1 c nq q =
+    (* If other queue is not empty, process *)
+    if not (Queue.is_empty q) then
+      (* If ts or i of c element were smaller, check next element of q *)
+      (* Get first element of q *)
+      let e = Queue.pop q in 
+      let i1, ts1, r1 = e in 
+      let i2, ts2, r2 = c in
+      (* q list element ts is < c ts, add element to new list *)
+      if ts1 < ts2 then begin
+        Queue.add e nq;
+        comb_q1 c nq q
+      end  
+      (* q list element ts is = c ts, add according to i *)
+      else if ts1 = ts2 then 
+        if i1 < i2 then begin
+            Queue.add e nq;
+            comb_q1 c nq q
+        end    
+        else if i1 = i2 then Queue.add (i1, ts1, (rel_u r1 r2))  nq
+        else begin Queue.add c nq end
+      (* otherwise add current element to list & readd popped element *)
+      else begin
+        Queue.add e q;
+        Queue.add c nq
+      end
+    (* Else, can just append current element to new list *)
+    else begin
+      Queue.add c nq
+    end  
+
+let rec comb_q2 c nq q =
+  (* If other queue is not empty, process *)
+  if not (Queue.is_empty q) then
+    (* If ts or i of c element were smaller, check next element of q *)
+    (* Get first element of q *)
+    let e = Queue.pop q in 
+    let ts1, r1 = e in 
+    let ts2, r2 = c in
+    (* q list element ts is < c ts, add element to new list *)
+    if ts1 < ts2 then begin
+      Queue.add e nq;
+      comb_q2 c nq q
+    end  
+    (* q list element ts is = c ts, add according to i *)
+    else if ts1 = ts2 then 
+      Queue.add (ts1, (rel_u r1 r2))  nq
+    (* otherwise add current element to list & readd popped element *)
+    else begin
+      Queue.add e q;
+      Queue.add c nq
+    end
+  (* Else, can just append current element to new list *)
+  else begin
+    Queue.add c nq
+  end      
+
 let combine_queues1 q1 q2 =  
   let tmp = Queue.create() in
   let nq = Queue.create() in
-  Queue.iter (fun e ->
-    let i, ts, r1 = e in
-    let _, _,  r2 = Queue.pop q2 in
-    Queue.add (i, ts, (rel_u r1 r2)) tmp;
-  ) q1;
+  Queue.iter (fun e -> comb_q1 e nq q2) q1;
+  if not (Queue.is_empty q2) then Queue.iter (fun e -> Queue.add e tmp) q2;
   (* Need to reverse the queue *)
   Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
   nq
@@ -34,11 +88,8 @@ let combine_queues1 q1 q2 =
 let combine_queues2 q1 q2 =  
   let tmp = Queue.create() in
   let nq = Queue.create() in
-  Queue.iter (fun e ->
-    let ts, r1 = e in
-    let _,  r2 = Queue.pop q2 in
-    Queue.add (ts, (rel_u r1 r2)) tmp;
-  ) q1;
+  Queue.iter (fun e -> comb_q2 e nq q2) q1;
+  if not (Queue.is_empty q2) then Queue.iter (fun e -> Queue.add e tmp) q2;
   (* Need to reverse the queue *)
   Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
   nq
