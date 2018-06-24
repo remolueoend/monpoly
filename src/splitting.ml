@@ -19,6 +19,8 @@ exception Type_error of string
 
 let rel_u r1 r2 = Relation.union r1 r2
 
+(* TODO: verify correctness of combination functions *)
+
 let rec comb_q1 c nq q =
     (* If other queue is not empty, process *)
     if not (Queue.is_empty q) then
@@ -87,26 +89,26 @@ let rec comb_q2 c nq q =
     Queue.add c nq
   end      
 
-  let rec comb_dll1 c nl l =
+  let rec comb_dll1 c nl l f =
     (* If other queue is not empty, process *)
     if not (Dllist.is_empty l) then
       (* If ts or i of c element were smaller, check next element of q *)
       (* Get first element of q *)
       let e = Dllist.pop_first l in 
-      let i1, ts1, r1 = e in 
-      let i2, ts2, r2 = c in
+      let i1, ts1, a1 = e in 
+      let i2, ts2, a2 = c in
       (* q list element ts is < c ts, add element to new list *)
       if ts1 < ts2 then begin
         Dllist.add_last e nl;
-        comb_dll1 c nl l
+        comb_dll1 c nl l f
       end  
       (* q list element ts is = c ts, add according to i *)
       else if ts1 = ts2 then 
         if i1 < i2 then begin
           Dllist.add_last e nl;
-            comb_dll1 c nl l
+            comb_dll1 c nl l f
         end    
-        else if i1 = i2 then Dllist.add_last (i1, ts1, (rel_u r1 r2)) nl
+        else if i1 = i2 then Dllist.add_last (i1, ts1, (f a1 a2)) nl
         else begin Dllist.add_last c nl end
       (* otherwise add current element to list & readd popped element *)
       else begin
@@ -193,7 +195,7 @@ let combine_mq q1 q2 =
 
 let combine_dll1 l1 l2 =  
   let res = Dllist.empty() in
-  Dllist.iter (fun e -> comb_dll1 e res l2) l1;
+  Dllist.iter (fun e -> comb_dll1 e res l2 rel_u) l1;
   if not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e res) l2;
   res
 
@@ -228,7 +230,6 @@ let combine_sainfo sainf1 sainf2 =
   | (None, None) -> None
   | _ -> raise (Type_error ("Mismatched states in ainfo"))
   in
-  (* Verify correctness *)
   let saauxrels = combine_mq sainf1.saauxrels sainf2.saauxrels in
   {sres = (rel_u sainf1.sres sainf2.sres); sarel2 = sarel2; saauxrels = saauxrels}
 
@@ -238,12 +239,10 @@ let combine_sinfo sinf1 sinf2  =
   | (None, None) -> None
   | _ -> raise (Type_error ("Mismatched states in ainfo"))
   in
-  (* Verify correctness *)
   let sauxrels = combine_mq sinf1.sauxrels sinf2.sauxrels in
   {srel2 = srel2; sauxrels = sauxrels}
 
 let combine_muninfo muninf1 muninf2 =
-    (* Verify correctness *)
   let mlistrel1 = combine_dll1 muninf1.mlistrel1 muninf2.mlistrel1 in 
   let mlistrel2 = combine_dll1 muninf1.mlistrel2 muninf2.mlistrel2 in 
   { mlast1 = muninf1.mlast1; mlast2 = muninf1.mlast2; mlistrel1 = mlistrel1; mlistrel2 = mlistrel2 }
@@ -252,21 +251,13 @@ let combine_muinfo muinf1 muinf2 =
   (* Helper function to combine raux and saux fields *)
   let sklist l1 l2 =
     let nl = Sk.empty() in
-    Sk.iter (fun e ->
-      let i, r1 = e in
-      (* Verify correctness *)
-      let _, r2 = Sk.pop_first l2 in
-      Sk.add_last (i, (rel_u r1 r2)) nl
-    ) l1;
+    Sk.iter (fun e -> comb_dll2 e nl l2) l1;
     nl
   in
   let mraux =
+    let mraux2 = muinf2.mraux in 
     let nl = Sj.empty() in
-    Sj.iter (fun e ->
-      let (i, ts, l1) = e in
-      let (_, _,  l2) = Sj.pop_first muinf2.mraux in
-      Sj.add_last (i, ts, (sklist l1 l2)) nl
-    ) muinf1.mraux;
+    Sj.iter (fun e -> comb_dll1 e nl mraux2 sklist) muinf1.mraux;
     nl
   in
   let murel2 = match (muinf1.murel2, muinf2.murel2) with
