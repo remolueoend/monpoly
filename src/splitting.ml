@@ -24,29 +24,37 @@ let rec comb_q1 c nq q =
     if not (Queue.is_empty q) then
       (* If ts or i of c element were smaller, check next element of q *)
       (* Get first element of q *)
-      let e = Queue.pop q in 
+      let e = Queue.peek q in 
       let i1, ts1, r1 = e in 
       let i2, ts2, r2 = c in
       (* q list element ts is < c ts, add element to new list *)
       if ts1 < ts2 then begin
+        ignore(Queue.pop q);
         Queue.add e nq;
         comb_q1 c nq q
       end  
       (* q list element ts is = c ts, add according to i *)
       else if ts1 = ts2 then 
         if i1 < i2 then begin
-            Queue.add e nq;
-            comb_q1 c nq q
+          ignore(Queue.pop q);
+          Queue.add e nq;
+          comb_q1 c nq q
         end    
-        else if i1 = i2 then Queue.add (i1, ts1, (rel_u r1 r2))  nq
-        else begin Queue.add c nq end
+        else if i1 = i2 then begin
+          ignore(Queue.pop q);
+          Queue.add (i1, ts1, (rel_u r1 r2))  nq
+        end
+        else begin 
+          ignore(Queue.pop q);
+          Queue.add c nq 
+        end
       (* otherwise add current element to list & readd popped element *)
       else begin
-        Queue.add e q;
         Queue.add c nq
       end
     (* Else, can just append current element to new list *)
     else begin
+      ignore(Queue.pop q);
       Queue.add c nq
     end  
 
@@ -55,68 +63,145 @@ let rec comb_q2 c nq q =
   if not (Queue.is_empty q) then
     (* If ts or i of c element were smaller, check next element of q *)
     (* Get first element of q *)
-    let e = Queue.pop q in 
+    let e = Queue.peek q in 
     let ts1, r1 = e in 
     let ts2, r2 = c in
     (* q list element ts is < c ts, add element to new list *)
     if ts1 < ts2 then begin
+      ignore(Queue.pop q);
       Queue.add e nq;
       comb_q2 c nq q
     end  
     (* q list element ts is = c ts, add according to i *)
-    else if ts1 = ts2 then 
+    else if ts1 = ts2 then begin
+      ignore(Queue.pop q);
       Queue.add (ts1, (rel_u r1 r2))  nq
-    (* otherwise add current element to list & readd popped element *)
+    end  
+    (* otherwise add current element to list & do not pop element *)
     else begin
-      Queue.add e q;
       Queue.add c nq
     end
   (* Else, can just append current element to new list *)
   else begin
+    ignore(Queue.pop q);
     Queue.add c nq
   end      
 
+  let rec comb_dll1 c nl l =
+    (* If other queue is not empty, process *)
+    if not (Dllist.is_empty l) then
+      (* If ts or i of c element were smaller, check next element of q *)
+      (* Get first element of q *)
+      let e = Dllist.pop_first l in 
+      let i1, ts1, r1 = e in 
+      let i2, ts2, r2 = c in
+      (* q list element ts is < c ts, add element to new list *)
+      if ts1 < ts2 then begin
+        Dllist.add_last e nl;
+        comb_dll1 c nl l
+      end  
+      (* q list element ts is = c ts, add according to i *)
+      else if ts1 = ts2 then 
+        if i1 < i2 then begin
+          Dllist.add_last e nl;
+            comb_dll1 c nl l
+        end    
+        else if i1 = i2 then Dllist.add_last (i1, ts1, (rel_u r1 r2)) nl
+        else begin Dllist.add_last c nl end
+      (* otherwise add current element to list & readd popped element *)
+      else begin
+        Dllist.add_last e l;
+        Dllist.add_last c nl
+      end
+    (* Else, can just append current element to new list *)
+    else begin
+      Dllist.add_last c nl
+    end
+
+let rec comb_dll2 c nl l =
+  (* If other queue is not empty, process *)
+  if not (Dllist.is_empty l) then
+    (* If ts or i of c element were smaller, check next element of q *)
+    (* Get first element of q *)
+    let e = Dllist.pop_first l in  
+    let ts1, r1 = e in 
+    let ts2, r2 = c in
+    (* q list element ts is < c ts, add element to new list *)
+    if ts1 < ts2 then begin
+      Dllist.add_last e nl;
+      comb_dll2 c nl l
+    end  
+    (* q list element ts is = c ts, add according to i *)
+    else if ts1 = ts2 then 
+      Dllist.add_last (ts1, (rel_u r1 r2)) nl
+    (* otherwise add current element to list & readd popped element *)
+    else begin
+      Dllist.add_last c nl
+    end
+  (* Else, can just append current element to new list *)
+  else begin
+    Dllist.add_last c nl
+  end
+
+let rec comb_mq c nq q =
+  (* If other queue is not empty, process *)
+  if not (Mqueue.is_empty q) then
+    (* If ts or i of c element were smaller, check next element of q *)
+    (* Get first element of q *)
+    let e = Mqueue.peek q in 
+    let ts1, r1 = e in 
+    let ts2, r2 = c in
+    (* q list element ts is < c ts, add element to new list *)
+    if ts1 < ts2 then begin
+      ignore(Mqueue.pop q);
+      Mqueue.add e nq;
+      comb_mq c nq q
+    end  
+    (* q list element ts is = c ts, add according to i *)
+    else if ts1 = ts2 then begin
+      ignore(Mqueue.pop q);
+      Mqueue.add (ts1, (rel_u r1 r2)) nq
+    end  
+    (* otherwise add current element to list & do not pop element *)
+    else begin
+      ignore(Mqueue.pop q);
+      Mqueue.add c nq
+    end
+  (* Else, can just append current element to new list *)
+  else begin
+    ignore(Mqueue.pop q);
+    Mqueue.add c nq
+  end    
+
 let combine_queues1 q1 q2 =  
-  let tmp = Queue.create() in
   let nq = Queue.create() in
   Queue.iter (fun e -> comb_q1 e nq q2) q1;
-  if not (Queue.is_empty q2) then Queue.iter (fun e -> Queue.add e tmp) q2;
-  (* Need to reverse the queue *)
-  Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+  if not (Queue.is_empty q2) then Queue.iter (fun e -> Queue.add e nq) q2;
   nq
 
 let combine_queues2 q1 q2 =  
-  let tmp = Queue.create() in
   let nq = Queue.create() in
   Queue.iter (fun e -> comb_q2 e nq q2) q1;
-  if not (Queue.is_empty q2) then Queue.iter (fun e -> Queue.add e tmp) q2;
-  (* Need to reverse the queue *)
-  Queue.iter (fun _ -> Queue.add (Queue.pop tmp) nq) tmp;
+  if not (Queue.is_empty q2) then Queue.iter (fun e -> Queue.add e nq) q2;
   nq
 
 let combine_mq q1 q2 =
-  Mqueue.update (fun e ->
-  let ts, r1  = e in
-  let _,  r2  = Mqueue.pop q2 in (ts, (rel_u r1 r2))) q1;
-  q1
+  let nq = Mqueue.create() in 
+  Mqueue.iter (fun e -> comb_mq e nq q2) q1;
+  if not (Mqueue.is_empty q2) then Mqueue.iter (fun e -> Mqueue.add e nq) q2;
+  nq
 
 let combine_dll1 l1 l2 =  
   let res = Dllist.empty() in
-    Dllist.iter (fun e ->
-      let i, ts, r1 = e in
-      let _, _,  r2 = Dllist.pop_first l2 in
-      Dllist.add_last (i, ts, (rel_u r1 r2)) res
-    ) l1;
-    res
+  Dllist.iter (fun e -> comb_dll1 e res l2) l1;
+  if not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e res) l2;
+  res
 
 let combine_dll2 l1 l2 =  
   let res = Dllist.empty() in
-    Dllist.iter (fun e ->
-      let ts, r1 = e in
-      let _,  r2 = Dllist.pop_first l2 in
-      Dllist.add_last (ts, (rel_u r1 r2)) res
-    ) l1;
-    res   
+  Dllist.iter (fun e -> comb_dll2 e res l2) l1;
+  if not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e res) l2;
+  res
 
 let combine_info  inf1 inf2 =
   combine_queues1 inf1 inf2
