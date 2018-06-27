@@ -110,20 +110,20 @@ let m_to_ext mf neval =
         Helper.get_new_elements neval NEval.void cond (fun x -> x)
     end
     in
-    let tree_list, ezlast =
-      if Dllist.is_empty mezinf.mezauxrels then [], Dllist.void
-      else begin
-      let f = fun (j,_,rel) -> (j,rel) in
-      let (_, tsq) = NEval.get_data cell in
-      let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
-      Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
+    if not (Dllist.is_empty mezinf.mezauxrels) then
+      let tree_list, ezlast =
+        let f = fun (j,_,rel) -> (j,rel) in
+        let (_, tsq) = NEval.get_data cell in
+        let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
+        Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
+      in
+      let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
+      {ezlastev = cell; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+    else begin
+      let eztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
+      let ezlast = Dllist.void in
+      {ezlastev = cell; eztree = eztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
     end
-    in
-    let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-    {ezlastev   = cell;
-     eztree     = meztree;
-     ezlast     = ezlast;
-     ezauxrels  = mezinf.mezauxrels}
   in
   let me2e intv meinf =
     (* TODO: verify correctness *)
@@ -131,30 +131,27 @@ let m_to_ext mf neval =
        elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info          the auxiliary relations (up to elastev)
     *)
+    let meauxrels = meinf.meauxrels in
     let _, cell =
       if NEval.is_empty neval then [], NEval.void
       else begin
-        let (tsq, _) = Dllist.get_first meinf.meauxrels in
+        let (_, tsq) = NEval.get_first neval in
         let cond = fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
         Helper.get_new_elements neval NEval.void cond (fun x -> x)
     end
     in
-    let tree_list, elast =
-      if Dllist.is_empty meinf.meauxrels then [], Dllist.void
-      else begin
-      let (_, tsq) = NEval.get_data cell in
-      Dllist.iter (fun e -> let ts, _ = e in MFOTL.print_ts ts) meinf.meauxrels;
-      let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv in
-      Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
+    if not(Dllist.is_empty meauxrels) && cell != NEval.void then
+    let (_, tsq) = NEval.get_data cell in
+      let tree_list, elast =
+        let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
+        Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
+      in
+      {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels}
+    else begin
+      let metree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
+      let elast = Dllist.void in
+      {elastev = cell; etree = metree; elast = elast;eauxrels = meinf.meauxrels}
     end
-    in
-    Printf.printf "Length: %d" (List.length tree_list);
-    (* TODO: what if resulting list is empty? *)
-    let metree    = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-    {elastev    = cell;
-     etree      = metree;
-     elast      = elast;
-     eauxrels   = meinf.meauxrels}
   in
   let mu2e muinf =
     let cell =
@@ -190,32 +187,37 @@ let m_to_ext mf neval =
   let mo2e intv moinf =
     (* TODO: verify correctness *)
     let moauxrels = moinf.moauxrels in
-    let tree_list, olast =
-      if Dllist.is_empty moauxrels then [], Dllist.void
-      else begin 
-      let (tsl, arel) = Dllist.get_first moauxrels in
+    if not (Dllist.is_empty moauxrels) then
+      let tree_list, olast =
+        let (tsq, _) = Dllist.get_first moauxrels in
 
-      (* In interval or in left extent better? In interval could be an issue if first entry has fallen out of interval *)
-      let cond = fun (tsr,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsr tsl) intv in
-      Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
-    end
+        let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv in
+        Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
     in
     { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moinf.moauxrels }
+    else begin
+      let otree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
+      let olast = Dllist.void in
+      { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
+    end
   in
   let moz2e intv mozinf =
     (* TODO: verify correctness *)
     let mozauxrels = mozinf.mozauxrels in
-    let tree_list, ozlast  =
-      if Dllist.is_empty mozauxrels then [], Dllist.void
-      else begin
-      let (_, tsl, arel) = Dllist.get_first mozauxrels in
-      let f = fun (j,_,rel) -> (j,rel) in
-      let cond = fun (_,tsr,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsr tsl) intv in
-      Helper.get_new_elements mozauxrels Dllist.void cond f
+    if not (Dllist.is_empty mozauxrels) then
+      let tree_list, ozlast  =
+        let (_, tsq, arel) = Dllist.get_first mozauxrels in
+        let f = fun (j,_,rel) -> (j,rel) in
+        let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv in
+        Helper.get_new_elements mozauxrels Dllist.void cond f
+      in 
+      { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
+    else begin
+      let oztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
+      let ozlast = Dllist.void in
+      { oztree = oztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
     end
-    in
-    { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
-  in
+   in
   let rec m2e = function
     | MRel           (rel)                                                 -> ERel         (rel)
     | MPred          (pred, c1, inf)                                       -> EPred        (pred, c1, inf)
