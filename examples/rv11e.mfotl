@@ -1,0 +1,1 @@
+approve(r) IMPLIES EVENTUALLY[0,14d] publish(r)

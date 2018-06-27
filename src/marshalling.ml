@@ -106,8 +106,7 @@ let m_to_ext mf neval =
       if NEval.is_empty neval then [], NEval.void
       else begin 
         let _, tsl = NEval.get_first neval in 
-        (* Break once we leave left extent of Eventually, meaning should be evaluated up to this point *)
-        let cond = fun (_, tsr) -> not (MFOTL.in_left_ext (MFOTL.ts_minus tsr tsl) intv) in
+        let cond = fun (_, tsr) -> MFOTL.in_left_ext (MFOTL.ts_minus tsr tsl) intv in
         Helper.get_new_elements neval NEval.void cond (fun x -> x)
     end
     in
@@ -115,9 +114,8 @@ let m_to_ext mf neval =
       if Dllist.is_empty mezinf.mezauxrels then [], Dllist.void
       else begin
       let f = fun (j,_,rel) -> (j,rel) in
-      let _, tsq = Dllist.get_data cell in
-      (* Break once auxrel element is in left extent, so not relevant for evaluation *)
-      let cond = fun (_,tsj,_) -> not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) in
+      let (_, tsq) = NEval.get_data cell in
+      let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
       Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
     end
     in
@@ -136,21 +134,22 @@ let m_to_ext mf neval =
     let _, cell =
       if NEval.is_empty neval then [], NEval.void
       else begin
-        let _, tsl = NEval.get_first neval in 
-        (* Break once we leave left extent of Eventually, meaning should be evaluated up to this point *)
-        let cond = fun (_, tsr) -> not (MFOTL.in_left_ext (MFOTL.ts_minus tsr tsl) intv) in
+        let (tsq, _) = Dllist.get_first meinf.meauxrels in
+        let cond = fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
         Helper.get_new_elements neval NEval.void cond (fun x -> x)
     end
     in
     let tree_list, elast =
       if Dllist.is_empty meinf.meauxrels then [], Dllist.void
       else begin
-      let _, tsq = Dllist.get_data cell in
-      (* Break once auxrel element is in left extent, so not relevant for evaluation *)
-      let cond = fun (tsj,_) -> not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) in
+      let (_, tsq) = NEval.get_data cell in
+      Dllist.iter (fun e -> let ts, _ = e in MFOTL.print_ts ts) meinf.meauxrels;
+      let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv in
       Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
     end
     in
+    Printf.printf "Length: %d" (List.length tree_list);
+    (* TODO: what if resulting list is empty? *)
     let metree    = Sliding.build_rl_tree_from_seq Relation.union tree_list in
     {elastev    = cell;
      etree      = metree;
