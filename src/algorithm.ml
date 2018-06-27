@@ -2381,14 +2381,14 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
 
   Array.iteri (fun index mf ->
   let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
-  dump_to_file (dumpfile ^ (string_of_int index)) value) result  
+  dump_to_file (dumpfile ^ (string_of_int index)) value) result
 
 
-let test_neval_combine =   
+let test_neval_combine =
   let nv1 = NEval.empty() in
   let nv2 = NEval.empty() in
 
-  NEval.add_first (6, MFOTL.ts_of_string "" "5") nv1;
+  (*NEval.add_first (6, MFOTL.ts_of_string "" "5") nv1;
   NEval.add_first (5, MFOTL.ts_of_string "" "3") nv1;
   NEval.add_first (4, MFOTL.ts_of_string "" "3") nv1;
   NEval.add_first (3, MFOTL.ts_of_string "" "2") nv1;
@@ -2402,17 +2402,16 @@ let test_neval_combine =
   NEval.add_first (3, MFOTL.ts_of_string "" "3") nv2;
   NEval.add_first (2, MFOTL.ts_of_string "" "2") nv2;
   NEval.add_first (1, MFOTL.ts_of_string "" "1") nv2;
-  NEval.add_first (0, MFOTL.ts_of_string "" "0") nv2;
+  NEval.add_first (0, MFOTL.ts_of_string "" "0") nv2;*)
 
   let res = Splitting.combine_neval nv1 nv2 in
-  Printf.printf "Length2: %d \n" (NEval.length res);
   NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) res
 
 let merge_formulas files = 
-  List.fold_right (fun s (i,last_ts,ff1,closed,neval1,tp,skipped_tps,last) -> 
+  List.fold_right (fun s (i,last_ts,ff1,closed,neval1,tp,skipped_tps,last) ->
     let (_,_,ff2,_,neval2,_,_,_) = read_m_from_file s in
     let comb_ff = Splitting.comb_m ff1 ff2 in
-    let comb_nv = Splitting.combine_neval neval1 neval2 in 
+    let comb_nv = Splitting.combine_neval neval1 neval2 in
     (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
 
@@ -2581,7 +2580,7 @@ let resume logfile =
   
 let combine logfile = 
   let files = files_to_list !combine_files in
-  let (i,last_ts,mf,closed,neval,tp,skipped_tps,last) = merge_formulas files in 
+  let (i,last_ts,mf,closed,neval,tp,skipped_tps,last) = merge_formulas files in
   let ff = Marshalling.m_to_ext mf neval in
   lastts := last_ts;
   Log.tp := tp;

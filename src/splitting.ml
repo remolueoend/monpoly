@@ -615,7 +615,6 @@ let combine_neval nv1 nv2 =
     else if not (Dllist.is_empty l1) && Dllist.is_empty l2 then Dllist.iter (fun e -> Dllist.add_last e nl) l1
     else if Dllist.is_empty l1 && not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e nl) l2
     else begin
-      print_endline "in rec";
       let e1 = Dllist.pop_first l1 in
       let i1, ts1 = e1 in 
       let e2 = Dllist.pop_first l2 in
@@ -630,7 +629,6 @@ let combine_neval nv1 nv2 =
           Dllist.add_last e1 nl
         end    
         else if i1 = i2 then begin
-          print_endline "ts & i equal";
           Dllist.add_last (i1, ts1) nl
         end
         else begin 
