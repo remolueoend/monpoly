@@ -1,0 +1,6 @@
+  trans(?c,?t,?a)
+  AND (ONCE[0,30] 
+        EXISTS ?t'. EXISTS ?a'. 
+	  NOT ?t = ?t' AND trans(?c,?t',?a') AND EVENTUALLY[0,5] report(?t'))
+IMPLIES 
+  EVENTUALLY[0,2] report(?t)

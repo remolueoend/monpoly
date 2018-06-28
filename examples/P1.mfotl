@@ -1,0 +1,5 @@
+publish(?a,?f) IMPLIES 
+  (NOT acc_F(?a) SINCE[0,*] acc_S(?a)) 
+  AND 
+  ONCE[0,10] EXISTS ?m. 
+    (NOT mgr_F(?m,?a) SINCE[0,*] mgr_S(?m,?a)) AND approve(?m,?f)
