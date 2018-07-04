@@ -268,8 +268,10 @@ let combine_oainfo oainf1 oainf2 =
   { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
   
 let combine_oinfo moinf1 moinf2 =
+  assert (moinf1.tslast = moinf2.tslast);
+  let tslast = moinf1.tslast in  
   let moauxrels = combine_dll2 moinf1.moauxrels moinf2.moauxrels in
-  { moauxrels = moauxrels }
+  { moauxrels = moauxrels; tslast = tslast }
 
 let combine_ezinfo mezinf1 mezinf2 =
   let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
@@ -331,7 +333,7 @@ let get_predicate f =
   let pvars p = Predicate.pvars p in
   let rec get_pred = function
     (* Equal, Less, LessEq all mapped to free vars;  ForAll not used *)
-  | MRel           (_)                    -> raise (Type_error ("Predicate function should not be entering ERel"))
+  | MRel           (_)                    -> []
   | MPred          (p, _, _)              -> pvars p
   | MNeg           (f1)                   -> get_pred f1
   | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
@@ -392,12 +394,6 @@ let get_1 (a,_) = a
 let get_2 (_,b) = b
 
 let comb_preds preds1 preds2 = List.append preds1 preds2
-
-let check_tuple t vl =
-  (*Printf.printf "Tlength: %d; VLength: %d \n" (List.length t) (List.length vl);*)
-  (* Lists always have same length due to filtering in split function *)
-  let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
-  List.fold_right (fun a agg -> (a || agg)) eval false
 
 let split_state mapping mf size =
   let split rel preds =
@@ -509,7 +505,7 @@ let split_state mapping mf size =
   in
   let split_moinfo moinf p =
     let dllists = split_dll2 moinf.moauxrels p in
-    Array.map (fun e -> {moauxrels = e }) dllists
+    Array.map (fun e -> {moauxrels = e; tslast = moinf.tslast }) dllists
   in
   let split_muninfo muninf p =
     let listrels1 = split_dll1 muninf.mlistrel1 p in
@@ -583,6 +579,11 @@ let split_state mapping mf size =
   split_f mf
     
 
+let check_tuple t vl =
+  (* Lists always have same length due to filtering in split function *)
+  let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
+  List.fold_right (fun a agg -> (a || agg)) eval false  
+
 let split_formula sconsts dumpfile i lastts ff closed neval =
   let numparts = (sconsts.num_partitions+1) in
 
@@ -590,8 +591,7 @@ let split_formula sconsts dumpfile i lastts ff closed neval =
   let constraints = sconsts.constraints in
   let a, mf = ext_to_m ff neval in
 
-  let split_paramater_function t p = 
-    Printf.printf "Tuple: %s    -> " (pred_list_to_string t);
+  let split_according_to_lists t p = 
     let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) p in
     (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
     let pos = List.filter (fun e -> e >= 0) pos in
@@ -603,7 +603,19 @@ let split_formula sconsts dumpfile i lastts ff closed neval =
     Printf.printf "Partitions: %s \n" (int_arr_to_string output);
     output
   in  
-  split_state split_paramater_function mf numparts
+  let split_according_to_modulo t p = 
+    let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) p in
+    (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
+    let pos = List.filter (fun e -> e >= 0) pos in
+    (* If no specified keys are in the predicate list, return all partitions *)
+    if List.length pos = 0 then let res = Array.make numparts 0 in Array.mapi (fun i e -> i) res else
+    (* Else we create a mapping to reorder our partition input values *)
+    let mapping t = List.map (fun e -> List.nth t e) pos in
+    let t = int_of_cst (List.hd (mapping t)) in
+    if t mod 2 = 0 then [|0|]
+    else [|1|]
+  in  
+  split_state split_according_to_modulo mf numparts
 
 
 (* END SPLITTING STATE *) 

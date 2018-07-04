@@ -17,6 +17,29 @@ open Mformula
 
 type state = (int * timestamp * bool * mformula * (int * timestamp) array * int * int * bool)
 
+let print_sauxel =
+  (fun (tsq,rel) ->
+     Printf.printf "(%s," (MFOTL.string_of_ts tsq);
+     Relation.print_rel "" rel;
+     print_string ")"
+  )
+
+
+  let print_oinf str inf =
+    print_string (str ^ "{");
+    if inf.olast == Dllist.void then
+      print_string "last = None; "
+    else
+      begin
+        let (ts,_) = Dllist.get_data inf.olast in
+        Printf.printf "last (ts) = %s; " (MFOTL.string_of_ts ts)
+      end;
+    print_string "oauxrels = ";
+    Misc.print_dllist print_sauxel inf.oauxrels;
+    Sliding.print_stree MFOTL.string_of_ts (Relation.print_rel "") ";\n oinf.tree = " inf.otree;
+    print_string "}"
+  
+
 let ext_to_m ff neval =
   let eze2m ezinf =
       {mezauxrels = ezinf.ezauxrels}
@@ -65,7 +88,9 @@ let ext_to_m ff neval =
         }
   in
   let o2m oinf =
-    { moauxrels = oinf.oauxrels }
+    let (ts, _) = Dllist.get_data oinf.olast in 
+    Printf.printf "\n Last TS: %f \n" ts;
+    { moauxrels = oinf.oauxrels; tslast = ts }
   in
   let oz2m ozinf =
     { mozauxrels = ozinf.ozauxrels}
@@ -105,8 +130,8 @@ let m_to_ext mf neval =
     let _, cell =
       if NEval.is_empty neval then [], NEval.void
       else begin 
-        let _, tsl = NEval.get_first neval in 
-        let cond = fun (_, tsr) -> MFOTL.in_left_ext (MFOTL.ts_minus tsr tsl) intv in
+        let (_, tsq) = NEval.get_first neval in 
+        let cond = fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
         Helper.get_new_elements neval NEval.void cond (fun x -> x)
     end
     in
@@ -132,25 +157,39 @@ let m_to_ext mf neval =
        eauxrels: info          the auxiliary relations (up to elastev)
     *)
     let meauxrels = meinf.meauxrels in
-    let _, cell =
-      if NEval.is_empty neval then [], NEval.void
+    let cell =
+      if NEval.is_empty neval then NEval.void
       else begin
-        let (_, tsq) = NEval.get_first neval in
-        let cond = fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
-        Helper.get_new_elements neval NEval.void cond (fun x -> x)
+        let _, tsq = NEval.get_first neval in 
+        let rec get_elem crt = 
+            let e = NEval.get_next neval crt in
+            let (_, tsj) = NEval.get_data e in
+            if MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv && not (NEval.is_last neval e) then
+              get_elem e
+            else   
+              e
+        in
+        get_elem (NEval.get_first_cell neval)
     end
     in
-    if not(Dllist.is_empty meauxrels) && cell != NEval.void then
-    let (_, tsq) = NEval.get_data cell in
-      let tree_list, elast =
-        let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
-        Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
-      in
-      {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels}
-    else begin
+    let return_empty =
       let metree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
       let elast = Dllist.void in
       {elastev = cell; etree = metree; elast = elast;eauxrels = meinf.meauxrels}
+    in
+    if not(Dllist.is_empty meauxrels) && cell != NEval.void then
+    let (_, tsq) = NEval.get_data cell in
+    let (tsj, _) = Dllist.get_first meauxrels in
+    if ((MFOTL.ts_minus tsj tsq) < 0.0) then
+      let tree_list, elast =
+        let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
+        Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
+      in
+      let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
+      einf
+      else return_empty
+    else begin
+      return_empty
     end
   in
   let mu2e muinf =
@@ -185,16 +224,20 @@ let m_to_ext mf neval =
     }
   in
   let mo2e intv moinf =
+    Printf.printf "\n NEval length: %d " (NEval.length neval);
     (* TODO: verify correctness *)
     let moauxrels = moinf.moauxrels in
     if not (Dllist.is_empty moauxrels) then
       let tree_list, olast =
-        let (tsq, _) = Dllist.get_first moauxrels in
-
-        let cond = fun (tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv in
+        let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj moinf.tslast) < 0.0 in
         Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
     in
-    { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moinf.moauxrels }
+    let (tsq, _) = Dllist.get_first moauxrels in
+    Printf.printf "First TS: %f \n" tsq; 
+    let ts, _ = Dllist.get_data olast in
+    Printf.printf "olast TS: %f \n" ts; 
+    let oinf = { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moauxrels } in
+    oinf
     else begin
       let otree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
       let olast = Dllist.void in
@@ -208,7 +251,7 @@ let m_to_ext mf neval =
       let tree_list, ozlast  =
         let (_, tsq, arel) = Dllist.get_first mozauxrels in
         let f = fun (j,_,rel) -> (j,rel) in
-        let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv in
+        let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
         Helper.get_new_elements mozauxrels Dllist.void cond f
       in 
       { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }

@@ -40,8 +40,6 @@ awk 'NR>3' $SOLS/left.sol  >> $SOLS/combined.sol
 awk 'NR>3' $SOLS/right.sol >> $SOLS/combined.sol
 awk 'NR>2' $SOLS/end.sol   >> $SOLS/combined.sol
 
-rm -r $STATES
-
 echo "### Evaluating Results..."
 
 python experiments/dif_checker.py -f1 $SOLS/reference.sol -f2 $SOLS/combined.sol

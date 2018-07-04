@@ -1387,7 +1387,7 @@ let rec eval f neval crt discard =
         end
       else
         None
-
+ 
 
 
 
@@ -2558,7 +2558,7 @@ let test_filter logfile f =
               | "terminate" ->
                 Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
               | "get_pos"   ->
-                Printf.printf "Current index: %d \n" i;
+                Printf.printf "Current index: %d \n" !tp;
                 loop f i
               | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
@@ -2588,6 +2588,5 @@ let combine logfile =
   Log.last := last;
 
   let lexbuf = Log.log_open logfile in
-  print_extf "Combined formula:" ff;
   check_log lexbuf ff closed neval i
   

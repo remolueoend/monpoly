@@ -34,8 +34,6 @@ mv checkpoint $STATES/checkpoint
 awk 'NR>2' $SOLS/save.sol  > $SOLS/combined.sol
 awk 'NR>3' $SOLS/resume.sol  >> $SOLS/combined.sol
 
-rm -r $STATES
-
 echo "### Evaluating Results..."
 
 python experiments/dif_checker.py -f1 $SOLS/reference.sol -f2 $SOLS/combined.sol
