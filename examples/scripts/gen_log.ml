@@ -40,7 +40,7 @@ let policy = ref "P1"
 let sindex = ref (-1)
 
 (* on average, 5% of all tuples generate a violation *)
-let violation_prob = 0.05
+let violation_prob = 0.10
 let violation_rate = int_of_float (violation_prob *. 100.)
 
 (* average number of events per second *)
