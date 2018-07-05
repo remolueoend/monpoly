@@ -276,13 +276,7 @@ let combine_ezinfo mezinf1 mezinf2 =
   {mezauxrels = mezauxrels }
 
 let combine_einfo meinf1 meinf2 =
-  Printf.printf "\n length: %d \n" (Dllist.length meinf1.meauxrels);
-  Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meinf1.meauxrels;
-  Printf.printf "\n length: %d \n" (Dllist.length meinf2.meauxrels);
-  Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meinf2.meauxrels;
   let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
-  Printf.printf "Auxrels length: %d \n" (Dllist.length meauxrels);
-  Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meauxrels;
   {meauxrels = meauxrels}
 
 let rec comb_m f1 f2  =
@@ -550,20 +544,15 @@ let split_state mapping mf size =
     Array.map (fun e -> { mezauxrels = e }) dllists
   in
   let split_meinfo meinf p =
-    Printf.printf "Auxrels length: %d \n" (Dllist.length meinf.meauxrels);
     let dllists = split_dll2 meinf.meauxrels p in
-    Array.map (fun e -> 
-    Printf.printf "\n length: %d \n" (Dllist.length e);
-    Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) e;
-    { meauxrels = e }
-    ) dllists
+    Array.map (fun e -> { meauxrels = e }) dllists
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
   let rec split_f = function
-    (* Don't think MRel is relevant *)
+    (* TODO: MRel *)
     | MRel           (rel)                                      -> Array.make size (MRel(rel)) 
-    | MPred          (p, comp, inf)                             -> let arr = split_info inf [Predicate.get_name p] in Array.map (fun e -> MPred(p, comp, e)) arr
+    | MPred          (p, comp, inf)                             -> let arr = split_info inf (pvars p) in Array.map (fun e -> MPred(p, comp, e)) arr
     | MNeg           (f1)                                       -> Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
     | MAnd           (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
     | MOr            (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
@@ -591,15 +580,14 @@ let check_tuple t vl =
   let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false  
 
-let split_formula sconsts dumpfile i lastts ff closed neval =
+let split_formula sconsts dumpfile i lastts mf closed neval =
   let numparts = (sconsts.num_partitions+1) in
 
   let keys = sconsts.keys in
   let constraints = sconsts.constraints in
-  let a, mf = ext_to_m ff neval in
 
   let split_according_to_lists t p = 
-    let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) p in
+    let pos = List.map (fun k -> try Misc.get_pos k p with e -> -1 ) keys in
     (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
     let pos = List.filter (fun e -> e >= 0) pos in
     (* If no specified keys are in the predicate list, return all partitions *)
@@ -607,18 +595,18 @@ let split_formula sconsts dumpfile i lastts ff closed neval =
     (* Else we create a mapping to reorder our partition input values *)
     let mapping t = List.map (fun e -> List.nth t e) pos in
     let output = Array.of_list (List.flatten (List.map (fun cs -> if check_tuple t (mapping cs.values) then cs.partitions else []) constraints)) in
-    Printf.printf "Partitions: %s \n" (int_arr_to_string output);
     output
   in  
   let split_according_to_modulo t p = 
-    let pos = List.map (fun p -> try Misc.get_pos p keys with e -> -1 ) p in
+    let pos = List.map (fun k -> try Misc.get_pos k p with e -> -1 ) keys in
     (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
     let pos = List.filter (fun e -> e >= 0) pos in
     (* If no specified keys are in the predicate list, return all partitions *)
     if List.length pos = 0 then let res = Array.make numparts 0 in Array.mapi (fun i e -> i) res else
     (* Else we create a mapping to reorder our partition input values *)
-    let mapping t = List.map (fun e -> List.nth t e) pos in
-    let t = int_of_cst (List.hd (mapping t)) in
+    let map t = List.map (fun e -> List.nth t e) pos in
+
+    let t = int_of_cst (List.hd (map t)) in
     if t mod 2 = 0 then [|0|]
     else [|1|]
   in  
@@ -666,8 +654,8 @@ let combine_neval nv1 nv2 =
   nl
 
 let rec print_ef = function
-  | ERel           (rel)                                      -> print_endline "Rel" 
-  | EPred          (p, comp, inf)                             -> print_endline "Pred"
+  | ERel           (rel)                                      -> Printf.printf "Rel:"; Relation.print_rel "" rel; print_endline "";
+  | EPred          (p, comp, inf)                             -> print_endline "Pred:"; Queue.iter(fun e-> let _,_,r = e in Relation.print_rel "" r) inf; print_endline "";
   | ENeg           (f1)                                       -> print_endline "Neg";print_ef f1
   | EAnd           (c, f1, f2, ainf)                          -> print_endline "And";print_ef f1; print_ef f2
   | EOr            (c, f1, f2, ainf)                          -> print_endline "Or";print_ef f1; print_ef f2

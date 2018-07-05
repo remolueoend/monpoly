@@ -215,8 +215,6 @@ let m_to_ext mf neval =
       Printf.printf "\n unmarshalled elast TS: %f \n" ts;
       Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meauxrels;
       let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
-      print_einf "" einf;
-      print_endline "";
       einf
       else return_empty
     else begin

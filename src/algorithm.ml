@@ -2376,9 +2376,23 @@ let files_to_list f =
   String.split_on_char ',' f   
 
 let split_and_save  sconsts dumpfile i lastts ff closed neval  =
-  let result = Splitting.split_formula sconsts dumpfile i lastts ff closed neval  in
+  Splitting.print_ef ff;
+  print_endline "Marshalling";
   let a, mf = Marshalling.ext_to_m ff neval in
+  print_endline "Splitting";
+  let result = Splitting.split_formula sconsts dumpfile i lastts mf closed neval  in
 
+  print_endline "CHECKING SPLIT";
+  let uf1 = Marshalling.m_to_ext result.(0) neval in 
+  let uf2 = Marshalling.m_to_ext result.(1) neval in 
+
+  print_endline "Even";
+  Splitting.print_ef uf1;
+  print_endline "Odd";
+  Splitting.print_ef uf2;
+
+  
+  print_endline "Dumping";
   Array.iteri (fun index mf ->
   let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result
