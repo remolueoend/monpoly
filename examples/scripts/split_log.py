@@ -75,7 +75,7 @@ with open (args.output + "-start.log", "w") as s:
             count = count + 1
             if count < 0.35 * num_lines:
               s.write(line)
-            elif count >= 0.35 * num_lines and count < 0.6 * num_lines:
+            elif count < 0.6 * num_lines:
               processLine(line, o1, o2)
             else:
               e.write(line)

@@ -39,12 +39,36 @@ let print_sauxel =
     Sliding.print_stree MFOTL.string_of_ts (Relation.print_rel "") ";\n oinf.tree = " inf.otree;
     print_string "}"
   
+  let print_einf str inf =
+    Printf.printf "%s{" str;
+    if inf.elastev == NEval.void then
+      print_string "elastev = None; "
+    else
+      begin
+        let (i,tsi) = NEval.get_data inf.elastev in
+        Printf.printf "elastev = (%d,%s); " i (MFOTL.string_of_ts tsi)
+      end;
+    if inf.elast == Dllist.void then
+      print_string "elast = None; "
+    else
+      begin
+        let ts = fst (Dllist.get_data inf.elast) in
+        Printf.printf "elast (ts) = %s; " (MFOTL.string_of_ts ts)
+      end;
+    print_string "eauxrels=";
+    Misc.print_dllist print_sauxel inf.eauxrels;
+    Sliding.print_stree MFOTL.string_of_ts (Relation.print_rel "") "; einf.etree = " inf.etree;
+    print_string "}"
 
 let ext_to_m ff neval =
   let eze2m ezinf =
       {mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
+      let _, ts1 = Dllist.get_data einf.elastev in
+      Printf.printf " \n elastev TS: %f  \n" ts1;
+      let ts, _ = Dllist.get_data einf.elast in
+      Printf.printf " \n elast TS: %f  \n" ts;
       {meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
@@ -90,7 +114,7 @@ let ext_to_m ff neval =
   let o2m oinf =
     let (ts, _) = Dllist.get_data oinf.olast in 
     Printf.printf "\n Last TS: %f \n" ts;
-    { moauxrels = oinf.oauxrels; tslast = ts }
+    { moauxrels = oinf.oauxrels; }
   in
   let oz2m ozinf =
     { mozauxrels = ozinf.ozauxrels}
@@ -185,7 +209,14 @@ let m_to_ext mf neval =
         let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
         Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
       in
+      let _, ts1 = Dllist.get_data cell in
+      Printf.printf " \n unmarshalled elastev TS: %f  \n" ts1;
+      let ts, _ = Dllist.get_data elast in
+      Printf.printf "\n unmarshalled elast TS: %f \n" ts;
+      Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meauxrels;
       let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
+      print_einf "" einf;
+      print_endline "";
       einf
       else return_empty
     else begin
@@ -227,12 +258,12 @@ let m_to_ext mf neval =
     Printf.printf "\n NEval length: %d " (NEval.length neval);
     (* TODO: verify correctness *)
     let moauxrels = moinf.moauxrels in
+    let (tsq, _) = Dllist.get_first moauxrels in
     if not (Dllist.is_empty moauxrels) then
       let tree_list, olast =
-        let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj moinf.tslast) < 0.0 in
+        let cond = fun (tsj,_) -> not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) in
         Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
     in
-    let (tsq, _) = Dllist.get_first moauxrels in
     Printf.printf "First TS: %f \n" tsq; 
     let ts, _ = Dllist.get_data olast in
     Printf.printf "olast TS: %f \n" ts; 

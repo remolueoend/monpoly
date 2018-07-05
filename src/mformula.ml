@@ -7,8 +7,7 @@ open MFOTL
 (* Immutable version of types used in eformula *)
 type mozinfo = { mozauxrels: (int * timestamp * relation) Dllist.dllist}
 
-type moinfo  = { tslast: float;
-                 moauxrels: (timestamp * relation) Dllist.dllist}
+type moinfo  = { moauxrels: (timestamp * relation) Dllist.dllist}
 
 type msainfo = { msres: relation;
                  msarel2: relation option;

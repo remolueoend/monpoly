@@ -268,17 +268,21 @@ let combine_oainfo oainf1 oainf2 =
   { ores = (rel_u oainf1.ores oainf2.ores); oaauxrels = oaauxrels }
   
 let combine_oinfo moinf1 moinf2 =
-  assert (moinf1.tslast = moinf2.tslast);
-  let tslast = moinf1.tslast in  
   let moauxrels = combine_dll2 moinf1.moauxrels moinf2.moauxrels in
-  { moauxrels = moauxrels; tslast = tslast }
+  { moauxrels = moauxrels; }
 
 let combine_ezinfo mezinf1 mezinf2 =
   let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
   {mezauxrels = mezauxrels }
 
 let combine_einfo meinf1 meinf2 =
+  Printf.printf "\n length: %d \n" (Dllist.length meinf1.meauxrels);
+  Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meinf1.meauxrels;
+  Printf.printf "\n length: %d \n" (Dllist.length meinf2.meauxrels);
+  Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meinf2.meauxrels;
   let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
+  Printf.printf "Auxrels length: %d \n" (Dllist.length meauxrels);
+  Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) meauxrels;
   {meauxrels = meauxrels}
 
 let rec comb_m f1 f2  =
@@ -505,7 +509,7 @@ let split_state mapping mf size =
   in
   let split_moinfo moinf p =
     let dllists = split_dll2 moinf.moauxrels p in
-    Array.map (fun e -> {moauxrels = e; tslast = moinf.tslast }) dllists
+    Array.map (fun e -> { moauxrels = e }) dllists
   in
   let split_muninfo muninf p =
     let listrels1 = split_dll1 muninf.mlistrel1 p in
@@ -543,13 +547,16 @@ let split_state mapping mf size =
   in
   let split_mezinfo mezinf p =
     let dllists = split_dll1 mezinf.mezauxrels p in
-    (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
     Array.map (fun e -> { mezauxrels = e }) dllists
   in
   let split_meinfo meinf p =
+    Printf.printf "Auxrels length: %d \n" (Dllist.length meinf.meauxrels);
     let dllists = split_dll2 meinf.meauxrels p in
-    (* TODO: handle tree by either getting rid of it for mformulas and reconstructing or actually splitting it aswell *)
-    Array.map (fun e -> { meauxrels = e }) dllists
+    Array.map (fun e -> 
+    Printf.printf "\n length: %d \n" (Dllist.length e);
+    Dllist.iter (fun le -> let ts, r = le in Relation.print_rel "" r; Printf.printf "TS: %f \n" ts;) e;
+    { meauxrels = e }
+    ) dllists
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
