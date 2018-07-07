@@ -1,17 +1,21 @@
 from argparse import ArgumentParser
 
 parser = ArgumentParser()
-parser.add_argument("-f", "--file", help="LOGFILE to split")
+parser.add_argument("-i", "--input", help="LOGFILE to split")
 parser.add_argument("-o", "--output", help="output file prefix")
 parser.add_argument("-p", "--policy", help="according to which policy should the file be split")
 
 args = parser.parse_args()
 
+def extractTs(line):
+  arr = line.split(" ")
+  return arr[0]
+
 def extractVal(line, index):
   arr = line.split(" ")
   if len(arr) < 3:
     return 0
-  
+
   length = len(arr[2])
   if length > 2:
     val = arr[2][1:length-2].split(",")[index]
@@ -24,33 +28,48 @@ def checkCondP1(line, o1, o2):
     o1.write(line)
     o2.write(line)
   else:
+    ts = extractTs(line)
     if "publish" in line:
       val = extractVal(line, 1)
     else:
       val = extractVal(line, 1)
-    if val % 2 == 0: o1.write(line)
-    else: o2.write(line)
+    if val % 2 == 0:
+	o1.write(line)
+    	o2.write(ts + "\n")
+    else:
+	o1.write(ts + "\n")
+	o2.write(line)
 
 def checkCondP2(line, o1, o2):
   if "trans" not in line and not "report" in line:
     o1.write(line)
     o2.write(line)
   else:
+    ts = extractTs(line)
     if "trans" in line:
       val = extractVal(line, 1)
     else:
       val = extractVal(line, 0)
-    if val % 2 == 0: o1.write(line)
-    else: o2.write(line)
+    if val % 2 == 0:
+	o2.write(ts + "\n")
+	o1.write(line)
+    else:
+	o1.write(ts + "\n")
+	o2.write(line)
 
 def checkCondP3(line, o1, o2):
   if "trans" not in line and not "auth" in line:
     o1.write(line)
     o2.write(line)
   else:
+    ts = extractTs(line)
     val = extractVal(line, 1)
-    if val % 2 == 0: o1.write(line)
-    else: o2.write(line)
+    if val % 2 == 0:
+	o1.write(line)
+    	o2.write(ts + "\n")
+    else:
+	o1.write(ts + "\n")
+	o2.write(line)
 
 def processLine(line, o1, o2):
   policy = args.policy
@@ -61,16 +80,14 @@ def processLine(line, o1, o2):
   elif policy == "P3":
     checkCondP3(line, o1, o2)
 
-print args.file
-
-num_lines = sum(1 for line in open(args.file))
+num_lines = sum(1 for line in open(args.input))
 count = 0
 
 with open (args.output + "-start.log", "w") as s:
   with open (args.output + "-left.log", "w") as o1:
     with open (args.output + "-right.log", "w") as o2:
       with open (args.output + "-end.log", "w") as e:
-        with open(args.file) as fp:
+        with open(args.input) as fp:
           for line in fp:
             count = count + 1
             if count < 0.35 * num_lines:
@@ -79,4 +96,6 @@ with open (args.output + "-start.log", "w") as s:
               processLine(line, o1, o2)
             else:
               e.write(line)
-
+	s.write("> split_state (t:int),  (),(0)  (),(1) <")
+	o1.write("> save_and_exit left-es <")
+	o2.write("> save_and_exit right-es <")

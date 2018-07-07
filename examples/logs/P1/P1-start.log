@@ -2055,6 +2055,4 @@
 @50 publish (6,4825)
 @50 publish (3,3110)
 @50 publish (8,54)
-> split_state (t:int),  (),(0)
-                        (),(1)
-<
+> split_state (t:int),  (),(0)  (),(1) <
