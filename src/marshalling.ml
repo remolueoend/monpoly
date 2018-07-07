@@ -113,7 +113,7 @@ let ext_to_m ff neval =
   in
   let o2m oinf =
     let (ts, _) = Dllist.get_data oinf.olast in 
-    Printf.printf "\n Last TS: %f \n" ts;
+    Printf.printf "\n Marshalling: olast TS = %f \n" ts;
     { moauxrels = oinf.oauxrels; }
   in
   let oz2m ozinf =
@@ -256,15 +256,16 @@ let m_to_ext mf neval =
     Printf.printf "\n NEval length: %d " (NEval.length neval);
     (* TODO: verify correctness *)
     let moauxrels = moinf.moauxrels in
-    let (tsq, _) = Dllist.get_first moauxrels in
+    let (tsq, rel) = Dllist.get_last moauxrels in
     if not (Dllist.is_empty moauxrels) then
       let tree_list, olast =
-        let cond = fun (tsj,_) -> not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) in
+        let cond = fun (tsj,_) -> (MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv) in
         Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
     in
-    Printf.printf "First TS: %f \n" tsq; 
+    Printf.printf "Last TS: %f \n" tsq; 
+    Dllist.iter (fun e -> let _, rel = e in Relation.print_rel "" rel) moauxrels;
     let ts, _ = Dllist.get_data olast in
-    Printf.printf "olast TS: %f \n" ts; 
+    Printf.printf "\n Unmarshalling: olast TS = %f \n" ts; 
     let oinf = { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moauxrels } in
     oinf
     else begin

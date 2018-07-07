@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from sets import Set
+import sys
 
 parser = ArgumentParser()
 parser.add_argument("-f1", "--file1", help="First file to compare")
@@ -24,26 +25,35 @@ def extractFingerprint(line):
 	tp=tp[0:len(tp) - 2]
 	val=val[0:len(val)-1]
 
-	return ts+"."+val
+	return ts+"."+tp+"."+val
 
-def processLine(line, set):
+def processLine(line, set, list):
 	if validLine(line):
-		fp = extractFingerprint(line)
-		set.add(fp)
+          fp = extractFingerprint(line)
+	  if fp in set:
+            list.append(fp)
+	  else:
+            set.add(fp)
 
 reference = Set()
 combined  = Set()
 
+dup1 = []
+dup2 = []
+
 with open(args.file1, "r") as f1:
 	for line in f1:
-		processLine(line, reference)
+		processLine(line, reference, dup1)
 
 with open(args.file2, "r") as f2:
 	for line in f2:
-		processLine(line, combined)
+		processLine(line, combined, dup2)
 
 print "Info: Number of unique entries in reference result: " + str(len(reference))
+print "Info: Number of duplicate entries in reference result: " + str(len(dup1))
+
 print "Info: Number of unique entries in experiment result: " + str(len(combined))
+print "Info: Number of duplicate entries in experiment result: " + str(len(dup2))
 
 dif = reference.difference(combined)
 print "Info: False Negatives (" + str(len(dif)) + ")"
@@ -52,5 +62,8 @@ print dif
 dif = combined.difference(reference)
 print "Info: False Positives (" + str(len(dif)) + ")"
 print dif
-
+print "Info: Duplicate Entries"
+for e in dup2:
+	sys.stdout.write(e+" ")
+sys.stdout.flush()
 
