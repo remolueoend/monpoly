@@ -162,20 +162,21 @@ let m_to_ext mf neval =
          where the timepoint is smaller than that of ezlastev
          Note: We are presuming that all monpoly instances have synchronized timepoints. *)
       let (tpq, tsq) = NEval.get_data cell in
-      let (_, tsj, _) = Dllist.get_first mezinf.mezauxrels in
-      if ((MFOTL.ts_minus tsj tsq) < 0.0) then
-      let tree_list, ezlast =
-        let f = fun (j,_,rel) -> (j,rel) in
-        let cond = fun (tpj,_,_) -> (tpj - tpq) < 0 in
-        Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
-      in
-      let _, ts1 = Dllist.get_data cell in
-      Printf.printf " \n unmarshalled ezlastev TS: %f  \n" ts1;
-      let tp, ts, _ = Dllist.get_data ezlast in
-      Printf.printf "\n unmarshalled ezlast TS: %f \n" ts;
-      Printf.printf "\n unmarshalled ezlast TP: %d \n" tp;
-      let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-      {ezlastev = cell; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+      let (tpj, tsj, _) = Dllist.get_first mezinf.mezauxrels in
+      (* Catch case where auxrels contains exactly one element with same tp as ezlast *)
+      if ((tpj - tpq) < 0) then
+        let tree_list, ezlast =
+          let f = fun (j,_,rel) -> (j,rel) in
+          let cond = fun (tpj,_,_) -> (tpj - tpq) < 0 in
+          Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
+        in
+        let _, ts1 = Dllist.get_data cell in
+        Printf.printf " \n unmarshalled ezlastev TS: %f  \n" ts1;
+        let tp, ts, _ = Dllist.get_data ezlast in
+        Printf.printf "\n unmarshalled ezlast TS: %f \n" ts;
+        Printf.printf "\n unmarshalled ezlast TP: %d \n" tp;
+        let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
+        {ezlastev = cell; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
       else return_empty
     else begin
       return_empty
@@ -216,6 +217,7 @@ let m_to_ext mf neval =
          where the timestamp is smaller than that of elastev *)
       let (_, tsq) = NEval.get_data cell in
       let (tsj, _) = Dllist.get_first meauxrels in
+      (* Catch case where auxrels contains exactly one element with same ts as elast *)
       if ((MFOTL.ts_minus tsj tsq) < 0.0) then
         let tree_list, elast =
           let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in

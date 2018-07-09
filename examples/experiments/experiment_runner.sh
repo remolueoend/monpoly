@@ -15,6 +15,7 @@ if [ -z $P ] || [ -z $T ]; then
     echo " - \$1: Policy to be run (P1/P2/P3)"
     echo " - \$2: Type of test     (resume/combine)"
     echo " - \$3 (optional): Duplicate entries (true/false), only relevant for combine test"
+    echo " - Usage Example: 'examples/experiments/experiment_runner.sh P2 combine true'"
     exit 1
 fi
 

@@ -27,9 +27,16 @@ let rel_u r1 r2 = Relation.union r1 r2
 (* In combination function we assume that:
    - for lists timepoints & timestamps are sorted in monotonic ascending order from head to tail
    - for queues timepoints & timestamps are sorted in monotonic ascending order from least recently added to most recently added
-*)
 
-(* TODO: verify correctness of combination functions *)
+  All queue and list combination functions follow the same schema. 
+  
+  We compare the first elements of both structures according to either just their timestamp or their timestamp & timepoint combination
+  and add an element to the new structure according to the comparison.
+  If the elements are equal, we merge their states and remove elements from both structures, while adding one new element to the new structure.
+  If the element of structure one is has a smaller ts / ts & tp combination we add that element to the new structure while removing it from the old.
+  If the element of structure two is has a smaller ts / ts & tp combination we add that element to the new structure while removing it from the old.
+  We recursively do this over both structures until one/both are empty. If only one is empty the leftovers are added to the new structure.
+*)
 
 let rec comb_q1 q1 q2 nq =
   if Queue.is_empty q1 && Queue.is_empty q2 then ()
@@ -198,6 +205,11 @@ let combine_dll2 l1 l2 =
   comb_dll2 l1 l2 res;
   res
 
+
+(* 
+ State combination functions
+ - Essentially just call the above combination functions and return the combined state
+ *)
 let combine_info  inf1 inf2 =
   combine_queues1 inf1 inf2
 
@@ -279,6 +291,10 @@ let combine_einfo meinf1 meinf2 =
   let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
   {meauxrels = meauxrels}
 
+(*
+  Combine two mformulas recursively. We must assume they have the same structure. 
+  If they do not, we raise an error.
+ *)
 let rec comb_m f1 f2  =
   match (f1,f2) with
     | (MRel  (rel1),          MRel(rel2))
@@ -327,15 +343,17 @@ let rec comb_m f1 f2  =
 
 
 (* SPLITTING STATE *)
+
+(* For each formula, returns list of relevant free variables according to sub structure *)
 let get_predicate f =
   let pvars p = Predicate.pvars p in
   let rec get_pred = function
-    (* Equal, Less, LessEq all mapped to free vars;  ForAll not used *)
   | MRel           (_)                    -> []
   | MPred          (p, _, _)              -> pvars p
   | MNeg           (f1)                   -> get_pred f1
   | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
   | MOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
+  (* Utilize comp to map away unwanted elements of pvars *)
   | MExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )
   | MAggreg        (_, f1)                -> get_pred f1
   | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1
@@ -393,13 +411,38 @@ let get_2 (_,b) = b
 
 let comb_preds preds1 preds2 = List.append preds1 preds2
 
+(*
+  split_state function splits an mformula.
+  - mapping: A function mapping a tuple to a partition array (int array)
+  - mf:      mformula to be split
+  - size:    Number of partitions
+
+  Returns an array of the size [size] each containing a split mformula with the index representing a partition.
+*)
 let split_state mapping mf size =
+
+  (* split function splits a relation according to the list of free variables and the "split_state" mapping
+     - rel:   Relation.relation to be split
+     - preds: free vars representing the column keys of [rel]
+     
+     Returns an array of size [size], each containing a split of the relation, the array index representing the partition.
+   *)
   let split rel preds =
     let res = Array.make size Relation.empty in
     (* Iterate over relation, adding tuples to relations of partitions where they are relevant *)
     Relation.iter (fun t -> let parts = mapping t preds in Array.iter (fun p -> res.(p) <- Relation.add t res.(p)) parts) rel;
     res
   in
+
+
+  (* Split functions for queues and lists all work in a similar fashion:
+     1. Create array of size [size], each element containing an empty structure
+     2. Iterate over state structure:
+        i. split state in each element
+        ii. iterate over resulting split array according to the index
+             - add each element to the array created in 1 using the index
+     This results in an array of split structures.
+  *)
 
   let split_queue1 q p =
     let res = Array.init size (fun i -> Queue.create()) in 
@@ -449,6 +492,12 @@ let split_state mapping mf size =
     ) l;
     res
   in
+
+  (*
+    State splitting functions.
+    - Call the above structure splitting function to split the structures in the state, then return an array of split states.
+   *)
+
   let split_info inf p =
     split_queue1 inf p
   in
@@ -493,12 +542,7 @@ let split_state mapping mf size =
     Array.map2 (fun ores nq ->  {ores = ores; oaauxrels = nq}) ores queues
   in
   let split_mozinfo mozinf p =
-    let dllists = Array.init size (fun i -> Dllist.empty()) in 
-      Dllist.iter (
-        fun e -> let i, ts, r  = e in
-        let states = split r p in 
-        Array.iteri (fun index s -> Dllist.add_last (i, ts, s) dllists.(index)) states
-      ) mozinf.mozauxrels;
+    let dllists = split_dll1 mozinf.mozauxrels p in
     Array.map (fun e -> {mozauxrels = e }) dllists
   in
   let split_moinfo moinf p =
@@ -549,6 +593,11 @@ let split_state mapping mf size =
   in
   let p1 f1 = get_predicate f1 in
   let p2 f1 f2 = get_predicate2 f1 f2 in
+  (* Recursive split call: At each step 
+     - call split on the subformula(s), resulting in array(s)
+     - get the relevant list of free vars and split the state, resulting in an array 
+     - create and return an array of formulas:
+          each index containing the relevant part of the state and relevant split of the subformula(s) *)
   let rec split_f = function
     (* TODO: MRel *)
     | MRel           (rel)                                      -> Array.make size (MRel(rel)) 
@@ -580,41 +629,53 @@ let check_tuple t vl =
   let eval = List.mapi (fun i e -> List.exists (fun e2 -> (List.nth t i) = e2) e) vl in
   List.fold_right (fun a agg -> (a || agg)) eval false  
 
+(* Split function for use with the manual split call *)
+let split_according_to_lists keys num_partitions constraints t p = 
+  let pos = List.map (fun k -> try Misc.get_pos k p with e -> -1 ) keys in
+  (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
+  let pos = List.filter (fun e -> e >= 0) pos in
+  (* If no specified keys are in the predicate list, return all partitions *)
+  if List.length pos = 0 then let res = Array.make num_partitions 0 in Array.mapi (fun i e -> i) res else
+  (* Else we create a mapping to reorder our partition input values *)
+  let mapping t = List.map (fun e -> List.nth t e) pos in
+  let output = Array.of_list (List.flatten (List.map (fun cs -> if check_tuple t (mapping cs.values) then cs.partitions else []) constraints)) in
+  output  
+
+(* Split function for use with the experiment set up *)  
+let split_according_to_modulo keys num_partitions t p  = 
+  let pos = List.map (fun k -> try Misc.get_pos k p with e -> -1 ) keys in
+  (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
+  let pos = List.filter (fun e -> e >= 0) pos in
+  (* If no specified keys are in the predicate list, return all partitions *)
+  if List.length pos = 0 then let res = Array.make num_partitions 0 in Array.mapi (fun i e -> i) res else
+  (* Else we create a mapping to reorder our partition input values *)
+  let map t = List.map (fun e -> List.nth t e) pos in
+
+  let t = int_of_cst (List.hd (map t)) in
+  (*if t mod 3 = 0 then [|0; 1|]
+  else begin*)
+    if t mod 2 = 0 then [|0|]
+    else [|1|]
+  (*end*)
+
+  
+(* Splits formula according to:
+    - the keys and the number of partitions specified in sconts
+    - the mapping from tuple -> partitions it defines
+ *)  
 let split_formula sconsts dumpfile i lastts mf closed neval =
   let numparts = (sconsts.num_partitions+1) in
 
   let keys = sconsts.keys in
-  let constraints = sconsts.constraints in
 
-  let split_according_to_lists t p = 
-    let pos = List.map (fun k -> try Misc.get_pos k p with e -> -1 ) keys in
-    (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
-    let pos = List.filter (fun e -> e >= 0) pos in
-    (* If no specified keys are in the predicate list, return all partitions *)
-    if List.length pos = 0 then let res = Array.make numparts 0 in Array.mapi (fun i e -> i) res else
-    (* Else we create a mapping to reorder our partition input values *)
-    let mapping t = List.map (fun e -> List.nth t e) pos in
-    let output = Array.of_list (List.flatten (List.map (fun cs -> if check_tuple t (mapping cs.values) then cs.partitions else []) constraints)) in
-    output
-  in  
-  let split_according_to_modulo t p = 
-    let pos = List.map (fun k -> try Misc.get_pos k p with e -> -1 ) keys in
-    (* columns not in cs.keys are filtered -> so ignored for checking tuples *)
-    let pos = List.filter (fun e -> e >= 0) pos in
-    (* If no specified keys are in the predicate list, return all partitions *)
-    if List.length pos = 0 then let res = Array.make numparts 0 in Array.mapi (fun i e -> i) res else
-    (* Else we create a mapping to reorder our partition input values *)
-    let map t = List.map (fun e -> List.nth t e) pos in
-
-    let t = int_of_cst (List.hd (map t)) in
-    if t mod 2 = 0 then [|0|]
-    else [|1|]
-  in  
-  split_state split_according_to_modulo mf numparts
+  let mapping = split_according_to_modulo keys numparts in
+  split_state mapping mf numparts
 
 
 (* END SPLITTING STATE *) 
 
+(* Combines two neval lists according to the timestamp and timepoints of their elements,
+   see the combination functions at the top for a more detailed explanation *)
 let combine_neval nv1 nv2 =
   let nl = NEval.empty() in
   let rec combine l1 l2 = 
