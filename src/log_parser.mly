@@ -155,8 +155,20 @@
   (* let parse_error str = () *)
 
 
+(*
+  Below functions are only relevant for the manual specification of the mappings from values to state partitions
+  in the split_and_save command. Useful for manual testing involving small sample log files.
+
+  Example: 
+  > split_state (a:string)(f:int)(m:string),  (Alice,Charlie)(160,187,152)(Mallory),   (0,2)
+                                              (Bob)(163)(Merlin),                      (1)
+  <
+ *)
+
+
 let get_2 (_, a) = a
 
+(* Creates a SplitParameters by converting value lists to their appropriate type as define by the matching key *)
 let make_split kwt group  =
   let convert_lists valueLists = 
     let pos = ref 0 in
@@ -186,10 +198,16 @@ let make_split kwt group  =
   let max  = Helper.get_max g in
   SplitParameters { keys = keys; constraints = g; num_partitions = max }
   
+(* Combines partition lists to state partition group
+   State partition group represents the mappings of different value partitions to different state partitions, with a subgroup
+   representing the mapping of one value partition to one state partition.
+ *)  
 let make_group group subgroup = subgroup::group
 
+(* Creates list of integers representing the state partitions a value partition is mapped to*)
 let make_subgroup valueLists partitions = (valueLists, List.map (fun p -> try (int_of_string p) with Failure _ -> raise (Type_error ("Partitions list expects integers"))) partitions)
 
+(* Creates a list of keys consisting of a name and type each *)
 let make_key str = match Misc.nsplit str ":" with
         | [] -> failwith "[Log_parser.make_predicate] internal error"
         | [type_str] -> "", get_type type_str

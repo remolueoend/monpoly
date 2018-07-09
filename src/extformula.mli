@@ -90,3 +90,15 @@ type extformula =
   | EUntil of comp_two * interval * extformula * extformula * uinfo
   | EEventuallyZ of interval * extformula * ezinfo
   | EEventually of interval * extformula * einfo
+
+val print_auxel:  int * Relation.relation -> unit
+val print_sauxel: MFOTL.timestamp * Relation.relation -> unit
+
+val print_neval: string -> (int * MFOTL.timestamp) Dllist.dllist -> unit
+val print_predinf: string -> info -> unit
+val print_uinf: string -> uinfo -> unit
+
+val print_einfn: string -> einfo -> unit
+val print_ezinf: string -> ezinfo -> unit
+
+val print_extf: string -> extformula -> unit

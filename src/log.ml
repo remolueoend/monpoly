@@ -160,6 +160,8 @@ let skipped_tps = ref 0
 let last = ref false
 let tp = ref 0
 
+(* Reads from lexbuf by calling Log_parser resulting in DataTuple, CommandTuple or ErrorTuple.
+   Called by Algorithm.check_log to process data stream/log file. *)
 let get_next_entry lexbuf =
   let rec get_next lexbuf =
     let log_entry =
