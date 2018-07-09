@@ -59,4 +59,4 @@ type mformula =
   | MEventuallyZ of interval * mformula * mezinfo
   | MEventually of interval * mformula * meinfo
 
-type state = (int * timestamp * bool * mformula * (int * timestamp) array * int * int * bool)
+type state = (timestamp * bool * mformula * (int * timestamp) array * int * bool)

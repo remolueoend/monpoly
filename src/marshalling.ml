@@ -28,18 +28,26 @@ type state = (int * timestamp * bool * mformula * (int * timestamp) array * int 
  *)
 let ext_to_m ff neval =
   let eze2m ezinf =
-      let _, ts1 = Dllist.get_data ezinf.ezlastev in
-      Printf.printf " \n ezlastev TS: %f  \n" ts1;
-      let tp, ts, _ = Dllist.get_data ezinf.ezlast in
-      Printf.printf " \n ezlast TS: %f  \n" ts;
-      Printf.printf " \n ezlast TP: %d  \n" tp;
+      if ezinf.ezlastev != Dllist.void then
+          let _, ts1 = Dllist.get_data ezinf.ezlastev in
+          Printf.printf " \n ezlastev TS: %f  \n" ts1;
+      else print_endline "ezlastev VOID";
+      if ezinf.ezlast != Dllist.void then
+        let tp, ts, _ = Dllist.get_data ezinf.ezlast in
+        Printf.printf " \n ezlast TS: %f  \n" ts;
+        Printf.printf " \n ezlast TP: %d  \n" tp;
+      else print_endline "ezlast VOID";
       {mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
-      let _, ts1 = Dllist.get_data einf.elastev in
-      Printf.printf " \n elastev TS: %f  \n" ts1;
+    if einf.elastev != Dllist.void then
+        let _, ts1 = Dllist.get_data einf.elastev in
+        Printf.printf " \n elastev TS: %f  \n" ts1;
+    else print_endline "elastev VOID";
+    if einf.elast != Dllist.void then
       let ts, _ = Dllist.get_data einf.elast in
       Printf.printf " \n elast TS: %f  \n" ts;
+    else print_endline "elast VOID";
       {meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
@@ -83,14 +91,18 @@ let ext_to_m ff neval =
         }
   in
   let o2m oinf =
-    let (ts, _) = Dllist.get_data oinf.olast in 
-    Printf.printf "\n Marshalling: olast TS = %f \n" ts;
+    if oinf.olast != Dllist.void then
+      let (ts, _) = Dllist.get_data oinf.olast in 
+      Printf.printf "\n Marshalling: olast TS = %f \n" ts;
+    else print_endline "olast VOID";
     { moauxrels = oinf.oauxrels; }
   in
   let oz2m ozinf =
-    let (tp, ts, _) = Dllist.get_data ozinf.ozlast in 
-    Printf.printf "\n Marshalling: ozlast TS = %f \n" ts;
-    Printf.printf "\n Marshalling: ozlast TP = %d \n" tp;
+    if ozinf.ozlast != Dllist.void then
+      let (tp, ts, _) = Dllist.get_data ozinf.ozlast in 
+      Printf.printf "\n Marshalling: ozlast TS = %f \n" ts;
+      Printf.printf "\n Marshalling: ozlast TP = %d \n" tp;
+    else print_endline "ozlast VOID";
     { mozauxrels = ozinf.ozauxrels}
   in
   let a = NEval.to_array neval in

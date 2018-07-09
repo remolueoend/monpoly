@@ -2049,17 +2049,14 @@ let read_m_from_file file =
   let ch = open_in_bin file in
   let value = (Marshal.from_channel ch : state) in
   close_in ch;
-  let (i,last_ts,closed,mf,a,tp,skipped_tps,last) = value in
+  let (last_ts,closed,mf,a,tp,last) = value in
   let neval = NEval.from_array a in
-  (i,last_ts,mf,closed,neval,tp,skipped_tps,last)  
+  (last_ts,mf,closed,neval,tp,last)  
 
-(*
-  Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile.
-  
-*)
+(* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
 let marshal dumpfile i lastts ff closed neval =
   let a, mf = Marshalling.ext_to_m ff neval in
-  let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
+  let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file dumpfile value
 
 (*
@@ -2067,9 +2064,9 @@ let marshal dumpfile i lastts ff closed neval =
   information using m_to_ext function.
 *)  
 let unmarshal resumefile =
-  let (i,last_ts,mf,closed,neval,tp,skipped_tps,last) = read_m_from_file resumefile in
+  let (last_ts,mf,closed,neval,tp,last) = read_m_from_file resumefile in
   let ff = Marshalling.m_to_ext mf neval in
-  (i,last_ts,ff,closed,neval,tp,skipped_tps,last)
+  (last_ts,ff,closed,neval,tp,last)
 
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
@@ -2094,7 +2091,7 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
   
   print_endline "Dumping";
   Array.iteri (fun index mf ->
-  let value : state = (i,lastts,closed,mf,a,!Log.tp,!Log.skipped_tps,!Log.last) in
+  let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result
 
 
@@ -2133,11 +2130,11 @@ let files_to_list f =
   is then folded over.
  *)
 let merge_formulas files = 
-  List.fold_right (fun s (i,last_ts,ff1,closed,neval1,tp,skipped_tps,last) ->
-    let (_,_,ff2,_,neval2,_,_,_) = read_m_from_file s in
+  List.fold_right (fun s (last_ts,ff1,closed,neval1,tp,last) ->
+    let (_,ff2,_,neval2,_,_) = read_m_from_file s in
     let comb_ff = Splitting.comb_m ff1 ff2 in
     let comb_nv = Splitting.combine_neval neval1 neval2 in
-    (i,last_ts,comb_ff,closed, comb_nv,tp,skipped_tps,last)
+    (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
 
 
@@ -2299,26 +2296,26 @@ let test_filter logfile f =
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
 let resume logfile =
-  let (i,last_ts,ff,closed,neval,tp,skipped_tps,last) = unmarshal !resumefile in
+  let (last_ts,ff,closed,neval,tp,last) = unmarshal !resumefile in
   lastts := last_ts;
   Log.tp := tp;
-  Log.skipped_tps := skipped_tps;
+  Log.skipped_tps := 0;
   Log.last := last;
   let lexbuf = Log.log_open logfile in
   Printf.printf "Loaded state\n%!";
-  check_log lexbuf ff closed neval i
+  check_log lexbuf ff closed neval 0
   
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
 let combine logfile = 
   let files = files_to_list !combine_files in
-  let (i,last_ts,mf,closed,neval,tp,skipped_tps,last) = merge_formulas files in
+  let (last_ts,mf,closed,neval,tp,last) = merge_formulas files in
   let ff = Marshalling.m_to_ext mf neval in
   lastts := last_ts;
   Log.tp := tp;
-  Log.skipped_tps := skipped_tps;
+  Log.skipped_tps := 0;
   Log.last := last;
 
   let lexbuf = Log.log_open logfile in
-  check_log lexbuf ff closed neval i
+  check_log lexbuf ff closed neval 0
   
