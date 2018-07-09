@@ -17,6 +17,15 @@ open Mformula
 
 type state = (int * timestamp * bool * mformula * (int * timestamp) array * int * int * bool)
 
+(*
+  Converts the extformula to an mformula by recursing through the structure and reducing state information. The resulting
+  formula thus has the same structure but minified state information.
+  Main changes:
+    - Once & Eventually have all pointers and trees removed
+    - Record fields containing cell are replaced with integers pointing at the cell index / encoding void.
+
+  neval dllist is converted to an array representation.
+ *)
 let ext_to_m ff neval =
   let eze2m ezinf =
       let _, ts1 = Dllist.get_data ezinf.ezlastev in
@@ -108,14 +117,19 @@ let ext_to_m ff neval =
     | EEventually    (intv, ext, einf)                                      -> MEventually  (intv, (e2m ext), (ee2m einf))
   in a, e2m ff
 
-
+(*
+  Restores an mformula to its extformula representation by reconstructing the full state information,
+  including optimization structures such as sliding trees.
+*)
 let m_to_ext mf neval = 
   let mez2e intv mezinf =
-  (* TODO: verify correctness *)
    (* contents of inf:
-       elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
-       eauxrels: info          the auxiliary relations (up to elastev)
+       ezlastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
+       ezauxrels: info          the auxiliary relations (up to ezlastev)
     *)
+    (* Retrieves last evaluated cell by taking the subformula interval and retrieving the last element
+       of neval which lies within it.
+       Returns void if neval is empty. *)
     let cell =
       if NEval.is_empty neval then NEval.void
       else begin 
@@ -125,11 +139,22 @@ let m_to_ext mf neval =
         c
     end
     in
-    if not (Dllist.is_empty mezinf.mezauxrels) then
+    (* if auxrels is empty or ezlastev is void return invalid tree, forcing reevaluation in the algorithm *)
+    let return_empty =
+      let eztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
+      let ezlast = Dllist.void in
+      {ezlastev = cell; eztree = eztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+    in
+    if not (Dllist.is_empty mezinf.mezauxrels) && not (cell = NEval.void) then
+      (* If auxrels contains elements, rebuild tree and restore ezlast by getting all elements of auxrels
+         where the timepoint is smaller than that of ezlastev
+         Note: We are presuming that all monpoly instances have synchronized timepoints. *)
+      let (tpq, tsq) = NEval.get_data cell in
+      let (_, tsj, _) = Dllist.get_first mezinf.mezauxrels in
+      if ((MFOTL.ts_minus tsj tsq) < 0.0) then
       let tree_list, ezlast =
         let f = fun (j,_,rel) -> (j,rel) in
-        let (_, tsq) = NEval.get_data cell in
-        let cond = fun (_,tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
+        let cond = fun (tpj,_,_) -> (tpj - tpq) < 0 in
         Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
       in
       let _, ts1 = Dllist.get_data cell in
@@ -139,19 +164,20 @@ let m_to_ext mf neval =
       Printf.printf "\n unmarshalled ezlast TP: %d \n" tp;
       let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
       {ezlastev = cell; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+      else return_empty
     else begin
-      let eztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
-      let ezlast = Dllist.void in
-      {ezlastev = cell; eztree = eztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+      return_empty
     end
   in
   let me2e intv meinf =
-    (* TODO: verify correctness *)
     (* contents of inf:
        elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info          the auxiliary relations (up to elastev)
     *)
     let meauxrels = meinf.meauxrels in
+    (* Retrieves last evaluated cell by taking the subformula interval and retrieving the last element
+      of neval which lies within it.
+      Returns void if neval is empty. *)
     let cell =
       if NEval.is_empty neval then NEval.void
       else begin
@@ -167,26 +193,29 @@ let m_to_ext mf neval =
         get_elem (NEval.get_first_cell neval)
     end
     in
+    (* if auxrels is empty or elastev is void return invalid tree, forcing reevaluation in the algorithm *)
     let return_empty =
       let metree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
       let elast = Dllist.void in
       {elastev = cell; etree = metree; elast = elast;eauxrels = meinf.meauxrels}
     in
     if not(Dllist.is_empty meauxrels) && cell != NEval.void then
-    let (_, tsq) = NEval.get_data cell in
-    let (tsj, _) = Dllist.get_first meauxrels in
-    if ((MFOTL.ts_minus tsj tsq) < 0.0) then
-      let tree_list, elast =
-        let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
-        Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
-      in
-      let _, ts1 = Dllist.get_data cell in
-      Printf.printf " \n unmarshalled elastev TS: %f  \n" ts1;
-      let ts, _ = Dllist.get_data elast in
-      Printf.printf "\n unmarshalled elast TS: %f \n" ts;
+     (* If auxrels contains elements, rebuild tree and restore elast by getting all elements of auxrels
+         where the timestamp is smaller than that of elastev *)
+      let (_, tsq) = NEval.get_data cell in
+      let (tsj, _) = Dllist.get_first meauxrels in
+      if ((MFOTL.ts_minus tsj tsq) < 0.0) then
+        let tree_list, elast =
+          let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
+          Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
+        in
+        let _, ts1 = Dllist.get_data cell in
+        Printf.printf " \n unmarshalled elastev TS: %f  \n" ts1;
+        let ts, _ = Dllist.get_data elast in
+        Printf.printf "\n unmarshalled elast TS: %f \n" ts;
 
-      let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
-      einf
+        let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
+        einf
       else return_empty
     else begin
       return_empty
@@ -225,9 +254,12 @@ let m_to_ext mf neval =
   in
   let mo2e intv moinf =
     Printf.printf "\n NEval length: %d " (NEval.length neval);
-    (* TODO: verify correctness *)
     let moauxrels = moinf.moauxrels in
     let (tsq, rel) = Dllist.get_last moauxrels in
+    (*Consider interval [a,b): Retrieves tree relevant list of auxrels elements, aswell as olast by setting the break condition to hold until
+      the first element whose timestamp does not have distance "a" from the last auxrel element's timestamp.
+      - ozlast thus is the last element in auxrels which has distance a from the last element from auxrels
+      - tree [list] contains all auxrel elements up to and including olast.*)
     if not (Dllist.is_empty moauxrels) then
       let tree_list, olast =
         let cond = fun (tsj,_) -> (MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv) in
@@ -239,15 +271,19 @@ let m_to_ext mf neval =
     let oinf = { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moauxrels } in
     oinf
     else begin
+      (* If auxrels is empty, set tree to be invalid, forcing reevaluation in the algorithm *)
       let otree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
       let olast = Dllist.void in
       { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
     end
   in
   let moz2e intv mozinf =
-    (* TODO: verify correctness *)
     let mozauxrels = mozinf.mozauxrels in
     if not (Dllist.is_empty mozauxrels) then
+      (* Retrieves tree relevant list of auxrels elements, aswell as ozlast by setting the break condition to hold until
+         the first element not in the left extent of the interval. 
+         - ozlast thus is the last element of auxrels within the interval
+         - tree [list] contains all auxrel elements up to and including ozlast.*)
       let tree_list, ozlast  =
         let (_, tsq, arel) = Dllist.get_first mozauxrels in
         let f = fun (j,_,rel) -> (j,rel) in
@@ -259,6 +295,7 @@ let m_to_ext mf neval =
       Printf.printf "\n Unmarshalling: ozlast TP = %d \n" tp; 
       { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
     else begin
+     (* If auxrels is empty, set tree to be invalid, forcing reevaluation in the algorithm *)
       let oztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
       let ozlast = Dllist.void in
       { oztree = oztree; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
