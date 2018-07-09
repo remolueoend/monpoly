@@ -53,5 +53,3 @@ type 'a atree =
 type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree
 
 val get_new_elements: 'a Dllist.dllist -> 'a Dllist.cell -> ('a -> bool) -> ('a -> 'b) -> 'b list * 'a Dllist.cell
-
-val get_elastev: 'a Dllist.dllist -> 'a Dllist.cell -> ('a -> bool) -> 'a Dllist.cell

@@ -114,24 +114,3 @@ let get_new_elements l last cond f =
         get (Dllist.get_next l last) last []
       else
         [], last
-   
-let get_elastev l last cond =
-    let rec get crt new_last abort =
-        let v = Dllist.get_data crt in
-        if cond v then
-          if Dllist.is_last l crt then
-            crt
-          else
-            get (Dllist.get_next l crt) crt false
-        else 
-          if abort then 
-            new_last
-          else
-            get (Dllist.get_next l crt) crt true
-      in
-      if last == Dllist.void then
-        get (Dllist.get_first_cell l) Dllist.void false
-      else if not (Dllist.is_last l last) then
-        get (Dllist.get_next l last) last false
-      else
-        last
