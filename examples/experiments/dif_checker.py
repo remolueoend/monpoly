@@ -66,4 +66,5 @@ print "Info: Duplicate Entries"
 for e in dup2:
 	sys.stdout.write(e+" ")
 sys.stdout.flush()
+print "\n"
 

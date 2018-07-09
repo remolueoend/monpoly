@@ -10,7 +10,7 @@ args = parser.parse_args()
 
 duplicates = args.duplicates.lower() == "true"
 
-print (duplicates)
+print ("Duplicates for combine: " + str(duplicates))
 
 def extractTs(line):
   arr = line.split(" ")
@@ -104,16 +104,26 @@ count = 0
 with open (args.output + "-start.log", "w") as s:
   with open (args.output + "-left.log", "w") as o1:
     with open (args.output + "-right.log", "w") as o2:
-      with open (args.output + "-end.log", "w") as e:
-        with open(args.input) as fp:
-          for line in fp:
-            count = count + 1
-            if count < 0.35 * num_lines:
-              s.write(line)
-            elif count < 0.6 * num_lines:
-              processLine(line, o1, o2)
-            else:
-              e.write(line)
-	s.write("> split_state (t:int),  (),(0)  (),(1) <")
-	o1.write("> save_and_exit left-es <")
-	o2.write("> save_and_exit right-es <")
+      with open (args.output + "-save.log", "w") as o3:
+        with open (args.output + "-resume.log", "w") as o4:
+          with open (args.output + "-end.log", "w") as e:
+            with open(args.input) as fp:
+              for line in fp:
+                count = count + 1
+                if count < 0.35 * num_lines:
+                  s.write(line)
+                elif count < 0.6 * num_lines:
+                  processLine(line, o1, o2)
+                else:
+                  e.write(line)
+
+                if count < 0.43 * num_lines:
+                  o3.write(line)
+                else:
+                  o4.write(line)
+
+              s.write("> split_state (t:int),  (),(0)  (),(1) <")
+              o1.write("> save_and_exit left-es <")
+              o2.write("> save_and_exit right-es <")
+
+              o3.write("> save_and_exit checkpoint <")
