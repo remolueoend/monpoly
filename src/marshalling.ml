@@ -134,6 +134,16 @@ let ext_to_m ff neval =
   including optimization structures such as sliding trees.
 *)
 let m_to_ext mf neval = 
+  let rec get_lastev crt cond =
+    if not (NEval.is_last neval crt) then
+      let e = NEval.get_next neval crt in
+      if cond (NEval.get_data e) && not (NEval.is_last neval e) then
+        get_lastev e cond
+      else
+        e  
+    else crt   
+  in    
+
   let mez2e intv mezinf =
    (* contents of inf:
        ezlastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
@@ -146,9 +156,7 @@ let m_to_ext mf neval =
       if NEval.is_empty neval then NEval.void
       else begin 
         let (_, tsq) = NEval.get_first neval in
-        let cond = fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
-        let _, c = Helper.get_new_elements neval NEval.void cond (fun x -> x) in
-        c
+        get_lastev (NEval.get_first_cell neval) (fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv)
     end
     in
     (* if auxrels is empty or ezlastev is void return invalid tree, forcing reevaluation in the algorithm *)
@@ -195,15 +203,7 @@ let m_to_ext mf neval =
       if NEval.is_empty neval then NEval.void
       else begin
         let _, tsq = NEval.get_first neval in
-        let rec get_elem crt =
-            let e = NEval.get_next neval crt in
-            let (_, tsj) = NEval.get_data e in
-            if MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv && not (NEval.is_last neval e) then
-              get_elem e
-            else
-              e
-        in
-        get_elem (NEval.get_first_cell neval)
+        get_lastev (NEval.get_first_cell neval) (fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv)
     end
     in
     (* if auxrels is empty or elastev is void return invalid tree, forcing reevaluation in the algorithm *)

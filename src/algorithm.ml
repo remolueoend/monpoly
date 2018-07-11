@@ -2176,13 +2176,12 @@ let rec check_log lexbuf ff closed neval i =
     let save_state c params = match params with
       | Some (Argument filename) ->
         marshal filename i !lastts ff closed neval;
-        Printf.printf "Saved state\n%!"
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
     let save_and_exit c params =  match params with
       | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
-      | None -> Printf.printf "%s: No filename specified, continuing with index %d\n%!" c i;
+      | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
     let get_constraints p = match p with
       (* Other case already handle by check split param *)
@@ -2191,7 +2190,7 @@ let rec check_log lexbuf ff closed neval i =
     in
     let split_state   c params = match params with
       | Some p -> if (checkSplitParam p = true) then split_and_save (get_constraints p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
-      | None -> Printf.printf "%s: No parameters specified, continuing with index %d\n%!" c i;
+      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
 
     match Log.get_next_entry lexbuf with
@@ -2202,13 +2201,13 @@ let rec check_log lexbuf ff closed neval i =
                print_newline ();
                loop ffl i
             | "terminate" ->
-               Printf.printf "Terminated at index: %d \n%!" i
+               Printf.printf "Terminated at timepoint: %d \n%!" !tp
             | "print_and_exit" ->
                print_extf "Current extended formula:\n" ff;
                print_newline ();
-               Printf.printf "Terminated at index: %d \n%!" i
+               Printf.printf "Terminated at timepoint: %d \n%!" !tp
             | "get_pos"   ->
-                Printf.printf "Current index: %d \n%!" !tp;
+                Printf.printf "Current timepoint: %d \n%!" !tp;
                 loop ffl i
             | "save_state" ->
                 save_state c parameters;
@@ -2283,7 +2282,7 @@ let test_filter logfile f =
               | "terminate" ->
                 Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
               | "get_pos"   ->
-                Printf.printf "Current index: %d \n" !tp;
+                Printf.printf "Current timepoint: %d \n" !tp;
                 loop f i
               | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
@@ -2302,7 +2301,6 @@ let resume logfile =
   Log.skipped_tps := 0;
   Log.last := last;
   let lexbuf = Log.log_open logfile in
-  Printf.printf "Loaded state\n%!";
   check_log lexbuf ff closed neval 0
   
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
