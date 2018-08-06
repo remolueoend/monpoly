@@ -19,6 +19,14 @@ type mezinfo = { mezauxrels:  (int * timestamp * relation) Dllist.dllist}
 
 type meinfo  = { meauxrels:  (timestamp * relation) Dllist.dllist}
 
+
+(*  IMPORTANT/TODO
+    The int pointers in the marshalled states can only be used if we work under the assumption that:
+    1. Each split state marshals the whole formula (given by implementation)
+    2. Each Monpoly instance receives all timepoints, without filtering at the source (dependent on the scope of the project)
+
+    If 2. is no longer given by the project, the pointers will be different for different Monpoly instances and can no longer just be combined when merging
+*)
 type muinfo  = { mulast   :  int;
                  mufirst  :  bool;
                  mures    :  relation;

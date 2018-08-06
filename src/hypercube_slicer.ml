@@ -1,4 +1,5 @@
 open Murmur_hash3
+open Predicate
 open MFOTL
 
 type share = int array
@@ -7,18 +8,23 @@ type integral_value = int
 type string_value   = string
 
 type domain = 
-  | IntegralValue of integral_value
-  | StringValue   of string_value
+  | Some of cst
+  | None
 
 module Domain_Set = Set.Make (
   struct type t = domain
     let compare = Pervasives.compare
   end)
 
+let contains_cst cst ds =
+  Domain_Set.exists (fun x -> 
+    match x with
+    | None -> false
+    | Some v -> cst == v
+  ) ds
+
 include Domain_Set
-
 type domain_set = Domain_Set.t
-
 type heavy = int * domain_set
 
 type hypercube_slicer = {
@@ -28,28 +34,19 @@ type hypercube_slicer = {
   seed: int
 }
 
+let dimensions slicer = List.length (MFOTL.free_vars slicer.formula)
+
 let degree slicer = 
   let simple_shares = slicer.shares.(0) in
   if (Array.length simple_shares == 0) then 1
   else Array.fold_left (fun acc b -> acc * b) 1 simple_shares
 
-let dimensions slicer = List.length (MFOTL.free_vars slicer.formula)
-
-let variables_in_order slicer = MFOTL.free_vars slicer.formula
-
-let hash value seed = match value with
-  | IntegralValue x ->
-    let lo = x in
-    let hi = shift_left x 32 in
-    Murmur_hash3.finalize_hash (Murmur_hash3.mix_last (Murmur_hash3.mix seed lo) hi) 0
-  | StringValue   x -> Murmur_hash3.string_hash x seed
-
-
 let seeds slicer =
+  (* TODO: verify how this should be done *)
+  let bound = Int32.max_int in
   let () = Random.init slicer.seed in
   Array.init (Array.length slicer.shares) (fun _ -> 
-   (* TODO: which int to use *)
-    Array.init (dimensions slicer) (fun _ -> Random.int (logxor 2 30)))
+    Array.init (dimensions slicer) (fun _ -> Int32.to_int (Random.int32 bound)))
 
 let strides slicer = 
   let shares = slicer.shares in
@@ -57,15 +54,28 @@ let strides slicer =
   let strides = Array.init (Array.length shares) 
       (fun _ -> Array.init dims (fun _ -> 1))
   in
-  let rec update s h i = 
+  (*let rec update s h i = 
     if i < dims then begin
       let () = s.(i) <- s.(i - 1) * shares.(h).(i - 1) in
       update s h (i+1)
     end
     else ()
-  in
-  let () = Array.iteri (fun h s -> update s h 1) strides in
+  in*)
+  let () = Array.iteri (
+    fun h s -> for i = 1 to dims do s.(i) <- s.(i - 1) * shares.(h).(i - 1) done
+    ) strides in
   strides
+
+let handle_hash x seed = 
+  let lo = x in
+  let hi = shift_left x 32 in
+  Murmur_hash3.finalize_hash (Murmur_hash3.mix_last (Murmur_hash3.mix seed lo) hi) 0
+
+let hash value seed = match value with
+  | Int   x -> handle_hash x seed
+  | Str   x -> Murmur_hash3.string_hash x seed
+  (*TODO*)
+  | Float x -> handle_hash (int_of_float x) seed
 
 let add_slices_of_valuation slicer valuation slices =
   let heavy_set = ref 0 in
@@ -75,19 +85,22 @@ let add_slices_of_valuation slicer valuation slices =
   
   let rec calc_heavy i = 
     if i < Array.length valuation then
-      (*let var_id = free_id vars_in_order.(i)  in *)
-      let i, s = heavy.(i) in
-      if (i >= 0) then
+      (*
+      TODO: check this
+      let var_id = free_id vars_in_order.(i)  in *)
+      let v, s = heavy.(i) in
+      if (v >= 0) then
         let value = valuation.(i) in
-        (* TODO: conditions *)
-        if (value == value) then
-          unconstrained_set := !unconstrained_set + (shift_left 1 i);
-        else if (0 == 0) then
-          heavy_set := !heavy_set + (shift_left 1 i);
+        match value with 
+          | None     -> unconstrained_set := !unconstrained_set + (shift_left 1 v);
+          | Some cst -> 
+            if contains_cst cst s then 
+               heavy_set := !heavy_set + (shift_left 1 v);
       calc_heavy (i+1)
     else ()
   in
   let () = calc_heavy 0 in
+
   let add_slices_for_heavy_set heavy_set =
     let the_seeds = (seeds slicer).(heavy_set) in
     let the_strides = (strides slicer).(heavy_set) in
@@ -97,9 +110,13 @@ let add_slices_of_valuation slicer valuation slices =
 
     let rec calc_slice i = 
       if i < (Array.length valuation) then
-        (*let var_id = free_id vars_in_order.(i)  in *)
+        (*
+        TODO: check this
+        let var_id = free_id vars_in_order.(i)  in *)
         let value = valuation.(i) in
-        slice_index := the_strides.(i) * ((mod) (hash value the_seeds.(i)) the_shares.(i));
+        match value with 
+          | Some v -> slice_index := the_strides.(i) * ((mod) (hash v the_seeds.(i)) the_shares.(i));
+          | None   -> ();
         calc_slice (i+1)
       else ()  
     in     
@@ -110,18 +127,17 @@ let add_slices_of_valuation slicer valuation slices =
         slices := !slices + k
       else begin  
         let value = valuation.(i) in
-        if (value == value) then begin
-          let rec iterate j =
-            if (j < the_shares.(i)) then begin
-              broadcast (i - 1) (k + the_strides.(i) * j);
-              iterate (j + 1)
-            end   
-            else ()
-           in  
-           iterate 0 
-          end   
-        else 
-          broadcast (i - 1) k
+        match value with 
+          | Some cst -> broadcast (i - 1) k
+          | None     -> 
+              let rec iterate j =
+                if (j < the_shares.(i)) then begin
+                  broadcast (i - 1) (k + the_strides.(i) * j);
+                  iterate (j + 1)
+                end   
+                else ()
+              in  
+              iterate 0 
       end  
     in
     broadcast (Array.length valuation - 1) !slice_index  
@@ -135,10 +151,14 @@ let add_slices_of_valuation slicer valuation slices =
       else cover_unconstrained (shift_right m 1) h
     end   
   in
+
   if (Array.length valuation == 0) then
     add_slices_for_heavy_set !heavy_set
   else 
     cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set
+
+(* TODO: check ordering *)
+let variables_in_order slicer = MFOTL.free_vars slicer.formula
 
 let mk_verdict_filter slicer slice verdict =
   let heavy_set = ref 0 in
@@ -146,14 +166,16 @@ let mk_verdict_filter slicer slice verdict =
   let vars_in_order = Array.init (List.length vars_in_order) (fun _ -> List.hd vars_in_order) in
   let rec calc_heavy i = 
     if i < Array.length vars_in_order then
-      (*let var_id = free_id vars_in_order.(i)  in *)
+      (*
+      TODO: check this
+      let var_id = free_id vars_in_order.(i)  in *)
       let var_id = i in
       let value = verdict.(i) in
       let heavyMap = slicer.heavy.(var_id) in
     
-      let i, s = heavyMap in
-      if (i >= 0 && (Domain_Set.exists (fun e -> e = value) s)) then
-        heavy_set := !heavy_set + (shift_left 1 i);
+      let v, s = heavyMap in
+      if (v >= 0 && (contains_cst value s)) then
+        heavy_set := !heavy_set + (shift_left 1 v);
 
       calc_heavy (i+1)
     else ()
@@ -177,4 +199,5 @@ let mk_verdict_filter slicer slice verdict =
     else ()  
   in    
   let () = calc_expected 0 in
+  
   calc_expected 0 == slice  
