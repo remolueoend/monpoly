@@ -25,7 +25,8 @@ OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
 MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
       tuple.mli relation.mli table.mli db.mli \
       rewriting.mli filter_rel.mli filter_empty_tp.mli sliding.mli \
-	  helper.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli
+	  helper.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
+	  murmur_hash3.mli hypercube_slicer.mli
 
 OURMLI = $(MLI) log.mli algorithm.mli 
 

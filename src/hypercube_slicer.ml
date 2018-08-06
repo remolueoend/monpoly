@@ -40,7 +40,7 @@ let variables_in_order slicer = MFOTL.free_vars slicer.formula
 let hash value seed = match value with
   | IntegralValue x ->
     let lo = x in
-    let hi = x lsr 32 in
+    let hi = shift_left x 32 in
     Murmur_hash3.finalize_hash (Murmur_hash3.mix_last (Murmur_hash3.mix seed lo) hi) 0
   | StringValue   x -> Murmur_hash3.string_hash x seed
 
@@ -49,7 +49,7 @@ let seeds slicer =
   let () = Random.init slicer.seed in
   Array.init (Array.length slicer.shares) (fun _ -> 
    (* TODO: which int to use *)
-    Array.init (dimensions slicer) (fun _ -> Random.int (int_of_float (2. ** 30.))))
+    Array.init (dimensions slicer) (fun _ -> Random.int (logxor 2 30)))
 
 let strides slicer = 
   let shares = slicer.shares in
@@ -81,9 +81,9 @@ let add_slices_of_valuation slicer valuation slices =
         let value = valuation.(i) in
         (* TODO: conditions *)
         if (value == value) then
-          unconstrained_set := !unconstrained_set + (1 lsl i);  
+          unconstrained_set := !unconstrained_set + (shift_left 1 i);
         else if (0 == 0) then
-          heavy_set := !heavy_set + (1 lsl i);
+          heavy_set := !heavy_set + (shift_left 1 i);
       calc_heavy (i+1)
     else ()
   in
@@ -130,15 +130,15 @@ let add_slices_of_valuation slicer valuation slices =
   let rec cover_unconstrained m h =
     if (h == 0) then add_slices_for_heavy_set h
     else begin
-      if (!unconstrained_set land m != 0) then
-        cover_unconstrained (m lsr 1) (h lor m)
-      else cover_unconstrained (m lsr 1) h  
+      if (logand !unconstrained_set m != 0) then
+        cover_unconstrained (shift_right m 1) (logor h m)
+      else cover_unconstrained (shift_right m 1) h
     end   
   in
   if (Array.length valuation == 0) then
     add_slices_for_heavy_set !heavy_set
   else 
-    cover_unconstrained (1 lsr ((Array.length valuation) - 1)) !heavy_set
+    cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set
 
 let mk_verdict_filter slicer slice verdict =
   let heavy_set = ref 0 in
@@ -153,7 +153,7 @@ let mk_verdict_filter slicer slice verdict =
     
       let i, s = heavyMap in
       if (i >= 0 && (Domain_Set.exists (fun e -> e = value) s)) then
-        heavy_set := !heavy_set + (1 lsl i);
+        heavy_set := !heavy_set + (shift_left 1 i);
 
       calc_heavy (i+1)
     else ()
