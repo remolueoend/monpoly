@@ -183,6 +183,12 @@ let pvars (p:predicate) =
   Misc.remove_duplicates (get_vars (get_args p))
 
 
+let cst_eq c c' =
+  match c, c' with
+  | Int a, Int a'     -> a == a'
+  | Str a, Str a'     -> compare a a' == 0
+  | _ -> failwith "[Predicate.cst_eq] incomparable constants"
+
 let cst_smaller c c' =
   match c,c' with
   | Int a, Int a' -> a < a'

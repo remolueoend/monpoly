@@ -77,6 +77,8 @@ val avg: cst -> cst -> cst
 val plus: cst -> cst -> cst
 val minus: cst -> cst -> cst
 
+val cst_eq: cst -> cst -> bool
+
 (** A predicate consists of a name and a list of term arguments. It is
     thus an atomic formula. *)
 type predicate

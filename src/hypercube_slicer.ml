@@ -20,7 +20,7 @@ let contains_cst cst ds =
   Domain_Set.exists (fun x -> 
     match x with
     | None -> false
-    | Some v -> cst == v
+    | Some v -> cst_eq cst v
   ) ds
 
 include Domain_Set
@@ -199,5 +199,5 @@ let mk_verdict_filter slicer slice verdict =
     else ()  
   in    
   let () = calc_expected 0 in
-  
+
   calc_expected 0 == slice  

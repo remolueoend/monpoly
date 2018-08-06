@@ -1,11 +1,10 @@
+open Predicate
+
 type share = int array
 
-type integral_value = int
-type string_value   = string
-
 type domain = 
-  | IntegralValue of integral_value
-  | StringValue   of string_value
+  | Some of cst
+  | None
 
 type domain_set
 type heavy = int * domain_set
