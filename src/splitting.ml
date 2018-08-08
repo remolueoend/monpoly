@@ -343,37 +343,8 @@ let rec comb_m f1 f2  =
 
 
 (* SPLITTING STATE *)
-
-(* For each formula, returns list of relevant free variables according to sub structure *)
-let get_predicate f =
-  let pvars p = Predicate.pvars p in
-  let rec get_pred = function
-  | MRel           (_)                    -> []
-  | MPred          (p, _, _)              -> pvars p
-  | MNeg           (f1)                   -> get_pred f1
-  | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
-  | MOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
-  (* Utilize comp to map away unwanted elements of pvars *)
-  | MExists        (comp, f1)             -> Helper.rel_to_pvars (comp (Helper.pvars_to_rel(get_pred f1))   )
-  | MAggreg        (_, f1)                -> get_pred f1
-  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1
-  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1
-  | MPrev          (_, f1, _)             -> get_pred f1
-  | MNext          (_, f1, _)             -> get_pred f1
-  | MSinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MSince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MOnceA         (_, f1, _)             -> get_pred f1
-  | MOnceZ         (_, f1, _)             -> get_pred f1
-  | MOnce          (_, f1, _)             -> get_pred f1
-  | MNUntil        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MUntil         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
-  | MEventuallyZ   (_, f1, _)             -> get_pred f1
-  | MEventually    (_, f1, _)             -> get_pred f1
-  in
-  get_pred f
-
-let get_predicate2 f1 f2 =
-  Misc.union (get_predicate f1) (get_predicate f2)
+let free_vars2 f1 f2 =
+  Misc.union (Mformula.free_vars f1) (Mformula.free_vars f2)
 
 let list_to_string l =
   let str = ref "" in
@@ -401,10 +372,10 @@ let pred_list_to_string l =
   !str
 
 let split_debug f op =
-  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (get_predicate f)) op
+  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (Mformula.free_vars f)) op
 
 let split_debug2 f1 f2 op =
-  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (get_predicate2 f1 f2)) op
+  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (free_vars2 f1 f2)) op
 
 let get_1 (a,_) = a
 let get_2 (_,b) = b
@@ -591,8 +562,8 @@ let split_state mapping mf size =
     let dllists = split_dll2 meinf.meauxrels p in
     Array.map (fun e -> { meauxrels = e }) dllists
   in
-  let p1 f1 = get_predicate f1 in
-  let p2 f1 f2 = get_predicate2 f1 f2 in
+  let p1 f1 = Mformula.free_vars f1 in
+  let p2 f1 f2 = free_vars2 f1 f2 in
   (* Recursive split call: At each step 
      - call split on the subformula(s), resulting in array(s)
      - get the relevant list of free vars and split the state, resulting in an array 
@@ -671,6 +642,8 @@ let split_formula sconsts dumpfile i lastts mf closed neval =
   let mapping = split_according_to_modulo keys numparts in
   split_state mapping mf numparts
 
+let split_with_slicer slicer num_partitions dumpfile i lastts mf closed neval =
+  split_state slicer mf num_partitions
 
 (* END SPLITTING STATE *) 
 

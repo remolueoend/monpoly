@@ -1,11 +1,9 @@
 open Murmur_hash3
 open Predicate
-open MFOTL
+open Helper
+open Tuple
+open Mformula
 
-type share = int array
-
-type integral_value = int
-type string_value   = string
 
 type domain = 
   | Some of cst
@@ -16,6 +14,28 @@ module Domain_Set = Set.Make (
     let compare = Pervasives.compare
   end)
 
+include Domain_Set
+
+type domain_set = Domain_Set.t
+
+type heavy = int * domain_set
+
+type share = int array
+
+type integral_value = int
+type string_value   = string
+
+type split_resume_parameters = (string * heavy array * int array array * int array array)
+
+type hypercube_slicer = {
+  formula: mformula;
+  heavy:  heavy array;
+  shares: int array array;
+  seeds: int array array;
+  strides: int array array;
+  degree: int;
+}
+
 let contains_cst cst ds =
   Domain_Set.exists (fun x -> 
     match x with
@@ -23,34 +43,23 @@ let contains_cst cst ds =
     | Some v -> cst_eq cst v
   ) ds
 
-include Domain_Set
-type domain_set = Domain_Set.t
-type heavy = int * domain_set
+let dimensions formula = List.length (Mformula.free_vars formula)
 
-type hypercube_slicer = {
-  formula: MFOTL.formula;
-  heavy:  heavy array;
-  shares: share array;
-  seed: int
-}
-
-let dimensions slicer = List.length (MFOTL.free_vars slicer.formula)
-
-let degree slicer = 
-  let simple_shares = slicer.shares.(0) in
+let degree shares = 
+  let simple_shares = shares.(0) in
   if (Array.length simple_shares == 0) then 1
   else Array.fold_left (fun acc b -> acc * b) 1 simple_shares
 
-let seeds slicer =
-  (* TODO: verify how this should be done *)
+(*let seeds slicer =
+  (* Now passed as parameter *)
   let bound = Int32.max_int in
   let () = Random.init slicer.seed in
   Array.init (Array.length slicer.shares) (fun _ -> 
-    Array.init (dimensions slicer) (fun _ -> Int32.to_int (Random.int32 bound)))
+    Array.init (dimensions slicer) (fun _ -> Int32.to_int (Random.int32 bound)))*)
 
-let strides slicer = 
-  let shares = slicer.shares in
-  let dims = dimensions slicer in
+let strides shares dimensions = 
+  let shares = shares in
+  let dims = dimensions in
   let strides = Array.init (Array.length shares) 
       (fun _ -> Array.init dims (fun _ -> 1))
   in
@@ -77,7 +86,23 @@ let hash value seed = match value with
   (*TODO*)
   | Float x -> handle_hash (int_of_float x) seed
 
-let add_slices_of_valuation slicer valuation slices =
+(* TODO: check ordering *)
+let variables_in_order slicer = Mformula.free_vars slicer.formula
+
+let add_slices_of_valuation slicer tuple free_vars =
+  (*let slices = Slice_Set.empty in*)
+  let slices = [] in
+  let tuple = Array.of_list tuple in
+
+  let free_vars_full = variables_in_order slicer in
+
+  let valuation = Array.init (List.length free_vars_full) (fun _ -> None) in
+
+  (* TODO: mapping of vars to vars_full *)
+  let pos     = Array.of_list (List.map (fun v -> Misc.get_pos v free_vars_full ) free_vars) in
+  Array.iteri (fun i e -> valuation.(pos.(i)) <- Some e ) tuple;
+
+
   let heavy_set = ref 0 in
   let unconstrained_set = ref 0 in
 
@@ -102,9 +127,9 @@ let add_slices_of_valuation slicer valuation slices =
   let () = calc_heavy 0 in
 
   let add_slices_for_heavy_set heavy_set =
-    let the_seeds = (seeds slicer).(heavy_set) in
-    let the_strides = (strides slicer).(heavy_set) in
-    let the_shares = (slicer.shares).(heavy_set) in
+    let the_seeds   = (slicer.seeds).(heavy_set) in
+    let the_strides = (slicer.strides).(heavy_set) in
+    let the_shares  = (slicer.shares).(heavy_set) in
 
     let slice_index = ref 0 in
 
@@ -122,25 +147,25 @@ let add_slices_of_valuation slicer valuation slices =
     in     
     let () = calc_slice 0 in
 
-    let rec broadcast i k =
+    let rec broadcast slices i k =
       if i < 0 then 
-        slices := !slices + k
+        k :: slices
       else begin  
         let value = valuation.(i) in
         match value with 
-          | Some cst -> broadcast (i - 1) k
+          | Some cst -> broadcast slices (i - 1) k
           | None     -> 
-              let rec iterate j =
+              let rec iterate slices j =
                 if (j < the_shares.(i)) then begin
-                  broadcast (i - 1) (k + the_strides.(i) * j);
-                  iterate (j + 1)
+                  let slices = broadcast slices (i - 1) (k + the_strides.(i) * j) in
+                  iterate slices (j + 1)
                 end   
-                else ()
+                else slices
               in  
-              iterate 0 
+              iterate slices 0 
       end  
     in
-    broadcast (Array.length valuation - 1) !slice_index  
+    broadcast slices (Array.length valuation - 1) !slice_index  
   in
 
   let rec cover_unconstrained m h =
@@ -153,12 +178,9 @@ let add_slices_of_valuation slicer valuation slices =
   in
 
   if (Array.length valuation == 0) then
-    add_slices_for_heavy_set !heavy_set
+    Array.of_list (add_slices_for_heavy_set !heavy_set)
   else 
-    cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set
-
-(* TODO: check ordering *)
-let variables_in_order slicer = MFOTL.free_vars slicer.formula
+    Array.of_list (cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set)
 
 let mk_verdict_filter slicer slice verdict =
   let heavy_set = ref 0 in
@@ -183,8 +205,8 @@ let mk_verdict_filter slicer slice verdict =
   let () = calc_heavy 0 in
   let heavy_set = !heavy_set in
 
-  let the_seeds = (seeds slicer).(heavy_set) in
-  let the_strides = (strides slicer).(heavy_set) in
+  let the_seeds = (slicer.seeds).(heavy_set) in
+  let the_strides = (slicer.strides).(heavy_set) in
   let the_shares = (slicer.shares).(heavy_set) in
 
   let expected_slice = ref 0 in
@@ -201,3 +223,10 @@ let mk_verdict_filter slicer slice verdict =
   let () = calc_expected 0 in
 
   calc_expected 0 == slice  
+
+let create_slicer formula heavy shares seeds =
+  let degree = degree shares in
+  let dimensions = dimensions formula in  
+  let strides = strides seeds dimensions in
+  
+  { formula = formula; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }

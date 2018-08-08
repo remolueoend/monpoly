@@ -87,6 +87,7 @@ open Marshalling
 open Splitting
 open Extformula
 open Mformula
+open Hypercube_slicer
 
 module NEval = Dllist
 module Sk = Dllist
@@ -2094,7 +2095,6 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result
 
-
 let test_neval_combine =
   let nv1 = NEval.empty() in
   let nv2 = NEval.empty() in
@@ -2291,6 +2291,18 @@ let test_filter logfile f =
           process_command c;
   in
   loop f 0 
+
+
+let split_new (params : split_resume_parameters) i lastts ff closed neval  =
+  let filename, heavy, shares, seeds = params in
+  dumpfile := filename;
+  (*Splitting.print_ef ff;*)
+  print_endline "Marshalling";
+  let a, mf = Marshalling.ext_to_m ff neval in
+  print_endline "Splitting";
+  let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
+  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) dumpfile i lastts mf closed neval in
+  result
 
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)

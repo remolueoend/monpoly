@@ -60,3 +60,5 @@ type mformula =
   | MEventually of interval * mformula * meinfo
 
 type state = (timestamp * bool * mformula * (int * timestamp) array * int * bool)
+
+val free_vars: mformula -> Predicate.var list

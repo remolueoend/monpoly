@@ -95,7 +95,6 @@ type extformula =
   | EEventuallyZ of interval * extformula * ezinfo
   | EEventually of interval * extformula * einfo
 
-
 (* 
   Print functions used for debugging
  *)  
