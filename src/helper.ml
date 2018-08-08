@@ -22,8 +22,9 @@ type constraintRelation = sconstraint list
 type splitParameters = {keys: string list; constraints: constraintRelation; num_partitions: int }
 
 type commandParameter = 
+    | SplitSave       of Domain_set.split_save_parameters
     | SplitParameters of splitParameters
-    | Argument of string
+    | Argument        of string
 
 type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
 type commandTuple = { c: string;  parameters: commandParameter option; }

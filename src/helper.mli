@@ -25,6 +25,7 @@ val pvars_to_rel: string list -> Relation.relation
 val rel_to_pvars: Relation.relation -> string list
 
 type commandParameter = 
+    | SplitSave       of Domain_set.split_save_parameters
     | SplitParameters of splitParameters
     | Argument        of string
 

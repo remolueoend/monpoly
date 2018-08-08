@@ -3,29 +3,11 @@ open Predicate
 open Helper
 open Tuple
 open Mformula
+open Domain_set
 
-
-type domain = 
-  | Some of cst
-  | None
-
-module Domain_Set = Set.Make (
-  struct type t = domain
-    let compare = Pervasives.compare
-  end)
-
-include Domain_Set
-
-type domain_set = Domain_Set.t
-
-type heavy = int * domain_set
-
-type share = int array
 
 type integral_value = int
 type string_value   = string
-
-type split_resume_parameters = (string * heavy array * int array array * int array array)
 
 type hypercube_slicer = {
   formula: mformula;
@@ -36,12 +18,6 @@ type hypercube_slicer = {
   degree: int;
 }
 
-let contains_cst cst ds =
-  Domain_Set.exists (fun x -> 
-    match x with
-    | None -> false
-    | Some v -> cst_eq cst v
-  ) ds
 
 let dimensions formula = List.length (Mformula.free_vars formula)
 

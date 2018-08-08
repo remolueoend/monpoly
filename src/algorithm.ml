@@ -2069,6 +2069,21 @@ let unmarshal resumefile =
   let ff = Marshalling.m_to_ext mf neval in
   (last_ts,ff,closed,neval,tp,last)
 
+let split_save params i lastts ff closed neval  =
+  let filename, heavy, shares, seeds = params in
+
+  (*Splitting.print_ef ff;*)
+  print_endline "Marshalling";
+  let a, mf = Marshalling.ext_to_m ff neval in
+  print_endline "Splitting";
+  let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
+  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) filename i lastts mf closed neval in
+
+  print_endline "Dumping";
+  Array.iteri (fun index mf ->
+  let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
+  dump_to_file (filename ^ (string_of_int index)) value) result
+
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
    with names of index prepended with dumpfile variable.
@@ -2183,13 +2198,22 @@ let rec check_log lexbuf ff closed neval i =
       | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
-    let get_constraints p = match p with
+    let get_constraints_split_state p = match p with
       (* Other case already handle by check split param *)
       | SplitParameters sp -> sp
       | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
     in
+    let get_constraints_split_respore p = match p with
+    (* Other case already handle by check split param *)
+    | SplitSave sr -> sr
+    | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
+  in
     let split_state   c params = match params with
-      | Some p -> if (checkSplitParam p = true) then split_and_save (get_constraints p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkSplitParam p = true) then split_and_save (get_constraints_split_state p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
+    in
+    let split_save   c params = match params with
+      | Some p -> if (checkSplitParam p = true) then split_save (get_constraints_split_respore p) i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
 
@@ -2212,6 +2236,8 @@ let rec check_log lexbuf ff closed neval i =
             | "save_state" ->
                 save_state c parameters;
                 loop ffl i
+            | "split_save_new" ->
+                split_save c parameters;
             | "save_and_exit" ->  save_and_exit c parameters;
             | "split_state" ->    split_state   c parameters;
             | _ ->
@@ -2291,18 +2317,6 @@ let test_filter logfile f =
           process_command c;
   in
   loop f 0 
-
-
-let split_new (params : split_resume_parameters) i lastts ff closed neval  =
-  let filename, heavy, shares, seeds = params in
-  dumpfile := filename;
-  (*Splitting.print_ef ff;*)
-  print_endline "Marshalling";
-  let a, mf = Marshalling.ext_to_m ff neval in
-  print_endline "Splitting";
-  let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) dumpfile i lastts mf closed neval in
-  result
 
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)

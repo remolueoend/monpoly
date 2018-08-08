@@ -1,13 +1,5 @@
 open Predicate
-
-type domain
-type domain_set
-
-type heavy = int * domain_set
-
-type split_resume_parameters = (string * heavy array * int array array * int array array)
-
-val contains_cst: Predicate.cst -> domain_set -> bool
+open Domain_set
 
 type hypercube_slicer = {
   formula: Mformula.mformula;

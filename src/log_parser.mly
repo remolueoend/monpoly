@@ -47,6 +47,7 @@
   open Db
   open Helper
   open Filter_rel
+  open Domain_set
 
   let f str =
     if Misc.debugging Dbg_log then
@@ -168,6 +169,9 @@
 
 let get_2 (_, a) = a
 
+let return_split_restore_parameters = 
+    SplitSave ("dockerfile", [|0, domain_empty|], [|[|0|]|], [|[|0|]|])
+
 (* Creates a SplitParameters by converting value lists to their appropriate type as define by the matching key *)
 let make_split kwt group  =
   let convert_lists valueLists = 
@@ -243,6 +247,7 @@ predicate:
 
 
 tsdb:
+      | CMD STR STR EOC         { CommandTuple { c = $2; parameters = Some return_split_restore_parameters } }
       | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
       | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
       | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
