@@ -2033,6 +2033,12 @@ let rec add_ext f =
   - (Un-)Marshalling, Splitting, Merging
  *)
 
+let split_state_msg = ">Split state"
+let saved_state_msg = ">Saved state"
+let restored_state_msg = ">Loaded state"
+let combined_state_msg = ">Combined state"
+let get_index_prefix_msg = ">Current timepoint:"
+
  (*
   Helper function used in "marshal" and "split_and_save" functions.
   Saves state to specified dumpfile
@@ -2089,10 +2095,7 @@ let split_save params i lastts ff closed neval  =
    with names of index prepended with dumpfile variable.
 *)  
 let split_and_save  sconsts dumpfile i lastts ff closed neval  =
-  (*Splitting.print_ef ff;*)
-  print_endline "Marshalling";
   let a, mf = Marshalling.ext_to_m ff neval in
-  print_endline "Splitting";
   let result = Splitting.split_formula sconsts dumpfile i lastts mf closed neval  in
 
   (*print_endline "CHECKING SPLIT";
@@ -2104,34 +2107,10 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
   print_endline "Odd";
   Splitting.print_ef uf2;*)
 
-  
-  print_endline "Dumping";
   Array.iteri (fun index mf ->
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
-  dump_to_file (dumpfile ^ (string_of_int index)) value) result
-
-let test_neval_combine =
-  let nv1 = NEval.empty() in
-  let nv2 = NEval.empty() in
-
-  (*NEval.add_first (6, MFOTL.ts_of_string "" "5") nv1;
-  NEval.add_first (5, MFOTL.ts_of_string "" "3") nv1;
-  NEval.add_first (4, MFOTL.ts_of_string "" "3") nv1;
-  NEval.add_first (3, MFOTL.ts_of_string "" "2") nv1;
-  NEval.add_first (2, MFOTL.ts_of_string "" "1") nv1;
-  NEval.add_first (1, MFOTL.ts_of_string "" "1") nv1;
-  NEval.add_first (0, MFOTL.ts_of_string "" "0") nv1;
-
-  NEval.add_first (6, MFOTL.ts_of_string "" "5") nv2;
-  NEval.add_first (5, MFOTL.ts_of_string "" "5") nv2;
-  NEval.add_first (4, MFOTL.ts_of_string "" "5") nv2;
-  NEval.add_first (3, MFOTL.ts_of_string "" "3") nv2;
-  NEval.add_first (2, MFOTL.ts_of_string "" "2") nv2;
-  NEval.add_first (1, MFOTL.ts_of_string "" "1") nv2;
-  NEval.add_first (0, MFOTL.ts_of_string "" "0") nv2;*)
-
-  let res = Splitting.combine_neval nv1 nv2 in
-  NEval.iter (fun e -> let i, ts = e in MFOTL.print_ts ts; Printf.printf "i: %d \n" i ) res
+  dump_to_file (dumpfile ^ (string_of_int index)) value) result;
+  Printf.printf "%s\n" split_state_msg
 
 (* Convert comma separated filenames to list of strings *)
 let files_to_list f = 
@@ -2191,6 +2170,7 @@ let rec check_log lexbuf ff closed neval i =
     let save_state c params = match params with
       | Some (Argument filename) ->
         marshal filename i !lastts ff closed neval;
+        Printf.printf "%s\n" saved_state_msg;
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
@@ -2308,7 +2288,7 @@ let test_filter logfile f =
               | "terminate" ->
                 Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
               | "get_pos"   ->
-                Printf.printf "Current timepoint: %d \n" !tp;
+                Printf.printf "%s %d \n" get_index_prefix_msg !tp;
                 loop f i
               | _ ->
                 Printf.printf "UNREGONIZED COMMAND: %s\n" c;
@@ -2327,6 +2307,7 @@ let resume logfile =
   Log.skipped_tps := 0;
   Log.last := last;
   let lexbuf = Log.log_open logfile in
+  Printf.printf "%s\n" restored_state_msg;
   check_log lexbuf ff closed neval 0
   
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
@@ -2341,5 +2322,6 @@ let combine logfile =
   Log.last := last;
 
   let lexbuf = Log.log_open logfile in
+  Printf.printf "%s\n" combined_state_msg;
   check_log lexbuf ff closed neval 0
   
