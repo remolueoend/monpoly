@@ -169,10 +169,27 @@
 
 let get_2 (_, a) = a
 
-let return_split_restore_parameters = 
-    SplitSave ("dockerfile", [|0, domain_empty|], [|[|0|]|], [|[|0|]|])
+let return_split_restore_parameters vars filename heavy_list shares seeds = 
+    let convert heavy_list = 
+      List.map2
+      (fun k (i, heavy_set) ->
+        let t = get_2 k in
+        (i, (domain_set_from_list t heavy_set))
+      )
+      vars heavy_list
+    in
+    let heavy_arr = Array.of_list (convert heavy_list) in
+  
+    SplitSave (filename, heavy_arr, shares, seeds)
 
-(* Creates a SplitParameters by converting value lists to their appropriate type as define by the matching key *)
+let convert_str_list l =  
+  Array.of_list (List.map(fun e -> int_of_string e) l)
+
+let convert_nested_str_list l =
+  Array.of_list (List.map(fun a -> convert_str_list a) l) 
+  
+
+(* Creates a SplitParameters by converting value lists to their appropriate type as defined by the matching key *)
 let make_split kwt group  =
   let convert_lists valueLists = 
     let pos = ref 0 in
@@ -247,7 +264,7 @@ predicate:
 
 
 tsdb:
-      | CMD STR STR EOC         { CommandTuple { c = $2; parameters = Some return_split_restore_parameters } }
+      | CMD STR slicing EOC     { CommandTuple { c = $2; parameters = Some $3 } }
       | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
       | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
       | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
@@ -300,7 +317,25 @@ tuple:
 fields:
       | STR COM fields          { f "fields(list)"; $1::$3 }
       | STR                     { f "fields(end)"; [$1] }
-      |                         { f "fields()"; [] }
+      | 
+                              { f "fields()"; [] }
+slicing: 
+      | LCB keys COM STR COM heavies COM nested_fields COM nested_fields RCB { return_split_restore_parameters $2 $4 $6 (convert_nested_str_list $8) (convert_nested_str_list $10) }
+
+heavies:
+      | LPA heavy RPA           { $2 }
+heavy:
+      | tupleseq COM heavy      { $1::$3 }
+      | tupleseq                { [$1] }
+tupleseq:
+      | LPA STR COM fields RPA  { (int_of_string $2), $4 }
+
+nested_fields:
+      | nested_field COM nested_fields  { $1::$3 }  
+      | nested_field            { [$1] }
+nested_field:
+      | LPA fields RPA          { $2 }
+
 
 parameters:
       | STR                     { Argument   $1    }

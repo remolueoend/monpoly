@@ -84,7 +84,8 @@ val cst_eq: cst -> cst -> bool
 type predicate
 
 
-
+(** Converts a string to a cst given its type *)
+val cst_of_str: tcst -> string -> cst
 
 val make_predicate: var * term list -> predicate
   (** [make_predicate n args] creates a predicate with name [n] and

@@ -41,6 +41,8 @@
 
 open Misc
 
+exception Type_error of string
+
 type var = string
 type cst =
   | Int of int
@@ -88,11 +90,17 @@ let get_info p = p
 let get_name (name,ar,args) = name
 let get_args (name,ar,args) = args
 
-
 let type_of_cst = function
   | Int _ -> TInt
   | Str _ -> TStr
   | Float _ -> TFloat
+
+let cst_of_str t v = 
+  match t with
+  | TInt   -> (try Int (int_of_string v) with Failure _ -> raise (Type_error ("Expecting int for type TInt [cst_of_ts]")))
+  | TStr   -> Str v
+  | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TInt [cst_of_ts]")))
+
 
 (* TODO: whould we return a set instead? *)
 let rec tvars = function

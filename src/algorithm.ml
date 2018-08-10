@@ -2131,7 +2131,6 @@ let merge_formulas files =
     (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
 
-
 (* MONITORING FUNCTION *)
 
 (* Checks if the parameter for the exit command is set *)

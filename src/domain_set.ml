@@ -22,6 +22,22 @@ type split_save_parameters = (string * heavy array * int array array * int array
 
 let domain_empty = Domain_Set.empty
 
+let domain_of_string t str : domain =
+  match str with
+    | "null" -> None
+    | _ -> Some (cst_of_str t str)
+
+
+let domain_set_from_list t l = 
+  let ds = Domain_Set.empty in
+  let rec iter ds tl =
+    if List.length l > 0 then 
+      let ds = Domain_Set.add (domain_of_string t (List.hd l)) ds in
+      iter ds (List.tl l)
+    else ds
+  in
+  iter ds l
+
 let contains_cst cst ds =
   Domain_Set.exists (fun x -> 
     match x with
