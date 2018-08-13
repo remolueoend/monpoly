@@ -97,6 +97,9 @@ let resumefile = ref ""
 let dumpfile = ref ""
 let combine_files = ref ""
 let lastts = ref MFOTL.ts_invalid
+let slicer_heavy = ref [|(0, Domain_set.domain_empty)|]
+let slicer_shares = ref [|[||]|]
+let slicer_seeds = ref [|[||]|]
 
 (* For the sake of clarity, think about merging these types and all
    related functions. Some fields will be redundant, but we will not lose
@@ -2075,20 +2078,25 @@ let unmarshal resumefile =
   let ff = Marshalling.m_to_ext mf neval in
   (last_ts,ff,closed,neval,tp,last)
 
-let split_save params i lastts ff closed neval  =
-  let filename, heavy, shares, seeds = params in
+let split_save filename i lastts ff closed neval  =
+  let heavy = !slicer_heavy in
+  let shares = !slicer_shares in
+  let seeds = !slicer_seeds in
 
   (*Splitting.print_ef ff;*)
-  print_endline "Marshalling";
   let a, mf = Marshalling.ext_to_m ff neval in
-  print_endline "Splitting";
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) filename i lastts mf closed neval in
+  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) !dumpfile i lastts mf closed neval in
 
   print_endline "Dumping";
+
+  let format_filename index =
+    Printf.sprintf "%s-%d.bin" filename index
+  in
   Array.iteri (fun index mf ->
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
-  dump_to_file (filename ^ (string_of_int index)) value) result
+  dump_to_file (format_filename index) value) result;
+  Printf.printf "%s\n" split_state_msg
 
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
@@ -2156,6 +2164,16 @@ let checkSplitParam p = match p with
    ([i] may be different from the current time point when
    filter_empty_tp is enabled)
 *)
+
+let set_slicer_parameters c p =
+  match p with 
+  | SplitSave sp ->
+    let heavy, shares, seeds = sp in
+    slicer_heavy := heavy;
+    slicer_shares := shares;
+    slicer_seeds := seeds;
+  | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
+
 let rec check_log lexbuf ff closed neval i =
   let finish () =
     if Misc.debugging Dbg_perf then
@@ -2177,25 +2195,23 @@ let rec check_log lexbuf ff closed neval i =
       | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
+    let split_save   c params = match params with
+      | Some p -> if (checkExitParam p = true) then split_save !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
+    in
     let get_constraints_split_state p = match p with
-      (* Other case already handle by check split param *)
+      (* Other case already handled by check split param *)
       | SplitParameters sp -> sp
       | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
     in
-    let get_constraints_split_respore p = match p with
-    (* Other case already handle by check split param *)
-    | SplitSave sr -> sr
-    | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
-  in
     let split_state   c params = match params with
       | Some p -> if (checkSplitParam p = true) then split_and_save (get_constraints_split_state p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
-    let split_save   c params = match params with
-      | Some p -> if (checkSplitParam p = true) then split_save (get_constraints_split_respore p) i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+    let set_slicer c params = match params with
+      | Some p -> set_slicer_parameters c p
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
-
     match Log.get_next_entry lexbuf with
     | MonpolyCommand {c; parameters} ->
         let process_command = function
@@ -2215,8 +2231,8 @@ let rec check_log lexbuf ff closed neval i =
             | "save_state" ->
                 save_state c parameters;
                 loop ffl i
-            | "split_save_new" ->
-                split_save c parameters;
+            | "set_slicer" -> set_slicer c parameters    
+            | "split_save" -> split_save c parameters;
             | "save_and_exit" ->  save_and_exit c parameters;
             | "split_state" ->    split_state   c parameters;
             | _ ->

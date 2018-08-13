@@ -169,7 +169,7 @@
 
 let get_2 (_, a) = a
 
-let return_split_restore_parameters vars filename heavy_list shares seeds = 
+let return_split_restore_parameters vars heavy_list shares seeds = 
     let convert heavy_list = 
       List.map2
       (fun k (i, heavy_set) ->
@@ -180,7 +180,7 @@ let return_split_restore_parameters vars filename heavy_list shares seeds =
     in
     let heavy_arr = Array.of_list (convert heavy_list) in
   
-    SplitSave (filename, heavy_arr, shares, seeds)
+    SplitSave (heavy_arr, shares, seeds)
 
 let convert_str_list l =  
   Array.of_list (List.map(fun e -> int_of_string e) l)
@@ -317,10 +317,10 @@ tuple:
 fields:
       | STR COM fields          { f "fields(list)"; $1::$3 }
       | STR                     { f "fields(end)"; [$1] }
-      | 
-                              { f "fields()"; [] }
+      |                         { f "fields()"; [] }
 slicing: 
-      | LCB keys COM STR COM heavies COM nested_fields COM nested_fields RCB { return_split_restore_parameters $2 $4 $6 (convert_nested_str_list $8) (convert_nested_str_list $10) }
+      | LCB keys COM heavies COM nested_fields COM nested_fields RCB 
+                                { return_split_restore_parameters $2 $4 (convert_nested_str_list $6) (convert_nested_str_list $8) }
 
 heavies:
       | LPA heavy RPA           { $2 }
