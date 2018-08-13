@@ -2051,6 +2051,14 @@ let dump_to_file dumpfile value =
   Marshal.to_channel ch value [Marshal.Closures];
   close_out ch
 
+let extended_dump_to_file dumpfile slicer value =
+  let shares = slicer.shares in
+  let heavy = slicer.heavy in
+  let seeds = slicer.seeds in
+  let ch = open_out_bin dumpfile in
+  Marshal.to_channel ch ((heavy, shares, seeds), value) [Marshal.Closures];
+  close_out ch
+
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
   Reads state from specified dumpfile and converts neval array to dllist
@@ -2061,13 +2069,21 @@ let read_m_from_file file =
   close_in ch;
   let (last_ts,closed,mf,a,tp,last) = value in
   let neval = NEval.from_array a in
-  (last_ts,mf,closed,neval,tp,last)  
+  (last_ts,mf,closed,neval,tp,last)
+
+let extended_read_m_from_file file =
+  let ch = open_in_bin file in
+  let value = (Marshal.from_channel ch : ex_state) in
+  close_in ch;
+  let (slicer_state,last_ts,closed,mf,a,tp,last) = value in
+  let neval = NEval.from_array a in
+  (slicer_state,last_ts,mf,closed,neval,tp,last)  
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
 let marshal dumpfile i lastts ff closed neval =
   let a, mf = Marshalling.ext_to_m ff neval in
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
-  dump_to_file dumpfile value
+  dump_to_file dumpfile value  
 
 (*
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
@@ -2096,8 +2112,9 @@ let split_save filename i lastts ff closed neval  =
   in
   Array.iteri (fun index mf ->
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
-  dump_to_file (format_filename index) value) result;
-  Printf.printf "%s\n" split_state_msg
+  extended_dump_to_file (format_filename index) slicer value)
+  result;
+  Printf.printf "%s to file with substr: %s \n" split_state_msg filename
 
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
@@ -2133,12 +2150,12 @@ let files_to_list f =
   is then folded over.
  *)
 let merge_formulas files = 
-  List.fold_right (fun s (last_ts,ff1,closed,neval1,tp,last) ->
-    let (_,ff2,_,neval2,_,_) = read_m_from_file s in
+  List.fold_right (fun s (slicer_state,last_ts,ff1,closed,neval1,tp,last) ->
+    let (_, _,ff2,_,neval2,_,_) = extended_read_m_from_file s in
     let comb_ff = Splitting.comb_m ff1 ff2 in
     let comb_nv = Splitting.combine_neval neval1 neval2 in
-    (last_ts,comb_ff,closed, comb_nv,tp,last)
-  ) (List.tl files) (read_m_from_file (List.hd files))
+    (slicer_state,last_ts,comb_ff,closed, comb_nv,tp,last)
+  ) (List.tl files) (extended_read_m_from_file (List.hd files))
 
 (* MONITORING FUNCTION *)
 
@@ -2333,8 +2350,14 @@ let resume logfile =
    the log file then processed from the beginning *)
 let combine logfile = 
   let files = files_to_list !combine_files in
-  let (last_ts,mf,closed,neval,tp,last) = merge_formulas files in
+  let (slicer_state,last_ts,mf,closed,neval,tp,last) = merge_formulas files in
   let ff = Marshalling.m_to_ext mf neval in
+
+  let heavy, shares, seeds = slicer_state in
+  slicer_shares := shares;
+  slicer_heavy := heavy;
+  slicer_seeds := seeds;
+
   lastts := last_ts;
   Log.tp := tp;
   Log.skipped_tps := 0;

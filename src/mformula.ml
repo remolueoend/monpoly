@@ -68,7 +68,7 @@ type mformula =
   | MEventually of interval * mformula * meinfo
 
 type state = (timestamp * bool * mformula * (int * timestamp) array * int * bool)
-
+type ex_state = (Domain_set.slicer_state * timestamp * bool * mformula * (int * timestamp) array * int * bool)
 
 (* For each formula, returns list of relevant free variables according to sub structure *)
 let free_vars f =

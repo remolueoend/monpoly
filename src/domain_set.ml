@@ -18,6 +18,7 @@ type heavy = int * domain_set
 type integral_value = int
 type string_value   = string
 
+type slicer_state = (heavy array * int array array * int array array)
 type split_save_parameters = (heavy array * int array array * int array array)
 
 let domain_empty = Domain_Set.empty

@@ -75,9 +75,9 @@ let add_slices_of_valuation slicer tuple free_vars =
   let unconstrained_set = ref 0 in
 
   let heavy = slicer.heavy in
-  
+
   let rec calc_heavy i = 
-    if i < Array.length valuation then
+    if i < Array.length valuation then begin
       let v, s = heavy.(i) in
       if (v >= 0) then
         let value = valuation.(i) in
@@ -85,8 +85,9 @@ let add_slices_of_valuation slicer tuple free_vars =
           | None     -> unconstrained_set := !unconstrained_set + (shift_left 1 v);
           | Some cst -> 
             if contains_cst cst s then 
-               heavy_set := !heavy_set + (shift_left 1 v);
+               heavy_set := !heavy_set + (shift_left 1 v);     
       calc_heavy (i+1)
+    end  
     else ()
   in
   let () = calc_heavy 0 in
@@ -182,14 +183,9 @@ let mk_verdict_filter slicer slice verdict =
   calc_expected 0 == slice  
 
 let create_slicer formula heavy shares seeds =
-  print_endline "degree";
   let degree = degree shares in
-  print_endline "dimensions";
   let dimensions = dimensions formula in  
-  print_endline "vars_in_order";
   let variables_in_order = build_var_ids (Mformula.free_vars formula) in
-  print_endline "strides";
   let strides = strides seeds dimensions in
-  print_endline "slicer";
   
   { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }

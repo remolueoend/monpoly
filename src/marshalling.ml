@@ -28,26 +28,9 @@ type state = (int * timestamp * bool * mformula * (int * timestamp) array * int 
  *)
 let ext_to_m ff neval =
   let eze2m ezinf =
-      if ezinf.ezlastev != Dllist.void then
-          let _, ts1 = Dllist.get_data ezinf.ezlastev in
-          Printf.printf " \n ezlastev TS: %f  \n" ts1;
-      else print_endline "ezlastev VOID";
-      if ezinf.ezlast != Dllist.void then
-        let tp, ts, _ = Dllist.get_data ezinf.ezlast in
-        Printf.printf " \n ezlast TS: %f  \n" ts;
-        Printf.printf " \n ezlast TP: %d  \n" tp;
-      else print_endline "ezlast VOID";
       {mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
-    if einf.elastev != Dllist.void then
-        let _, ts1 = Dllist.get_data einf.elastev in
-        Printf.printf " \n elastev TS: %f  \n" ts1;
-    else print_endline "elastev VOID";
-    if einf.elast != Dllist.void then
-      let ts, _ = Dllist.get_data einf.elast in
-      Printf.printf " \n elast TS: %f  \n" ts;
-    else print_endline "elast VOID";
       {meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
@@ -91,18 +74,9 @@ let ext_to_m ff neval =
         }
   in
   let o2m oinf =
-    if oinf.olast != Dllist.void then
-      let (ts, _) = Dllist.get_data oinf.olast in 
-      Printf.printf "\n Marshalling: olast TS = %f \n" ts;
-    else print_endline "olast VOID";
     { moauxrels = oinf.oauxrels; }
   in
   let oz2m ozinf =
-    if ozinf.ozlast != Dllist.void then
-      let (tp, ts, _) = Dllist.get_data ozinf.ozlast in 
-      Printf.printf "\n Marshalling: ozlast TS = %f \n" ts;
-      Printf.printf "\n Marshalling: ozlast TP = %d \n" tp;
-    else print_endline "ozlast VOID";
     { mozauxrels = ozinf.ozauxrels}
   in
   let a = NEval.to_array neval in
@@ -178,11 +152,6 @@ let m_to_ext mf neval =
           let cond = fun (tpj,_,_) -> (tpj - tpq) < 0 in
           Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
         in
-        let _, ts1 = Dllist.get_data cell in
-        Printf.printf " \n unmarshalled ezlastev TS: %f  \n" ts1;
-        let tp, ts, _ = Dllist.get_data ezlast in
-        Printf.printf "\n unmarshalled ezlast TS: %f \n" ts;
-        Printf.printf "\n unmarshalled ezlast TP: %d \n" tp;
         let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
         {ezlastev = cell; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
       else return_empty
@@ -223,11 +192,6 @@ let m_to_ext mf neval =
           let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
           Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
         in
-        let _, ts1 = Dllist.get_data cell in
-        Printf.printf " \n unmarshalled elastev TS: %f  \n" ts1;
-        let ts, _ = Dllist.get_data elast in
-        Printf.printf "\n unmarshalled elast TS: %f \n" ts;
-
         let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
         einf
       else return_empty
@@ -267,7 +231,6 @@ let m_to_ext mf neval =
     }
   in
   let mo2e intv moinf =
-    Printf.printf "\n NEval length: %d " (NEval.length neval);
     let moauxrels = moinf.moauxrels in
     let (tsq, rel) = Dllist.get_last moauxrels in
     (*Consider interval [a,b): Retrieves tree relevant list of auxrels elements, aswell as olast by setting the break condition to hold until
@@ -279,9 +242,6 @@ let m_to_ext mf neval =
         let cond = fun (tsj,_) -> (MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv) in
         Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
     in
-    Printf.printf "Last TS: %f \n" tsq; 
-    let ts, _ = Dllist.get_data olast in
-    Printf.printf "\n Unmarshalling: olast TS = %f \n" ts; 
     let oinf = { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moauxrels } in
     oinf
     else begin
@@ -304,9 +264,6 @@ let m_to_ext mf neval =
         let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
         Helper.get_new_elements mozauxrels Dllist.void cond f
       in 
-      let tp, ts, _ = Dllist.get_data ozlast in
-      Printf.printf "\n Unmarshalling: ozlast TS = %f \n" ts; 
-      Printf.printf "\n Unmarshalling: ozlast TP = %d \n" tp; 
       { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
     else begin
      (* If auxrels is empty, set tree to be invalid, forcing reevaluation in the algorithm *)

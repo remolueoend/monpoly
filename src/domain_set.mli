@@ -3,6 +3,7 @@ type domain_set
 
 type heavy = int * domain_set
 
+type slicer_state = (heavy array * int array array * int array array)
 type split_save_parameters = (heavy array * int array array * int array array)
 
 val domain_empty: domain_set

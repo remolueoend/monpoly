@@ -643,7 +643,6 @@ let split_formula sconsts dumpfile i lastts mf closed neval =
   split_state mapping mf numparts
 
 let split_with_slicer slicer num_partitions dumpfile i lastts mf closed neval =
-  print_endline "splitting with slicer";
   split_state slicer mf num_partitions
 
 (* END SPLITTING STATE *) 
