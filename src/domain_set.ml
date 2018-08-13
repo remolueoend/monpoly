@@ -36,9 +36,9 @@ let domain_of_string_basic str : domain =
 let domain_set_from_list t l = 
   let ds = Domain_Set.empty in
   let rec iter ds tl =
-    if List.length l > 0 then 
-      let ds = Domain_Set.add (domain_of_string t (List.hd l)) ds in
-      iter ds (List.tl l)
+    if List.length tl > 0 then 
+      let ds = Domain_Set.add (domain_of_string t (List.hd tl)) ds in
+      iter ds (List.tl tl)
     else ds
   in
   iter ds l
@@ -46,13 +46,13 @@ let domain_set_from_list t l =
 let domain_set_from_list_basic l = 
   let ds = Domain_Set.empty in
   let rec iter ds tl =
-    if List.length l > 0 then 
-      let ds = Domain_Set.add (domain_of_string_basic (List.hd l)) ds in
-      iter ds (List.tl l)
+    if List.length tl > 0 then 
+      let ds = Domain_Set.add (domain_of_string_basic (List.hd tl)) ds in
+      iter ds (List.tl tl)
     else ds
   in
   iter ds l
-  
+
 
 let contains_cst cst ds =
   Domain_Set.exists (fun x -> 

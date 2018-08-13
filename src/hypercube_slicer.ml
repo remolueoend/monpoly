@@ -39,7 +39,8 @@ let strides shares dimensions =
       (fun _ -> Array.init dims (fun _ -> 1))
   in
   let () = Array.iteri (
-    fun h s -> for i = 1 to dims do s.(i) <- s.(i - 1) * shares.(h).(i - 1) done
+    fun h s ->
+      for i = 1 to dims-1 do s.(i) <- s.(i - 1) * shares.(h).(i - 1) done
     ) strides in
   strides
 
@@ -181,9 +182,14 @@ let mk_verdict_filter slicer slice verdict =
   calc_expected 0 == slice  
 
 let create_slicer formula heavy shares seeds =
+  print_endline "degree";
   let degree = degree shares in
+  print_endline "dimensions";
   let dimensions = dimensions formula in  
+  print_endline "vars_in_order";
   let variables_in_order = build_var_ids (Mformula.free_vars formula) in
+  print_endline "strides";
   let strides = strides seeds dimensions in
+  print_endline "slicer";
   
   { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }

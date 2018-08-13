@@ -2083,11 +2083,12 @@ let split_save filename i lastts ff closed neval  =
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  (*Splitting.print_ef ff;*)
+  print_endline "Marshalling";
   let a, mf = Marshalling.ext_to_m ff neval in
+  print_endline "Creating slicer";
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
+  print_endline "Splitting";
   let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) !dumpfile i lastts mf closed neval in
-
   print_endline "Dumping";
 
   let format_filename index =
@@ -2172,6 +2173,7 @@ let set_slicer_parameters c p =
     slicer_heavy := heavy;
     slicer_shares := shares;
     slicer_seeds := seeds;
+    Printf.printf ">%s\n" "slicing parameters updated"
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
 let rec check_log lexbuf ff closed neval i =
@@ -2231,7 +2233,9 @@ let rec check_log lexbuf ff closed neval i =
             | "save_state" ->
                 save_state c parameters;
                 loop ffl i
-            | "set_slicer" -> set_slicer c parameters    
+            | "set_slicer" ->
+                set_slicer c parameters; 
+                loop ffl i    
             | "split_save" -> split_save c parameters;
             | "save_and_exit" ->  save_and_exit c parameters;
             | "split_state" ->    split_state   c parameters;

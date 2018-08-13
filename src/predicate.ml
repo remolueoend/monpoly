@@ -102,8 +102,8 @@ let cst_of_str t v =
   | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TInt [cst_of_ts]")))
 
 let cst_of_str_basic v = 
-  try Float (float_of_string v) with Failure _ ->
-  try Int (int_of_string v) with Failure _ -> 
+  try Int (int_of_string v) with Failure _ ->
+  try Float (float_of_string v) with Failure _ -> 
   Str v
 
 (* TODO: whould we return a set instead? *)
@@ -199,6 +199,8 @@ let cst_eq c c' =
   match c, c' with
   | Int a, Int a'     -> a == a'
   | Str a, Str a'     -> compare a a' == 0
+  | Float f, _ -> failwith "comparing float"
+  | _, Float f -> failwith "comparing float"
   | _ -> failwith "[Predicate.cst_eq] incomparable constants"
 
 let cst_smaller c c' =

@@ -306,18 +306,21 @@ fields:
       | STR COM fields          { f "fields(list)"; $1::$3 }
       | STR                     { f "fields(end)"; [$1] }
       |                         { f "fields()"; [] }
+  
 slicing: 
-      | LCB heavies COM nested_fields COM nested_fields RCB 
+      | LCB heavies COM shares_seeds COM shares_seeds RCB 
                                 { return_split_restore_parameters $2 (convert_nested_str_list $4) (convert_nested_str_list $6) }
 
 heavies:
-      | LPA heavy RPA           { $2 }
+      | LCB heavy RCB           { $2 }
 heavy:
       | tupleseq COM heavy      { $1::$3 }
       | tupleseq                { [$1] }
 tupleseq:
-      | LPA STR COM fields RPA  { (int_of_string $2), $4 }
+      | LPA STR COM nested_field RPA  { (int_of_string $2), $4 }
 
+shares_seeds:
+      | LCB nested_fields RCB   { $2 }
 nested_fields:
       | nested_field COM nested_fields  { $1::$3 }  
       | nested_field            { [$1] }
