@@ -8,9 +8,11 @@ open Domain_set
 
 type integral_value = int
 type string_value   = string
+type var_id = { var: Predicate.var; free_id: int}
 
 type hypercube_slicer = {
   formula: mformula;
+  variables_in_order: var_id array;
   heavy:  heavy array;
   shares: int array array;
   seeds: int array array;
@@ -21,17 +23,14 @@ type hypercube_slicer = {
 
 let dimensions formula = List.length (Mformula.free_vars formula)
 
+let build_var_ids vars = 
+  let sorted = (List.sort Pervasives.compare vars) in
+  List.mapi (fun i e -> {var = e; free_id = i}) sorted
+
 let degree shares = 
   let simple_shares = shares.(0) in
   if (Array.length simple_shares == 0) then 1
   else Array.fold_left (fun acc b -> acc * b) 1 simple_shares
-
-(*let seeds slicer =
-  (* Now passed as parameter *)
-  let bound = Int32.max_int in
-  let () = Random.init slicer.seed in
-  Array.init (Array.length slicer.shares) (fun _ -> 
-    Array.init (dimensions slicer) (fun _ -> Int32.to_int (Random.int32 bound)))*)
 
 let strides shares dimensions = 
   let shares = shares in
@@ -39,13 +38,6 @@ let strides shares dimensions =
   let strides = Array.init (Array.length shares) 
       (fun _ -> Array.init dims (fun _ -> 1))
   in
-  (*let rec update s h i = 
-    if i < dims then begin
-      let () = s.(i) <- s.(i - 1) * shares.(h).(i - 1) in
-      update s h (i+1)
-    end
-    else ()
-  in*)
   let () = Array.iteri (
     fun h s -> for i = 1 to dims do s.(i) <- s.(i - 1) * shares.(h).(i - 1) done
     ) strides in
@@ -66,18 +58,17 @@ let hash value seed = match value with
 let variables_in_order slicer = Mformula.free_vars slicer.formula
 
 let add_slices_of_valuation slicer tuple free_vars =
-  (*let slices = Slice_Set.empty in*)
+  (*Do not actually need a set here (verify)*)
   let slices = [] in
   let tuple = Array.of_list tuple in
 
-  let free_vars_full = variables_in_order slicer in
+  let free_vars_full = Mformula.free_vars slicer.formula in
 
   let valuation = Array.init (List.length free_vars_full) (fun _ -> None) in
 
-  (* TODO: mapping of vars to vars_full *)
+  (* mapping of vars array of subformula to vars_full *)
   let pos     = Array.of_list (List.map (fun v -> Misc.get_pos v free_vars_full ) free_vars) in
   Array.iteri (fun i e -> valuation.(pos.(i)) <- Some e ) tuple;
-
 
   let heavy_set = ref 0 in
   let unconstrained_set = ref 0 in
@@ -86,9 +77,6 @@ let add_slices_of_valuation slicer tuple free_vars =
   
   let rec calc_heavy i = 
     if i < Array.length valuation then
-      (*
-      TODO: check this
-      let var_id = free_id vars_in_order.(i)  in *)
       let v, s = heavy.(i) in
       if (v >= 0) then
         let value = valuation.(i) in
@@ -111,9 +99,6 @@ let add_slices_of_valuation slicer tuple free_vars =
 
     let rec calc_slice i = 
       if i < (Array.length valuation) then
-        (*
-        TODO: check this
-        let var_id = free_id vars_in_order.(i)  in *)
         let value = valuation.(i) in
         match value with 
           | Some v -> slice_index := the_strides.(i) * ((mod) (hash v the_seeds.(i)) the_shares.(i));
@@ -160,14 +145,10 @@ let add_slices_of_valuation slicer tuple free_vars =
 
 let mk_verdict_filter slicer slice verdict =
   let heavy_set = ref 0 in
-  let vars_in_order = variables_in_order slicer in
-  let vars_in_order = Array.init (List.length vars_in_order) (fun _ -> List.hd vars_in_order) in
+  let vars_in_order = slicer.variables_in_order in
   let rec calc_heavy i = 
     if i < Array.length vars_in_order then
-      (*
-      TODO: check this
-      let var_id = free_id vars_in_order.(i)  in *)
-      let var_id = i in
+      let var_id = vars_in_order.(i).free_id in
       let value = verdict.(i) in
       let heavyMap = slicer.heavy.(var_id) in
     
@@ -189,8 +170,7 @@ let mk_verdict_filter slicer slice verdict =
 
   let rec calc_expected i = 
     if i < (Array.length vars_in_order) then
-      (*let var_id = free_id vars_in_order.(i)  in *)
-      let var_id = i in
+      let var_id = vars_in_order.(i).free_id in
       let value = verdict.(i) in
       expected_slice := the_strides.(var_id) * ((mod) (hash value the_seeds.(var_id)) the_shares.(var_id));
       calc_expected (i+1)
@@ -203,6 +183,7 @@ let mk_verdict_filter slicer slice verdict =
 let create_slicer formula heavy shares seeds =
   let degree = degree shares in
   let dimensions = dimensions formula in  
+  let variables_in_order = build_var_ids (Mformula.free_vars formula) in
   let strides = strides seeds dimensions in
   
-  { formula = formula; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }
+  { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }

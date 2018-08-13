@@ -1,8 +1,11 @@
 open Predicate
 open Domain_set
 
+type var_id
+
 type hypercube_slicer = {
   formula: Mformula.mformula;
+  variables_in_order: var_id array;
   heavy:  heavy array;
   shares: int array array;
   seeds: int array array;
