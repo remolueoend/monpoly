@@ -97,9 +97,9 @@ let resumefile = ref ""
 let dumpfile = ref ""
 let combine_files = ref ""
 let lastts = ref MFOTL.ts_invalid
-let slicer_heavy = ref [|(0, Domain_set.domain_empty)|]
+let slicer_heavy  = ref [|(0, Domain_set.domain_empty)|]
 let slicer_shares = ref [|[||]|]
-let slicer_seeds = ref [|[||]|]
+let slicer_seeds  = ref [|[||]|]
 
 (* For the sake of clarity, think about merging these types and all
    related functions. Some fields will be redundant, but we will not lose

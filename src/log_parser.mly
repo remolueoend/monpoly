@@ -169,14 +169,13 @@
 
 let get_2 (_, a) = a
 
-let return_split_restore_parameters vars heavy_list shares seeds = 
+let return_split_restore_parameters heavy_list shares seeds = 
     let convert heavy_list = 
-      List.map2
-      (fun k (i, heavy_set) ->
-        let t = get_2 k in
-        (i, (domain_set_from_list t heavy_set))
+      List.map
+      (fun (i, heavy_set) ->
+        (i, (domain_set_from_list_basic heavy_set))
       )
-      vars heavy_list
+      heavy_list
     in
     let heavy_arr = Array.of_list (convert heavy_list) in
   
@@ -198,18 +197,7 @@ let make_split kwt group  =
       List.map (fun v ->
         incr pos;
         let t = get_2 k in 
-        match t with
-        | TInt ->
-          (try Int (int_of_string v)
-            with Failure _ ->
-              raise (Type_error ("Expected type int for field number "
-                                ^ (string_of_int !pos))))
-        | TStr -> Str v
-        | TFloat ->
-          (try Float (float_of_string v)
-            with Failure _ ->
-              raise (Type_error ("Expected type float for field number "
-                                ^ (string_of_int !pos))))
+        Predicate.cst_of_str t v
       ) values
     )
     kwt valueLists
@@ -319,8 +307,8 @@ fields:
       | STR                     { f "fields(end)"; [$1] }
       |                         { f "fields()"; [] }
 slicing: 
-      | LCB keys COM heavies COM nested_fields COM nested_fields RCB 
-                                { return_split_restore_parameters $2 $4 (convert_nested_str_list $6) (convert_nested_str_list $8) }
+      | LCB heavies COM nested_fields COM nested_fields RCB 
+                                { return_split_restore_parameters $2 (convert_nested_str_list $4) (convert_nested_str_list $6) }
 
 heavies:
       | LPA heavy RPA           { $2 }

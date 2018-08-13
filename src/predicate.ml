@@ -101,6 +101,10 @@ let cst_of_str t v =
   | TStr   -> Str v
   | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TInt [cst_of_ts]")))
 
+let cst_of_str_basic v = 
+  try Float (float_of_string v) with Failure _ ->
+  try Int (int_of_string v) with Failure _ -> 
+  Str v
 
 (* TODO: whould we return a set instead? *)
 let rec tvars = function
