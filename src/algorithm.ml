@@ -2051,12 +2051,9 @@ let dump_to_file dumpfile value =
   Marshal.to_channel ch value [Marshal.Closures];
   close_out ch
 
-let extended_dump_to_file dumpfile slicer value =
-  let shares = slicer.shares in
-  let heavy = slicer.heavy in
-  let seeds = slicer.seeds in
+let extended_dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
-  Marshal.to_channel ch ((heavy, shares, seeds), value) [Marshal.Closures];
+  Marshal.to_channel ch value [Marshal.Closures];
   close_out ch
 
 (*
@@ -2089,6 +2086,11 @@ let marshal dumpfile i lastts ff closed neval =
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
   information using m_to_ext function.
 *)  
+let extended_unmarshal resumefile =
+  let (slicer,last_ts,mf,closed,neval,tp,last) = extended_read_m_from_file resumefile in
+  let ff = Marshalling.m_to_ext mf neval in
+  (slicer,last_ts,ff,closed,neval,tp,last)
+
 let unmarshal resumefile =
   let (last_ts,mf,closed,neval,tp,last) = read_m_from_file resumefile in
   let ff = Marshalling.m_to_ext mf neval in
@@ -2110,10 +2112,14 @@ let split_save filename i lastts ff closed neval  =
   let format_filename index =
     Printf.sprintf "%s-%d.bin" filename index
   in
+
+  let shares = slicer.shares in
+  let heavy = slicer.heavy in
+  let seeds = slicer.seeds in
   Array.iteri (fun index mf ->
-  let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
-  extended_dump_to_file (format_filename index) slicer value)
-  result;
+    let value : ex_state = ((heavy, shares, seeds), lastts,closed,mf,a,!Log.tp,!Log.last) in
+    extended_dump_to_file (format_filename index) value
+  ) result;
   Printf.printf "%s to file with substr: %s \n" split_state_msg filename
 
 (*
@@ -2194,6 +2200,8 @@ let set_slicer_parameters c p =
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
 let rec check_log lexbuf ff closed neval i =
+  print_endline "testing";
+  print_ef ff;
   let finish () =
     if Misc.debugging Dbg_perf then
       Perf.check_log_end i !lastts
@@ -2337,12 +2345,15 @@ let test_filter logfile f =
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
 let resume logfile =
-  let (last_ts,ff,closed,neval,tp,last) = unmarshal !resumefile in
+  let (slicer,last_ts,ff,closed,neval,tp,last) = extended_unmarshal !resumefile in
+  print_endline "Unmarshalled";
   lastts := last_ts;
   Log.tp := tp;
   Log.skipped_tps := 0;
   Log.last := last;
+  print_endline "set refs";
   let lexbuf = Log.log_open logfile in
+  print_endline "opened log";
   Printf.printf "%s\n" restored_state_msg;
   check_log lexbuf ff closed neval 0
   
