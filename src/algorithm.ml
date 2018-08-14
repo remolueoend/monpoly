@@ -2036,11 +2036,12 @@ let rec add_ext f =
   - (Un-)Marshalling, Splitting, Merging
  *)
 
-let split_state_msg = ">Split state"
-let saved_state_msg = ">Saved state"
-let restored_state_msg = ">Loaded state"
-let combined_state_msg = ">Combined state"
-let get_index_prefix_msg = ">Current timepoint:"
+let split_state_msg = "Split state"
+let saved_state_msg = "Saved state"
+let slicing_parameters_updated_msg = "Slicing parameters updated"
+let restored_state_msg = "Loaded state"
+let combined_state_msg = "Combined state"
+let get_index_prefix_msg = "Current timepoint:"
 
  (*
   Helper function used in "marshal" and "split_and_save" functions.
@@ -2101,13 +2102,9 @@ let split_save filename i lastts ff closed neval  =
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  print_endline "Marshalling";
   let a, mf = Marshalling.ext_to_m ff neval in
-  print_endline "Creating slicer";
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-  print_endline "Splitting";
   let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) !dumpfile i lastts mf closed neval in
-  print_endline "Dumping";
 
   let format_filename index =
     Printf.sprintf "%s-%d.bin" filename index
@@ -2120,7 +2117,8 @@ let split_save filename i lastts ff closed neval  =
     let value : ex_state = ((heavy, shares, seeds), lastts,closed,mf,a,!Log.tp,!Log.last) in
     extended_dump_to_file (format_filename index) value
   ) result;
-  Printf.printf "%s to file with substr: %s \n" split_state_msg filename
+  Printf.printf "%s\n" saved_state_msg
+  (*Printf.printf "%s to file with substr: %s \n" saved_state_msg filename*)
 
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
@@ -2130,19 +2128,10 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
   let a, mf = Marshalling.ext_to_m ff neval in
   let result = Splitting.split_formula sconsts dumpfile i lastts mf closed neval  in
 
-  (*print_endline "CHECKING SPLIT";
-  let uf1 = Marshalling.m_to_ext result.(0) neval in 
-  let uf2 = Marshalling.m_to_ext result.(1) neval in 
-
-  print_endline "Even";
-  Splitting.print_ef uf1;
-  print_endline "Odd";
-  Splitting.print_ef uf2;*)
-
   Array.iteri (fun index mf ->
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result;
-  Printf.printf "%s\n" split_state_msg
+  Printf.printf "%s\n" saved_state_msg
 
 (* Convert comma separated filenames to list of strings *)
 let files_to_list f = 
@@ -2196,12 +2185,10 @@ let set_slicer_parameters c p =
     slicer_heavy := heavy;
     slicer_shares := shares;
     slicer_seeds := seeds;
-    Printf.printf ">%s\n" "slicing parameters updated"
+    Printf.printf "%s\n" slicing_parameters_updated_msg
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
 let rec check_log lexbuf ff closed neval i =
-  print_endline "testing";
-  print_ef ff;
   let finish () =
     if Misc.debugging Dbg_perf then
       Perf.check_log_end i !lastts
@@ -2214,7 +2201,7 @@ let rec check_log lexbuf ff closed neval i =
     let save_state c params = match params with
       | Some (Argument filename) ->
         marshal filename i !lastts ff closed neval;
-        Printf.printf "%s\n" saved_state_msg;
+        Printf.printf "%s\n" saved_state_msg
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
@@ -2232,7 +2219,10 @@ let rec check_log lexbuf ff closed neval i =
       | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
     in
     let split_state   c params = match params with
-      | Some p -> if (checkSplitParam p = true) then split_and_save (get_constraints_split_state p) !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkSplitParam p = true) then
+                    split_and_save (get_constraints_split_state p) !dumpfile i !lastts ff closed neval
+                  else
+                    Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
     let set_slicer c params = match params with
@@ -2262,6 +2252,7 @@ let rec check_log lexbuf ff closed neval i =
                 set_slicer c parameters; 
                 loop ffl i    
             | "split_save" -> split_save c parameters;
+                loop ffl i
             | "save_and_exit" ->  save_and_exit c parameters;
             | "split_state" ->    split_state   c parameters;
             | _ ->
@@ -2346,14 +2337,11 @@ let test_filter logfile f =
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
 let resume logfile =
   let (slicer,last_ts,ff,closed,neval,tp,last) = extended_unmarshal !resumefile in
-  print_endline "Unmarshalled";
   lastts := last_ts;
   Log.tp := tp;
   Log.skipped_tps := 0;
   Log.last := last;
-  print_endline "set refs";
   let lexbuf = Log.log_open logfile in
-  print_endline "opened log";
   Printf.printf "%s\n" restored_state_msg;
   check_log lexbuf ff closed neval 0
   

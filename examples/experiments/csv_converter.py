@@ -7,6 +7,7 @@ parser.add_argument("-f", "--file", help="Input log file")
 args = parser.parse_args()
 
 currentTp = 0
+currentTs = 1
 
 def validLine(line):
 	if line.find("@") == 0:
@@ -16,18 +17,21 @@ def validLine(line):
 
 def split_line(line):
   global currentTp
+  global currentTs
 
   if validLine(line) == 0:
     return ""
 
   arr = line.split(" ")
   ts  = arr[0]
-  ts  = ts[1:len(ts)-1]
+  ts  = currentTs
   name= arr[1]
   tp  = currentTp
   currentTp += 1
   val = arr[2]
   val = val[1:len(val)-2]
+
+  currentTs += 10
 
   return produce_format (name, tp, ts, val)
 
