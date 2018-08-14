@@ -121,9 +121,6 @@ let main () =
 
   Misc.split_debug !debug;
 
-  print_endline !logfile;
-  print_endline !Algorithm.combine_files;
-
   if !displayver then
     print_endline ("MonPoly, version " ^ version)
   else if !Algorithm.resumefile <> "" then

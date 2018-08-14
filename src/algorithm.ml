@@ -2117,8 +2117,8 @@ let split_save filename i lastts ff closed neval  =
     let value : ex_state = ((heavy, shares, seeds), lastts,closed,mf,a,!Log.tp,!Log.last) in
     extended_dump_to_file (format_filename index) value
   ) result;
-  Printf.printf "%s\n" saved_state_msg
-  (*Printf.printf "%s to file with substr: %s \n" saved_state_msg filename*)
+  Printf.printf "%s\n%!" saved_state_msg
+  (*Printf.printf "%s to file with substr: %s \n%!" saved_state_msg filename*)
 
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
@@ -2131,7 +2131,7 @@ let split_and_save  sconsts dumpfile i lastts ff closed neval  =
   Array.iteri (fun index mf ->
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result;
-  Printf.printf "%s\n" saved_state_msg
+  Printf.printf "%s\n%!" saved_state_msg
 
 (* Convert comma separated filenames to list of strings *)
 let files_to_list f = 
@@ -2144,7 +2144,9 @@ let files_to_list f =
   being the accumulator which is initialized as the first element of the list. The rest of the list
   is then folded over.
  *)
-let merge_formulas files = 
+let merge_formulas files =
+  if List.length files == 1 then extended_read_m_from_file (List.hd files)
+  else
   List.fold_right (fun s (slicer_state,last_ts,ff1,closed,neval1,tp,last) ->
     let (_, _,ff2,_,neval2,_,_) = extended_read_m_from_file s in
     let comb_ff = Splitting.comb_m ff1 ff2 in
@@ -2185,7 +2187,7 @@ let set_slicer_parameters c p =
     slicer_heavy := heavy;
     slicer_shares := shares;
     slicer_seeds := seeds;
-    Printf.printf "%s\n" slicing_parameters_updated_msg
+    (*Printf.printf "%s\n%!" slicing_parameters_updated_msg*)
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
 let rec check_log lexbuf ff closed neval i =
@@ -2201,7 +2203,7 @@ let rec check_log lexbuf ff closed neval i =
     let save_state c params = match params with
       | Some (Argument filename) ->
         marshal filename i !lastts ff closed neval;
-        Printf.printf "%s\n" saved_state_msg
+        Printf.printf "%s\n%!" saved_state_msg
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
@@ -2342,7 +2344,7 @@ let resume logfile =
   Log.skipped_tps := 0;
   Log.last := last;
   let lexbuf = Log.log_open logfile in
-  Printf.printf "%s\n" restored_state_msg;
+  Printf.printf "%s\n%!" restored_state_msg;
   check_log lexbuf ff closed neval 0
   
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
@@ -2363,6 +2365,6 @@ let combine logfile =
   Log.last := last;
 
   let lexbuf = Log.log_open logfile in
-  Printf.printf "%s\n" combined_state_msg;
+  Printf.printf "%s\n%!" combined_state_msg;
   check_log lexbuf ff closed neval 0
   
