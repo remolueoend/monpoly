@@ -2104,8 +2104,7 @@ let split_save filename i lastts ff closed neval  =
 
   let a, mf = Marshalling.ext_to_m ff neval in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) (Array.length seeds) !dumpfile i lastts mf closed neval in
-
+  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree !dumpfile i lastts mf closed neval in
   let format_filename index =
     Printf.sprintf "%s-%d.bin" filename index
   in
@@ -2149,8 +2148,18 @@ let merge_formulas files =
   else
   List.fold_right (fun s (slicer_state,last_ts,ff1,closed,neval1,tp,last) ->
     let (_, _,ff2,_,neval2,_,_) = extended_read_m_from_file s in
-    let comb_ff = Splitting.comb_m ff1 ff2 in
+    (*print_endline "Neval 1: ";
+    NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) neval1;
+    print_endline "";
+    print_endline "Neval 2: ";
+    NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) neval2;
+    print_endline "";*)
     let comb_nv = Splitting.combine_neval neval1 neval2 in
+    (*print_endline "Comb neval1: ";
+    NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) comb_nv;
+    print_endline "";*)
+    let comb_ff = Splitting.comb_m ff1 ff2 in
+
     (slicer_state,last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (extended_read_m_from_file (List.hd files))
 

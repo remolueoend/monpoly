@@ -649,43 +649,69 @@ let split_with_slicer slicer num_partitions dumpfile i lastts mf closed neval =
 
 (* Combines two neval lists according to the timestamp and timepoints of their elements,
    see the combination functions at the top for a more detailed explanation *)
-let combine_neval nv1 nv2 =
-  let nl = NEval.empty() in
-  let rec combine l1 l2 = 
-    if Dllist.is_empty l1 && Dllist.is_empty l2 then ()
-    else if not (Dllist.is_empty l1) && Dllist.is_empty l2 then Dllist.iter (fun e -> Dllist.add_last e nl) l1
-    else if Dllist.is_empty l1 && not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e nl) l2
-    else begin
-      let e1 = Dllist.pop_first l1 in
-      let i1, ts1 = e1 in 
-      let e2 = Dllist.pop_first l2 in
-      let i2, ts2 = e2 in
-      if ts1 < ts2 then begin 
-        ignore(Dllist.add_first e2 l2);
-        Dllist.add_last e1 nl
-      end  
-      else if ts1 = ts2 then begin
-        if i1 < i2 then begin
+
+let merge_first_elements nv1 nv2 nl =
+  let e1 = Dllist.pop_first nv1 in
+  let i1, ts1 = e1 in 
+  let e2 = Dllist.pop_first nv2 in
+  let i2, ts2 = e2 in
+  let () =
+  if ts1 < ts2 then 
+    NEval.add_first e1 nl
+  else if ts1 = ts2 then begin
+    if i1 < i2 then
+      NEval.add_first e1 nl     
+    else if i1 = i2 then
+      NEval.add_first e1 nl
+    else 
+      NEval.add_first e2 nl
+  end     
+  else
+    NEval.add_first e2 nl
+  in
+  nl 
+
+let combine_neval nv1 nv2 =  
+    let nl = if NEval.length nv1 > 0 && NEval.length nv2 > 0 then
+      merge_first_elements nv1 nv2 (NEval.empty())
+    else 
+      NEval.empty()
+    in
+    let rec combine l1 l2 = 
+      if Dllist.is_empty l1 && Dllist.is_empty l2 then ()
+      else if not (Dllist.is_empty l1) && Dllist.is_empty l2 then Dllist.iter (fun e -> Dllist.add_last e nl) l1
+      else if Dllist.is_empty l1 && not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e nl) l2
+      else begin
+        let e1 = Dllist.pop_first l1 in
+        let i1, ts1 = e1 in 
+        let e2 = Dllist.pop_first l2 in
+        let i2, ts2 = e2 in
+        if ts1 < ts2 then begin 
           ignore(Dllist.add_first e2 l2);
           Dllist.add_last e1 nl
-        end    
-        else if i1 = i2 then begin
-          Dllist.add_last (i1, ts1) nl
-        end
+        end  
+        else if ts1 = ts2 then begin
+          if i1 < i2 then begin
+            ignore(Dllist.add_first e2 l2);
+            Dllist.add_last e1 nl
+          end    
+          else if i1 = i2 then begin
+            Dllist.add_last (i1, ts1) nl
+          end
+          else begin 
+            ignore(Dllist.add_first e1 l1);
+            Dllist.add_last e2 nl
+          end
+        end  
         else begin 
           ignore(Dllist.add_first e1 l1);
           Dllist.add_last e2 nl
-        end
-      end  
-      else begin 
-        ignore(Dllist.add_first e1 l1);
-        Dllist.add_last e2 nl
-      end;
-      combine l1 l2
-    end
-  in  
-  combine nv1 nv2;
-  nl
+        end;
+        combine l1 l2
+      end
+    in  
+    combine nv1 nv2;
+    nl
 
 let rec print_ef = function
   | ERel           (rel)                                      -> Printf.printf "Rel:"; Relation.print_rel "" rel; print_endline "";

@@ -66,11 +66,9 @@ let add_slices_of_valuation slicer tuple free_vars =
   let free_vars_full = Mformula.free_vars slicer.formula in
 
   let valuation = Array.init (List.length free_vars_full) (fun _ -> None) in
-
   (* mapping of vars array of subformula to vars_full *)
-  let pos     = Array.of_list (List.map (fun v -> Misc.get_pos v free_vars_full ) free_vars) in
-  Array.iteri (fun i e -> valuation.(pos.(i)) <- Some e ) tuple;
-
+  let pos = List.map (fun v -> try Misc.get_pos v free_vars_full with e -> -1  ) free_vars in
+  List.iteri (fun i e -> if e >= 0 then begin valuation.(e) <- Some tuple.(i) end) pos;
   let heavy_set = ref 0 in
   let unconstrained_set = ref 0 in
 
@@ -103,7 +101,9 @@ let add_slices_of_valuation slicer tuple free_vars =
       if i < (Array.length valuation) then
         let value = valuation.(i) in
         match value with 
-          | Some v -> slice_index := the_strides.(i) * ((mod) (hash v the_seeds.(i)) the_shares.(i));
+          | Some v -> 
+            (*TODO Verify: should this be abs*)
+            slice_index := the_strides.(i) * (abs ((mod) (hash v the_seeds.(i)) the_shares.(i)));
           | None   -> ();
         calc_slice (i+1)
       else ()  
@@ -140,10 +140,14 @@ let add_slices_of_valuation slicer tuple free_vars =
     end   
   in
 
-  if (Array.length valuation == 0) then
+  let res = if (Array.length valuation == 0) then begin
     Array.of_list (add_slices_for_heavy_set !heavy_set)
-  else 
+  end  
+  else begin
     Array.of_list (cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set)
+  end  
+  in
+  res
 
 let mk_verdict_filter slicer slice verdict =
   let heavy_set = ref 0 in

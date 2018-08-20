@@ -1,1 +1,1 @@
-trans(c,t,a) AND 2000 < a  AND NOT ONCE[2,21) EXISTS e. auth(e,t)
+trans(c,t,a) AND 2000 < a  AND NOT ONCE[2,21) (EXISTS e. auth(e,t))
