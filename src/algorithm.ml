@@ -2050,7 +2050,8 @@ let get_index_prefix_msg = "Current timepoint:"
 let dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
   Marshal.to_channel ch value [Marshal.Closures];
-  close_out ch
+  close_out ch;
+  Printf.printf "%s\n%!" saved_state_msg
 
 let extended_dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
@@ -2144,24 +2145,25 @@ let files_to_list f =
   is then folded over.
  *)
 let merge_formulas files =
-  if List.length files == 1 then extended_read_m_from_file (List.hd files)
+  if List.length files == 1 then read_m_from_file (List.hd files)
   else
-  List.fold_right (fun s (slicer_state,last_ts,ff1,closed,neval1,tp,last) ->
-    let (_, _,ff2,_,neval2,_,_) = extended_read_m_from_file s in
+  List.fold_right (fun s (last_ts,ff1,closed,neval1,tp,last) ->
+    let (_,ff2,_,neval2,_,_) = read_m_from_file s in
     (*print_endline "Neval 1: ";
     NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) neval1;
     print_endline "";
     print_endline "Neval 2: ";
     NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) neval2;
-    print_endline "";*)
+    print_endline "";
     let comb_nv = Splitting.combine_neval neval1 neval2 in
-    (*print_endline "Comb neval1: ";
+    print_endline "Comb neval1: ";
     NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) comb_nv;
     print_endline "";*)
+    let comb_nv = Splitting.combine_neval neval1 neval2 in
     let comb_ff = Splitting.comb_m ff1 ff2 in
 
-    (slicer_state,last_ts,comb_ff,closed, comb_nv,tp,last)
-  ) (List.tl files) (extended_read_m_from_file (List.hd files))
+    (last_ts,comb_ff,closed, comb_nv,tp,last)
+  ) (List.tl files) (read_m_from_file (List.hd files))
 
 (* MONITORING FUNCTION *)
 
@@ -2347,7 +2349,7 @@ let test_filter logfile f =
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
 let resume logfile =
-  let (slicer,last_ts,ff,closed,neval,tp,last) = extended_unmarshal !resumefile in
+  let (last_ts,ff,closed,neval,tp,last) = unmarshal !resumefile in
   lastts := last_ts;
   Log.tp := tp;
   Log.skipped_tps := 0;
@@ -2360,13 +2362,8 @@ let resume logfile =
    the log file then processed from the beginning *)
 let combine logfile = 
   let files = files_to_list !combine_files in
-  let (slicer_state,last_ts,mf,closed,neval,tp,last) = merge_formulas files in
+  let (last_ts,mf,closed,neval,tp,last) = merge_formulas files in
   let ff = Marshalling.m_to_ext mf neval in
-
-  let heavy, shares, seeds = slicer_state in
-  slicer_shares := shares;
-  slicer_heavy := heavy;
-  slicer_seeds := seeds;
 
   lastts := last_ts;
   Log.tp := tp;
