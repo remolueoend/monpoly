@@ -2053,11 +2053,6 @@ let dump_to_file dumpfile value =
   close_out ch;
   Printf.printf "%s\n%!" saved_state_msg
 
-let extended_dump_to_file dumpfile value =
-  let ch = open_out_bin dumpfile in
-  Marshal.to_channel ch value [Marshal.Closures];
-  close_out ch
-
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
   Reads state from specified dumpfile and converts neval array to dllist
@@ -2070,13 +2065,6 @@ let read_m_from_file file =
   let neval = NEval.from_array a in
   (last_ts,mf,closed,neval,tp,last)
 
-let extended_read_m_from_file file =
-  let ch = open_in_bin file in
-  let value = (Marshal.from_channel ch : ex_state) in
-  close_in ch;
-  let (slicer_state,last_ts,closed,mf,a,tp,last) = value in
-  let neval = NEval.from_array a in
-  (slicer_state,last_ts,mf,closed,neval,tp,last)  
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
 let marshal dumpfile i lastts ff closed neval =
@@ -2087,12 +2075,7 @@ let marshal dumpfile i lastts ff closed neval =
 (*
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
   information using m_to_ext function.
-*)  
-let extended_unmarshal resumefile =
-  let (slicer,last_ts,mf,closed,neval,tp,last) = extended_read_m_from_file resumefile in
-  let ff = Marshalling.m_to_ext mf neval in
-  (slicer,last_ts,ff,closed,neval,tp,last)
-
+*)
 let unmarshal resumefile =
   let (last_ts,mf,closed,neval,tp,last) = read_m_from_file resumefile in
   let ff = Marshalling.m_to_ext mf neval in
@@ -2110,12 +2093,9 @@ let split_save filename i lastts ff closed neval  =
     Printf.sprintf "%s-%d.bin" filename index
   in
 
-  let shares = slicer.shares in
-  let heavy = slicer.heavy in
-  let seeds = slicer.seeds in
   Array.iteri (fun index mf ->
-    let value : ex_state = ((heavy, shares, seeds), lastts,closed,mf,a,!Log.tp,!Log.last) in
-    extended_dump_to_file (format_filename index) value
+    let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
+    dump_to_file (format_filename index) value
   ) result;
   Printf.printf "%s\n%!" saved_state_msg
   (*Printf.printf "%s to file with substr: %s \n%!" saved_state_msg filename*)
@@ -2198,7 +2178,7 @@ let set_slicer_parameters c p =
     slicer_heavy := heavy;
     slicer_shares := shares;
     slicer_seeds := seeds;
-    (*Printf.printf "%s\n%!" slicing_parameters_updated_msg*)
+    Printf.printf "%s\n%!" slicing_parameters_updated_msg
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
 let rec check_log lexbuf ff closed neval i =
