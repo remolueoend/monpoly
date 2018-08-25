@@ -4,6 +4,8 @@ type domain =
   | Some of cst
   | None
 
+type formula_pred = { pvar: var; ptcst: tcst}  
+
 module Domain_Set = Set.Make (
   struct type t = domain
     let compare = Pervasives.compare
@@ -14,14 +16,16 @@ include Domain_Set
 type domain_set = Domain_Set.t
 
 type heavy = int * domain_set
+type heavy_unproc = int * string list
 
 type integral_value = int
 type string_value   = string
 
-type slicer_state = (heavy array * int array array * int array array)
-type split_save_parameters = (heavy array * int array array * int array array)
+type split_save_parameters = (heavy_unproc array * int array array * int array array)
 
 let domain_empty = Domain_Set.empty
+
+let predicates = ref []
 
 let domain_of_string t str : domain =
   match str with

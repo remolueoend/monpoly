@@ -97,7 +97,7 @@ let resumefile = ref ""
 let dumpfile = ref ""
 let combine_files = ref ""
 let lastts = ref MFOTL.ts_invalid
-let slicer_heavy  = ref [|(0, Domain_set.domain_empty)|]
+let slicer_heavy_unproc : (int * string list) array ref= ref [|(0, [])|]
 let slicer_shares = ref [|[||]|]
 let slicer_seeds  = ref [|[||]|]
 
@@ -2082,11 +2082,12 @@ let unmarshal resumefile =
   (last_ts,ff,closed,neval,tp,last)
 
 let split_save filename i lastts ff closed neval  =
-  let heavy = !slicer_heavy in
+  let heavy_unproc = !slicer_heavy_unproc in
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
   let a, mf = Marshalling.ext_to_m ff neval in
+  let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
   let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree !dumpfile i lastts mf closed neval in
   let format_filename index =
@@ -2175,7 +2176,7 @@ let set_slicer_parameters c p =
   match p with 
   | SplitSave sp ->
     let heavy, shares, seeds = sp in
-    slicer_heavy := heavy;
+    slicer_heavy_unproc := heavy;
     slicer_shares := shares;
     slicer_seeds := seeds;
     Printf.printf "%s\n%!" slicing_parameters_updated_msg

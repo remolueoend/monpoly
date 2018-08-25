@@ -57,8 +57,15 @@
 
   let preds = ref []
 
+  let update_slicer_preds e =
+    Domain_set.predicates := e :: !Domain_set.predicates
+
   let update_preds l =
     preds := l;
+    List.iter (fun e ->
+     let _, vars = e in 
+     List.iter (fun e -> let var, tcst = e in update_slicer_preds { pvar = var; ptcst = tcst }) vars
+     ) l;
     l
 
   let get_type = function
@@ -169,16 +176,8 @@
 
 let get_2 (_, a) = a
 
-let return_split_restore_parameters heavy_list shares seeds = 
-    let convert heavy_list = 
-      List.map
-      (fun (i, heavy_set) ->
-        (i, (domain_set_from_list_basic heavy_set))
-      )
-      heavy_list
-    in
-    let heavy_arr = Array.of_list (convert heavy_list) in
-  
+let return_split_restore_parameters heavy_list shares seeds =
+    let heavy_arr = Array.of_list heavy_list in
     SplitSave (heavy_arr, shares, seeds)
 
 let convert_str_list l =  
