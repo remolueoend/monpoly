@@ -24,7 +24,7 @@ type hypercube_slicer = {
 
 let dimensions formula = List.length (Mformula.free_vars formula)
 
-let build_var_ids vars (predicates: Domain_set.formula_pred list) = 
+let build_var_ids vars predicates =
   let sorted = (List.sort Pervasives.compare vars) in
   List.mapi (fun i e -> 
     let pred = List.find (fun el -> el.pvar = e) predicates in
@@ -190,7 +190,7 @@ let mk_verdict_filter slicer slice verdict =
 
   calc_expected 0 == slice  
 
-let convert_heavy formula heavy_unproc = 
+let convert_heavy formula heavy_unproc =
   let variables_in_order = build_var_ids (Mformula.free_vars formula) !Domain_set.predicates in
   let heavy = Array.init (Array.length heavy_unproc) (fun i -> (-1, Domain_set.domain_empty)) in
   List.iter (fun e -> 

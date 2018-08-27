@@ -158,6 +158,7 @@ let update lexbuf =
 
 let skipped_tps = ref 0
 let last = ref false
+let last_ts = ref MFOTL.ts_invalid
 let tp = ref 0
 
 (* Reads from lexbuf by calling Log_parser resulting in DataTuple, CommandTuple or ErrorTuple.
@@ -189,6 +190,7 @@ let get_next_entry lexbuf =
 
     | DataTuple {ts; db; } ->
       update lexbuf;
+      last_ts := ts;
       incr tp;
       if !Filter_empty_tp.enabled && Db.is_empty db then
         begin (* skip empty db *)

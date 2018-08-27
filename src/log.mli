@@ -63,5 +63,6 @@ val get_next_entry : Lexing.lexbuf -> monpoly_feed
     end of the log is reached. *)
 
 val tp : int ref
+val last_ts : MFOTL.timestamp ref
 val skipped_tps : int ref
 val last : bool ref

@@ -2067,7 +2067,7 @@ let read_m_from_file file =
 
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
-let marshal dumpfile i lastts ff closed neval =
+let marshal dumpfile lastts ff closed neval =
   let a, mf = Marshalling.ext_to_m ff neval in
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file dumpfile value  
@@ -2081,21 +2081,42 @@ let unmarshal resumefile =
   let ff = Marshalling.m_to_ext mf neval in
   (last_ts,ff,closed,neval,tp,last)
 
-let split_save filename i lastts ff closed neval  =
+
+let create_empty_db = 
+  Db.make_db []
+
+let add_empty_db ff neval = 
+  Printf.printf "Last TP: %d \n" !Log.tp;
+  Printf.printf "Last TS: "; MFOTL.print_ts !Log.last_ts;
+  NEval.add_last ((!Log.tp-1), !Log.last_ts) neval;
+  add_index ff (!Log.tp-1) !Log.last_ts create_empty_db  
+
+let catch_up_on_filtered_tp ff neval = 
+  if (!crt_tp < (!Log.tp-1)) then
+    let () = Printf.printf "Current TP: %d || Log TP %d " !crt_tp (!Log.tp-1) in
+    let () = print_endline "MISMATCH BETWEEN CRT_TP & LOG.TP" in
+    let () = add_empty_db ff neval in
+    let first = NEval.get_first_cell neval in
+    let () = ignore(NEval.pop_first neval) in
+    ignore (eval ff neval first false)
+
+let split_save filename ff closed neval  =
   let heavy_unproc = !slicer_heavy_unproc in
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
+  catch_up_on_filtered_tp ff neval;
+
   let a, mf = Marshalling.ext_to_m ff neval in
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree !dumpfile i lastts mf closed neval in
+  let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree mf in
   let format_filename index =
     Printf.sprintf "%s-%d.bin" filename index
   in
 
   Array.iteri (fun index mf ->
-    let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
+    let value : state = (!Log.last_ts,closed,mf,a,!Log.tp,!Log.last) in
     dump_to_file (format_filename index) value
   ) result;
   Printf.printf "%s\n%!" saved_state_msg
@@ -2106,8 +2127,9 @@ let split_save filename i lastts ff closed neval  =
    with names of index prepended with dumpfile variable.
 *)  
 let split_and_save  sconsts dumpfile i lastts ff closed neval  =
+  catch_up_on_filtered_tp ff neval;
   let a, mf = Marshalling.ext_to_m ff neval in
-  let result = Splitting.split_formula sconsts dumpfile i lastts mf closed neval  in
+  let result = Splitting.split_formula sconsts mf in
 
   Array.iteri (fun index mf ->
   let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
@@ -2194,17 +2216,21 @@ let rec check_log lexbuf ff closed neval i =
     (* Helper functions for handling different monpoly commands *)  
     let save_state c params = match params with
       | Some (Argument filename) ->
-        marshal filename i !lastts ff closed neval;
+        catch_up_on_filtered_tp ff neval;
+        marshal filename !lastts ff closed neval;
         Printf.printf "%s\n%!" saved_state_msg
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
     let save_and_exit c params =  match params with
-      | Some p -> if (checkExitParam p = true) then marshal !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkExitParam p = true) then begin
+        catch_up_on_filtered_tp ff neval;
+        marshal !dumpfile !lastts ff closed neval end
+        else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i  
       | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
     let split_save   c params = match params with
-      | Some p -> if (checkExitParam p = true) then split_save !dumpfile i !lastts ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkExitParam p = true) then split_save !dumpfile ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
     let get_constraints_split_state p = match p with

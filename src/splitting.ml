@@ -634,7 +634,7 @@ let split_according_to_modulo keys num_partitions t p  =
     - the keys and the number of partitions specified in sconts
     - the mapping from tuple -> partitions it defines
  *)  
-let split_formula sconsts dumpfile i lastts mf closed neval =
+let split_formula sconsts mf =
   let numparts = (sconsts.num_partitions+1) in
 
   let keys = sconsts.keys in
@@ -642,7 +642,7 @@ let split_formula sconsts dumpfile i lastts mf closed neval =
   let mapping = split_according_to_modulo keys numparts in
   split_state mapping mf numparts
 
-let split_with_slicer slicer num_partitions dumpfile i lastts mf closed neval =
+let split_with_slicer slicer num_partitions mf =
   split_state slicer mf num_partitions
 
 (* END SPLITTING STATE *) 
@@ -672,11 +672,7 @@ let merge_first_elements nv1 nv2 nl =
   nl 
 
 let combine_neval nv1 nv2 =  
-    let nl = if NEval.length nv1 > 0 && NEval.length nv2 > 0 then
-      merge_first_elements nv1 nv2 (NEval.empty())
-    else 
-      NEval.empty()
-    in
+    let nl = NEval.empty() in
     let rec combine l1 l2 = 
       if Dllist.is_empty l1 && Dllist.is_empty l2 then ()
       else if not (Dllist.is_empty l1) && Dllist.is_empty l2 then Dllist.iter (fun e -> Dllist.add_last e nl) l1

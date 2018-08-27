@@ -123,14 +123,8 @@ let main () =
 
   if !displayver then
     print_endline ("MonPoly, version " ^ version)
-  else if !Algorithm.resumefile <> "" then
-    let _ = Log.get_signature !sigfile in
-    Algorithm.resume !logfile
   else if !formulafile = "" then
     print_endline usage_string
-  else if !Algorithm.combine_files <> "" then
-    let _ = Log.get_signature !sigfile in
-    Algorithm.combine !logfile
   else
     (* read formula file *)
     let f = analyze_formulafile () in
@@ -154,7 +148,14 @@ let main () =
               Algorithm.test_filter !logfile pf
             else
               (* start monitoring *)
-              Algorithm.monitor !logfile pf
+              if !Algorithm.resumefile <> "" then
+                let _ = Log.get_signature !sigfile in
+                Algorithm.resume !logfile
+              else if !Algorithm.combine_files <> "" then
+                let _ = Log.get_signature !sigfile in
+                Algorithm.combine !logfile
+              else
+                Algorithm.monitor !logfile pf
           end
       end
 
