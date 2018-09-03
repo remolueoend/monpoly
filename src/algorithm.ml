@@ -2086,15 +2086,11 @@ let create_empty_db =
   Db.make_db []
 
 let add_empty_db ff neval = 
-  Printf.printf "Last TP: %d \n" !Log.tp;
-  Printf.printf "Last TS: "; MFOTL.print_ts !Log.last_ts;
   NEval.add_last ((!Log.tp-1), !Log.last_ts) neval;
   add_index ff (!Log.tp-1) !Log.last_ts create_empty_db  
 
 let catch_up_on_filtered_tp ff neval = 
-  if (!crt_tp < (!Log.tp-1)) then
-    let () = Printf.printf "Current TP: %d || Log TP %d " !crt_tp (!Log.tp-1) in
-    let () = print_endline "MISMATCH BETWEEN CRT_TP & LOG.TP" in
+  if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then
     let () = add_empty_db ff neval in
     let first = NEval.get_first_cell neval in
     let () = ignore(NEval.pop_first neval) in
