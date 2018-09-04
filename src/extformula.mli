@@ -91,6 +91,8 @@ type extformula =
   | EEventuallyZ of interval * extformula * ezinfo
   | EEventually of interval * extformula * einfo
 
+val contains_eventually: extformula -> bool
+
 val print_auxel:  int * Relation.relation -> unit
 val print_sauxel: MFOTL.timestamp * Relation.relation -> unit
 

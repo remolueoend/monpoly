@@ -95,6 +95,29 @@ type extformula =
   | EEventuallyZ of interval * extformula * ezinfo
   | EEventually of interval * extformula * einfo
 
+
+  let rec contains_eventually = function
+  | ERel           (rel)                                      -> false
+  | EPred          (p, comp, inf)                             -> false
+  | ENeg           (f1)                                       -> contains_eventually f1
+  | EAnd           (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
+  | EOr            (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
+  | EExists        (c, f1)                                    -> contains_eventually f1
+  | EAggreg        (c, f1)                                    -> contains_eventually f1
+  | EAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> contains_eventually f1
+  | EAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> contains_eventually f1
+  | EPrev          (dt, f1, pinf)                             -> contains_eventually f1
+  | ENext          (dt, f1, ninf)                             -> contains_eventually f1
+  | ESinceA        (c2, dt, f1, f2, sainf)                    -> contains_eventually f1 || contains_eventually f2
+  | ESince         (c2, dt, f1, f2, sinf)                     -> contains_eventually f1 || contains_eventually f2
+  | EOnceA         (dt, f1, oainf)                            -> contains_eventually f1
+  | EOnceZ         (dt, f1, ozinf)                            -> contains_eventually f1
+  | EOnce          (dt, f1, oinf)                             -> contains_eventually f1
+  | ENUntil        (c1, dt, f1, f2, muninf)                   -> contains_eventually f1 || contains_eventually f2
+  | EUntil         (c1, dt, f1, f2, muinf)                    -> contains_eventually f1 || contains_eventually f2
+  | EEventuallyZ   (dt, f1, mezinf)                           -> true
+  | EEventually    (dt, f1, meinf)                            -> true
+
 (* 
   Print functions used for debugging
  *)  

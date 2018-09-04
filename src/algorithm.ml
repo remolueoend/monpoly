@@ -2090,11 +2090,13 @@ let add_empty_db ff neval =
   add_index ff (!Log.tp-1) !Log.last_ts create_empty_db  
 
 let catch_up_on_filtered_tp ff neval = 
-  if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then
+  if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then begin
+    let pop_elem = (NEval.length neval > 0) || not (contains_eventually ff) in
     let () = add_empty_db ff neval in
     let first = NEval.get_first_cell neval in
-    let () = ignore(NEval.pop_first neval) in
-    ignore (eval ff neval first false)
+    let () = ignore (eval ff neval first false) in
+    if(pop_elem) then ignore(NEval.pop_first neval)
+  end  
 
 let split_save filename ff closed neval  =
   let heavy_unproc = !slicer_heavy_unproc in
@@ -2213,8 +2215,7 @@ let rec check_log lexbuf ff closed neval i =
     let save_state c params = match params with
       | Some (Argument filename) ->
         catch_up_on_filtered_tp ff neval;
-        marshal filename !lastts ff closed neval;
-        Printf.printf "%s\n%!" saved_state_msg
+        marshal filename !lastts ff closed neval
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
