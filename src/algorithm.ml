@@ -2050,8 +2050,7 @@ let get_index_prefix_msg = "Current timepoint:"
 let dump_to_file dumpfile value =
   let ch = open_out_bin dumpfile in
   Marshal.to_channel ch value [Marshal.Closures];
-  close_out ch;
-  Printf.printf "%s\n%!" saved_state_msg
+  close_out ch
 
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
@@ -2150,19 +2149,8 @@ let merge_formulas files =
   else
   List.fold_right (fun s (last_ts,ff1,closed,neval1,tp,last) ->
     let (_,ff2,_,neval2,_,_) = read_m_from_file s in
-    (*print_endline "Neval 1: ";
-    NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) neval1;
-    print_endline "";
-    print_endline "Neval 2: ";
-    NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) neval2;
-    print_endline "";
-    let comb_nv = Splitting.combine_neval neval1 neval2 in
-    print_endline "Comb neval1: ";
-    NEval.iter (fun e -> let tp, ts = e in Printf.printf "(%d,%f)," tp ts) comb_nv;
-    print_endline "";*)
     let comb_nv = Splitting.combine_neval neval1 neval2 in
     let comb_ff = Splitting.comb_m ff1 ff2 in
-
     (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
 
@@ -2214,20 +2202,26 @@ let rec check_log lexbuf ff closed neval i =
     (* Helper functions for handling different monpoly commands *)  
     let save_state c params = match params with
       | Some (Argument filename) ->
-        catch_up_on_filtered_tp ff neval;
-        marshal filename !lastts ff closed neval
+                    catch_up_on_filtered_tp ff neval;
+                    marshal filename !lastts ff closed neval;
+                    Printf.printf "%s\n%!" saved_state_msg
       | None -> Printf.printf "%s: No filename specified\n%!" c;
       | _ -> print_endline "Unsupported parameters to save_state";
     in
     let save_and_exit c params =  match params with
       | Some p -> if (checkExitParam p = true) then begin
-        catch_up_on_filtered_tp ff neval;
-        marshal !dumpfile !lastts ff closed neval end
+                    catch_up_on_filtered_tp ff neval;
+                    marshal !dumpfile !lastts ff closed neval;
+                    Printf.printf "%s\n%!" saved_state_msg
+        end
         else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i  
       | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
     let split_save   c params = match params with
-      | Some p -> if (checkExitParam p = true) then split_save !dumpfile ff closed neval else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+      | Some p -> if (checkExitParam p = true) then 
+                    split_save !dumpfile ff closed neval
+                  else
+                    Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
     let get_constraints_split_state p = match p with

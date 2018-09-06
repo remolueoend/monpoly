@@ -217,6 +217,10 @@ let combine_ainfo ainf1 ainf2 =
   let urel = match (ainf1.arel, ainf2.arel) with
   | (Some r1, Some r2) -> Some (rel_u r1 r2)
   | (None, None) -> None
+  
+  (** TODO: this fixes mismatch error for empty timepoint filtering, can this be applied everywhere without adverse consequences ? **)
+  | (Some r1, None) -> Some (r1)
+  | (None, Some r2) -> Some (r2)
   | _ -> raise (Type_error ("Mismatched states in ainfo"))
   in
   { arel = urel; }
