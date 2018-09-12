@@ -96,3 +96,31 @@ let free_vars f =
   | MEventually    (_, f1, _)             -> get_pred f1
   in
   get_pred f
+
+  (* For each formula, returns list of relevant free variables according to sub structure *)
+let predicates f =
+  print_endline "Retrieving predicates";
+  let rec get_pred = function
+  | MRel           (_)                    -> []
+  | MPred          (p, _, _)              -> p :: []
+  | MNeg           (f1)                   -> get_pred f1
+  | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
+  | MOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
+  (* Utilize comp to map away unwanted elements of pvars *)
+  | MExists        (comp, f1)             -> get_pred f1
+  | MAggreg        (_, f1)                -> get_pred f1
+  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1
+  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1
+  | MPrev          (_, f1, _)             -> get_pred f1
+  | MNext          (_, f1, _)             -> get_pred f1
+  | MSinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MSince         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MOnceA         (_, f1, _)             -> get_pred f1
+  | MOnceZ         (_, f1, _)             -> get_pred f1
+  | MOnce          (_, f1, _)             -> get_pred f1
+  | MNUntil        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MUntil         (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
+  | MEventuallyZ   (_, f1, _)             -> get_pred f1
+  | MEventually    (_, f1, _)             -> get_pred f1
+  in
+  get_pred f

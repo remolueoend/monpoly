@@ -62,10 +62,7 @@
 
   let update_preds l =
     preds := l;
-    List.iter (fun e ->
-     let _, vars = e in 
-     List.iter (fun e -> let var, tcst = e in update_slicer_preds { pvar = var; ptcst = tcst }) vars
-     ) l;
+    List.iter (fun e -> update_slicer_preds (Domain_set.convert_predicate e)) l;
     l
 
   let get_type = function

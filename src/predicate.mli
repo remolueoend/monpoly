@@ -81,7 +81,7 @@ val cst_eq: cst -> cst -> bool
 
 (** A predicate consists of a name and a list of term arguments. It is
     thus an atomic formula. *)
-type predicate
+type predicate = var * int * term list
 
 val cst_of_str: tcst -> string -> cst
 (** Converts a string to a cst given its type *)
@@ -129,6 +129,7 @@ val int_of_cst: cst -> int
 
 val print_var: var -> unit
 val print_tcst: tcst -> unit
+val string_of_var: var -> string
 val string_of_cst: bool -> cst -> string
 val print_cst: bool -> cst -> unit
 (* val output_cst: out_channel -> cst -> unit *)

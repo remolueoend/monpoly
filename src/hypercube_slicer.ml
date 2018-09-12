@@ -9,7 +9,7 @@ open Domain_set
 
 type integral_value = int
 type string_value   = string
-type var_id = { var: Predicate.var; free_id: int; tcst: tcst}
+type var_id = { var: Predicate.var; free_id: int; tcst: Predicate.tcst }
 
 type hypercube_slicer = {
   formula: mformula;
@@ -24,12 +24,63 @@ type hypercube_slicer = {
 
 let dimensions formula = List.length (Mformula.free_vars formula)
 
+(*
 let build_var_ids vars predicates =
   let sorted = (List.sort Pervasives.compare vars) in
   List.mapi (fun i e -> 
     let pred = List.find (fun el -> el.pvar = e) predicates in
     {var = e; free_id = i; tcst = pred.ptcst}
   ) sorted
+let build_var_ids vars =
+  let sorted = (List.sort Pervasives.compare vars) in
+  List.mapi (fun i e -> 
+    {var = e; free_id = i }
+  ) sorted
+  *)
+  
+let rec filter elems pos res = 
+  if List.length elems != 0 then begin
+    
+  end else res   
+
+let rec remove_duplicates l = match l with
+  | [] -> []
+  | h::t -> h::(remove_duplicates (List.filter (fun x -> x.var <> h.var) t))
+
+let build_var_ids_preds free_vars preds_form preds_sig =
+  let sorted = (List.sort Pervasives.compare free_vars) in
+
+  let sorted_free_vars = List.map (fun e -> Predicate.string_of_var e) sorted in
+
+  let rec check_preds preds res_total =
+    if List.length preds != 0 then begin
+      let (name, arity, args) = List.hd preds in
+      let str_args = List.map (fun e -> Predicate.string_of_term e) args in
+
+      let pred = List.find (fun el -> el.name = name) preds_sig in
+      let pos  = List.filter (fun e -> e > -1) (List.map (fun v -> try Misc.get_pos v str_args with e -> -1) free_vars) in
+     
+      let vars = Array.of_list pred.vars in
+      let res = List.map (fun i -> vars.(i)) pos in
+      let pos = Array.of_list pos in
+      let str_args = Array.of_list str_args in
+      let res = List.mapi (fun i e -> 
+      let name = str_args.(pos.(i)) in
+      { tcst = e.ptcst; var = name; free_id = (Misc.get_pos name sorted_free_vars) }) res in
+      check_preds (List.tl preds) (List.append res res_total) 
+    end else res_total
+  in
+  let to_check = remove_duplicates (check_preds preds_form []) in 
+  (*List.mapi (fun i (name, arity, args) -> 
+    let str_args = List.map (fun e -> Predicate.string_of_term e) args in
+    let pred = List.find (fun el -> el.name = name) preds_sig in
+    let pos  = List.filter (fun e -> e > -1) (List.map (fun v -> try Misc.get_pos v str_args  with e -> -1) vars) in
+    let vars = Array.of_list pred.vars in
+    let res = List.map (fun i -> vars.(i)) pos in
+    let res = List.mapi (fun i e -> { tcst = e.ptcst; lvar = e.pvar; lfree_id = i }) res in
+    res
+  ) preds_form*)
+  to_check
 
 let degree shares = 
   let simple_shares = shares.(0) in
@@ -77,6 +128,13 @@ let add_slices_of_valuation slicer tuple free_vars =
   let unconstrained_set = ref 0 in
 
   let heavy = slicer.heavy in
+
+  (*Array.iter (fun t -> 
+  match t with 
+  | None     -> Printf.printf "None, "
+  | Some cst -> Printf.printf "%s , "  (Predicate.string_of_cst false cst);
+  ) valuation;
+  print_endline "";*)
 
   let rec calc_heavy i = 
     if i < Array.length valuation then begin
@@ -191,7 +249,8 @@ let mk_verdict_filter slicer slice verdict =
   calc_expected 0 == slice  
 
 let convert_heavy formula heavy_unproc =
-  let variables_in_order = build_var_ids (Mformula.free_vars formula) !Domain_set.predicates in
+  let preds = Mformula.predicates formula in
+  let variables_in_order = build_var_ids_preds (Mformula.free_vars formula) preds !Domain_set.predicates in
   let heavy = Array.init (Array.length heavy_unproc) (fun i -> (-1, Domain_set.domain_empty)) in
   List.iter (fun e -> 
     let (i, h) = heavy_unproc.(e.free_id) in 
@@ -202,7 +261,8 @@ let convert_heavy formula heavy_unproc =
 let create_slicer formula heavy shares seeds =
   let degree = degree shares in
   let dimensions = dimensions formula in  
-  let variables_in_order = build_var_ids (Mformula.free_vars formula) !Domain_set.predicates in
+  let preds = Mformula.predicates formula in
+  let variables_in_order = build_var_ids_preds (Mformula.free_vars formula) preds !Domain_set.predicates in
   let strides = strides seeds dimensions in
   
   { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }

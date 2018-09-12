@@ -4,7 +4,8 @@ type domain =
   | Some of cst
   | None
 
-type formula_pred = { pvar: var; ptcst: tcst}  
+type formula_var  = { pvar: var; ptcst: tcst }
+type formula_pred = { name: string; vars: formula_var list }  
 
 module Domain_Set = Set.Make (
   struct type t = domain
@@ -37,6 +38,12 @@ let domain_of_string_basic str : domain =
     | "null" -> None
     | _ -> Some (cst_of_str_basic str)    
 
+
+let convert_predicate p =
+  let name, vars = p in
+  let formula_vars = List.map (fun e -> let var, tcst = e in { pvar = var; ptcst = tcst }) vars in
+  { name = name; vars = formula_vars}
+  
 
 let domain_set_from_list t l = 
   let ds = Domain_Set.empty in

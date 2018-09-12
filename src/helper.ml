@@ -57,13 +57,32 @@ type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree
 let pvars_to_rel pvars = 
     Relation.singleton (List.map (fun v -> Str v) pvars)
 
+let preds_to_rel preds = 
+    Relation.singleton (List.map (fun (name, _, _) -> Str name) preds)
+
 let rel_to_pvars rel   =
     List.map (fun e -> match e with
         | Str   s   -> s
-        | Float f   -> raise (Type_error ("rel_to_pvars helper funtion only accepts strings"))
-        | Int   i   -> raise (Type_error ("rel_to_pvars helper funtion only accepts strings")))
+        | _   -> raise (Type_error ("rel_to_pvars helper funtion only accepts strings")))
     (Relation.min_elt rel) 
 
+let rel_to_preds rel   =
+    List.map (fun e -> match e with
+    | Str   s   -> s
+    | _  -> raise (Type_error ("rel_to_pvars helper funtion only accepts strings")))
+    (Relation.min_elt rel) 
+
+let comp_preds comp (predicates : Predicate.predicate list) =
+    let names = rel_to_preds (comp (preds_to_rel predicates)) in
+    let filtered = [] in
+    let rec filter l filtered =
+        if List.length l != 0 then
+            let name = List.hd l in
+            filter (List.tl l) (List.find (fun (n, _, _) -> n == name) predicates :: filtered)
+        else
+            filtered
+    in
+    filter names filtered
 
 let empty = Constraint_Set.empty
 

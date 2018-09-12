@@ -62,3 +62,4 @@ type mformula =
 type state = (timestamp * bool * mformula * (int * timestamp) array * int * bool)
 
 val free_vars: mformula -> Predicate.var list
+val predicates: mformula -> Predicate.predicate list

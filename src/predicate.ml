@@ -102,9 +102,13 @@ let cst_of_str t v =
   | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TInt [cst_of_ts]")))
 
 let cst_of_str_basic v = 
-  try Int (int_of_string v) with Failure _ ->
-  try Float (float_of_string v) with Failure _ -> 
-  Str v
+  if (Str.string_match (Str.regexp "^\".+\"$") v 0) then begin
+    Str (Str.global_replace (Str.regexp "\"") "" v)
+  end else begin
+    try Int (int_of_string v) with Failure _ ->
+    try Float (float_of_string v) with Failure _ -> 
+    Str v
+  end
 
 (* TODO: whould we return a set instead? *)
 let rec tvars = function
@@ -227,6 +231,9 @@ let print_tcst t =
   | TInt -> print_string "int"
   | TStr -> print_string "string"
   | TFloat -> print_string "float"
+
+let string_of_var var =
+  var
 
 let string_of_cst qm c =
   match c with
