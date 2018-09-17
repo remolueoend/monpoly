@@ -26,33 +26,32 @@ type commandParameter =
     | SplitParameters of splitParameters
     | Argument        of string
 
-type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
-type commandTuple = { c: string;  parameters: commandParameter option; }
-
-type parser_feed =
-    | CommandTuple of commandTuple
-    | DataTuple    of dataTuple
-    | ErrorTuple   of string
-
-type monpolyData    = { tp: int; ts: MFOTL.timestamp; db: Db.db;       }
-type monpolyCommand = { c: string; parameters: commandParameter option }
-
-type monpoly_feed =
-    | MonpolyCommand of commandTuple
-    | MonpolyData    of monpolyData
-    | MonpolyError   of string
+    type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
+    type commandTuple = { c: string;  parameters: commandParameter option; }
+    type slicingTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
+    
+    type parser_feed =
+        | SlicingTestTuple of slicingTestTuple
+        | CommandTuple of commandTuple
+        | DataTuple    of dataTuple
+        | ErrorTuple   of string
+    
+    type monpolyData    = { tp: int; ts: MFOTL.timestamp; db: Db.db; }
+    type monpolyCommand = { c: string; parameters: commandParameter option}
+    type monpolyTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
+    
+    type monpoly_feed =
+        | MonpolyTestTuple of monpolyTestTuple
+        | MonpolyCommand of commandTuple
+        | MonpolyData    of monpolyData
+        | MonpolyError   of string
+    
 
 type 'a atree =
     | ALNode of 'a
     | AINode of ('a * int * int)  
     
 type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree    
-
-
-(*let split_constraints cs l = 
-
-    let get_e (a, b) = if l then a else b in
-    map (fun c -> { relname = c.relname; values = get_e c.values }) cs*)
 
 let pvars_to_rel pvars = 
     Relation.singleton (List.map (fun v -> Str v) pvars)

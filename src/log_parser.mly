@@ -169,13 +169,15 @@
                                               (Bob)(163)(Merlin),                      (1)
   <
  *)
-
+let make_slicing_test vars tuple destinations =
+  let dest = Array.of_list (List.map (fun e -> int_of_string e) destinations) in
+  SlicingTestTuple { vars = vars; tuple = tuple; output = dest }
 
 let get_2 (_, a) = a
 
 let return_split_restore_parameters heavy_list shares seeds =
-    let heavy_arr = Array.of_list heavy_list in
-    SplitSave (heavy_arr, shares, seeds)
+  let heavy_arr = Array.of_list heavy_list in
+  SplitSave (heavy_arr, shares, seeds)
 
 let convert_str_list l =  
   Array.of_list (List.map(fun e -> int_of_string e) l)
@@ -251,6 +253,7 @@ tsdb:
       | CMD STR slicing EOC     { CommandTuple { c = $2; parameters = Some $3 } }
       | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
       | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
+      | CMD slicing_test EOC    { $2 }
       | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
       | AT STR db CMD           { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
       | AT STR db EOF           { f "tsdb(last)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
@@ -345,3 +348,6 @@ constraintList:
       |                                   { [] }
 constraintSet:
       | LPA fields RPA                    { $2 }
+
+slicing_test:
+      | LCB tuple COM tuple COM tuple RCB { make_slicing_test $2 $4 $6}

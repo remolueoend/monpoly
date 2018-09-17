@@ -203,6 +203,9 @@ let get_next_entry lexbuf =
     | CommandTuple { c; parameters } ->
         MonpolyCommand { c; parameters }
 
+    | SlicingTestTuple { vars; tuple; output }
+        -> MonpolyTestTuple { vars; tuple; output}
+
     | ErrorTuple s ->
       if Misc.debugging Dbg_filter then
         Printf.eprintf "Filter_empty_tp: skipped: %d, notskipped: %d\n"

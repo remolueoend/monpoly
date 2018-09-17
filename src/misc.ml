@@ -365,6 +365,12 @@ let get_pos e l =
     | [] -> raise Not_found
   in get_pos' e 0 l
 
+let get_pos_no_e e l =
+  let rec get_pos' e i = function
+    | h::t -> if h=e then i else get_pos' e (i+1) t
+    | [] -> -1
+  in get_pos' e 0 l
+
 
 
 

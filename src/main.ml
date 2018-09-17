@@ -81,6 +81,8 @@ let logfile = ref ""
 let sigfile = ref ""
 let debug = ref ""
 
+let slicer_file = ref ""
+
 let negate = ref false
 let inc = ref false
 let memarg = ref false
@@ -147,12 +149,14 @@ let main () =
             if !testfilteropt then
               Algorithm.test_filter !logfile pf
             else
+              let _ = Log.get_signature !sigfile in
+              (* Test Slicing implementation *)
+              if !slicer_file <> "" then
+                Algorithm.test_slicer !logfile pf
               (* start monitoring *)
-              if !Algorithm.resumefile <> "" then
-                let _ = Log.get_signature !sigfile in
+              else if !Algorithm.resumefile <> "" then
                 Algorithm.resume !logfile
               else if !Algorithm.combine_files <> "" then
-                let _ = Log.get_signature !sigfile in
                 Algorithm.combine !logfile
               else
                 Algorithm.monitor !logfile pf
@@ -183,6 +187,7 @@ let _ =
     "-stop_at_first_viol", Arg.Set Misc.stop_at_first_viol, "\tStop at first encountered violation";
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
     "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
+    "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
   ]
     (fun _ -> ())
     usage_string;

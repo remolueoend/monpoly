@@ -2085,17 +2085,24 @@ let create_empty_db =
   Db.make_db []
 
 let add_empty_db ff neval = 
-  NEval.add_last ((!Log.tp-1), !Log.last_ts) neval;
-  add_index ff (!Log.tp-1) !Log.last_ts create_empty_db  
+  crt_tp := !Log.tp -1;
+  NEval.add_last (!crt_tp, !Log.last_ts) neval;
+  lastts := !Log.last_ts;
+  add_index ff !crt_tp !Log.last_ts create_empty_db  
 
 let catch_up_on_filtered_tp ff neval = 
   if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then begin
-    let pop_elem = (NEval.length neval > 0) || not (contains_eventually ff) in
     let () = add_empty_db ff neval in
     let first = NEval.get_first_cell neval in
-    let () = ignore (eval ff neval first false) in
-    if(pop_elem) then ignore(NEval.pop_first neval)
-  end  
+    let res = eval ff neval first false in
+    match res with
+    | Some r ->
+      ignore(NEval.pop_first neval)
+    | None -> 
+      (** TP mismatch in result if this isn't done**)
+      ignore(NEval.pop_first neval);
+      ()
+  end
 
 let split_save filename ff closed neval  =
   let heavy_unproc = !slicer_heavy_unproc in
@@ -2123,13 +2130,13 @@ let split_save filename ff closed neval  =
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
    with names of index prepended with dumpfile variable.
 *)  
-let split_and_save  sconsts dumpfile i lastts ff closed neval  =
+let split_and_save  sconsts dumpfile i ff closed neval  =
   catch_up_on_filtered_tp ff neval;
   let a, mf = Marshalling.ext_to_m ff neval in
   let result = Splitting.split_formula sconsts mf in
 
   Array.iteri (fun index mf ->
-  let value : state = (lastts,closed,mf,a,!Log.tp,!Log.last) in
+  let value : state = (!lastts,closed,mf,a,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result;
   Printf.printf "%s\n%!" saved_state_msg
 
@@ -2147,9 +2154,16 @@ let files_to_list f =
 let merge_formulas files =
   if List.length files == 1 then read_m_from_file (List.hd files)
   else
-  List.fold_right (fun s (last_ts,ff1,closed,neval1,tp,last) ->
-    let (_,ff2,_,neval2,_,_) = read_m_from_file s in
+  List.fold_right (fun s (last_ts1,ff1,closed,neval1,tp1,last) ->
+    let (last_ts,ff2,_,neval2,tp,_) = read_m_from_file s in
+    Printf.printf "TS1: %f, TS2: %f" last_ts1 last_ts;
+    if (MFOTL.ts_minus last_ts1 last_ts) == 0. then failwith "[merge_formulas] last_ts mismatch";
+    if tp1 != tp then failwith "[merge_formulas] last_ts mismatch";
+
+    Printf.printf "1 length_ %d \n" (NEval.length neval1);
+    Printf.printf "2 length_ %d \n" (NEval.length neval2);
     let comb_nv = Splitting.combine_neval neval1 neval2 in
+    Printf.printf "comb length_ %d \n" (NEval.length comb_nv);
     let comb_ff = Splitting.comb_m ff1 ff2 in
     (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
@@ -2231,7 +2245,7 @@ let rec check_log lexbuf ff closed neval i =
     in
     let split_state   c params = match params with
       | Some p -> if (checkSplitParam p = true) then
-                    split_and_save (get_constraints_split_state p) !dumpfile i !lastts ff closed neval
+                    split_and_save (get_constraints_split_state p) !dumpfile i ff closed neval
                   else
                     Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
       | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
@@ -2341,6 +2355,8 @@ let test_filter logfile f =
                 loop f i
           in
           process_command c;
+      | _ ->
+        Printf.printf "%s, processed %d time points\n" "Unrecognized type" (i - 1)
   in
   loop f 0 
 
@@ -2372,3 +2388,53 @@ let combine logfile =
   Printf.printf "%s\n%!" combined_state_msg;
   check_log lexbuf ff closed neval 0
   
+
+(* Testing slicer *)
+let test_tuple_split slicer size tuple dest =
+  let parts = slicer tuple in
+  Array.iter2 (fun i1 i2 -> if i1 != i2 then failwith "Mismatch between slicing result and groundtruth") parts dest
+
+let test_slicer ff evaluation  =
+  let heavy_unproc = !slicer_heavy_unproc in
+  let shares = !slicer_shares in
+  let seeds = !slicer_seeds in
+
+  let a, mf = Marshalling.ext_to_m ff (NEval.empty()) in
+  let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
+  let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
+
+  Dllist.iter (fun e -> 
+    let tuple = convert_slicing_tuple slicer e.vars e.tuple in
+    test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple e.output
+  ) evaluation
+
+let rec test_log lexbuf ff evaluation =
+  let rec loop ffl =
+    let set_slicer c params = match params with
+      | Some p -> set_slicer_parameters c p
+      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
+    in
+    match Log.get_next_entry lexbuf with
+    | MonpolyCommand {c; parameters} ->
+        let process_command = function
+            | "set_slicer" ->
+                set_slicer c parameters; 
+                loop ffl
+            | "test_slicer" -> test_slicer ff evaluation;
+                loop ffl
+            | _ ->
+                Printf.printf "UNRECOGNIZED COMMAND: %s\n%!" c;
+                loop ffl
+        in
+        process_command c;
+    | MonpolyTestTuple st ->
+          Dllist.add_last st evaluation
+    | _ -> ()
+  in
+  loop ff
+
+
+let test_slicer testfile formula = 
+  let lexbuf = Log.log_open testfile in
+  Printf.printf "Testing slicing configurations\n";
+  test_log lexbuf (add_ext formula) (NEval.empty())

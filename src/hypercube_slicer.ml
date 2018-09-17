@@ -22,26 +22,7 @@ type hypercube_slicer = {
 }
 
 
-let dimensions formula = List.length (Mformula.free_vars formula)
-
-(*
-let build_var_ids vars predicates =
-  let sorted = (List.sort Pervasives.compare vars) in
-  List.mapi (fun i e -> 
-    let pred = List.find (fun el -> el.pvar = e) predicates in
-    {var = e; free_id = i; tcst = pred.ptcst}
-  ) sorted
-let build_var_ids vars =
-  let sorted = (List.sort Pervasives.compare vars) in
-  List.mapi (fun i e -> 
-    {var = e; free_id = i }
-  ) sorted
-  *)
-  
-let rec filter elems pos res = 
-  if List.length elems != 0 then begin
-    
-  end else res   
+let dimensions formula = List.length (Mformula.free_vars formula) 
 
 let rec remove_duplicates l = match l with
   | [] -> []
@@ -58,29 +39,20 @@ let build_var_ids_preds free_vars preds_form preds_sig =
       let str_args = List.map (fun e -> Predicate.string_of_term e) args in
 
       let pred = List.find (fun el -> el.name = name) preds_sig in
-      let pos  = List.filter (fun e -> e > -1) (List.map (fun v -> try Misc.get_pos v str_args with e -> -1) free_vars) in
+      let pos  = List.filter (fun e -> e > -1) (List.map (fun v -> Misc.get_pos_no_e v str_args) free_vars) in
      
       let vars = Array.of_list pred.vars in
       let res = List.map (fun i -> vars.(i)) pos in
       let pos = Array.of_list pos in
       let str_args = Array.of_list str_args in
       let res = List.mapi (fun i e -> 
-      let name = str_args.(pos.(i)) in
-      { tcst = e.ptcst; var = name; free_id = (Misc.get_pos name sorted_free_vars) }) res in
+        let name = str_args.(pos.(i)) in
+        { tcst = e.ptcst; var = name; free_id = (Misc.get_pos name sorted_free_vars) }
+      ) res in
       check_preds (List.tl preds) (List.append res res_total) 
     end else res_total
   in
-  let to_check = remove_duplicates (check_preds preds_form []) in 
-  (*List.mapi (fun i (name, arity, args) -> 
-    let str_args = List.map (fun e -> Predicate.string_of_term e) args in
-    let pred = List.find (fun el -> el.name = name) preds_sig in
-    let pos  = List.filter (fun e -> e > -1) (List.map (fun v -> try Misc.get_pos v str_args  with e -> -1) vars) in
-    let vars = Array.of_list pred.vars in
-    let res = List.map (fun i -> vars.(i)) pos in
-    let res = List.mapi (fun i e -> { tcst = e.ptcst; lvar = e.pvar; lfree_id = i }) res in
-    res
-  ) preds_form*)
-  to_check
+  remove_duplicates (check_preds preds_form [])
 
 let degree shares = 
   let simple_shares = shares.(0) in
@@ -113,28 +85,13 @@ let hash value seed = match value with
 (* TODO: check ordering *)
 let variables_in_order slicer = Mformula.free_vars slicer.formula
 
-let add_slices_of_valuation slicer tuple free_vars =
+let return_shares slicer valuation =
   (*Do not actually need a set here (verify)*)
   let slices = [] in
-  let tuple = Array.of_list tuple in
-
-  let free_vars_full = Mformula.free_vars slicer.formula in
-
-  let valuation = Array.init (List.length free_vars_full) (fun _ -> None) in
-  (* mapping of vars array of subformula to vars_full *)
-  let pos = List.map (fun v -> try Misc.get_pos v free_vars_full with e -> -1  ) free_vars in
-  List.iteri (fun i e -> if e >= 0 then begin valuation.(e) <- Some tuple.(i) end) pos;
   let heavy_set = ref 0 in
   let unconstrained_set = ref 0 in
 
   let heavy = slicer.heavy in
-
-  (*Array.iter (fun t -> 
-  match t with 
-  | None     -> Printf.printf "None, "
-  | Some cst -> Printf.printf "%s , "  (Predicate.string_of_cst false cst);
-  ) valuation;
-  print_endline "";*)
 
   let rec calc_heavy i = 
     if i < Array.length valuation then begin
@@ -145,7 +102,7 @@ let add_slices_of_valuation slicer tuple free_vars =
           | None     -> unconstrained_set := !unconstrained_set + (shift_left 1 v);
           | Some cst -> 
             if contains_cst cst s then 
-               heavy_set := !heavy_set + (shift_left 1 v);     
+                heavy_set := !heavy_set + (shift_left 1 v);     
       calc_heavy (i+1)
     end  
     else ()
@@ -210,6 +167,19 @@ let add_slices_of_valuation slicer tuple free_vars =
   end  
   in
   res
+  
+
+let add_slices_of_valuation slicer tuple free_vars =
+  let tuple = Array.of_list tuple in
+
+  let free_vars_full = Mformula.free_vars slicer.formula in
+
+  let valuation = Array.init (List.length free_vars_full) (fun _ -> None) in
+  (* mapping of vars array of subformula to vars_full *)
+  let pos = List.map (fun v -> Misc.get_pos_no_e v free_vars_full) free_vars in
+  List.iteri (fun i e -> if e >= 0 then begin valuation.(e) <- Some tuple.(i) end) pos;
+
+  return_shares slicer valuation
 
 let mk_verdict_filter slicer slice verdict =
   let heavy_set = ref 0 in
@@ -266,3 +236,25 @@ let create_slicer formula heavy shares seeds =
   let strides = strides seeds dimensions in
   
   { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }
+
+
+let rec filter i pos l res =
+  if List.length l == 0 then begin
+    if pos.(i) > -1 then 
+      filter (i+1) pos (List.tl l) (List.hd l :: res)
+    else 
+      filter (i+1) pos (List.tl l) res  
+  end
+  else res
+
+let convert_slicing_tuple slicer vars values =
+  let vars_in_order = slicer.variables_in_order in
+  let str_vars = Array.to_list (Array.map (fun e -> (Predicate.string_of_var e.var)) vars_in_order) in
+
+  let raw_pos = List.map (fun v -> Misc.get_pos_no_e v str_vars) vars in
+  let pos = Array.of_list (List.filter (fun e -> e > -1) raw_pos) in
+
+  let tuple = Array.init (Array.length pos) (fun _ -> None) in
+  let values = Array.of_list values in 
+  Array.iteri (fun i v -> tuple.(i) <- Some (Predicate.cst_of_str vars_in_order.(v).tcst values.(i))) pos;
+  tuple

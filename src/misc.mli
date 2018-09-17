@@ -149,6 +149,9 @@ val split_at_lastbutone: 'a list -> 'a list * 'a * 'a
 val get_pos: 'a -> 'a list -> int
   (** [get_pos pos l] returns the elements at position [pos] in
       [l]. *)
+val get_pos_no_e: 'a -> 'a list -> int
+(** [get_pos pos l] returns the elements at position [pos] in
+    [l]. without throwing an exception *)
 
 
 val remove_positions: int list -> 'a list -> 'a list

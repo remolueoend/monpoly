@@ -99,7 +99,6 @@ let free_vars f =
 
   (* For each formula, returns list of relevant free variables according to sub structure *)
 let predicates f =
-  print_endline "Retrieving predicates";
   let rec get_pred = function
   | MRel           (_)                    -> []
   | MPred          (p, _, _)              -> p :: []

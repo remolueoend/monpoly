@@ -33,21 +33,23 @@ type commandParameter =
 
 type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
 type commandTuple = { c: string;  parameters: commandParameter option; }
+type slicingTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
 
 type parser_feed =
+    | SlicingTestTuple of slicingTestTuple
     | CommandTuple of commandTuple
     | DataTuple    of dataTuple
     | ErrorTuple   of string
 
 type monpolyData    = { tp: int; ts: MFOTL.timestamp; db: Db.db; }
 type monpolyCommand = { c: string; parameters: commandParameter option}
-
+type monpolyTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
 
 type monpoly_feed =
+    | MonpolyTestTuple of monpolyTestTuple
     | MonpolyCommand of commandTuple
     | MonpolyData    of monpolyData
     | MonpolyError   of string
-
 
 type 'a atree =
     | ALNode of 'a
