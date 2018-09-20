@@ -66,4 +66,4 @@ val monitor: string -> formula -> unit
     the tuples satisfying formula [f]. *)
 
 val test_filter: string -> formula -> unit
-val test_slicer: string -> formula -> unit
+val run_test: string -> formula -> unit

@@ -2156,14 +2156,14 @@ let merge_formulas files =
   else
   List.fold_right (fun s (last_ts1,ff1,closed,neval1,tp1,last) ->
     let (last_ts,ff2,_,neval2,tp,_) = read_m_from_file s in
-    Printf.printf "TS1: %f, TS2: %f" last_ts1 last_ts;
+    (*f.printf "TS1: %f, TS2: %f \n" last_ts1 last_ts;
     if (MFOTL.ts_minus last_ts1 last_ts) == 0. then failwith "[merge_formulas] last_ts mismatch";
     if tp1 != tp then failwith "[merge_formulas] last_ts mismatch";
 
     Printf.printf "1 length_ %d \n" (NEval.length neval1);
-    Printf.printf "2 length_ %d \n" (NEval.length neval2);
+    Printf.printf "2 length_ %d \n" (NEval.length neval2);*)
     let comb_nv = Splitting.combine_neval neval1 neval2 in
-    Printf.printf "comb length_ %d \n" (NEval.length comb_nv);
+  
     let comb_ff = Splitting.comb_m ff1 ff2 in
     (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
@@ -2311,6 +2311,7 @@ let rec check_log lexbuf ff closed neval i =
             (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts);
           loop ffl i
         end
+    | MonpolyTestTuple st -> finish ()
     | MonpolyError s -> finish ()
   in
   loop ff i
@@ -2392,7 +2393,9 @@ let combine logfile =
 (* Testing slicer *)
 let test_tuple_split slicer size tuple dest =
   let parts = slicer tuple in
-  Array.iter2 (fun i1 i2 -> if i1 != i2 then failwith "Mismatch between slicing result and groundtruth") parts dest
+  Array.iter2 (fun i1 i2 ->
+  Printf.printf "%d, %d\n" i1 i2;
+  if i1 <> i2 then failwith "Mismatch between slicing result and groundtruth") parts dest
 
 let test_slicer ff evaluation  =
   let heavy_unproc = !slicer_heavy_unproc in
@@ -2428,13 +2431,14 @@ let rec test_log lexbuf ff evaluation =
         in
         process_command c;
     | MonpolyTestTuple st ->
-          Dllist.add_last st evaluation
+          Dllist.add_last st evaluation;
+          loop ffl
     | _ -> ()
   in
   loop ff
 
 
-let test_slicer testfile formula = 
+let run_test testfile formula = 
   let lexbuf = Log.log_open testfile in
   Printf.printf "Testing slicing configurations\n";
   test_log lexbuf (add_ext formula) (NEval.empty())

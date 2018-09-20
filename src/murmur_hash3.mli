@@ -1,7 +1,7 @@
-val finalize_hash: int -> int -> int
-val string_hash: string -> int -> int
-val mix_last: int -> int -> int
-val mix: int -> int -> int
+val finalize_hash: int32 -> int -> int32
+val string_hash: string -> int32 -> int32
+val mix_last: int32 -> int32 -> int32
+val mix: int -> int -> int32
 
 (* Helper classes, abstracting away Int32 conversion to match Scala int *)
 val logor: int -> int -> int

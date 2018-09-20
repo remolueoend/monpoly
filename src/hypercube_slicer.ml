@@ -6,6 +6,7 @@ open Mformula
 open Log_parser
 open Domain_set
 
+exception Error of string
 
 type integral_value = int
 type string_value   = string
@@ -21,6 +22,14 @@ type hypercube_slicer = {
   degree: int;
 }
 
+let rec filter i pos l res =
+  if List.length l <> 0 then begin
+    if pos.(i) > -1 then 
+      filter (i+1) pos (List.tl l) (List.hd l :: res)
+    else 
+      filter (i+1) pos (List.tl l) res  
+  end
+  else res
 
 let dimensions formula = List.length (Mformula.free_vars formula) 
 
@@ -39,16 +48,18 @@ let build_var_ids_preds free_vars preds_form preds_sig =
       let str_args = List.map (fun e -> Predicate.string_of_term e) args in
 
       let pred = List.find (fun el -> el.name = name) preds_sig in
-      let pos  = List.filter (fun e -> e > -1) (List.map (fun v -> Misc.get_pos_no_e v str_args) free_vars) in
-     
-      let vars = Array.of_list pred.vars in
+      let pos_in_free  = Array.of_list (List.map (fun v -> Misc.get_pos_no_e v free_vars) str_args) in
+      let vars = filter 0 pos_in_free pred.vars [] in
+      
+
+      (*let vars = Array.of_list pred.vars in
       let res = List.map (fun i -> vars.(i)) pos in
-      let pos = Array.of_list pos in
-      let str_args = Array.of_list str_args in
+      let pos = Array.of_list pos in *)
+      let free_vars_arr = Array.of_list free_vars in
       let res = List.mapi (fun i e -> 
-        let name = str_args.(pos.(i)) in
+        let name = free_vars_arr.(i) in
         { tcst = e.ptcst; var = name; free_id = (Misc.get_pos name sorted_free_vars) }
-      ) res in
+      ) vars in
       check_preds (List.tl preds) (List.append res res_total) 
     end else res_total
   in
@@ -73,23 +84,26 @@ let strides shares dimensions =
 
 let handle_hash x seed = 
   let lo = x in
-  let hi = shift_left x 32 in
-  Murmur_hash3.finalize_hash (Murmur_hash3.mix_last (Murmur_hash3.mix seed lo) hi) 0
+  let hi = x lsr 32 in
+  let res = Int32.to_int (Murmur_hash3.finalize_hash (Murmur_hash3.mix_last (Murmur_hash3.mix seed lo) (Int32.of_int hi)) 0) in
+  res
 
 let hash value seed = match value with
   | Int   x -> handle_hash x seed
-  | Str   x -> Murmur_hash3.string_hash x seed
+  | Str   x -> handle_hash (int_of_string x) seed
+  (*Int32.to_int (Murmur_hash3.string_hash x (Int32.of_int seed))*)
   (*TODO*)
   | Float x -> handle_hash (int_of_float x) seed
 
-(* TODO: check ordering *)
-let variables_in_order slicer = Mformula.free_vars slicer.formula
-
 let return_shares slicer valuation =
-  (*Do not actually need a set here (verify)*)
   let slices = [] in
   let heavy_set = ref 0 in
   let unconstrained_set = ref 0 in
+
+  (*Array.iter (fun e -> match e with 
+  | Some v -> Printf.printf "Value: %s \n" (Predicate.string_of_cst false v)
+  | None -> Printf.printf "None \n"
+  ) valuation;*)
 
   let heavy = slicer.heavy in
 
@@ -114,28 +128,27 @@ let return_shares slicer valuation =
     let the_strides = (slicer.strides).(heavy_set) in
     let the_shares  = (slicer.shares).(heavy_set) in
 
-    let slice_index = ref 0 in
-
-    let rec calc_slice i = 
+    let rec calc_slice slice_index i = 
       if i < (Array.length valuation) then
         let value = valuation.(i) in
         match value with 
           | Some v -> 
-            (*TODO Verify: should this be abs*)
-            slice_index := the_strides.(i) * (abs ((mod) (hash v the_seeds.(i)) the_shares.(i)));
-          | None   -> ();
-        calc_slice (i+1)
-      else ()  
+            let index = slice_index + the_strides.(i) * (abs ((mod) (hash v the_seeds.(i)) the_shares.(i))) in
+            calc_slice index (i+1)
+          | None   -> 
+            calc_slice slice_index (i+1)
+      else 
+      slice_index 
     in     
-    let () = calc_slice 0 in
-
+    let slice_index = calc_slice 0 0 in
     let rec broadcast slices i k =
       if i < 0 then 
         k :: slices
       else begin  
         let value = valuation.(i) in
         match value with 
-          | Some cst -> broadcast slices (i - 1) k
+          | Some cst -> 
+            broadcast slices (i - 1) k
           | None     -> 
               let rec iterate slices j =
                 if (j < the_shares.(i)) then begin
@@ -147,11 +160,11 @@ let return_shares slicer valuation =
               iterate slices 0 
       end  
     in
-    broadcast slices (Array.length valuation - 1) !slice_index  
+    broadcast slices (Array.length valuation - 1) slice_index  
   in
 
   let rec cover_unconstrained m h =
-    if (h == 0) then add_slices_for_heavy_set h
+    if (m == 0) then add_slices_for_heavy_set h
     else begin
       if (logand !unconstrained_set m != 0) then
         cover_unconstrained (shift_right m 1) (logor h m)
@@ -180,43 +193,7 @@ let add_slices_of_valuation slicer tuple free_vars =
   List.iteri (fun i e -> if e >= 0 then begin valuation.(e) <- Some tuple.(i) end) pos;
 
   return_shares slicer valuation
-
-let mk_verdict_filter slicer slice verdict =
-  let heavy_set = ref 0 in
-  let vars_in_order = slicer.variables_in_order in
-  let rec calc_heavy i = 
-    if i < Array.length vars_in_order then
-      let var_id = vars_in_order.(i).free_id in
-      let value = verdict.(i) in
-      let heavyMap = slicer.heavy.(var_id) in
-    
-      let v, s = heavyMap in
-      if (v >= 0 && (contains_cst value s)) then
-        heavy_set := !heavy_set + (shift_left 1 v);
-
-      calc_heavy (i+1)
-    else ()
-  in
-  let () = calc_heavy 0 in
-  let heavy_set = !heavy_set in
-
-  let the_seeds = (slicer.seeds).(heavy_set) in
-  let the_strides = (slicer.strides).(heavy_set) in
-  let the_shares = (slicer.shares).(heavy_set) in
-
-  let expected_slice = ref 0 in
-
-  let rec calc_expected i = 
-    if i < (Array.length vars_in_order) then
-      let var_id = vars_in_order.(i).free_id in
-      let value = verdict.(i) in
-      expected_slice := the_strides.(var_id) * ((mod) (hash value the_seeds.(var_id)) the_shares.(var_id));
-      calc_expected (i+1)
-    else ()  
-  in    
-  let () = calc_expected 0 in
-
-  calc_expected 0 == slice  
+  
 
 let convert_heavy formula heavy_unproc =
   let preds = Mformula.predicates formula in
@@ -238,23 +215,14 @@ let create_slicer formula heavy shares seeds =
   { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }
 
 
-let rec filter i pos l res =
-  if List.length l == 0 then begin
-    if pos.(i) > -1 then 
-      filter (i+1) pos (List.tl l) (List.hd l :: res)
-    else 
-      filter (i+1) pos (List.tl l) res  
-  end
-  else res
-
 let convert_slicing_tuple slicer vars values =
   let vars_in_order = slicer.variables_in_order in
-  let str_vars = Array.to_list (Array.map (fun e -> (Predicate.string_of_var e.var)) vars_in_order) in
 
-  let raw_pos = List.map (fun v -> Misc.get_pos_no_e v str_vars) vars in
-  let pos = Array.of_list (List.filter (fun e -> e > -1) raw_pos) in
-
-  let tuple = Array.init (Array.length pos) (fun _ -> None) in
+  let tuple = Array.init (List.length vars) (fun _ -> None) in
   let values = Array.of_list values in 
-  Array.iteri (fun i v -> tuple.(i) <- Some (Predicate.cst_of_str vars_in_order.(v).tcst values.(i))) pos;
+  Array.iteri (fun i var -> 
+    if String.compare values.(var.free_id) "null" <> 0 then begin
+      tuple.(var.free_id) <- Some (Predicate.cst_of_str var.tcst values.(var.free_id))
+    end) vars_in_order;
+
   tuple
