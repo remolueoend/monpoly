@@ -22,6 +22,15 @@ type hypercube_slicer = {
   degree: int;
 }
 
+module Result_Set = Set.Make (
+  struct type t = int
+    let compare = Pervasives.compare
+  end)
+
+include Result_Set
+
+type result_set = Result_Set.t
+
 let rec filter i pos l res =
   if List.length l <> 0 then begin
     if pos.(i) > -1 then 
@@ -71,7 +80,6 @@ let degree shares =
   else Array.fold_left (fun acc b -> acc * b) 1 simple_shares
 
 let strides shares dimensions = 
-  let shares = shares in
   let dims = dimensions in
   let strides = Array.init (Array.length shares) 
       (fun _ -> Array.init dims (fun _ -> 1))
@@ -82,6 +90,7 @@ let strides shares dimensions =
     ) strides in
   strides
 
+
 let handle_hash x seed = 
   let lo = x in
   let hi = x lsr 32 in
@@ -90,34 +99,38 @@ let handle_hash x seed =
 
 let hash value seed = match value with
   | Int   x -> handle_hash x seed
-  | Str   x -> handle_hash (int_of_string x) seed
-  (*Int32.to_int (Murmur_hash3.string_hash x (Int32.of_int seed))*)
-  (*TODO*)
+  | Str   x -> Int32.to_int (Murmur_hash3.string_hash x (Int32.of_int seed))
+    (*TODO*)
   | Float x -> handle_hash (int_of_float x) seed
 
+let string_of_some_cst cst =
+  match cst with 
+  | Some v -> Predicate.string_of_cst false v
+  | None -> "null"
+
 let return_shares slicer valuation =
-  let slices = [] in
+  let set = Dllist.empty() in
   let heavy_set = ref 0 in
   let unconstrained_set = ref 0 in
-
-  (*Array.iter (fun e -> match e with 
-  | Some v -> Printf.printf "Value: %s \n" (Predicate.string_of_cst false v)
-  | None -> Printf.printf "None \n"
-  ) valuation;*)
 
   let heavy = slicer.heavy in
 
   let rec calc_heavy i = 
     if i < Array.length valuation then begin
       let v, s = heavy.(i) in
-      if (v >= 0) then
+      if (v >= 0) then begin
         let value = valuation.(i) in
         match value with 
-          | None     -> unconstrained_set := !unconstrained_set + (shift_left 1 v);
+          | None     ->
+            unconstrained_set := !unconstrained_set + (shift_left 1 v);
+            calc_heavy (i+1)
           | Some cst -> 
-            if contains_cst cst s then 
-                heavy_set := !heavy_set + (shift_left 1 v);     
-      calc_heavy (i+1)
+            if contains_cst cst s then begin
+                heavy_set := !heavy_set + (shift_left 1 v); 
+            end else ();
+            calc_heavy (i+1)
+        end else
+          calc_heavy (i+1)
     end  
     else ()
   in
@@ -141,45 +154,56 @@ let return_shares slicer valuation =
       slice_index 
     in     
     let slice_index = calc_slice 0 0 in
-    let rec broadcast slices i k =
-      if i < 0 then 
-        k :: slices
-      else begin  
+
+    let rec broadcast i k =
+      if i < 0 then begin
+        Dllist.add_last k set;
+      end else begin  
         let value = valuation.(i) in
         match value with 
           | Some cst -> 
-            broadcast slices (i - 1) k
+            broadcast (i - 1) k
           | None     -> 
-              let rec iterate slices j =
+              let rec iterate j =
                 if (j < the_shares.(i)) then begin
-                  let slices = broadcast slices (i - 1) (k + the_strides.(i) * j) in
-                  iterate slices (j + 1)
+                  broadcast (i - 1) (k + the_strides.(i) * j);
+                  iterate (j + 1)
                 end   
-                else slices
+                else ()
               in  
-              iterate slices 0 
+              iterate 0 
       end  
     in
-    broadcast slices (Array.length valuation - 1) slice_index  
+    broadcast (Array.length valuation - 1) slice_index  
   in
 
   let rec cover_unconstrained m h =
-    if (m == 0) then add_slices_for_heavy_set h
-    else begin
+    let check_cond m = 
       if (logand !unconstrained_set m != 0) then
         cover_unconstrained (shift_right m 1) (logor h m)
-      else cover_unconstrained (shift_right m 1) h
+    in
+    if (m == 0) then add_slices_for_heavy_set h
+    else begin
+      check_cond m;
+      cover_unconstrained (shift_right m 1) h
     end   
   in
 
   let res = if (Array.length valuation == 0) then begin
-    Array.of_list (add_slices_for_heavy_set !heavy_set)
+    set
   end  
   else begin
-    Array.of_list (cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set)
+    cover_unconstrained (shift_left 1 ((Array.length valuation) - 1)) !heavy_set;
+    set
   end  
   in
-  res
+  let rec create_set set =
+    if Dllist.is_empty res == false then
+      create_set (Result_Set.add (Dllist.pop_first res) set)
+    else set
+  in
+  let result_set = create_set Result_Set.empty in
+  Array.of_list (Result_Set.elements result_set)
   
 
 let add_slices_of_valuation slicer tuple free_vars =
@@ -210,7 +234,7 @@ let create_slicer formula heavy shares seeds =
   let dimensions = dimensions formula in  
   let preds = Mformula.predicates formula in
   let variables_in_order = build_var_ids_preds (Mformula.free_vars formula) preds !Domain_set.predicates in
-  let strides = strides seeds dimensions in
+  let strides = strides shares dimensions in
   
   { formula = formula; variables_in_order = Array.of_list variables_in_order; heavy = heavy; shares = shares; seeds = seeds; strides = strides; degree = degree }
 

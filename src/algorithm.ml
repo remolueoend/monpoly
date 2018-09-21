@@ -2394,8 +2394,9 @@ let combine logfile =
 let test_tuple_split slicer size tuple dest =
   let parts = slicer tuple in
   Array.iter2 (fun i1 i2 ->
-  Printf.printf "%d, %d\n" i1 i2;
-  if i1 <> i2 then failwith "Mismatch between slicing result and groundtruth") parts dest
+   Printf.printf "%d, %d\n" i1 i2;
+     if i1 <> i2 then failwith "Mismatch between slicing result and groundtruth"
+   ) parts dest
 
 let test_slicer ff evaluation  =
   let heavy_unproc = !slicer_heavy_unproc in
@@ -2406,10 +2407,16 @@ let test_slicer ff evaluation  =
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
 
-  Dllist.iter (fun e -> 
-    let tuple = convert_slicing_tuple slicer e.vars e.tuple in
-    test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple e.output
-  ) evaluation
+  let rec test_entries i =
+    if Dllist.is_empty evaluation <> true then
+      let elem = Dllist.pop_first evaluation in
+      let tuple = convert_slicing_tuple slicer elem.vars elem.tuple in
+      let () = test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple elem.output in
+      test_entries i
+    else 
+      print_endline "All entries tested"
+  in
+    test_entries 0
 
 let rec test_log lexbuf ff evaluation =
   let rec loop ffl =
