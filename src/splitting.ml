@@ -217,10 +217,6 @@ let combine_ainfo ainf1 ainf2 =
   let urel = match (ainf1.arel, ainf2.arel) with
   | (Some r1, Some r2) -> Some (rel_u r1 r2)
   | (None, None) -> None
-  
-  (** TODO: this fixes mismatch error for empty timepoint filtering, can this be applied everywhere without adverse consequences ? **)
-  | (Some r1, None) -> Some (r1)
-  | (None, Some r2) -> Some (r2)
   | _ -> raise (Type_error ("Mismatched states in ainfo"))
   in
   { arel = urel; }
@@ -348,7 +344,9 @@ let rec comb_m f1 f2  =
 
 (* SPLITTING STATE *)
 let free_vars2 f1 f2 =
-  Misc.union (Mformula.free_vars f1) (Mformula.free_vars f2)
+  let vars1 = (Mformula.free_vars f1) in
+  let vars2 = (Mformula.free_vars f2) in
+  Misc.union vars1 vars2
 
 let list_to_string l =
   let str = ref "" in
@@ -378,9 +376,6 @@ let pred_list_to_string l =
 let split_debug f op =
   Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (Mformula.free_vars f)) op
 
-let split_debug2 f1 f2 op =
-  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (free_vars2 f1 f2)) op
-
 let get_1 (a,_) = a
 let get_2 (_,b) = b
 
@@ -405,7 +400,10 @@ let split_state mapping mf size =
   let split rel preds =
     let res = Array.make size Relation.empty in
     (* Iterate over relation, adding tuples to relations of partitions where they are relevant *)
-    Relation.iter (fun t -> let parts = mapping t preds in Array.iter (fun p -> res.(p) <- Relation.add t res.(p)) parts) rel;
+    Relation.iter (fun t -> 
+      let parts = mapping t preds in
+      Array.iter (fun p -> res.(p) <- Relation.add t res.(p)) parts)
+       rel;
     res
   in
 
@@ -492,23 +490,23 @@ let split_state mapping mf size =
     let res = split_queue2 agg.non_tw_rels p in      
     Array.map (fun e -> {non_tw_rels = e; tbl = agg.tbl }) res
   in
-  let split_sainfo sainf p =
+  let split_sainfo sainf p1 p2 =
     let arr = Array.init size (fun i -> None) in 
     let sarels = match sainf.sarel2 with
-    | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
+    | Some r -> let states = (split r p2) in Array.map (fun s ->  Some s) states
     | None -> arr
     in
-    let queues = split_mqueue sainf.saauxrels p in    
-    let sres = split sainf.sres p in 
+    let queues = split_mqueue sainf.saauxrels p2 in    
+    let sres = split sainf.sres p2 in 
     Array.mapi (fun i e ->  {sres = e; sarel2 = sarels.(i); saauxrels = queues.(i)}) sres
   in
-  let split_sinfo sinf p =
+  let split_sinfo sinf p1 p2 =
     let arr = Array.init size (fun i -> None) in 
     let srels = match sinf.srel2 with
-    | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
+    | Some r -> let states = (split r p2) in Array.map (fun s ->  Some s) states
     | None -> arr
     in
-    let queues = split_mqueue sinf.sauxrels p in    
+    let queues = split_mqueue sinf.sauxrels p2 in    
     Array.map2 (fun srel2 nq -> {srel2 = srel2; sauxrels = nq}) srels queues
   in
   let split_oainfo oainf p =
@@ -524,14 +522,14 @@ let split_state mapping mf size =
     let dllists = split_dll2 moinf.moauxrels p in
     Array.map (fun e -> { moauxrels = e }) dllists
   in
-  let split_muninfo muninf p =
-    let listrels1 = split_dll1 muninf.mlistrel1 p in
-    let listrels2 = split_dll1 muninf.mlistrel2 p in
+  let split_muninfo muninf p1 p2 =
+    let listrels1 = split_dll1 muninf.mlistrel1 p1 in
+    let listrels2 = split_dll1 muninf.mlistrel2 p2 in
     Array.map2 (fun listrel1 listrel2 -> { mlast1 = muninf.mlast1; mlast2 = muninf.mlast2; mlistrel1 = listrel1;  mlistrel2 = listrel2 }) listrels1 listrels2
   in
-  let split_muinfo muinf p =
+  let split_muinfo muinf p1 p2 =
     (* Helper function for raux and saux fields, creates split Sk.dllist *)
-    let sklist l =
+    let sklist l p =
       let sklists = Array.init size (fun i -> Sk.empty()) in 
       Sk.iter (fun e ->
         let i, r = e in
@@ -540,19 +538,21 @@ let split_state mapping mf size =
       ) l;
       sklists
     in
+    (* Split mraux with p2 *)
     let mraux = Array.init size (fun i -> Sj.empty()) in 
       Sj.iter (fun e ->
         let (i, ts, l) = e in
-        let lists = sklist l in
+        let lists = sklist l p2 in
         Array.iteri (fun index l -> Sj.add_last (i, ts, l) mraux.(i)) lists
       ) muinf.mraux;
     let arr = Array.make size None in 
     let murels = match muinf.murel2 with
-    | Some r -> let states = (split r p) in Array.map (fun s ->  Some s) states
+    | Some r -> let states = (split r p2) in Array.map (fun s ->  Some s) states
     | None -> arr
     in
-    let msaux = sklist muinf.msaux in
-    let mures = split muinf.mures p in
+    (* Split msaux with p1 *)
+    let msaux = sklist muinf.msaux p1 in
+    let mures = split muinf.mures p1 in
     Array.mapi (fun i e -> 
     { mulast = muinf.mulast; mufirst = muinf.mufirst; mures = mures.(i);
       murel2 = e; mraux = mraux.(i); msaux = msaux.(i) })
@@ -574,27 +574,71 @@ let split_state mapping mf size =
      - create and return an array of formulas:
           each index containing the relevant part of the state and relevant split of the subformula(s) *)
   let rec split_f = function
-    (* TODO: MRel *)
-    | MRel           (rel)                                      -> Array.make size (MRel(rel)) 
-    | MPred          (p, comp, inf)                             -> let arr = split_info inf (pvars p) in Array.map (fun e -> MPred(p, comp, e)) arr
-    | MNeg           (f1)                                       -> Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
-    | MAnd           (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
-    | MOr            (c, f1, f2, ainf)                          -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p2 f1 f2))
-    | MExists        (c, f1)                                    -> Array.map (fun e -> MExists(c, e)) (split_f f1)                                                                    
-    | MAggreg        (c, f1)                                    -> Array.map (fun e -> MAggreg(c, e)) (split_f f1)  
-    | MAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_agg agg (p1 f1))   
-    | MAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggMMOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_aggMM aggMM (p1 f1))
-    | MPrev          (dt, f1, pinf)                             -> Array.map (fun e -> MPrev(dt, e, pinf)) (split_f f1)
-    | MNext          (dt, f1, ninf)                             -> Array.map (fun e -> MNext(dt, e, ninf)) (split_f f1)
-    | MSinceA        (c2, dt, f1, f2, sainf)                    -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSinceA(c2, dt, a1.(i), a2.(i), e)) (split_sainfo sainf (p2 f1 f2))
-    | MSince         (c2, dt, f1, f2, sinf)                     -> let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c2, dt, a1.(i), a2.(i), e)) (split_sinfo sinf (p2 f1 f2))
-    | MOnceA         (dt, f1, oainf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e)) (split_oainfo oainf (p1 f1))                      
-    | MOnceZ         (dt, f1, ozinf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e)) (split_mozinfo ozinf (p1 f1))                                
-    | MOnce          (dt, f1, oinf)                             -> let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e)) (split_moinfo oinf (p1 f1)) 
-    | MNUntil        (c1, dt, f1, f2, muninf)                   -> let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c1, dt, a1.(i), a2.(i), e)) (split_muninfo muninf (p2 f1 f2))   
-    | MUntil         (c1, dt, f1, f2, muinf)                    -> let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c1, dt, a1.(i), a2.(i), e)) (split_muinfo muinf (p2 f1 f2))   
-    | MEventuallyZ   (dt, f1, mezinf)                           -> let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e)) (split_mezinfo mezinf (p1 f1))            
-    | MEventually    (dt, f1, meinf)                            -> let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e)) (split_meinfo meinf (p1 f1))
+    | MRel           (rel)                                      ->
+      (*print_endline "rel";*)
+      Array.make size (MRel(rel)) 
+    | MPred          (p, comp, inf)                             ->
+      (*print_endline "pred";
+      let vars = (pvars p) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
+      let arr = split_info inf (pvars p) in Array.map (fun e -> MPred(p, comp, e)) arr
+    | MNeg           (f1)                                       -> 
+      (*print_endline "neg";*)
+      Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
+    | MAnd           (c, f1, f2, ainf)                          -> 
+      (*print_endline "and";
+      let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline ""; *)
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e)) (split_ainfo ainf (p1 f1))
+    | MOr            (c, f1, f2, ainf)                          ->
+      (*print_endline "or";*)
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p1 f1))
+    | MExists        (c, f1)                                    ->
+      (*print_endline "exists";*)
+      Array.map (fun e -> MExists(c, e)) (split_f f1)                                                                    
+    | MAggreg        (c, f1)                                    ->
+      (*print_endline "aggreg";*)
+      Array.map (fun e -> MAggreg(c, e)) (split_f f1)  
+    | MAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   ->
+      (*print_endline "aggonce";*)
+      let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_agg agg (p1 f1))   
+    | MAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) ->
+      (*print_endline "aggmmonce";*)
+      let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggMMOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_aggMM aggMM (p1 f1))
+    | MPrev          (dt, f1, pinf)                             ->
+      (*print_endline "mprev";*)
+      Array.map (fun e -> MPrev(dt, e, pinf)) (split_f f1)
+    | MNext          (dt, f1, ninf)                             ->
+      (*print_endline "next";*)
+      Array.map (fun e -> MNext(dt, e, ninf)) (split_f f1)
+    | MSinceA        (c, dt, f1, f2, sainf)                     ->
+      (*print_endline "sincea";*)
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSinceA(c, dt, a1.(i), a2.(i), e)) (split_sainfo sainf (p1 f1) (p1 f2))
+    | MSince         (c, dt, f1, f2, sinf)                      -> 
+      (*print_endline "since";*)
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c, dt, a1.(i), a2.(i), e)) (split_sinfo sinf (p1 f1) (p1 f2))
+    | MOnceA         (dt, f1, oainf)                            ->
+      (*print_endline "oncea";*)
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e)) (split_oainfo oainf (p1 f1))                      
+    | MOnceZ         (dt, f1, ozinf)                            ->
+      (*print_endline "oncez";
+      let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e)) (split_mozinfo ozinf (p1 f1))                                
+    | MOnce          (dt, f1, oinf)                             ->
+      (*print_endline "once";*)
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e)) (split_moinfo oinf (p1 f1)) 
+    | MNUntil        (c, dt, f1, f2, muninf)                    ->
+      (*print_endline "nuntil"; *)
+      let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c, dt, a1.(i), a2.(i), e)) (split_muninfo muninf (p1 f1) (p1 f2))   
+    | MUntil         (c, dt, f1, f2, muinf)                     ->
+      (*print_endline "until";*)
+      let a1 = (split_f f1) in
+      let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c, dt, a1.(i), a2.(i), e)) (split_muinfo muinf (p1 f1) (p1 f2))   
+    | MEventuallyZ   (dt, f1, mezinf)                           ->
+      (*print_endline "eventuallyz";
+      let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e)) (split_mezinfo mezinf (p1 f1))            
+    | MEventually    (dt, f1, meinf)                            ->
+      (*print_endline "eventually";*)
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e)) (split_meinfo meinf (p1 f1))
     in
   split_f mf
     

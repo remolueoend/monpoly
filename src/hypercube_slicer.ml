@@ -208,15 +208,21 @@ let return_shares slicer valuation =
 
 let add_slices_of_valuation slicer tuple free_vars =
   let tuple = Array.of_list tuple in
-
   let free_vars_full = Mformula.free_vars slicer.formula in
-
   let valuation = Array.init (List.length free_vars_full) (fun _ -> None) in
   (* mapping of vars array of subformula to vars_full *)
-  let pos = List.map (fun v -> Misc.get_pos_no_e v free_vars_full) free_vars in
-  List.iteri (fun i e -> if e >= 0 then begin valuation.(e) <- Some tuple.(i) end) pos;
 
-  return_shares slicer valuation
+  let pos = List.map (fun v -> Misc.get_pos_no_e v free_vars_full) free_vars in
+  (*Printf.printf "free_vars: %d, val: %d, tuple: %d, list: %d" (List.length free_vars) (Array.length valuation) (Array.length tuple) (List.length pos);
+  print_endline "";
+  Printf.printf "item: %d, val: %d, tuple: %d, list: %d" (List.length free_vars) (Array.length valuation) (Array.length tuple) (List.length pos);
+  List.iter (fun p -> Printf.printf "Pos: %d, " p) pos;*)
+  List.iteri (fun i e -> if e >= 0 then begin valuation.(e) <- Some tuple.(i) end) pos;
+  (*print_endline "past iter";*)
+  let res = return_shares slicer valuation
+  in
+  (*print_endline "Returned shares";*)
+  res
   
 
 let convert_heavy formula heavy_unproc =
