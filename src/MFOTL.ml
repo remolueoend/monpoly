@@ -171,6 +171,9 @@ let direct_subformulas = function
 let rec subformulas f =
    f::(List.concat (List.map subformulas (direct_subformulas f)))
 
+
+let predicates f = List.filter (fun x -> match x with Pred _ -> true | _ -> false) (subformulas f)
+
 (** returns the list of all temporal subformulas of [f] *)
 let rec temporal_subformulas f =
   match f with
@@ -221,6 +224,7 @@ let rec free_vars = function
   | Until (intv,f1,f2) -> Misc.union (free_vars f1) (free_vars f2)
 
 
+
 let string_of_ts ts =
   if !unixts then
     let tm = Unix.gmtime ts in
@@ -236,15 +240,19 @@ let string_of_ts ts =
 let print_ts ts =
   print_string (string_of_ts ts)
 
-let print_interval (a,b) =
+let string_of_interval (a,b) =
   (match a with
-   | OBnd a -> Printf.printf "(%.0f," a
-   | CBnd a -> Printf.printf "[%.0f," a
-   | Inf -> Printf.printf "(*,");
+    | OBnd a -> Printf.sprintf "(%.0f," a
+    | CBnd a -> Printf.sprintf "[%.0f," a
+    | Inf -> Printf.sprintf "(*,") 
+  ^
   match b with
-  | OBnd b -> Printf.printf "%.0f)" b
-  | CBnd b -> Printf.printf "%.0f]" b
-  | Inf -> Printf.printf "*)"
+  | OBnd b -> Printf.sprintf "%.0f)" b
+  | CBnd b -> Printf.sprintf "%.0f]" b
+  | Inf -> Printf.sprintf "*)"
+
+let print_interval (a,b) =
+  Printf.printf "%s" (string_of_interval (a,b))
 
 let string_of_agg_op = function
   | Cnt -> "CNT"
@@ -254,142 +262,187 @@ let string_of_agg_op = function
   | Avg -> "AVG"
   | Med -> "MED"
 
+
+
+let string_of_formula str f =
+  let rec string_f_rec top par f =
+    (match f with
+      | Equal (t1,t2) ->
+        Predicate.string_of_term t1 ^ " = " ^ Predicate.string_of_term t2
+      | Less (t1,t2) ->
+        Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2
+      | LessEq (t1,t2) ->
+        Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2
+      | Pred p -> Predicate.string_of_predicate p;
+      | _ ->
+        if par && not top then "(" else ""
+        ^ 
+        (match f with
+        | Neg f ->
+          "NOT " ^ string_f_rec false false f
+
+        | Exists (vl,f) ->
+          "EXISTS " 
+          ^ 
+          Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl) 
+          ^
+          ". "
+          ^
+          string_f_rec false false f
+
+        | ForAll (vl,f) ->
+          "FORALL "
+          ^
+          Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl)
+          ^
+          ". "
+          ^
+          string_f_rec false false f
+
+        | Aggreg (y,op,x,glist,f) ->
+          Predicate.string_of_term (Var y)
+          ^
+          " <- "
+          ^
+          (string_of_agg_op op)
+          ^
+          " "
+          ^
+          Predicate.string_of_term (Var x)
+          ^
+          if glist <> [] then
+              "; "
+              ^
+              Misc.string_of_list_ext "" "" "," (fun z -> Predicate.string_of_term (Var z)) glist
+          else ""
+          ^
+          " "
+          ^
+          string_f_rec false false f
+
+        | Prev (intv,f) ->
+          "PREVIOUS"
+          ^
+          string_of_interval intv
+          ^
+          " "
+          ^
+          string_f_rec false false f
+
+        | Next (intv,f) ->
+          "NEXT"
+          ^
+          string_of_interval intv
+          ^
+          " "
+          ^
+          string_f_rec false false f
+
+        | Eventually (intv,f) ->
+          "EVENTUALLY"
+          ^
+          string_of_interval intv
+          ^
+          " "
+          ^
+          string_f_rec false false f
+
+        | Once (intv,f) ->
+          "ONCE"
+          ^
+          string_of_interval intv
+          ^
+          " "
+          ^
+          string_f_rec false false f
+
+        | Always (intv,f) ->
+          "ALWAYS"
+          ^
+          string_of_interval intv
+          ^
+          " "
+          ^
+          string_f_rec false false f
+
+        | PastAlways (intv,f) ->
+          "PAST_ALWAYS"
+          ^
+          string_of_interval intv
+          ^
+          " "
+          ^
+          string_f_rec false false f
+        | _ ->
+          if not par && not top then
+            "("
+          else ""
+          ^
+          (match f with
+            | And (f1,f2) ->
+              string_f_rec false true f1
+              ^
+              " AND "
+              ^
+              string_f_rec false false f2
+
+            | Or (f1,f2) ->
+              string_f_rec false true f1
+              ^
+              " OR "
+              ^
+              string_f_rec false false f2
+
+            | Implies (f1,f2) ->
+              string_f_rec false true f1
+              ^
+              " IMPLIES "
+              ^
+              string_f_rec false false f2
+
+            | Equiv (f1,f2) ->
+              string_f_rec false true f1
+              ^
+              " EQUIV "
+              ^
+              string_f_rec false false f2
+
+            | Since (intv,f1,f2) ->
+              string_f_rec false true f1
+              ^ 
+              " SINCE"
+              ^
+              string_of_interval intv
+              ^
+              " "
+              ^
+              string_f_rec false false f2
+
+            | Until (intv,f1,f2) ->
+              string_f_rec false true f1
+              ^
+              " UNTIL"
+              ^
+              string_of_interval intv
+              ^
+              " "
+              ^
+              string_f_rec false false f2
+            | _ -> failwith "[print_formula] impossible"
+          )
+          ^
+          if not par && not top then ")" else ""
+        ) 
+        ^
+        if par && not top then ")" else ""
+    )
+  in
+  str ^ string_f_rec true false f
+
 (* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
 ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
 let print_formula str f =
-  let rec print_f_rec top par f =
-    (match f with
-     | Equal (t1,t2) ->
-       Predicate.print_term t1;
-       print_string " = ";
-       Predicate.print_term t2
-
-     | Less (t1,t2) ->
-       Predicate.print_term t1;
-       print_string " < ";
-       Predicate.print_term t2
-
-     | LessEq (t1,t2) ->
-       Predicate.print_term t1;
-       print_string " <= ";
-       Predicate.print_term t2
-
-     | Pred p ->
-       Predicate.print_predicate p;
-
-     | _ ->
-       if par && not top then
-         print_string "(";
-       (match f with
-        | Neg f ->
-          print_string "NOT ";
-          print_f_rec false false f;
-
-        | Exists (vl,f) ->
-          print_string "EXISTS ";
-          Misc.print_list_ext "" "" ", "
-            Predicate.print_term
-            (List.map (fun v -> Var v) vl);
-          print_string ". ";
-          print_f_rec false false f;
-
-        | ForAll (vl,f) ->
-          print_string "FORALL ";
-          Misc.print_list_ext "" "" ", "
-            Predicate.print_term
-            (List.map (fun v -> Var v) vl);
-          print_string ". ";
-          print_f_rec false false f;
-
-        | Aggreg (y,op,x,glist,f) ->
-          Predicate.print_term (Var y);
-          print_string " <- ";
-          print_string (string_of_agg_op op);
-          print_string " ";
-          Predicate.print_term (Var x);
-          if glist <> [] then
-            begin
-              print_string "; ";
-              Misc.print_list_ext "" "" "," (fun z -> Predicate.print_term (Var z)) glist;
-            end;
-          print_string " ";
-          print_f_rec false false f;
-
-        | Prev (intv,f) ->
-          print_string "PREVIOUS";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-
-        | Next (intv,f) ->
-          print_string "NEXT";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-
-        | Eventually (intv,f) ->
-          print_string "EVENTUALLY";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-
-        | Once (intv,f) ->
-          print_string "ONCE";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-
-        | Always (intv,f) ->
-          print_string "ALWAYS";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-
-        | PastAlways (intv,f) ->
-          print_string "PAST_ALWAYS";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | _ ->
-          if not par && not top then
-            print_string "(";
-          (match f with
-           | And (f1,f2) ->
-             print_f_rec false true f1;
-             print_string " AND ";
-             print_f_rec false false f2
-
-           | Or (f1,f2) ->
-             print_f_rec false true f1;
-             print_string " OR ";
-             print_f_rec false false f2
-
-           | Implies (f1,f2) ->
-             print_f_rec false true f1;
-             print_string " IMPLIES ";
-             print_f_rec false false f2
-
-           | Equiv (f1,f2) ->
-             print_f_rec false true f1;
-             print_string " EQUIV ";
-             print_f_rec false false f2
-
-           | Since (intv,f1,f2) ->
-             print_f_rec false true f1;
-             print_string " SINCE";
-             print_interval intv; print_string " ";
-             print_f_rec false false f2
-
-           | Until (intv,f1,f2) ->
-             print_f_rec false true f1;
-             print_string " UNTIL";
-             print_interval intv; print_string " ";
-             print_f_rec false false f2
-           | _ -> failwith "[print_formula] impossible"
-          );
-          if not par && not top then
-            print_string ")"
-       );
-       if par && not top then
-         print_string ")";
-    )
-  in
-  print_string str;
-  print_f_rec true false f
+  print_string (string_of_formula str f)
 
 let printnl_formula str f =
   print_formula str f;

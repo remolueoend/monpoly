@@ -55,7 +55,7 @@ open Rewriting
 let usage_string =
   "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]
                [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]
-               [-check] [-sigout] [-unix] [-mem] [-nonewlastts]
+               [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]
                [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
                [-ignore_parse_errors] [-stop_at_out_of_order_ts]
                [-stop_at_first_viol] [-load <file>]"
@@ -92,6 +92,8 @@ let statsarg = ref false
 let testfilteropt = ref false
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
+let verified = ref false
+
 
 let starttime = Unix.time()
 
@@ -158,6 +160,8 @@ let main () =
                 Algorithm.resume !logfile
               else if !Algorithm.combine_files <> "" then
                 Algorithm.combine !logfile
+              else if !verified then
+                Algorithm_verified.monitor !logfile pf
               else
                 Algorithm.monitor !logfile pf
           end
@@ -188,6 +192,7 @@ let _ =
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
     "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
     "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
+    "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
   ]
     (fun _ -> ())
     usage_string;

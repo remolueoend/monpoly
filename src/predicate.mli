@@ -135,5 +135,6 @@ val print_cst: bool -> cst -> unit
 (* val output_cst: out_channel -> cst -> unit *)
 val string_of_term: term -> string
 val print_term: term -> unit
+val string_of_predicate: predicate -> string
 val print_predicate: predicate -> unit
 val print_vartypes_list: (var * tcst) list -> unit

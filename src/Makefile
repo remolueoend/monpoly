@@ -10,12 +10,12 @@ JSFLAGS = -package str -package unix -package js_of_ocaml -package lwt -package 
 ifeq "$(OCAML)" "$(OCAMLOPT)"
   O = cmx
   A = cmxa
-  LIBS = unix.$(A) str.$(A)
+  LIBS = unix.$(A) str.$(A) nums.$(A)
   OCAMLDEPFLAGS = -native
 else
   O = cmo
   A = cma
-  LIBS = -custom unix.$(A) str.$(A)
+  LIBS = -custom unix.$(A) str.$(A) nums.$(A)
 endif
 
 OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
@@ -26,22 +26,22 @@ MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
       tuple.mli relation.mli table.mli db.mli \
       rewriting.mli filter_rel.mli filter_empty_tp.mli sliding.mli \
 	  helper.mli domain_set.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
-	  murmur_hash3.mli hypercube_slicer.mli
+	  murmur_hash3.mli hypercube_slicer.mli verified_adapter.mli 
 
-OURMLI = $(MLI) log.mli algorithm.mli 
+OURMLI = $(MLI) log.mli algorithm_verified.mli algorithm.mli 
 
 ALLMLI = $(OURMLI) formula_parser.mli log_parser.mli
 
 
 # The lists of implementation files
-OURML = $(OURMLI:.mli=.ml) main.ml
+OURML = $(OURMLI:.mli=.ml) verified.ml main.ml
 ALLML = $(ALLMLI:.mli=.ml) formula_lexer.ml log_lexer.ml
 
 # The lists of object files
-OBJ = $(MLI:.mli=.$(O)) \
+OBJ =  verified.$(O) $(MLI:.mli=.$(O)) \
        formula_parser.$(O) log_parser.$(O) \
        formula_lexer.$(O) log_lexer.$(O) \
-       log.$(O) algorithm.$(O)
+       log.$(O) algorithm.$(O) algorithm_verified.$(O)
 
 OBJC = $(OBJ:.$(O)=.cmo)
 OBJX = $(OBJ:.$(O)=.cmx)

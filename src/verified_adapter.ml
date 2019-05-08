@@ -1,0 +1,118 @@
+open MFOTL
+open Verified.Monpoly
+open Predicate
+open Relation
+open Helper
+
+exception UnsupportedFragment of string
+
+let (<<) f g x = f(g(x));;
+let nat_of_int = nat_of_integer << Big_int.big_int_of_int
+let nat_of_float = nat_of_int << int_of_float
+let enat_of_float f = Enat ((nat_of_int << int_of_float) f)
+let int_of_nat = Big_int.int_of_big_int << integer_of_nat (* Problem? *)
+let float_of_nat = Big_int.float_of_big_int << integer_of_nat (* Problem? *)
+let equal_nata m n = Big_int.eq_big_int (integer_of_nat m) (integer_of_nat n)
+
+let filterWith f p = List.map f << List.filter p
+let deoptionalize  = 
+  let is_some = function Some _ -> true | _ -> false in
+  List.map (function | Some x -> x | None -> assert false) << List.filter (is_some)
+     
+
+let index_of =
+  let rec index_of_rec c x lst = match lst with
+      | [] -> raise(Failure "Not Found")
+      | hd::tl -> if (hd=x) then c else index_of_rec (c+1) x tl  in
+  index_of_rec 0
+
+let convert_term fvl bvl = function
+  | Cst c -> Const c
+  | Var a -> Var (nat_of_integer (Big_int.big_int_of_int (try (index_of a bvl)
+                  with Failure s -> (List.length bvl) + (try index_of a fvl 
+                      with Failure s -> List.length fvl))))
+  | x -> let msg = "Unsupported term " ^ (string_of_term x) in
+    raise (UnsupportedFragment msg)
+
+let convert_interval (l,r) = 
+  if l <= r then
+    let lm = match l with 
+    | OBnd a -> nat_of_float (a+.1.)
+    | CBnd a -> nat_of_float a
+    | Inf -> let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
+              raise (UnsupportedFragment msg) in
+    let um = match r with 
+    | OBnd a -> enat_of_float (a-.1.)
+    | CBnd a ->  enat_of_float a
+    | Inf -> Infinity_enat in 
+    interval (lm, um)
+  else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
+  raise (UnsupportedFragment msg) 
+
+
+ 
+
+let convert_formula f = 
+  let fvl = MFOTL.free_vars f in
+  let truth = Equal ((Cst (Int 1)), (Cst (Int 1)))  in
+  let rec convert_formula_vars bvl = function 
+  | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
+  | Pred (p,_,tl) -> Pred (explode p, List.map (fun t -> convert_term fvl bvl t) tl)
+  | Neg f -> Neg (convert_formula_vars bvl f)
+  | And (f1,f2) -> convert_formula_vars bvl (Neg (Or (Neg f1, Neg f2)))
+  | Or (f1,f2) -> Disj (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
+  | Implies (f1,f2) -> convert_formula_vars bvl (Or ((Neg f1), f2))
+  | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
+  | Exists (v,f) -> Exists (convert_formula_vars (v@bvl) f)
+  | ForAll (v,f) -> convert_formula_vars bvl (Neg (Exists (v,(Neg f))))
+  | Aggreg (_,_,_,_,f) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
+                          raise (UnsupportedFragment msg)
+  | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars bvl f))
+  | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars bvl f))
+  | Since (intv,f1,f2) -> Since (convert_formula_vars bvl f1,convert_interval intv,convert_formula_vars bvl f2)
+  | Until (intv,f1,f2) -> Until (convert_formula_vars bvl f1,convert_interval intv,convert_formula_vars bvl f2)
+  | Eventually (intv,f) -> convert_formula_vars bvl (Until (intv,truth,f))
+  | Once (intv,f) -> convert_formula_vars bvl (Since (intv,truth,f))
+  | Always (intv,f) -> convert_formula_vars bvl (Neg (Eventually (intv,(Neg f))))
+  | PastAlways (intv,f) -> convert_formula_vars bvl (Neg (Once (intv,(Neg f))))
+  | Less (t1,t2) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
+                           raise (UnsupportedFragment msg)
+  | LessEq (t1,t2) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
+  raise (UnsupportedFragment msg) in
+  convert_formula_vars [] f
+
+
+let convert_db md = 
+  let convert_relations db = 
+    Set (List.flatten 
+                  (List.map 
+                    (fun t -> 
+                      let (name,_) = (Table.get_schema t) in 
+                      List.map (fun tup -> (explode name,tup)) (Relation.elements (Table.get_relation t)))
+                    (Db.get_tables db))) in
+  (convert_relations md.db, nat_of_float md.ts)
+
+(* (Verified.Monpoly.nat * Predicate.cst option list) Verified.Monpoly.set -> (timestamp * relation) *)
+let convert_violations vs = 
+  let vsl = match vs with 
+    | Set l -> l
+    | Coset _ -> [] in (* Should always be empty? *)
+  let qtss = List.map fst vsl in 
+  let qmap = List.fold_left (fun a e -> 
+      (fun ts -> if equal_nata ts (fst e) 
+          then (if a (fst e) = [] then [(snd e)] else (snd e)::(a ts)) 
+          else (a ts)))
+   (fun ts -> []) vsl in
+  List.sort 
+    (fun x y -> (fst x) - (fst y)) 
+    (List.map 
+      (fun ts -> (int_of_nat ts, Relation.make_relation ((List.map (Tuple.make_tuple<<deoptionalize) (qmap ts))))) 
+      qtss)
+
+  let cst_eq = function 
+  | (Int a, Int b) -> a = b 
+  | (Str a, Str b) -> a = b
+  | (Float a, Float b) -> a = b
+  | _ -> false
+
+  let equality =  { equal = (fun a b -> cst_eq (a, b))  }
