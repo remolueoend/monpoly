@@ -59,7 +59,11 @@ let convert_formula f =
   | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Pred (p,_,tl) -> Pred (explode p, List.map (fun t -> convert_term fvl bvl t) tl)
   | Neg f -> Neg (convert_formula_vars bvl f)
-  | And (f1,f2) -> convert_formula_vars bvl (Neg (Or (Neg f1, Neg f2)))
+  | And (f1,f2) -> (match (f1, f2) with 
+    | (Neg sf1, Neg sf2) -> convert_formula_vars bvl (Neg (Or (sf1, sf2)))
+    | (Neg sf1,     sf2) -> convert_formula_vars bvl (Neg (Or (Neg sf2, sf1)))
+    | (    sf1, Neg sf2) -> convert_formula_vars bvl (Neg (Or (Neg sf1, sf2)))
+    | (    sf1,     sf2) -> convert_formula_vars bvl (Neg (Or (Neg sf1, Neg sf2))))
   | Or (f1,f2) -> Disj (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
   | Implies (f1,f2) -> convert_formula_vars bvl (Or ((Neg f1), f2))
   | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))

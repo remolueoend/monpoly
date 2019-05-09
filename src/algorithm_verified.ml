@@ -58,5 +58,6 @@ let monitor logfile f =
       let (vs, new_state) = Monpoly.mstep equality (convert_db d) state in
       let vs = convert_violations vs in
       List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
+      let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
       loop new_state tpts d.tp d.ts in
   loop init_state empty init_i init_ts
