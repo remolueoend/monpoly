@@ -263,21 +263,43 @@ let string_of_agg_op = function
   | Med -> "MED"
 
 
+let rec type_of_fma = function
+  | Equal (t1,t2) -> "Eq"
+  | Less (t1,t2) -> "Less"
+  | LessEq (t1,t2) -> "LessEq"
+  | Pred p -> "Pred"
+  | Neg f -> "Neg"
+  | And (f1,f2) -> "And"
+  | Or (f1,f2) -> "Or"
+  | Implies (f1,f2) -> "Implies"
+  | Equiv (f1,f2) -> "Equiv"
+  | Exists (vl,f) -> "Exists"
+  | ForAll (vl,f) -> "Forall"
+  | Aggreg (y,op,x,glist,f) -> "Agggreg"
+  | Prev (intv,f) -> "Prev"
+  | Next (intv,f) -> "Next"
+  | Eventually (intv,f) -> "Eventually"
+  | Once (intv,f) -> "Once"
+  | Always (intv,f) -> "Always"
+  | PastAlways (intv,f) -> "PastAlways"
+  | Since (intv,f1,f2) -> "Since"
+  | Until (intv,f1,f2) -> "Unitl"
 
-let string_of_formula str f =
-  let rec string_f_rec top par f =
-    (match f with
+
+let string_of_formula str g =
+  let rec string_f_rec top par h =
+    (match h with
       | Equal (t1,t2) ->
         Predicate.string_of_term t1 ^ " = " ^ Predicate.string_of_term t2
       | Less (t1,t2) ->
         Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2
       | LessEq (t1,t2) ->
         Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2
-      | Pred p -> Predicate.string_of_predicate p;
+      | Pred p -> Predicate.string_of_predicate p
       | _ ->
-        if par && not top then "(" else ""
+        (if par && not top then "(" else "")
         ^ 
-        (match f with
+        (match h with
         | Neg f ->
           "NOT " ^ string_f_rec false false f
 
@@ -374,17 +396,15 @@ let string_of_formula str f =
           ^
           string_f_rec false false f
         | _ ->
-          if not par && not top then
-            "("
-          else ""
+          (if not par && not top then "(" else "")
           ^
-          (match f with
+          (match h with
             | And (f1,f2) ->
               string_f_rec false true f1
               ^
-              " AND "
+              " AND " 
               ^
-              string_f_rec false false f2
+              string_f_rec false true f2
 
             | Or (f1,f2) ->
               string_f_rec false true f1
@@ -431,13 +451,13 @@ let string_of_formula str f =
             | _ -> failwith "[print_formula] impossible"
           )
           ^
-          if not par && not top then ")" else ""
+          (if not par && not top then ")" else "")
         ) 
         ^
-        if par && not top then ")" else ""
+        (if par && not top then ")" else "")
     )
   in
-  str ^ string_f_rec true false f
+  str ^ string_f_rec true false g
 
 (* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
 ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)

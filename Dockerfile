@@ -1,15 +1,22 @@
-FROM ocaml/opam:ubuntu-14.04_ocaml-4.04.1
+FROM ocaml/opam2:ubuntu-18.04
 
-RUN sudo apt-get install --no-install-recommends -y \ 
+RUN sudo apt-get update \
+    && sudo apt-get install -y \
     subversion \
-    && sudo rm -rf /var/lib/apt/lists/*
+    m4 \
+    && sudo rm -rf /var/lib/apt/lists/* 
 
-RUN opam install \
-    ocamlfind
+# RUN opam init -y \
+RUN opam switch create 4.06.1 \
+    && opam install \
+       ocamlfind \
+       num
 
+# RUN useradd -ms /bin/bash monply
 USER opam
 ENV WDIR /home/opam/monpoly
 RUN mkdir -p ${WDIR}
 WORKDIR ${WDIR}
+
 ADD . ${WDIR}
-RUN sudo chown -R opam:opam . && eval `opam config env` && make monpoly && make clean && sudo cp ./monpoly /usr/local/bin/monpoly
+RUN sudo chown -R opam:opam . && eval `opam config env` && make && make clean && sudo cp ./monpoly /usr/local/bin/monpoly
