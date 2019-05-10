@@ -3,9 +3,9 @@ module Monpoly : sig
   val integer_of_nat : nat -> Big_int.big_int
   type 'a equal = {equal : 'a -> 'a -> bool}
   val equal : 'a equal -> 'a -> 'a -> bool
+  type 'a set = Set of 'a list | Coset of 'a list
   type char
   type enat = Enat of nat | Infinity_enat
-  type 'a set = Set of 'a list | Coset of 'a list
   type 'a trm = Var of nat | Const of 'a
   type i
   type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
@@ -61,7 +61,28 @@ type 'a linorder = {order_linorder : 'a order};;
 
 let linorder_nat = ({order_linorder = order_nat} : nat linorder);;
 
+let rec list_all p x1 = match p, x1 with p, [] -> true
+                   | p, x :: xs -> p x && list_all p xs;;
+
+type 'a set = Set of 'a list | Coset of 'a list;;
+
 let rec eq _A a b = equal _A a b;;
+
+let rec membera _A x0 y = match x0, y with [], y -> false
+                     | x :: xs, y -> eq _A x y || membera _A xs y;;
+
+let rec member _A
+  x xa1 = match x, xa1 with x, Coset xs -> not (membera _A xs x)
+    | x, Set xs -> membera _A xs x;;
+
+let rec less_eq_set _A
+  a b = match a, b with Coset [], Set [] -> false
+    | a, Coset ys -> list_all (fun y -> not (member _A y a)) ys
+    | Set xs, b -> list_all (fun x -> member _A x b) xs;;
+
+let rec equal_seta _A a b = less_eq_set _A a b && less_eq_set _A b a;;
+
+let rec equal_set _A = ({equal = equal_seta _A} : 'a set equal);;
 
 let rec equal_lista _A
   x0 x1 = match x0, x1 with [], x21 :: x22 -> false
@@ -119,8 +140,6 @@ let ord_integer =
 
 type num = One | Bit0 of num | Bit1 of num;;
 
-type 'a set = Set of 'a list | Coset of 'a list;;
-
 type 'a trm = Var of nat | Const of 'a;;
 
 type i = Abs_I of (nat * enat);;
@@ -167,13 +186,6 @@ let rec filtera
   p x1 = match p, x1 with p, [] -> []
     | p, x :: xs -> (if p x then x :: filtera p xs else filtera p xs);;
 
-let rec membera _A x0 y = match x0, y with [], y -> false
-                     | x :: xs, y -> eq _A x y || membera _A xs y;;
-
-let rec member _A
-  x xa1 = match x, xa1 with x, Coset xs -> not (membera _A xs x)
-    | x, Set xs -> membera _A xs x;;
-
 let rec removeAll _A
   x xa1 = match x, xa1 with x, [] -> []
     | x, y :: xs ->
@@ -213,11 +225,17 @@ let rec fv_trm
 let rec map f x1 = match f, x1 with f, [] -> []
               | f, x21 :: x22 -> f x21 :: map f x22;;
 
-let rec image f (Set xs) = Set (map f xs);;
+let rec remdups _A
+  = function [] -> []
+    | x :: xs ->
+        (if membera _A xs x then remdups _A xs else x :: remdups _A xs);;
+
+let rec image _B f (Set xs) = Set (remdups _B (map f xs));;
 
 let rec fv
   b x1 = match b, x1 with
-    b, Pred (r, ts) -> sup_seta equal_nat (image (fv_trm b) (Set ts))
+    b, Pred (r, ts) ->
+      sup_seta equal_nat (image (equal_set equal_nat) (fv_trm b) (Set ts))
     | b, Eq (t1, t2) -> sup_set equal_nat (fv_trm b t1) (fv_trm b t2)
     | b, Neg phi -> fv b phi
     | b, Disj (phi, psi) -> sup_set equal_nat (fv b phi) (fv b psi)
@@ -238,7 +256,7 @@ let zero_nat : nat = Nat Big_int.zero_big_int;;
 
 let rec nfv
   phi = maxa linorder_nat
-          (insert equal_nat zero_nat (image suc (fv zero_nat phi)));;
+          (insert equal_nat zero_nat (image equal_nat suc (fv zero_nat phi)));;
 
 let rec foldr f x1 = match f, x1 with f, [] -> id
                 | f, x :: xs -> comp (f x) (foldr f xs);;
@@ -262,7 +280,7 @@ let rec the (Some x2) = x2;;
 let rec is_none = function Some x -> false
                   | None -> true;;
 
-let rec these a = image the (filter (fun x -> not (is_none x)) a);;
+let rec these _A a = image _A the (filter (fun x -> not (is_none x)) a);;
 
 let rec map_option f x1 = match f, x1 with f, None -> None
                      | f, Some x2 -> Some (f x2);;
@@ -284,9 +302,14 @@ let rec join1 _A
 
 let rec join _A
   a pos b =
-    (if pos then these (image (join1 _A) (product a b))
+    (if pos
+      then these (equal_list (equal_option _A))
+             (image (equal_option (equal_list (equal_option _A))) (join1 _A)
+               (product a b))
       else minus_set (equal_list (equal_option _A)) a
-             (these (image (join1 _A) (product a b))));;
+             (these (equal_list (equal_option _A))
+               (image (equal_option (equal_list (equal_option _A))) (join1 _A)
+                 (product a b))));;
 
 let rec fun_upd _A f a b = (fun x -> (if eq _A x a then b else f x));;
 
@@ -428,49 +451,17 @@ let rec eval_until
 let rec mbuf2_add xsa ysa (xs, ys) = (xs @ xsa, ys @ ysa);;
 
 let rec meval _A
-  n t db x3 = match n, t, db, x3 with n, t, db, MRel rel -> ([rel], MRel rel)
-    | n, t, db, MPred (e, ts) ->
-        ([image (fun f -> tabulate f zero_nat n)
-            (these
-              (image (matcha _A ts)
-                (sup_seta (equal_list _A)
-                  (image
-                    (fun (ea, x) ->
-                      (if equal_lista equal_char e ea
-                        then insert (equal_list _A) x bot_set else bot_set))
-                    db))))],
-          MPred (e, ts))
-    | n, t, db, MAnd (phi, pos, psi, buf) ->
-        (let (xs, phia) = meval _A n t db phi in
-         let (ys, psia) = meval _A n t db psi in
-         let (zs, bufa) =
-           mbuf2_take (fun r1 -> join _A r1 pos) (mbuf2_add xs ys buf) in
-          (zs, MAnd (phia, pos, psia, bufa)))
-    | n, t, db, MOr (phi, psi, buf) ->
-        (let (xs, phia) = meval _A n t db phi in
-         let (ys, psia) = meval _A n t db psi in
-         let (zs, bufa) =
-           mbuf2_take (sup_set (equal_list (equal_option _A)))
-             (mbuf2_add xs ys buf)
-           in
-          (zs, MOr (phia, psia, bufa)))
-    | n, t, db, MExists phi ->
-        (let (xs, phia) = meval _A (suc n) t db phi in
-          (map (image tl) xs, MExists phia))
-    | n, t, db, MPrev (i, phi, first, buf, nts) ->
-        (let (xs, phia) = meval _A n t db phi in
-         let (zs, (bufa, ntsa)) = mprev_next i (buf @ xs) (nts @ [t]) in
-          ((if first then empty_table :: zs else zs),
-            MPrev (i, phia, false, bufa, ntsa)))
-    | n, t, db, MNext (i, phi, first, nts) ->
-        (let (xs, phia) = meval _A n t db phi in
-         let (xsa, firsta) =
-           (match (xs, first) with ([], b) -> ([], b)
-             | (_ :: xsa, true) -> (xsa, false)
-             | (x :: xsa, false) -> (x :: xsa, false))
-           in
-         let (zs, (_, ntsa)) = mprev_next i xsa (nts @ [t]) in
-          (zs, MNext (i, phia, firsta, ntsa)))
+  n t db x3 = match n, t, db, x3 with
+    n, t, db, MUntil (pos, phi, i, psi, buf, nts, aux) ->
+      (let (xs, phia) = meval _A n t db phi in
+       let (ys, psia) = meval _A n t db psi in
+       let (auxa, (bufa, ntsa)) =
+         mbuf2t_take (update_until _A i pos) aux (mbuf2_add xs ys buf)
+           (nts @ [t])
+         in
+       let (zs, auxb) =
+         eval_until i (match ntsa with [] -> t | nt :: _ -> nt) auxa in
+        (zs, MUntil (pos, phia, i, psia, bufa, ntsa, auxb)))
     | n, t, db, MSince (pos, phi, i, psi, buf, nts, aux) ->
         (let (xs, phia) = meval _A n t db phi in
          let (ys, psia) = meval _A n t db psi in
@@ -487,16 +478,50 @@ let rec meval _A
             (fun (bufa, ntsa) ->
               (zs, MSince (pos, phia, i, psia, bufa, ntsa, auxa))))
             b)
-    | n, t, db, MUntil (pos, phi, i, psi, buf, nts, aux) ->
+    | n, t, db, MNext (i, phi, first, nts) ->
+        (let (xs, phia) = meval _A n t db phi in
+         let (xsa, firsta) =
+           (match (xs, first) with ([], b) -> ([], b)
+             | (_ :: xsa, true) -> (xsa, false)
+             | (x :: xsa, false) -> (x :: xsa, false))
+           in
+         let (zs, (_, ntsa)) = mprev_next i xsa (nts @ [t]) in
+          (zs, MNext (i, phia, firsta, ntsa)))
+    | n, t, db, MPrev (i, phi, first, buf, nts) ->
+        (let (xs, phia) = meval _A n t db phi in
+         let (zs, (bufa, ntsa)) = mprev_next i (buf @ xs) (nts @ [t]) in
+          ((if first then empty_table :: zs else zs),
+            MPrev (i, phia, false, bufa, ntsa)))
+    | n, t, db, MExists phi ->
+        (let (xs, phia) = meval _A (suc n) t db phi in
+          (map (image (equal_list (equal_option _A)) tl) xs, MExists phia))
+    | n, t, db, MOr (phi, psi, buf) ->
         (let (xs, phia) = meval _A n t db phi in
          let (ys, psia) = meval _A n t db psi in
-         let (auxa, (bufa, ntsa)) =
-           mbuf2t_take (update_until _A i pos) aux (mbuf2_add xs ys buf)
-             (nts @ [t])
+         let (zs, bufa) =
+           mbuf2_take (sup_set (equal_list (equal_option _A)))
+             (mbuf2_add xs ys buf)
            in
-         let (zs, auxb) =
-           eval_until i (match ntsa with [] -> t | nt :: _ -> nt) auxa in
-          (zs, MUntil (pos, phia, i, psia, bufa, ntsa, auxb)));;
+          (zs, MOr (phia, psia, bufa)))
+    | n, t, db, MAnd (phi, pos, psi, buf) ->
+        (let (xs, phia) = meval _A n t db phi in
+         let (ys, psia) = meval _A n t db psi in
+         let (zs, bufa) =
+           mbuf2_take (fun r1 -> join _A r1 pos) (mbuf2_add xs ys buf) in
+          (zs, MAnd (phia, pos, psia, bufa)))
+    | n, t, db, MPred (e, ts) ->
+        ([these (equal_list (equal_option _A))
+            (image (equal_option (equal_list (equal_option _A)))
+              (comp (map_option (fun f -> tabulate f zero_nat n))
+                (matcha _A ts))
+              (sup_seta (equal_list _A)
+                (image (equal_set (equal_list _A))
+                  (fun (ea, x) ->
+                    (if equal_lista equal_char e ea
+                      then insert (equal_list _A) x bot_set else bot_set))
+                  db)))],
+          MPred (e, ts))
+    | n, t, db, MRel rel -> ([rel], MRel rel);;
 
 let rec neq_rel _A
   n x1 x2 = match n, x1, x2 with
@@ -617,13 +642,12 @@ let rec mstep _A
   tdb st =
     (let (xs, m) = meval _A (mstate_n st) (snd tdb) (fst tdb) (mstate_m st) in
       (sup_seta (equal_prod equal_nat (equal_list (equal_option _A)))
-         (Set (map (fun (i, a) -> image (fun aa -> (i, aa)) a)
+         (Set (map (fun (i, a) ->
+                     image (equal_prod equal_nat (equal_list (equal_option _A)))
+                       (fun aa -> (i, aa)) a)
                 (enumerate (mstate_i st) xs))),
         Mstate_ext
           (plus_nat (mstate_i st) (size_list xs), m, mstate_n st, ())));;
-
-let rec list_all p x1 = match p, x1 with p, [] -> true
-                   | p, x :: xs -> p x && list_all p xs;;
 
 let one_enat : enat = Enat one_nat;;
 
@@ -652,13 +676,6 @@ let rec equal_enat x0 x1 = match x0, x1 with Enat nat, Infinity_enat -> false
                      | Infinity_enat, Enat nat -> false
                      | Enat nata, Enat nat -> equal_nata nata nat
                      | Infinity_enat, Infinity_enat -> true;;
-
-let rec less_eq_set _A
-  a b = match a, b with Coset [], Set [] -> false
-    | a, Coset ys -> list_all (fun y -> not (member _A y a)) ys
-    | Set xs, b -> list_all (fun x -> member _A x b) xs;;
-
-let rec equal_set _A a b = less_eq_set _A a b && less_eq_set _A b a;;
 
 let rec monitorable_formula_exec
   = function Eq (t1, t2) -> is_Const t1 || is_Const t2
@@ -701,7 +718,7 @@ let rec monitorable_formula_exec
           (monitorable_formula_exec phi &&
             monitorable_formula_exec (Until (v, va, vb)))
     | Disj (phi, psi) ->
-        equal_set equal_nat (fv zero_nat psi) (fv zero_nat phi) &&
+        equal_seta equal_nat (fv zero_nat psi) (fv zero_nat phi) &&
           (monitorable_formula_exec phi && monitorable_formula_exec psi)
     | Exists phi -> monitorable_formula_exec phi
     | Prev (i, phi) -> monitorable_formula_exec phi

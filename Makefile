@@ -91,7 +91,7 @@ monpoly-$(VER).tgz:
 release: monpoly-$(VER).tgz
 
 
-docker: 
+docker: clean
 	docker build -t $(USERNAME)/$(IMAGENAME) .
 
 docker-run:

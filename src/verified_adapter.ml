@@ -6,10 +6,11 @@ open Helper
 
 exception UnsupportedFragment of string
 
-let (<<) f g x = f(g(x));;
+let (<<) f g x = f(g(x))
 let nat_of_int = nat_of_integer << Big_int.big_int_of_int
-let nat_of_float = nat_of_int << int_of_float
-let enat_of_float f = Enat ((nat_of_int << int_of_float) f)
+let nat_of_int64 = nat_of_integer << Big_int.big_int_of_int64
+let nat_of_float f = if (float_of_int max_int) < f then (nat_of_int64 Int64.max_int) else (nat_of_int64 << Int64.of_float) f
+let enat_of_float f = Enat ((nat_of_int64 << Int64.of_float) f)
 let int_of_nat = Big_int.int_of_big_int << integer_of_nat (* Problem? *)
 let float_of_nat = Big_int.float_of_big_int << integer_of_nat (* Problem? *)
 let equal_nata m n = Big_int.eq_big_int (integer_of_nat m) (integer_of_nat n)
@@ -18,7 +19,7 @@ let filterWith f p = List.map f << List.filter p
 let deoptionalize  = 
   let is_some = function Some _ -> true | _ -> false in
   List.map (function | Some x -> x | None -> assert false) << List.filter (is_some)
-     
+
 
 let index_of =
   let rec index_of_rec c x lst = match lst with
@@ -35,20 +36,24 @@ let convert_term fvl bvl = function
     raise (UnsupportedFragment msg)
 
 let convert_interval (l,r) = 
-  if l <= r then
     let lm = match l with 
-    | OBnd a -> nat_of_float (a+.1.)
-    | CBnd a -> nat_of_float a
+    | OBnd a -> (a+.1.)
+    | CBnd a -> a
     | Inf -> let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
               raise (UnsupportedFragment msg) in
     let um = match r with 
-    | OBnd a -> enat_of_float (a-.1.)
-    | CBnd a ->  enat_of_float a
-    | Inf -> Infinity_enat in 
-    interval (lm, um)
-  else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
-  raise (UnsupportedFragment msg) 
+    | OBnd a -> Some (a-.1.)
+    | CBnd a ->  Some a
+    | Inf -> None in 
+    match um with 
+    | None -> interval (nat_of_float lm, Infinity_enat)
+    | Some um ->  if lm <= um then
+                  interval (nat_of_float lm, enat_of_float um)
+                  else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
+                  raise (UnsupportedFragment msg) 
 
+    
+  
 
  
 
@@ -100,7 +105,7 @@ let convert_db md =
 let convert_violations vs = 
   let vsl = match vs with 
     | Set l -> l
-    | Coset _ -> [] in (* Should always be empty? *)
+    | Coset _ -> failwith "Impossible!" in 
   let qtss = List.map fst vsl in 
   let qmap = List.fold_left (fun a e -> 
       (fun ts -> if equal_nata ts (fst e) 
@@ -109,9 +114,9 @@ let convert_violations vs =
    (fun ts -> []) vsl in
   List.sort 
     (fun x y -> (fst x) - (fst y)) 
-    (List.map 
+    (Misc.remove_duplicates (List.map 
       (fun ts -> (int_of_nat ts, Relation.make_relation ((List.map (Tuple.make_tuple<<deoptionalize) (qmap ts))))) 
-      qtss)
+      qtss))
 
   let cst_eq = function 
   | (Int a, Int b) -> a = b 
