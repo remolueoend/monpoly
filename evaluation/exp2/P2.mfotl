@@ -1,0 +1,1 @@
+(trans(c,t,a) AND 2000 < a)  AND NOT  EVENTUALLY[0,6) report(t)
