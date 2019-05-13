@@ -1,6 +1,10 @@
 [[ -n $WORK_DIR ]] || WORK_DIR=`cd "$(dirname "$BASH_SOURCE")"; pwd`
+[[ -n $EVAL_DIR ]] || EVAL_DIR=`cd "$WORK_DIR/.."; pwd`
 
-TOOL_JAR="$WORK_DIR/evaluation-tools-1.0-SNAPSHOT.jar"
+
+TOOL_JAR="$EVAL_DIR/evaluation-tools-1.0-SNAPSHOT.jar"
+DEJAVU_COMPILE="$EVAL_DIR/dejavu-compile"
+DEJAVU_RUN="$EVAL_DIR/dejavu-run"
 OUTPUT_DIR="$WORK_DIR/logs"
 VERDICT_DIR="$WORK_DIR/verdicts"
 REPORT_DIR="$WORK_DIR/reports"
@@ -205,8 +209,8 @@ function monitor() {
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
     #DEJAVU
-    local perf=$(run "$WORK_DIR/dejavu-compile ${WORK_DIR}/${formula_dejavu}")
-    local dejavuCMD="$WORK_DIR/dejavu-run ${logpath}_dejavu ${verdictpath}_dejavu"
+    local perf=$(run "${DEJAVU_COMPILE} ${WORK_DIR}/${formula_dejavu}")
+    local dejavuCMD="${DEJAVU_RUN} ${logpath}_dejavu ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
     local oracleCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath} -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"

@@ -4,22 +4,16 @@
 #
 # To use, call (after making executable with: chmod +x dejavu) as follows:
 #
-#   dejavu <specFile> <traceFile> <output file>
+#   dejavu <traceFile> <output file>
 
 BDDSIZE=20 # default number of bits per variable = 20
 DEBUG="" # default is no debugging
-output=$3
+output=$2
 
-DEJAVU=`dirname $1`
-
-# Parse specification and synthesize monitor:
-java -cp $DEJAVU/dejavu.jar dejavu.Verify $1 2>&1 > /dev/null
-
-# Compile synthesized monitor:
-scalac -cp .:$DEJAVU/dejavu.jar TraceMonitor.scala 2>&1 > /dev/null
+DEJAVU=`cd "$(dirname "$BASH_SOURCE")"; pwd`
 
 # Run the compiled monitor on trace:
-scala -J-Xmx16g -cp .:$DEJAVU/dejavu.jar TraceMonitor $2 $BDDSIZE $DEBUG 2>&1 > /dev/null
+scala -J-Xmx16g -cp .:$DEJAVU/dejavu.jar TraceMonitor $1 $BDDSIZE $DEBUG 2>&1 > /dev/null
 
 # Move results
 mv dejavu-results $output

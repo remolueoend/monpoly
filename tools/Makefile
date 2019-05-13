@@ -61,6 +61,9 @@ mfotl2sql: $(MONPOLY_LIB) mfotl2sql.ml
 table2log: $(MONPOLY_LIB) table2log.cmi table2log.$(O)
 	$(OCAMLEXE) -I ../src/ ../src/$(MONPOLY_LIB) table2log.ml -o $@
 
+generator: 
+	ocamlopt -o gen_log PrioQueue.ml gen_log.ml
+
 %.cmi: %.mli $(MONPOLY_LIB)
 	$(OCAMLC) $(FLAGS) -c $<
 
@@ -72,4 +75,4 @@ table2log: $(MONPOLY_LIB) table2log.cmi table2log.$(O)
 
 
 clean:
-	rm -f *.cm[iox]
+	rm -f *.cm[iox] *.o

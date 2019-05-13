@@ -7,7 +7,7 @@
 #   dejavu <specFile> 
 
 
-DEJAVU=`pwd`
+DEJAVU=`cd "$(dirname "$BASH_SOURCE")"; pwd`
 
 # Parse specification and synthesize monitor:
 java -cp $DEJAVU/dejavu.jar dejavu.Verify $1 2>&1 > /dev/null

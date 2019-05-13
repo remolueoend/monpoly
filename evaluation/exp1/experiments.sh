@@ -4,6 +4,8 @@
 
 # PREAMBLE & PRIVATE PARAMETERS
 WORK_DIR=`cd "$(dirname "$BASH_SOURCE")"; pwd`
+EVAL_DIR=`cd "$WORK_DIR/.."; pwd`
+
 source "$WORK_DIR/functions.sh"
 
 

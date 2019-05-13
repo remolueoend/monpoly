@@ -26,11 +26,9 @@ RUN locale-gen en_US.UTF-8 \
     && echo "export LANG=en_US.UTF-8 LANGUAGE=en_US.en LC_ALL=en_US.UTF-8" >> /root/.bashrc
 
 COPY --from=build /usr/local/bin/monpoly /bin/monpoly
+COPY --from=build /usr/local/bin/gen_log /bin/gen_log
 USER root
 ENV WDIR /home/root/monpoly
 RUN mkdir -p ${WDIR}
 WORKDIR ${WDIR}
 ADD . ${WDIR}
-RUN cp ./dejavu /usr/local/bin/dejavu \
-    && cp ./dejavu-compile /usr/local/bin/dejavu-compile \
-    && cp ./dejavu-run /usr/local/bin/dejavu-run 

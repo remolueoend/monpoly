@@ -48,6 +48,9 @@ table2log:
 	cd tools && $(MAKE) table2log
 	cp -v tools/table2log $(BIN)
 
+generator:
+	cd tools && $(MAKE) generator
+
 install: monpoly 
 	cp -v monpoly $(BIN)monpoly
 
