@@ -1,0 +1,1 @@
+FORALL a . FORALL b . FORALL c . FORALL d . (ONCE[0,*) ((ONCE[0,*) A(a,b)) AND B(a,c))) IMPLIES NOT C(a,d)
