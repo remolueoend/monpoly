@@ -1,5 +1,6 @@
 S src
 S test
+S tools
 S applet
 B _build/*
 PKG yojson

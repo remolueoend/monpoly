@@ -61,8 +61,16 @@ mfotl2sql: $(MONPOLY_LIB) mfotl2sql.ml
 table2log: $(MONPOLY_LIB) table2log.cmi table2log.$(O)
 	$(OCAMLEXE) -I ../src/ ../src/$(MONPOLY_LIB) table2log.ml -o $@
 
-generator: 
+log_generator: 
 	ocamlopt -o gen_log PrioQueue.ml gen_log.ml
+
+fma_generator: 
+	ocamlfind ocamlc -I ../src -c random_generator.mli
+	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -c random_generator.ml
+	ocamlfind ocamlc -I ../src -c formula_generator.mli
+	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -c formula_generator.ml
+	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -o gen_fma str.cmxa ../src/mqueue.cmx ../src/dllist.cmx ../src/misc.cmx ../src/predicate.cmx ../src/MFOTL.cmx random_generator.ml formula_generator.ml gen_fma.ml
+
 
 %.cmi: %.mli $(MONPOLY_LIB)
 	$(OCAMLC) $(FLAGS) -c $<

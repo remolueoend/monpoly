@@ -118,6 +118,14 @@ let rec formula_of_genformula = function
 | GNUntil      (i, f1, f2) -> Until (i, Neg (formula_of_genformula f1), formula_of_genformula f2)
 
 
+let rec string_of_arity = function
+| 0 -> ""
+| 1 -> "int"
+| n -> "int, " ^ (string_of_arity (n-1))
+
+let string_of_sig map =
+  List.fold_left (fun str (a,set) -> List.fold_left (fun subs p -> subs ^ p ^ "(" ^ (string_of_arity a) ^ ")"  ) "" (Set.elements set)) "" (IntMap.bindings map)
+
 let mapSnd f (a,b) = (a,f b)
 
 (* TODO: parethesize *)
@@ -184,7 +192,7 @@ let predicate_gen map vs =
   let vs = List.map (fun e -> Var e) vs in 
   let predNum = Set.cardinal (List.fold_left Set.union Set.empty (List.map snd (IntMap.bindings map))) in
   let freshPred = "P" ^ string_of_int predNum in
-  let oldSet = (find (List.length vs) map) in 
+  let oldSet = try find (List.length vs) map with Not_found -> Set.empty in 
   let newSet = Set.add freshPred oldSet in 
   let updatedMap = add (List.length vs) newSet map in
   let shuffled_Vars = Gen.shuffle_l vs in
@@ -196,11 +204,11 @@ let predicate_gen map vs =
   
     
 (* TODO: sig gen *)
-let formula_gen ?(signature = []) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) varnum size = 
+let formula_gen signature max_lb max_interval past_only varnum size = 
   let fq = if past_only then 0 else 1 in
   let mq = if max_lb == -1 then 0 else 1 in 
   let vars = List.map (fun e -> "x" ^ string_of_int e) (1 -- varnum) in
-  let preds = List.fold_left (fun m e -> add (snd e) (fst e) m) empty signature in
+  let preds = signature in
   Random_generator.fix (fun go (predmap,vars,size) -> match size with 
     | 0 -> Gen.map (mapSnd gPred) (predicate_gen predmap vars)
     | n -> 
@@ -260,5 +268,6 @@ let formula_gen ?(signature = []) ?(max_lb = -1) ?(max_interval=10) ?(past_only=
   ) (preds,vars,size)
   
   
+  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only varnum size))
 
     (* TODO: no future, no intervals, temporal boolean ops *)

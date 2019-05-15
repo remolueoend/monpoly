@@ -48,8 +48,15 @@ table2log:
 	cd tools && $(MAKE) table2log
 	cp -v tools/table2log $(BIN)
 
-generator:
-	cd tools && $(MAKE) generator
+log_generator:
+	cd tools && $(MAKE) log_generator
+	cp tools/gen_log gen_log
+
+fma_generator:
+	cd src && $(MAKE) monpoly
+	cd tools && $(MAKE) fma_generator
+	cp tools/gen_fma gen_fma
+
 
 install: monpoly 
 	cp -v monpoly $(BIN)monpoly
