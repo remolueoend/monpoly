@@ -140,3 +140,4 @@ val print_interval: interval -> unit
 val string_of_formula: string -> formula -> string
 val print_formula: string -> formula -> unit
 val printnl_formula: string -> formula -> unit
+val string_of_parenthesized_formula: string -> formula -> string

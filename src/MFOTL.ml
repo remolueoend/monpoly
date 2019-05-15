@@ -285,7 +285,8 @@ let rec type_of_fma = function
   | Since (intv,f1,f2) -> "Since"
   | Until (intv,f1,f2) -> "Unitl"
 
-
+(* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
+ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
 let string_of_formula str g =
   let rec string_f_rec top par h =
     (match h with
@@ -459,8 +460,209 @@ let string_of_formula str g =
   in
   str ^ string_f_rec true false g
 
-(* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
-ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
+  (* Fully parenthesize an MFOTL formula *)
+  let string_of_parenthesized_formula str g =
+    let rec string_f_rec top par h =
+      (match h with
+        | Equal (t1,t2) ->
+          "(" ^ Predicate.string_of_term t1 ^ " = " ^ Predicate.string_of_term t2 ^ ")"
+        | Less (t1,t2) ->
+          "(" ^ Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2 ^ ")"
+        | LessEq (t1,t2) ->
+          "(" ^ Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2 ^ ")"
+        | Pred p -> Predicate.string_of_predicate p
+        | _ ->
+           
+          (match h with
+          | Neg f ->
+            "(" ^
+            "NOT " ^ string_f_rec false false f
+            ^ ")"
+  
+          | Exists (vl,f) ->
+            "(" ^
+            "EXISTS " 
+            ^ 
+            Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl) 
+            ^
+            ". "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | ForAll (vl,f) ->
+            "(" ^
+            "FORALL "
+            ^
+            Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl)
+            ^
+            ". "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | Aggreg (y,op,x,glist,f) ->
+            "(" ^
+            Predicate.string_of_term (Var y)
+            ^
+            " <- "
+            ^
+            (string_of_agg_op op)
+            ^
+            " "
+            ^
+            Predicate.string_of_term (Var x)
+            ^
+            if glist <> [] then
+                "; "
+                ^
+                Misc.string_of_list_ext "" "" "," (fun z -> Predicate.string_of_term (Var z)) glist
+            else ""
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | Prev (intv,f) ->
+            "(" ^
+            "PREVIOUS"
+            ^
+            string_of_interval intv
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | Next (intv,f) ->
+            "(" ^
+            "NEXT"
+            ^
+            string_of_interval intv
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | Eventually (intv,f) ->
+            "(" ^
+            "EVENTUALLY"
+            ^
+            string_of_interval intv
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | Once (intv,f) ->
+            "(" ^
+            "ONCE"
+            ^
+            string_of_interval intv
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | Always (intv,f) ->
+            "(" ^
+            "ALWAYS"
+            ^
+            string_of_interval intv
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+  
+          | PastAlways (intv,f) ->
+            "(" ^
+            "PAST_ALWAYS"
+            ^
+            string_of_interval intv
+            ^
+            " "
+            ^
+            string_f_rec false false f
+            ^ ")"
+            
+          | _ ->
+            
+            (match h with
+              | And (f1,f2) ->
+                "(" ^
+                string_f_rec false true f1
+                ^
+                " AND " 
+                ^
+                string_f_rec false true f2
+                ^ ")"
+  
+              | Or (f1,f2) ->
+                "(" ^
+                string_f_rec false true f1
+                ^
+                " OR "
+                ^
+                string_f_rec false false f2
+                ^ ")"
+  
+              | Implies (f1,f2) ->
+                "(" ^
+                string_f_rec false true f1
+                ^
+                " IMPLIES "
+                ^
+                string_f_rec false false f2
+                ^ ")"
+  
+              | Equiv (f1,f2) ->
+                "(" ^
+                string_f_rec false true f1
+                ^
+                " EQUIV "
+                ^
+                string_f_rec false false f2
+                ^ ")"
+  
+              | Since (intv,f1,f2) ->
+                "(" ^
+                string_f_rec false true f1
+                ^ 
+                " SINCE"
+                ^
+                string_of_interval intv
+                ^
+                " "
+                ^
+                string_f_rec false false f2
+                ^ ")"
+  
+              | Until (intv,f1,f2) ->
+                "(" ^
+                string_f_rec false true f1
+                ^
+                " UNTIL"
+                ^
+                string_of_interval intv
+                ^
+                " "
+                ^
+                string_f_rec false false f2
+                ^ ")"
+              | _ -> failwith "[print_formula] impossible"
+            )
+            
+          ) 
+          
+      )
+    in
+    str ^ string_f_rec true false g
+
 let print_formula str f =
   print_string (string_of_formula str f)
 

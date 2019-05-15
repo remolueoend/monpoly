@@ -124,12 +124,11 @@ let rec string_of_arity = function
 | n -> "int, " ^ (string_of_arity (n-1))
 
 let string_of_sig map =
-  List.fold_left (fun str (a,set) -> List.fold_left (fun subs p -> subs ^ p ^ "(" ^ (string_of_arity a) ^ ")"  ) "" (Set.elements set)) "" (IntMap.bindings map)
+  List.fold_left (fun str (a,set) -> str ^ List.fold_left (fun subs p -> subs ^ p ^ "(" ^ (string_of_arity a) ^ ")\n"  ) "" (Set.elements set)) "" (IntMap.bindings map)
 
 let mapSnd f (a,b) = (a,f b)
 
-(* TODO: parethesize *)
-let string_of_genformula f = string_of_formula "" (formula_of_genformula f)
+let string_of_genformula f = string_of_parenthesized_formula "" (formula_of_genformula f)
 
 let interval_gen_bound max_lb max_delta =
   let lb = Gen.int_bound max_lb in
@@ -197,22 +196,20 @@ let predicate_gen map vs =
   let updatedMap = add (List.length vs) newSet map in
   let shuffled_Vars = Gen.shuffle_l vs in
   shuffled_Vars >>= (fun vs -> 
-  Gen.map (fun (m,p) -> (m,make_predicate (p, shuffle vs))) 
+  Gen.map (fun (m,p) -> (m, make_predicate (p, shuffle vs))) 
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
-
   
-    
-(* TODO: sig gen *)
+
 let formula_gen signature max_lb max_interval past_only varnum size = 
   let fq = if past_only then 0 else 1 in
   let mq = if max_lb == -1 then 0 else 1 in 
   let vars = List.map (fun e -> "x" ^ string_of_int e) (1 -- varnum) in
-  let preds = signature in
-  Random_generator.fix (fun go (predmap,vars,size) -> match size with 
+  Random_generator.fix (
+  fun go (predmap, vars, size) -> match size with 
     | 0 -> Gen.map (mapSnd gPred) (predicate_gen predmap vars)
     | n -> 
-    let noint = Gen.return (CBnd 0., Inf) in
+      let noint = Gen.return (CBnd 0., Inf) in
       let bound_variable = "y" ^ string_of_int ((List.length (List.filter (fun x -> String.contains x 'y') vars))+1) in
       let interval = if (max_lb == -1) then noint else interval_gen max_lb max_interval in
       let interval_bound = interval_gen_bound max_lb max_interval in
@@ -225,21 +222,21 @@ let formula_gen signature max_lb max_interval past_only varnum size =
       let metricunarybind f intr =
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf) -> 
-              (intr >>= (fun i -> (fun s -> (newMap, f i sf))))) in 
+                (intr >>= (fun i -> (fun s -> (newMap, f i sf))))) in 
       let binarybind f vars1 vars2 = 
         (go (predmap, vars1, m)) >>= 
-            (fun (predmap',lf) -> 
-              (go (predmap', vars2, (n - 1 - m)))  >>= 
-                  (fun (predmap'',rf) -> 
-                      (fun s -> (predmap'', (f lf rf))))) in
+            (fun (newMap,lf) -> 
+                (go (newMap, vars2, (n - 1 - m)))  >>= 
+                    (fun (newestMap,rf) -> 
+                        (fun s -> (newestMap, (f lf rf))))) in
       let metricbinarybind f intr vars1 vars2 = 
         (go (predmap, vars1, m)) >>= 
-            (fun (predmap',lf) -> 
-              (go (predmap', vars2, (n - 1 - m)))  >>= 
-                  (fun (predmap'',rf) -> 
-                      intr >>= 
-                      (fun i -> 
-                      (fun s -> (predmap'', (f i lf rf)))))) in
+            (fun (newMap,lf) -> 
+                (go (newMap, vars2, (n - 1 - m)))  >>= 
+                    (fun (newestMap,rf) -> 
+                        intr >>= 
+                            (fun i -> 
+                                (fun s -> (newestMap, (f i lf rf)))))) in
       Gen.frequency [
         1, binarybind gOr          vars vars;
         1, binarybind gNAndEQ      vars vars;
@@ -265,9 +262,10 @@ let formula_gen signature max_lb max_interval past_only varnum size =
        fq, metricbinarybind gUntil      interval_bound vars vars;
        fq, metricbinarybind gNUntil     interval_bound vars vars;       
       ]
-  ) (preds,vars,size)
+  ) (signature, vars, size)
   
   
   let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only varnum size))
 
-    (* TODO: no future, no intervals, temporal boolean ops *)
+    (* TODO: temporal boolean ops *)
+    (* TODO: special AND cases *)
