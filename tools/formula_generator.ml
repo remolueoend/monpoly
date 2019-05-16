@@ -346,7 +346,7 @@ let predicate_gen map vs =
   Gen.map (fun (m,p) -> (m, make_predicate (p, shuffle vs))) 
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
-let formula_gen signature max_lb max_interval past_only all_rels varnum size = 
+let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size = 
   let fq = if past_only then 0 else 1 in
   let mq = if max_lb == -1 then 0 else 1 in 
   let vars = List.map (fun e -> "x" ^ string_of_int e) (1 -- varnum) in
@@ -364,6 +364,7 @@ let formula_gen signature max_lb max_interval past_only all_rels varnum size =
             (List.filter 
               (fun x -> String.contains x 'y') 
               vars)))+1) in
+      let side = Gen.bool in
       let interval = interval_gen max_lb max_interval in
       let interval_bound = interval_gen_bound max_lb max_interval in
       let interval_inf = interval_gen_inf max_lb in
@@ -390,7 +391,17 @@ let formula_gen signature max_lb max_interval past_only all_rels varnum size =
             (fun (newMap,lf) -> 
                 (go (newMap, vars2, (n - 1 - m)))  >>= 
                     (fun (newestMap,rf) -> 
-                        (fun s -> (newestMap, (f lf rf))))) in
+                        if not qtl then
+                        (fun s -> (newestMap, (f lf rf)))
+                        else side >>= 
+                          (fun left -> 
+                            if left then 
+                            (fun s -> (newestMap, (f (gOnce (CBnd 0., Inf) lf) rf)))
+                            else 
+                            (fun s -> (newestMap, (f lf (gOnce (CBnd 0., Inf) rf))))
+                          )
+                    )) 
+                        in
       let metricbinarybind f intr vars1 vars2 = 
         (go (predmap, vars1, m)) >>= 
             (fun (newMap,lf) -> 
@@ -425,7 +436,7 @@ let formula_gen signature max_lb max_interval past_only all_rels varnum size =
        fq, vars_sub1 >>= (fun v1 -> metricbinarybind gNUntil     interval_bound v1 vars);       
       ]) (signature, vars, size)
   
-  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels varnum size))
+  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels qtl varnum size))
 
     (* TODO: temporal boolean ops *)
     (* TODO: other special AND case *)
