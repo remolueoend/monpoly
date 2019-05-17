@@ -257,7 +257,7 @@ str ^ string_f_rec true false g
 
 let string_of_genformula f = string_of_parenthesized_formula "" (formula_of_genformula f)
 
-let string_of_genformula_qtl f = string_of_parenthesized_formula_qtl "" (formula_of_genformula f)
+let string_of_genformula_qtl f = string_of_parenthesized_formula_qtl "prop random : " (formula_of_genformula (gNeg f))
 
 
 let interval_gen_bound max_lb max_delta =
@@ -350,7 +350,11 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
   let fq = if past_only then 0 else 1 in
   let mq = if max_lb == -1 then 0 else 1 in 
   let vars = List.map (fun e -> "x" ^ string_of_int e) (1 -- varnum) in
-  Random_generator.fix (
+  let rec toplvlq fg = function
+  | [] -> fg
+  | v::vs -> toplvlq (Random_generator.map (fun (m,f) -> (m,gExists [v] f)) fg) vs
+  in
+  let result = Random_generator.fix (
   fun go (predmap, vars, size) -> match size with 
     | 0 -> Gen.map (mapSnd gPred) (predicate_gen predmap vars)
     | n -> 
@@ -434,9 +438,11 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
        mq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSinceA    interval_inf v1 vars);
        fq, vars_sub1 >>= (fun v1 -> metricbinarybind gUntil      interval_bound v1 vars);
        fq, vars_sub1 >>= (fun v1 -> metricbinarybind gNUntil     interval_bound v1 vars);       
-      ]) (signature, vars, size)
+      ]) (signature, vars, size) in
+      if qtl then toplvlq result vars
+      else result
   
   let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels qtl varnum size))
 
-    (* TODO: temporal boolean ops *)
+    (* TODO: check binary temporal ops for qtl  *)
     (* TODO: other special AND case *)

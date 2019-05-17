@@ -10,6 +10,7 @@ RUN sudo apt-get update \
 RUN opam switch create 4.06.1 \
     && opam install \
        ocamlfind \
+       qcheck \
        num
 
 # RUN useradd -ms /bin/bash monply
@@ -19,4 +20,12 @@ RUN mkdir -p ${WDIR}
 WORKDIR ${WDIR}
 
 ADD . ${WDIR}
-RUN sudo chown -R opam:opam . && eval `opam config env` && make && make log_generator && make clean && sudo cp ./monpoly /usr/local/bin/monpoly && sudo cp ./tools/gen_log /usr/local/bin/gen_log
+RUN sudo chown -R opam:opam . \
+    && eval `opam config env` \
+    && make \
+    && make log_generator \
+    && make fma_generator \
+    && make clean \
+    && sudo cp ./monpoly /usr/local/bin/monpoly \
+    && sudo cp ./tools/gen_log /usr/local/bin/gen_log \
+    && sudo cp ./tools/gen_fma /usr/local/bin/gen_fma 

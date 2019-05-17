@@ -27,6 +27,7 @@ RUN locale-gen en_US.UTF-8 \
 
 COPY --from=build /usr/local/bin/monpoly /bin/monpoly
 COPY --from=build /usr/local/bin/gen_log /bin/gen_log
+COPY --from=build /usr/local/bin/gen_fma /bin/gen_fma
 USER root
 ENV WDIR /home/root/monpoly
 RUN mkdir -p ${WDIR}
