@@ -5,8 +5,8 @@ module Monpoly : sig
   val equal : 'a equal -> 'a -> 'a -> bool
   type 'a set = Set of 'a list | Coset of 'a list
   type char
-  type enat = Enat of nat | Infinity_enat
   type 'a trm = Var of nat | Const of 'a
+  type enat = Enat of nat | Infinity_enat
   type i
   type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
     Neg of 'a formula | Disj of 'a formula * 'a formula | Exists of 'a formula |
@@ -118,18 +118,6 @@ let rec equal_optiona _A x0 x1 = match x0, x1 with None, Some x2 -> false
 
 let rec equal_option _A = ({equal = equal_optiona _A} : ('a option) equal);;
 
-type enat = Enat of nat | Infinity_enat;;
-
-let rec less_eq_enat q x1 = match q, x1 with Infinity_enat, Enat n -> false
-                       | q, Infinity_enat -> true
-                       | Enat m, Enat n -> less_eq_nat m n;;
-
-let rec less_enat x0 q = match x0, q with Infinity_enat, q -> false
-                    | Enat m, Infinity_enat -> true
-                    | Enat m, Enat n -> less_nat m n;;
-
-let ord_enat = ({less_eq = less_eq_enat; less = less_enat} : enat ord);;
-
 let rec equal_proda _A _B (x1, x2) (y1, y2) = eq _A x1 y1 && eq _B x2 y2;;
 
 let rec equal_prod _A _B = ({equal = equal_proda _A _B} : ('a * 'b) equal);;
@@ -141,6 +129,8 @@ let ord_integer =
 type num = One | Bit0 of num | Bit1 of num;;
 
 type 'a trm = Var of nat | Const of 'a;;
+
+type enat = Enat of nat | Infinity_enat;;
 
 type i = Abs_I of (nat * enat);;
 
@@ -345,6 +335,10 @@ let rec gen_length n x1 = match n, x1 with n, x :: xs -> gen_length (suc n) xs
 let rec unit_table _A
   n = insert (equal_list (equal_option _A)) (replicate n None) bot_set;;
 
+let rec less_eq_enat q x1 = match q, x1 with Infinity_enat, Enat n -> false
+                       | q, Infinity_enat -> true
+                       | Enat m, Enat n -> less_eq_nat m n;;
+
 let rec interval
   i = Abs_I (if less_eq_enat (Enat (fst i)) (snd i) then i
               else rep_I (failwith "undefined"));;
@@ -438,6 +432,10 @@ let rec mbuf2_take
 let rec plus_enat q qa = match q, qa with q, Infinity_enat -> Infinity_enat
                     | Infinity_enat, q -> Infinity_enat
                     | Enat m, Enat n -> Enat (plus_nat m n);;
+
+let rec less_enat x0 q = match x0, q with Infinity_enat, q -> false
+                    | Enat m, Infinity_enat -> true
+                    | Enat m, Enat n -> less_nat m n;;
 
 let rec eval_until
   i nt x2 = match i, nt, x2 with i, nt, [] -> ([], [])
@@ -649,26 +647,6 @@ let rec mstep _A
         Mstate_ext
           (plus_nat (mstate_i st) (size_list xs), m, mstate_n st, ())));;
 
-let one_enat : enat = Enat one_nat;;
-
-let rec future_reach
-  = function Pred (uu, uv) -> zero_enat
-    | Eq (uw, ux) -> zero_enat
-    | Neg phi -> future_reach phi
-    | Disj (phi, psi) -> max ord_enat (future_reach phi) (future_reach psi)
-    | Exists phi -> future_reach phi
-    | Prev (i, phi) -> minus_enat (future_reach phi) (Enat (left i))
-    | Next (i, phi) ->
-        plus_enat (plus_enat (future_reach phi) (right i)) one_enat
-    | Since (phi, i, psi) ->
-        max ord_enat (future_reach phi)
-          (minus_enat (future_reach psi) (Enat (left i)))
-    | Until (phi, i, psi) ->
-        plus_enat
-          (plus_enat (max ord_enat (future_reach phi) (future_reach psi))
-            (right i))
-          one_enat;;
-
 let rec is_Const = function Var x1 -> false
                    | Const x2 -> true;;
 
@@ -677,124 +655,113 @@ let rec equal_enat x0 x1 = match x0, x1 with Enat nat, Infinity_enat -> false
                      | Enat nata, Enat nat -> equal_nata nata nat
                      | Infinity_enat, Infinity_enat -> true;;
 
-let rec monitorable_formula_exec
+let rec mmonitorable_exec
   = function Eq (t1, t2) -> is_Const t1 || is_Const t2
     | Neg (Eq (Const x, Const y)) -> true
     | Neg (Eq (Var x, Var y)) -> equal_nata x y
     | Pred (e, ts) -> true
     | Neg (Disj (Neg phi, Neg psi)) ->
-        monitorable_formula_exec phi && monitorable_formula_exec psi
+        mmonitorable_exec phi && mmonitorable_exec psi
     | Neg (Disj (Neg phi, Pred (v, va))) ->
         less_eq_set equal_nat (fv zero_nat (Pred (v, va))) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Pred (v, va)))
+          (mmonitorable_exec phi && mmonitorable_exec (Pred (v, va)))
     | Neg (Disj (Neg phi, Eq (v, va))) ->
         less_eq_set equal_nat (fv zero_nat (Eq (v, va))) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Eq (v, va)))
+          (mmonitorable_exec phi && mmonitorable_exec (Eq (v, va)))
     | Neg (Disj (Neg phi, Disj (v, va))) ->
         less_eq_set equal_nat (fv zero_nat (Disj (v, va))) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Disj (v, va)))
+          (mmonitorable_exec phi && mmonitorable_exec (Disj (v, va)))
     | Neg (Disj (Neg phi, Exists v)) ->
         less_eq_set equal_nat (fv zero_nat (Exists v)) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi && monitorable_formula_exec (Exists v))
+          (mmonitorable_exec phi && mmonitorable_exec (Exists v))
     | Neg (Disj (Neg phi, Prev (v, va))) ->
         less_eq_set equal_nat (fv zero_nat (Prev (v, va))) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Prev (v, va)))
+          (mmonitorable_exec phi && mmonitorable_exec (Prev (v, va)))
     | Neg (Disj (Neg phi, Next (v, va))) ->
         less_eq_set equal_nat (fv zero_nat (Next (v, va))) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Next (v, va)))
+          (mmonitorable_exec phi && mmonitorable_exec (Next (v, va)))
     | Neg (Disj (Neg phi, Since (v, va, vb))) ->
         less_eq_set equal_nat (fv zero_nat (Since (v, va, vb)))
           (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Since (v, va, vb)))
+          (mmonitorable_exec phi && mmonitorable_exec (Since (v, va, vb)))
     | Neg (Disj (Neg phi, Until (v, va, vb))) ->
         less_eq_set equal_nat (fv zero_nat (Until (v, va, vb)))
           (fv zero_nat phi) &&
-          (monitorable_formula_exec phi &&
-            monitorable_formula_exec (Until (v, va, vb)))
+          (mmonitorable_exec phi && mmonitorable_exec (Until (v, va, vb)))
     | Disj (phi, psi) ->
         equal_seta equal_nat (fv zero_nat psi) (fv zero_nat phi) &&
-          (monitorable_formula_exec phi && monitorable_formula_exec psi)
-    | Exists phi -> monitorable_formula_exec phi
-    | Prev (i, phi) -> monitorable_formula_exec phi
-    | Next (i, phi) -> monitorable_formula_exec phi
+          (mmonitorable_exec phi && mmonitorable_exec psi)
+    | Exists phi -> mmonitorable_exec phi
+    | Prev (i, phi) -> mmonitorable_exec phi
+    | Next (i, phi) ->
+        mmonitorable_exec phi && not (equal_enat (right i) Infinity_enat)
     | Since (Neg phi, i, psi) ->
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
-          (monitorable_formula_exec phi && monitorable_formula_exec psi)
+          (mmonitorable_exec phi && mmonitorable_exec psi)
     | Since (Pred (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Pred (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Pred (v, va)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Pred (v, va)) && mmonitorable_exec psi)
     | Since (Eq (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Eq (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Eq (v, va)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Eq (v, va)) && mmonitorable_exec psi)
     | Since (Disj (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Disj (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Disj (v, va)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Disj (v, va)) && mmonitorable_exec psi)
     | Since (Exists v, i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Exists v)) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Exists v) && monitorable_formula_exec psi)
+          (mmonitorable_exec (Exists v) && mmonitorable_exec psi)
     | Since (Prev (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Prev (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Prev (v, va)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Prev (v, va)) && mmonitorable_exec psi)
     | Since (Next (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Next (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Next (v, va)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Next (v, va)) && mmonitorable_exec psi)
     | Since (Since (v, va, vb), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Since (v, va, vb)))
           (fv zero_nat psi) &&
-          (monitorable_formula_exec (Since (v, va, vb)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Since (v, va, vb)) && mmonitorable_exec psi)
     | Since (Until (v, va, vb), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Until (v, va, vb)))
           (fv zero_nat psi) &&
-          (monitorable_formula_exec (Until (v, va, vb)) &&
-            monitorable_formula_exec psi)
+          (mmonitorable_exec (Until (v, va, vb)) && mmonitorable_exec psi)
     | Until (Neg phi, i, psi) ->
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
-          (monitorable_formula_exec phi && monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec phi && mmonitorable_exec psi))
     | Until (Pred (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Pred (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Pred (v, va)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Pred (v, va)) && mmonitorable_exec psi))
     | Until (Eq (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Eq (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Eq (v, va)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Eq (v, va)) && mmonitorable_exec psi))
     | Until (Disj (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Disj (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Disj (v, va)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Disj (v, va)) && mmonitorable_exec psi))
     | Until (Exists v, i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Exists v)) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Exists v) && monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Exists v) && mmonitorable_exec psi))
     | Until (Prev (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Prev (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Prev (v, va)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Prev (v, va)) && mmonitorable_exec psi))
     | Until (Next (v, va), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Next (v, va))) (fv zero_nat psi) &&
-          (monitorable_formula_exec (Next (v, va)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Next (v, va)) && mmonitorable_exec psi))
     | Until (Since (v, va, vb), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Since (v, va, vb)))
           (fv zero_nat psi) &&
-          (monitorable_formula_exec (Since (v, va, vb)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Since (v, va, vb)) && mmonitorable_exec psi))
     | Until (Until (v, va, vb), i, psi) ->
         less_eq_set equal_nat (fv zero_nat (Until (v, va, vb)))
           (fv zero_nat psi) &&
-          (monitorable_formula_exec (Until (v, va, vb)) &&
-            monitorable_formula_exec psi)
+          (not (equal_enat (right i) Infinity_enat) &&
+            (mmonitorable_exec (Until (v, va, vb)) && mmonitorable_exec psi))
     | Neg (Pred (va, vb)) -> false
     | Neg (Eq (Var vc, Const v)) -> false
     | Neg (Eq (Const v, Var vc)) -> false
@@ -813,14 +780,8 @@ let rec monitorable_formula_exec
     | Neg (Since (va, vb, vc)) -> false
     | Neg (Until (va, vb, vc)) -> false;;
 
-let rec monitorable_formula phi = monitorable_formula_exec phi;;
-
-let rec mmonitorable
-  phi = monitorable_formula phi &&
-          not (equal_enat (future_reach phi) Infinity_enat);;
-
 let rec minit_safe _A
-  phi = (if mmonitorable phi then minit _A phi else failwith "undefined");;
+  phi = (if mmonitorable_exec phi then minit _A phi else failwith "undefined");;
 
 let rec bit_cut_integer
   k = (if Big_int.eq_big_int k Big_int.zero_big_int

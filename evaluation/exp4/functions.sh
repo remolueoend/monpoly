@@ -148,11 +148,11 @@ function run() {
 
     if [ "$status" == "2" ]; then
         echo "$cmd" >> /tmp/error.log
-        echo "REASON: $result"
+        echo "REASON: $result" >> /tmp/error.log
     else 
         if [ "$space" != "$result" ]; then
             echo "$cmd" >> /tmp/error.log
-            echo "REASON: $result"
+            echo "REASON: $result" >> /tmp/error.log
         fi
     fi
 
