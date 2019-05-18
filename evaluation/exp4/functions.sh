@@ -106,7 +106,7 @@ function make_log() {
     local start=$((length*part))
     local seed=$RANDOM
 
-    local name=$(log_name "$adaptations" "$formula" "$er" "$ir" "$part" "$seed")
+    local name=$(log_name "$adaptations" "$formula" "$er" "$ir" "$length" "$seed")
     local log=$(log_path $name)
     local fma=$(fma_path $formula)
 
@@ -142,6 +142,19 @@ function run() {
     debug "Start monitoring"
 
     local result=$( { eval "$TIME $cmd"; } 2>&1 )
+    status=$(echo $?)
+
+    space=$(echo "$result" | grep -oE '[^ ]+$')
+
+    if [ "$status" == "2" ]; then
+        echo "$cmd" >> /tmp/error.log
+        echo "REASON: $result"
+    else 
+        if [ "$space" != "$result" ]; then
+            echo "$cmd" >> /tmp/error.log
+            echo "REASON: $result"
+        fi
+    fi
 
     debug "Finished monitoring"
 
@@ -150,7 +163,7 @@ function run() {
     local time=`bc <<< "scale=2; $delta/1000000000"`
     
     #returns time
-    echo "$time, $result"
+    echo "$time, $space"
 }
 
 
@@ -189,19 +202,18 @@ function monitor() {
     local fma=$(fma_path $formula)
 
     #MONPOLY
-    local monpolyCMD="monpoly -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}.log > ${verdictpath}_monpoly"
+    local monpolyCMD="monpoly -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath} > ${verdictpath}_monpoly"
     
     #ORACLE-Monpoly
-    local oracleCMD="monpoly -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}.log -verified > ${verdictpath}_oracle_monpoly"
-    
+    local oracleCMD="monpoly -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
+
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
     #DEJAVU
-    local perf=$(run "${DEJAVU_COMPILE} ${fma}.qtl")
-    local dejavuCMD="${DEJAVU_RUN} ${logpath}.csv ${verdictpath}_dejavu"
+    local dejavuCMD="${DEJAVU_RUN} ${fma} ${logpath}_dejavu ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
-    local oracleCMD="monpoly -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}.log -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
+    local oracleCMD="monpoly -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath} -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
 
     compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
 }

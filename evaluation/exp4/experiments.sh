@@ -13,7 +13,7 @@ REPETITIONS=10
 FORMULAS="2;1 5;2 10;3 15;3 15;5 20;2 20;5 20;10"
 EVENT_RATES="1" 
 INDEX_RATES="1"
-LOG_LENGTH="50 75 100 150 200"
+LOG_LENGTH="50 80 100 120 150 200"
 NUM_ADAPTATIONS='0/1/ '
 
 # Log generation strategies 
@@ -156,9 +156,6 @@ for f in $FORMULAS; do
         done
     done
 done
-
-# Clean the generator
-make clean
 
 info "Done! Following differences found:"
 diffs=$(ls ${REPORT_DIR} | grep diff)
