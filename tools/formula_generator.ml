@@ -311,7 +311,10 @@ let rec superset = function
 
 let random_subset = Gen.oneofl << superset 
 
-let random_subset_2 = Gen.oneofl << List.filter (fun x -> let xl = List.length x in 0 < xl && xl <= 2) << superset 
+(* random_subset_2 acutally generates only singleton sets, 
+   since oracle does not accept var1 = var2 formulas 
+   change xl <= 1 below to xl <= 2 for more the general case*)
+let random_subset_2 = Gen.oneofl << List.filter (fun x -> let xl = List.length x in 0 < xl && xl <= 1) << superset 
 
 let shuffle l =
   let a = Array.of_list l in

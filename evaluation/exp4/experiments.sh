@@ -10,7 +10,7 @@ source "$WORK_DIR/functions.sh"
 
 # EXPERIMENT PARAMETERS:
 REPETITIONS=10
-FORMULAS="2;1 5;2 10;3 15;3 15;5 20;2 20;5 20;10"
+FORMULAS="2;1 2;2 3;1 3;2 5;2 5;3 5;5 6;1 6;4 10;3 10;5 15;3 15;5 15;10 20;2 20;5 20;10 100;10"
 EVENT_RATES="1" 
 INDEX_RATES="1"
 LOG_LENGTH="50 80 100 120 150 200"
@@ -113,7 +113,7 @@ parse_options "$@"
 
 #Compile the generator
 
-info "=== Running Dejavu's Data Race experiments ==="
+info "=== Running random formula & random traces experiments ==="
 
 # FOR each param
 TIFS=$IFS
