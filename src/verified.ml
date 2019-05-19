@@ -521,6 +521,81 @@ let rec meval _A
           MPred (e, ts))
     | n, t, db, MRel rel -> ([rel], MRel rel);;
 
+let rec is_Const = function Var x1 -> false
+                   | Const x2 -> true;;
+
+let rec safe_formula
+  = function Eq (t1, t2) -> is_Const t1 || is_Const t2
+    | Neg (Eq (Const x, Const y)) -> true
+    | Neg (Eq (Var x, Var y)) -> equal_nata x y
+    | Pred (e, ts) -> true
+    | Neg (Disj (Neg phi, Neg psi)) -> safe_formula phi && safe_formula psi
+    | Neg (Disj (Neg phi, Pred (v, va))) ->
+        less_eq_set equal_nat (fv zero_nat (Pred (v, va))) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Pred (v, va)))
+    | Neg (Disj (Neg phi, Eq (v, va))) ->
+        less_eq_set equal_nat (fv zero_nat (Eq (v, va))) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Eq (v, va)))
+    | Neg (Disj (Neg phi, Disj (v, va))) ->
+        less_eq_set equal_nat (fv zero_nat (Disj (v, va))) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Disj (v, va)))
+    | Neg (Disj (Neg phi, Exists v)) ->
+        less_eq_set equal_nat (fv zero_nat (Exists v)) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Exists v))
+    | Neg (Disj (Neg phi, Prev (v, va))) ->
+        less_eq_set equal_nat (fv zero_nat (Prev (v, va))) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Prev (v, va)))
+    | Neg (Disj (Neg phi, Next (v, va))) ->
+        less_eq_set equal_nat (fv zero_nat (Next (v, va))) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Next (v, va)))
+    | Neg (Disj (Neg phi, Since (v, va, vb))) ->
+        less_eq_set equal_nat (fv zero_nat (Since (v, va, vb)))
+          (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Since (v, va, vb)))
+    | Neg (Disj (Neg phi, Until (v, va, vb))) ->
+        less_eq_set equal_nat (fv zero_nat (Until (v, va, vb)))
+          (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula (Until (v, va, vb)))
+    | Disj (phi, psi) ->
+        equal_seta equal_nat (fv zero_nat psi) (fv zero_nat phi) &&
+          (safe_formula phi && safe_formula psi)
+    | Exists phi -> safe_formula phi
+    | Prev (i, phi) -> safe_formula phi
+    | Next (i, phi) -> safe_formula phi
+    | Since (phi, i, psi) ->
+        less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
+          ((safe_formula phi ||
+             (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+               | Neg a -> safe_formula a | Disj (_, _) -> false
+               | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
+               | Since (_, _, _) -> false | Until (_, _, _) -> false)) &&
+            safe_formula psi)
+    | Until (phi, i, psi) ->
+        less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
+          ((safe_formula phi ||
+             (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+               | Neg a -> safe_formula a | Disj (_, _) -> false
+               | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
+               | Since (_, _, _) -> false | Until (_, _, _) -> false)) &&
+            safe_formula psi)
+    | Neg (Pred (va, vb)) -> false
+    | Neg (Eq (Var vc, Const v)) -> false
+    | Neg (Eq (Const v, Var vc)) -> false
+    | Neg (Neg va) -> false
+    | Neg (Disj (Pred (v, vc), vb)) -> false
+    | Neg (Disj (Eq (v, vc), vb)) -> false
+    | Neg (Disj (Disj (v, vc), vb)) -> false
+    | Neg (Disj (Exists v, vb)) -> false
+    | Neg (Disj (Prev (v, vc), vb)) -> false
+    | Neg (Disj (Next (v, vc), vb)) -> false
+    | Neg (Disj (Since (v, vc, vd), vb)) -> false
+    | Neg (Disj (Until (v, vc, vd), vb)) -> false
+    | Neg (Exists va) -> false
+    | Neg (Prev (va, vb)) -> false
+    | Neg (Next (va, vb)) -> false
+    | Neg (Since (va, vb, vc)) -> false
+    | Neg (Until (va, vb, vc)) -> false;;
+
 let rec neq_rel _A
   n x1 x2 = match n, x1, x2 with
     n, Const x, Const y -> (if eq _A x y then empty_table else unit_table _A n)
@@ -581,49 +656,21 @@ let rec minit0 _A
     | n, Prev (i, phi) -> MPrev (i, minit0 _A n phi, true, [], [])
     | n, Next (i, phi) -> MNext (i, minit0 _A n phi, true, [])
     | n, Since (phi, i, psi) ->
-        (match phi
-          with Pred (_, _) ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Eq (_, _) ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Neg phia ->
-            MSince
-              (false, minit0 _A n phia, i, minit0 _A n psi, ([], []), [], [])
-          | Disj (_, _) ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Exists _ ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Prev (_, _) ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Next (_, _) ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Since (_, _, _) ->
-            MSince (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Until (_, _, _) ->
-            MSince
-              (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], []))
+        (if safe_formula phi
+          then MSince
+                 (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
+          else (let Neg phia = phi in
+                 MSince
+                   (false, minit0 _A n phia, i, minit0 _A n psi, ([], []), [],
+                     [])))
     | n, Until (phi, i, psi) ->
-        (match phi
-          with Pred (_, _) ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Eq (_, _) ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Neg phia ->
-            MUntil
-              (false, minit0 _A n phia, i, minit0 _A n psi, ([], []), [], [])
-          | Disj (_, _) ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Exists _ ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Prev (_, _) ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Next (_, _) ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Since (_, _, _) ->
-            MUntil (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
-          | Until (_, _, _) ->
-            MUntil
-              (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], []));;
+        (if safe_formula phi
+          then MUntil
+                 (true, minit0 _A n phi, i, minit0 _A n psi, ([], []), [], [])
+          else (let Neg phia = phi in
+                 MUntil
+                   (false, minit0 _A n phia, i, minit0 _A n psi, ([], []), [],
+                     [])));;
 
 let rec minit _A
   phi = (let n = nfv phi in Mstate_ext (zero_nat, minit0 _A n phi, n, ()));;
@@ -646,9 +693,6 @@ let rec mstep _A
                 (enumerate (mstate_i st) xs))),
         Mstate_ext
           (plus_nat (mstate_i st) (size_list xs), m, mstate_n st, ())));;
-
-let rec is_Const = function Var x1 -> false
-                   | Const x2 -> true;;
 
 let rec equal_enat x0 x1 = match x0, x1 with Enat nat, Infinity_enat -> false
                      | Infinity_enat, Enat nat -> false
@@ -695,73 +739,24 @@ let rec mmonitorable_exec
     | Prev (i, phi) -> mmonitorable_exec phi
     | Next (i, phi) ->
         mmonitorable_exec phi && not (equal_enat (right i) Infinity_enat)
-    | Since (Neg phi, i, psi) ->
+    | Since (phi, i, psi) ->
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
-          (mmonitorable_exec phi && mmonitorable_exec psi)
-    | Since (Pred (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Pred (v, va))) (fv zero_nat psi) &&
-          (mmonitorable_exec (Pred (v, va)) && mmonitorable_exec psi)
-    | Since (Eq (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Eq (v, va))) (fv zero_nat psi) &&
-          (mmonitorable_exec (Eq (v, va)) && mmonitorable_exec psi)
-    | Since (Disj (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Disj (v, va))) (fv zero_nat psi) &&
-          (mmonitorable_exec (Disj (v, va)) && mmonitorable_exec psi)
-    | Since (Exists v, i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Exists v)) (fv zero_nat psi) &&
-          (mmonitorable_exec (Exists v) && mmonitorable_exec psi)
-    | Since (Prev (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Prev (v, va))) (fv zero_nat psi) &&
-          (mmonitorable_exec (Prev (v, va)) && mmonitorable_exec psi)
-    | Since (Next (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Next (v, va))) (fv zero_nat psi) &&
-          (mmonitorable_exec (Next (v, va)) && mmonitorable_exec psi)
-    | Since (Since (v, va, vb), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Since (v, va, vb)))
-          (fv zero_nat psi) &&
-          (mmonitorable_exec (Since (v, va, vb)) && mmonitorable_exec psi)
-    | Since (Until (v, va, vb), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Until (v, va, vb)))
-          (fv zero_nat psi) &&
-          (mmonitorable_exec (Until (v, va, vb)) && mmonitorable_exec psi)
-    | Until (Neg phi, i, psi) ->
+          ((mmonitorable_exec phi ||
+             (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+               | Neg a -> mmonitorable_exec a | Disj (_, _) -> false
+               | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
+               | Since (_, _, _) -> false | Until (_, _, _) -> false)) &&
+            mmonitorable_exec psi)
+    | Until (phi, i, psi) ->
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
           (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec phi && mmonitorable_exec psi))
-    | Until (Pred (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Pred (v, va))) (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Pred (v, va)) && mmonitorable_exec psi))
-    | Until (Eq (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Eq (v, va))) (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Eq (v, va)) && mmonitorable_exec psi))
-    | Until (Disj (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Disj (v, va))) (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Disj (v, va)) && mmonitorable_exec psi))
-    | Until (Exists v, i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Exists v)) (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Exists v) && mmonitorable_exec psi))
-    | Until (Prev (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Prev (v, va))) (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Prev (v, va)) && mmonitorable_exec psi))
-    | Until (Next (v, va), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Next (v, va))) (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Next (v, va)) && mmonitorable_exec psi))
-    | Until (Since (v, va, vb), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Since (v, va, vb)))
-          (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Since (v, va, vb)) && mmonitorable_exec psi))
-    | Until (Until (v, va, vb), i, psi) ->
-        less_eq_set equal_nat (fv zero_nat (Until (v, va, vb)))
-          (fv zero_nat psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
-            (mmonitorable_exec (Until (v, va, vb)) && mmonitorable_exec psi))
+            ((mmonitorable_exec phi ||
+               (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+                 | Neg a -> mmonitorable_exec a | Disj (_, _) -> false
+                 | Exists _ -> false | Prev (_, _) -> false
+                 | Next (_, _) -> false | Since (_, _, _) -> false
+                 | Until (_, _, _) -> false)) &&
+              mmonitorable_exec psi))
     | Neg (Pred (va, vb)) -> false
     | Neg (Eq (Var vc, Const v)) -> false
     | Neg (Eq (Const v, Var vc)) -> false
