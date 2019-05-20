@@ -377,8 +377,9 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
       let interval_inf = interval_gen_inf max_lb in
       let interval_zero = interval_gen 0 max_interval in
       let interval_zero_bound = interval_gen_bound 0 max_interval in
-      let vars_sub1 = random_subset vars in
-      let vars_sub2 = random_subset vars in
+      let bound_vars = List.filter (fun b -> String.contains b 'y') vars in
+      let vars_sub1 = Gen.map (fun v -> Set.elements (Set.union (Set.of_list v) (Set.of_list bound_vars))) (random_subset vars) in
+      let vars_sub2 = Gen.map (fun v -> Set.elements (Set.union (Set.of_list v) (Set.of_list bound_vars))) (random_subset vars) in
       let fv_cover v1 v2 vars = 
         Set.elements (Set.union (Set.of_list v2) (Set.diff (Set.of_list vars) (Set.of_list v1))) in 
       let m = Random.int n in
