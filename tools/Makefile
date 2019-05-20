@@ -3,6 +3,7 @@ OCAMLC = ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
+export OCAMLRUNPARAM=b
 
 FLAGS = -I ../src
 
@@ -67,9 +68,9 @@ log_generator:
 fma_generator: 
 	ocamlfind ocamlc -I ../src -c random_generator.mli
 	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -c random_generator.ml
-	ocamlfind ocamlc -I ../src -c formula_generator.mli
-	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -c formula_generator.ml
-	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -o gen_fma str.cmxa ../src/mqueue.cmx ../src/dllist.cmx ../src/misc.cmx ../src/predicate.cmx ../src/MFOTL.cmx random_generator.ml formula_generator.ml gen_fma.ml
+	ocamlfind ocamlc -I ../src -g -c formula_generator.mli
+	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -g -c formula_generator.ml
+	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -g -o gen_fma str.cmxa ../src/mqueue.cmx ../src/dllist.cmx ../src/misc.cmx ../src/predicate.cmx ../src/MFOTL.cmx random_generator.ml formula_generator.ml gen_fma.ml
 
 
 %.cmi: %.mli $(MONPOLY_LIB)

@@ -94,7 +94,7 @@ let rec formula_of_genformula = function
 | GPred        p           -> Pred p
 | GNeg         f           -> Neg (formula_of_genformula f)
 | GOr          (f1, f2)    -> Or (formula_of_genformula f1, formula_of_genformula f2)       
-| GNAndEQ      (f1, f2) 
+| GNAndEQ      (f1, f2)
 | GNAnd        (f1, f2)    -> And (formula_of_genformula f1, Neg (formula_of_genformula f2))
 | GSAndSUB     (f1, f2)
 | GSAnd        (f1, f2)
@@ -133,7 +133,7 @@ let string_of_parenthesized_formula_qtl str g =
 let check_interval = function
 | (CBnd 0., Inf) -> ""
 | (OBnd 0., Inf) -> ""
-| _ -> failwith "Unsupported" in
+| _ -> failwith "Unsupported1" in
 let rec string_f_rec top par h =
   (match h with
     | Equal (t1,t2) ->
@@ -173,7 +173,7 @@ let rec string_f_rec top par h =
         string_f_rec false false f
         ^ ")"
 
-      | Aggreg (y,op,x,glist,f) -> failwith "Unsupported"
+      | Aggreg (y,op,x,glist,f) -> failwith "Unsupported2"
       | Prev (intv,f) ->
         check_interval intv ^
         "(" ^
@@ -184,7 +184,7 @@ let rec string_f_rec top par h =
 
       | Next (intv,f) 
       | Always (intv,f) 
-      | Eventually (intv,f) -> failwith "Unsupported"
+      | Eventually (intv,f) -> failwith "Unsupported3"
         
       | Once (intv,f) ->
         check_interval intv ^
@@ -244,7 +244,7 @@ let rec string_f_rec top par h =
             string_f_rec false false f2
             ^ ")"
 
-          | Until (intv,f1,f2) -> failwith "Unsupported"
+          | Until (intv,f1,f2) -> failwith "Unsupported4"
 
           | _ -> failwith "[print_formula] impossible"
         )
@@ -261,9 +261,7 @@ let string_of_genformula_qtl f = string_of_parenthesized_formula_qtl "prop rando
 
 
 let interval_gen_bound max_lb max_delta =
-  let noint = Gen.return (CBnd 0., Inf) in
-    if (max_lb == -1) then noint else
-    let lb = Gen.int_bound max_lb in
+    let lb = Gen.int_bound (max max_lb 0) in
     let delta = Gen.int_bound max_delta in
     let ival = Gen.map2 (fun l d -> (l, (l + d))) lb delta in
     let lp = Gen.bool in
@@ -350,7 +348,7 @@ let predicate_gen map vs =
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
 let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size = 
-  let fq = if past_only then 0 else 1 in
+  let fq = if past_only || qtl then 0 else 1 in
   let mq = if max_lb == -1 then 0 else 1 in 
   let vars = List.map (fun e -> "x" ^ string_of_int e) (1 -- varnum) in
   let rec toplvlq fg = function
@@ -359,7 +357,18 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
   in
   let result = Random_generator.fix (
   fun go (predmap, vars, size) -> match size with 
-    | 0 -> Gen.map (mapSnd gPred) (predicate_gen predmap vars)
+    | 0 -> 
+      if (List.length vars) == 1 then
+      let predbool = Gen.bool in
+      predbool >>= (fun b ->
+        if b then 
+          let twovars = random_subset_2 vars in
+          Gen.map (fun e -> (predmap,e)) (rel_gen twovars all_rels)
+        else
+          Gen.map (mapSnd gPred) (predicate_gen predmap vars)
+      )
+      else 
+      Gen.map (mapSnd gPred) (predicate_gen predmap vars)
     | n -> 
       let sq = min (List.length vars) 1 in
       let bound_variable = "y" ^ string_of_int
@@ -372,11 +381,12 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
               (fun x -> String.contains x 'y') 
               vars)))+1) in
       let side = Gen.bool in
-      let interval = interval_gen max_lb max_interval in
-      let interval_bound = interval_gen_bound max_lb max_interval in
-      let interval_inf = interval_gen_inf max_lb in
-      let interval_zero = interval_gen 0 max_interval in
-      let interval_zero_bound = interval_gen_bound 0 max_interval in
+      let noint = Gen.return (CBnd 0., Inf) in
+      let interval = if qtl then noint else interval_gen max_lb max_interval in
+      let interval_bound = if qtl then noint else interval_gen_bound max_lb max_interval in
+      let interval_inf = if qtl then noint else interval_gen_inf max_lb in
+      let interval_zero = if qtl then noint else interval_gen 0 max_interval in
+      let interval_zero_bound = if qtl then noint else interval_gen_bound 0 max_interval in
       let bound_vars = List.filter (fun b -> String.contains b 'y') vars in
       let vars_sub1 = Gen.map (fun v -> Set.elements (Set.union (Set.of_list v) (Set.of_list bound_vars))) (random_subset vars) in
       let vars_sub2 = Gen.map (fun v -> Set.elements (Set.union (Set.of_list v) (Set.of_list bound_vars))) (random_subset vars) in
@@ -422,7 +432,7 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
         1, binarybind gOr          vars vars;
         1, binarybind gNAndEQ      vars vars;
         1, vars_sub1 >>= (fun v1 -> binarybind gNAnd vars v1);
-       sq, unarybind gSAndSUB     vars; 
+       sq, unarybind gSAndSUB     vars;
        (* sq, unarybind gSAnd        vars;  *)
         1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gAnd v1 v2'));
         1, binarybind gAndEQ       vars vars;

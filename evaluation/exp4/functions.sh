@@ -91,6 +91,7 @@ function make_fma {
     local fma=$(fma_path $name)
 
     gen_fma -size $size -free_vars $fvs -qtl -output $fma
+    gen_fma -size $size -free_vars $fvs -max_lb 5 -output "${fma}_future"
     echo "${name}"
 }
 
@@ -114,8 +115,12 @@ function make_log() {
         debug "           Log exists, skipping..."
     else
         "$WORK_DIR/generator.sh" -seed $seed -e $er -i $ir -t $start -sig ${fma}.sig $startegy $length > ${log}_tmp$$
-        cat ${log}_tmp$$ | "$WORK_DIR/replayer.sh" -a 0 -m > $log 
+        cat ${log}_tmp$$ | "$WORK_DIR/replayer.sh" -a 0 -m > ${log}_oracle 
         cat ${log}_tmp$$ | "$WORK_DIR/replayer.sh" -a 0 -d > ${log}_dejavu
+        rm ${log}_tmp$$
+
+        "$WORK_DIR/generator.sh" -seed $seed -e $er -i $ir -t $start -sig ${fma}_future.sig $startegy $length > ${log}_tmp$$
+        cat ${log}_tmp$$ | "$WORK_DIR/replayer.sh" -a 0 -m > $log 
         rm ${log}_tmp$$
     fi
     echo "${name}"
@@ -202,10 +207,10 @@ function monitor() {
     local fma=$(fma_path $formula)
 
     #MONPOLY
-    local monpolyCMD="monpoly -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath} > ${verdictpath}_monpoly"
+    local monpolyCMD="monpoly -no_rw -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} > ${verdictpath}_monpoly"
     
     #ORACLE-Monpoly
-    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
+    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
 
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
@@ -213,7 +218,7 @@ function monitor() {
     local dejavuCMD="${DEJAVU_RUN} ${fma} ${logpath}_dejavu ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
-    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath} -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
+    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}_oracle -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
 
     compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
 }
