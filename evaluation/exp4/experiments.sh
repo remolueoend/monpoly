@@ -9,11 +9,11 @@ source "$WORK_DIR/functions.sh"
 
 
 # EXPERIMENT PARAMETERS:
-REPETITIONS=1000
-FORMULAS="2;1 2;2 2;5 3;1 3;2 3;3 3;6 4;2 4;3" #4;4 4;9 5;2 5;3 5;5 5;8 6;1 6;4 10;3 10;5 15;3 15;5 15;10 20;2 20;5 20;10 50;5 50;10 100;10 100;20"
+REPETITIONS=100
+FORMULAS="2;1 3;1 3;2 3;3 3;6 4;2 4;3" #4;4 4;9 5;2 5;3 5;5 5;8 6;1 6;4 10;3 10;5 15;3 15;5 15;10 20;2 20;5 20;10 50;5 50;10 100;10 100;20"
 EVENT_RATES="1" 
 INDEX_RATES="1"
-LOG_LENGTH="20 40 50 100"
+LOG_LENGTH="5 10 20"
 NUM_ADAPTATIONS='0/1/ '
 
 # Log generation strategies 
@@ -143,7 +143,7 @@ for f in $FORMULAS; do
                         for part in `seq 0 $adaptations`; do
 
                                 strategy=$(echo $strategies | cut -d ";" -f $((a+1)))
-                                info "            Generating log with statistics ${strategy}, numbered ${part} (out of {0..${adaptations}})"
+                                info "            Generating log ..."
                                 log=$(make_log "$fma_name" "$er" "$ir" "$part" "$r" "$length" "$strategy")
                                 
                                 info "            Monitoring ... "

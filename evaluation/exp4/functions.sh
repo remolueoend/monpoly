@@ -131,6 +131,8 @@ function make_log() {
 # ============================================================
 
 TIME="\time -f %M"
+TIMEOUTCMD="timeout --foreground"
+TIMEOUT=60
 
 function verdict_path() {
     local v=$1
@@ -146,7 +148,7 @@ function run() {
 
     debug "Start monitoring"
 
-    local result=$( { eval "$TIME $cmd"; } 2>&1 )
+    local result=$( { eval "$TIMEOUTCMD $TIMEOUT $TIME $cmd"; } 2>&1 )
     status=$(echo $?)
 
     space=$(echo "$result" | grep -oE '[^ ]+$')
@@ -161,6 +163,11 @@ function run() {
         fi
     fi
 
+    if [ "$status" == "124" ]; then
+        echo "$cmd" >> /tmp/error.log
+        echo "REASON: timeout" >> /tmp/error.log
+    fi
+
     debug "Finished monitoring"
 
     local ts2=$(date +%s%N)
@@ -168,7 +175,11 @@ function run() {
     local time=`bc <<< "scale=2; $delta/1000000000"`
     
     #returns time
-    echo "$time, $space"
+    if [ $status == "0" ]; then
+        echo "$time, $space"
+    else
+        echo ""
+    fi
 }
 
 
@@ -181,18 +192,22 @@ function  compare() {
     local verdictpath=$(verdict_path $log)
 
     #TOOL
-    local perf=$(run "$toolCMD")
-    echo ${perf} > ${REPORT_DIR}/${log}_perf_${tool}
-
-    #ORACLE
-    local perf=$(run "$oracleCMD")
-    echo ${perf} > ${REPORT_DIR}/${log}_perf_oracle_${tool}
-
-    #DIFF
-    local verdictdiff=$(diff ${verdictpath}_oracle_${tool} ${verdictpath}_${tool})
+    local perf1=$(run "$toolCMD")
     
-    if [ ! -z "${verdictdiff}" ]; then
-      echo ${verdictdiff} > ${REPORT_DIR}/${log}_diff_${tool}
+    #ORACLE
+    local perf2=$(run "$oracleCMD")
+    
+
+    if [ "$perf1" != "" ] && [ "$perf2" != "" ]; then 
+
+        echo ${perf1} > ${REPORT_DIR}/${log}_perf_${tool}
+        echo ${perf2} > ${REPORT_DIR}/${log}_perf_oracle_${tool}
+        #DIFF
+        local verdictdiff=$(diff ${verdictpath}_oracle_${tool} ${verdictpath}_${tool})
+        
+        if [ ! -z "${verdictdiff}" ]; then
+        echo ${verdictdiff} > ${REPORT_DIR}/${log}_diff_${tool}
+        fi
     fi
 
 }
