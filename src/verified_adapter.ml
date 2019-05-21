@@ -69,7 +69,7 @@ let convert_formula f =
     | (Neg sf1,     sf2) -> convert_formula_vars bvl (Neg (Or (Neg sf2, sf1)))
     | (    sf1, Neg sf2) -> convert_formula_vars bvl (Neg (Or (Neg sf1, sf2)))
     | (    sf1,     sf2) -> convert_formula_vars bvl (Neg (Or (Neg sf1, Neg sf2))))
-  | Or (f1,f2) -> Disj (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
+  | Or (f1,f2) -> Or (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
   | Implies (f1,f2) -> convert_formula_vars bvl (Or ((Neg f1), f2))
   | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
   | Exists (v,f) -> Exists (convert_formula_vars (v@bvl) f)
