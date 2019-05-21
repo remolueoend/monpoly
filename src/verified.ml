@@ -9,7 +9,7 @@ module Monpoly : sig
   type enat = Enat of nat | Infinity_enat
   type i
   type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
-    Neg of 'a formula | Disj of 'a formula * 'a formula | Exists of 'a formula |
+    Neg of 'a formula | Or of 'a formula * 'a formula | Exists of 'a formula |
     Prev of i * 'a formula | Next of i * 'a formula |
     Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula
   type 'a mformula
@@ -135,7 +135,7 @@ type enat = Enat of nat | Infinity_enat;;
 type i = Abs_I of (nat * enat);;
 
 type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
-  Neg of 'a formula | Disj of 'a formula * 'a formula | Exists of 'a formula |
+  Neg of 'a formula | Or of 'a formula * 'a formula | Exists of 'a formula |
   Prev of i * 'a formula | Next of i * 'a formula |
   Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula;;
 
@@ -228,7 +228,7 @@ let rec fv
       sup_seta equal_nat (image (equal_set equal_nat) (fv_trm b) (Set ts))
     | b, Eq (t1, t2) -> sup_set equal_nat (fv_trm b t1) (fv_trm b t2)
     | b, Neg phi -> fv b phi
-    | b, Disj (phi, psi) -> sup_set equal_nat (fv b phi) (fv b psi)
+    | b, Or (phi, psi) -> sup_set equal_nat (fv b phi) (fv b psi)
     | b, Exists phi -> fv (suc b) phi
     | b, Prev (i, phi) -> fv b phi
     | b, Next (i, phi) -> fv b phi
@@ -529,15 +529,15 @@ let rec safe_formula
     | Neg (Eq (Const x, Const y)) -> true
     | Neg (Eq (Var x, Var y)) -> equal_nata x y
     | Pred (e, ts) -> true
-    | Neg (Disj (Neg phi, psi)) ->
+    | Neg (Or (Neg phi, psi)) ->
         safe_formula phi &&
           (safe_formula psi &&
              less_eq_set equal_nat (fv zero_nat psi) (fv zero_nat phi) ||
             (match psi with Pred (_, _) -> false | Eq (_, _) -> false
-              | Neg a -> safe_formula a | Disj (_, _) -> false
-              | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
+              | Neg a -> safe_formula a | Or (_, _) -> false | Exists _ -> false
+              | Prev (_, _) -> false | Next (_, _) -> false
               | Since (_, _, _) -> false | Until (_, _, _) -> false))
-    | Disj (phi, psi) ->
+    | Or (phi, psi) ->
         equal_seta equal_nat (fv zero_nat psi) (fv zero_nat phi) &&
           (safe_formula phi && safe_formula psi)
     | Exists phi -> safe_formula phi
@@ -547,7 +547,7 @@ let rec safe_formula
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
           ((safe_formula phi ||
              (match phi with Pred (_, _) -> false | Eq (_, _) -> false
-               | Neg a -> safe_formula a | Disj (_, _) -> false
+               | Neg a -> safe_formula a | Or (_, _) -> false
                | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
                | Since (_, _, _) -> false | Until (_, _, _) -> false)) &&
             safe_formula psi)
@@ -555,7 +555,7 @@ let rec safe_formula
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
           ((safe_formula phi ||
              (match phi with Pred (_, _) -> false | Eq (_, _) -> false
-               | Neg a -> safe_formula a | Disj (_, _) -> false
+               | Neg a -> safe_formula a | Or (_, _) -> false
                | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
                | Since (_, _, _) -> false | Until (_, _, _) -> false)) &&
             safe_formula psi)
@@ -563,14 +563,14 @@ let rec safe_formula
     | Neg (Eq (Var vc, Const v)) -> false
     | Neg (Eq (Const v, Var vc)) -> false
     | Neg (Neg va) -> false
-    | Neg (Disj (Pred (v, vc), vb)) -> false
-    | Neg (Disj (Eq (v, vc), vb)) -> false
-    | Neg (Disj (Disj (v, vc), vb)) -> false
-    | Neg (Disj (Exists v, vb)) -> false
-    | Neg (Disj (Prev (v, vc), vb)) -> false
-    | Neg (Disj (Next (v, vc), vb)) -> false
-    | Neg (Disj (Since (v, vc, vd), vb)) -> false
-    | Neg (Disj (Until (v, vc, vd), vb)) -> false
+    | Neg (Or (Pred (v, vc), vb)) -> false
+    | Neg (Or (Eq (v, vc), vb)) -> false
+    | Neg (Or (Or (v, vc), vb)) -> false
+    | Neg (Or (Exists v, vb)) -> false
+    | Neg (Or (Prev (v, vc), vb)) -> false
+    | Neg (Or (Next (v, vc), vb)) -> false
+    | Neg (Or (Since (v, vc, vd), vb)) -> false
+    | Neg (Or (Until (v, vc, vd), vb)) -> false
     | Neg (Exists va) -> false
     | Neg (Prev (va, vb)) -> false
     | Neg (Next (va, vb)) -> false
@@ -602,7 +602,7 @@ let rec minit0 _A
   n x1 = match n, x1 with
     n, Neg phi ->
       (match phi with Eq (t1, t2) -> MRel (neq_rel _A n t1 t2)
-        | Disj (Neg phia, psi) ->
+        | Or (Neg phia, psi) ->
           (if safe_formula psi &&
                 less_eq_set equal_nat (fv zero_nat psi) (fv zero_nat phia)
             then MAnd (minit0 _A n phia, false, minit0 _A n psi, ([], []))
@@ -610,7 +610,7 @@ let rec minit0 _A
                    MAnd (minit0 _A n phia, true, minit0 _A n psia, ([], [])))))
     | n, Eq (t1, t2) -> MRel (eq_rel _A n t1 t2)
     | n, Pred (e, ts) -> MPred (e, ts)
-    | n, Disj (phi, psi) -> MOr (minit0 _A n phi, minit0 _A n psi, ([], []))
+    | n, Or (phi, psi) -> MOr (minit0 _A n phi, minit0 _A n psi, ([], []))
     | n, Exists phi -> MExists (minit0 _A (suc n) phi)
     | n, Prev (i, phi) -> MPrev (i, minit0 _A n phi, true, [], [])
     | n, Next (i, phi) -> MNext (i, minit0 _A n phi, true, [])
@@ -663,15 +663,15 @@ let rec mmonitorable_exec
     | Neg (Eq (Const x, Const y)) -> true
     | Neg (Eq (Var x, Var y)) -> equal_nata x y
     | Pred (e, ts) -> true
-    | Neg (Disj (Neg phi, psi)) ->
+    | Neg (Or (Neg phi, psi)) ->
         mmonitorable_exec phi &&
           (mmonitorable_exec psi &&
              less_eq_set equal_nat (fv zero_nat psi) (fv zero_nat phi) ||
             (match psi with Pred (_, _) -> false | Eq (_, _) -> false
-              | Neg a -> mmonitorable_exec a | Disj (_, _) -> false
+              | Neg a -> mmonitorable_exec a | Or (_, _) -> false
               | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
               | Since (_, _, _) -> false | Until (_, _, _) -> false))
-    | Disj (phi, psi) ->
+    | Or (phi, psi) ->
         equal_seta equal_nat (fv zero_nat psi) (fv zero_nat phi) &&
           (mmonitorable_exec phi && mmonitorable_exec psi)
     | Exists phi -> mmonitorable_exec phi
@@ -682,7 +682,7 @@ let rec mmonitorable_exec
         less_eq_set equal_nat (fv zero_nat phi) (fv zero_nat psi) &&
           ((mmonitorable_exec phi ||
              (match phi with Pred (_, _) -> false | Eq (_, _) -> false
-               | Neg a -> mmonitorable_exec a | Disj (_, _) -> false
+               | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                | Exists _ -> false | Prev (_, _) -> false | Next (_, _) -> false
                | Since (_, _, _) -> false | Until (_, _, _) -> false)) &&
             mmonitorable_exec psi)
@@ -691,7 +691,7 @@ let rec mmonitorable_exec
           (not (equal_enat (right i) Infinity_enat) &&
             ((mmonitorable_exec phi ||
                (match phi with Pred (_, _) -> false | Eq (_, _) -> false
-                 | Neg a -> mmonitorable_exec a | Disj (_, _) -> false
+                 | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                  | Exists _ -> false | Prev (_, _) -> false
                  | Next (_, _) -> false | Since (_, _, _) -> false
                  | Until (_, _, _) -> false)) &&
@@ -700,14 +700,14 @@ let rec mmonitorable_exec
     | Neg (Eq (Var vc, Const v)) -> false
     | Neg (Eq (Const v, Var vc)) -> false
     | Neg (Neg va) -> false
-    | Neg (Disj (Pred (v, vc), vb)) -> false
-    | Neg (Disj (Eq (v, vc), vb)) -> false
-    | Neg (Disj (Disj (v, vc), vb)) -> false
-    | Neg (Disj (Exists v, vb)) -> false
-    | Neg (Disj (Prev (v, vc), vb)) -> false
-    | Neg (Disj (Next (v, vc), vb)) -> false
-    | Neg (Disj (Since (v, vc, vd), vb)) -> false
-    | Neg (Disj (Until (v, vc, vd), vb)) -> false
+    | Neg (Or (Pred (v, vc), vb)) -> false
+    | Neg (Or (Eq (v, vc), vb)) -> false
+    | Neg (Or (Or (v, vc), vb)) -> false
+    | Neg (Or (Exists v, vb)) -> false
+    | Neg (Or (Prev (v, vc), vb)) -> false
+    | Neg (Or (Next (v, vc), vb)) -> false
+    | Neg (Or (Since (v, vc, vd), vb)) -> false
+    | Neg (Or (Until (v, vc, vd), vb)) -> false
     | Neg (Exists va) -> false
     | Neg (Prev (va, vb)) -> false
     | Neg (Next (va, vb)) -> false
