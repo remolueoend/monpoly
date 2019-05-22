@@ -102,26 +102,20 @@ let convert_db md =
   (convert_relations md.db, nat_of_float md.ts)
 
 (* (Verified.Monpoly.nat * Predicate.cst option list) Verified.Monpoly.set -> (timestamp * relation) *)
-let convert_violations vs = 
-  let vsl = match vs with 
-    | Set l -> l
-    | Coset _ -> failwith "Impossible!" in 
-  let qtss = List.map fst vsl in 
-  let qmap = List.fold_left (fun a e -> 
-      (fun ts -> if equal_nata ts (fst e) 
-          then (if a (fst e) = [] then [(snd e)] else (snd e)::(a ts)) 
-          else (a ts)))
-   (fun ts -> []) vsl in
-  List.sort 
-    (fun x y -> (fst x) - (fst y)) 
-    (Misc.remove_duplicates (List.map 
-      (fun ts -> (int_of_nat ts, Relation.make_relation ((List.map (Tuple.make_tuple<<deoptionalize) (qmap ts))))) 
-      qtss))
+let convert_violations vs =
+  let vsl = match vs with
+    | Set l -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) l
+    | Coset _ -> failwith "Impossible!" in
+  let qtps = List.sort_uniq (fun x y -> x - y) (List.map fst vsl) in
+  let qmap tp = List.filter (fun (tp', _) -> tp = tp') vsl in
+  List.map
+    (fun qtp -> (qtp, Relation.make_relation ((List.map (Tuple.make_tuple<<deoptionalize<<snd) (qmap qtp)))))
+    qtps
 
-  let cst_eq = function 
-  | (Int a, Int b) -> a = b 
-  | (Str a, Str b) -> a = b
-  | (Float a, Float b) -> a = b
-  | _ -> false
+let cst_eq = function
+| (Int a, Int b) -> a = b
+| (Str a, Str b) -> a = b
+| (Float a, Float b) -> a = b
+| _ -> false
 
-  let equality =  { equal = (fun a b -> cst_eq (a, b))  }
+let equality =  { equal = (fun a b -> cst_eq (a, b))  }
