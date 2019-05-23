@@ -85,10 +85,10 @@ clean:
 
 
 clean-all: clean
-	rm -f monpoly
+	rm -f monpoly gen_fma gen_log
 	rm -f doc/*
 	rm -f tools/merger tools/fc_colsuf tools/fc_paramslicing tools/fc_filter_empty_tp tools/compare tools/count \
-		tools/mysql_test tools/pgsql tools/mfotl2sql tools/table2log
+		tools/mysql_test tools/pgsql tools/mfotl2sql tools/table2log tools/gen_fma tools/gen_log
 	rm -f src/monpoly $(BIN)monpoly $(BIN)mfotl2sql $(BIN)table2log
 
 depend:
