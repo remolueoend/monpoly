@@ -96,9 +96,8 @@ function make_log() {
     local start=$((length*part))
     local seed=$RANDOM
 
-    local name=$(log_name "$adaptations" "$formula" "$er" "$ir" "$part" "$seed")
+    local name=$(log_name "$adaptations" "$formula" "$er" "$ir" "$length" "$seed")
     local log=$(log_path $name)
-    local verdicts=
 
     if [ -f "$log" ]; then
         debug "           Log exists, skipping..."
@@ -181,17 +180,17 @@ function monitor() {
         -S) 
             formula="star.mfotl"
             formula_oracle_dejavu="star-past-ltl.mfotl"
-            formula_dejavu="star-past-ltl.qtl"
+            formula_dejavu="star-past-ltl"
         ;;
         -T) 
             formula="triangle.mfotl"
             formula_oracle_dejavu="triangle-past-ltl.mfotl"
-            formula_dejavu="triangle-past-ltl.qtl"
+            formula_dejavu="triangle-past-ltl"
         ;;
         -L)
             formula="linear.mfotl"
             formula_oracle_dejavu="linear-past-ltl.mfotl"
-            formula_dejavu="linear-past-ltl.qtl"
+            formula_dejavu="linear-past-ltl"
         ;;
         *) 
             error "Formula ${fma} does not exist"
@@ -201,19 +200,18 @@ function monitor() {
     local verdictpath=$(verdict_path $log)
 
     #MONPOLY
-    local monpolyCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath} > ${verdictpath}_monpoly"
+    local monpolyCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath} > ${verdictpath}_monpoly"
     
     #ORACLE-Monpoly
-    local oracleCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
+    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
     
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
     #DEJAVU
-    local perf=$(run "${DEJAVU_COMPILE} ${WORK_DIR}/${formula_dejavu}")
-    local dejavuCMD="${DEJAVU_RUN} ${logpath}_dejavu ${verdictpath}_dejavu"
+    local dejavuCMD="${DEJAVU_RUN} ${WORK_DIR}/${formula_dejavu} ${logpath}_dejavu ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
-    local oracleCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath} -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
+    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath} -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
 
     compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
     

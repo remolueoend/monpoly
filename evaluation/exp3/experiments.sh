@@ -138,7 +138,7 @@ for f in $FORMULAS; do
                     for part in `seq 0 $adaptations`; do
 
                             strategy=$(echo $strategies | cut -d ";" -f $((a+1)))
-                            info "            Generating log with statistics ${strategy}, numbered ${part} (out of {0..${adaptations}})"
+                            info "            Generating logs..."
                             log=$(make_log "$f" "$er" "$ir" "$part" "$num" "$length" "$strategy")
 
                         for r in $(seq 1 $REPETITIONS); do

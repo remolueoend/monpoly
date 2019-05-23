@@ -1,0 +1,1 @@
+prop random : (! (Exists x1. (x1 = 24)))

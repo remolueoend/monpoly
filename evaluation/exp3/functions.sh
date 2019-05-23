@@ -159,7 +159,7 @@ function monitor() {
         race) 
             formula="race.mfotl"
             formula_oracle_dejavu="race.mfotl"
-            formula_dejavu="race.qtl"
+            formula_dejavu="race"
         ;;
         *) 
             error "Formula ${fma} does not exist"
@@ -169,19 +169,18 @@ function monitor() {
     local verdictpath=$(verdict_path $log)
 
     #MONPOLY
-    local monpolyCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log > ${verdictpath}_monpoly"
+    local monpolyCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log > ${verdictpath}_monpoly"
     
     #ORACLE-Monpoly
-    local oracleCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log -verified > ${verdictpath}_oracle_monpoly"
+    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log -verified > ${verdictpath}_oracle_monpoly"
     
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
     #DEJAVU
-    local perf=$(run "${DEJAVU_COMPILE} ${WORK_DIR}/${formula_dejavu}")
-    local dejavuCMD="${DEJAVU_RUN} ${logpath}.csv ${verdictpath}_dejavu"
+    local dejavuCMD="${DEJAVU_RUN} ${WORK_DIR}/${formula_dejavu} ${logpath}.csv ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
-    local oracleCMD="monpoly -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath}.log -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
+    local oracleCMD="monpoly  -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath}.log -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
 
     compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
 }

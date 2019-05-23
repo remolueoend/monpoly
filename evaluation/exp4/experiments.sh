@@ -9,8 +9,8 @@ source "$WORK_DIR/functions.sh"
 
 
 # EXPERIMENT PARAMETERS:
-REPETITIONS=100
-FORMULAS="2;1 3;1 3;2 3;3 3;6 4;2 4;3" #4;4 4;9 5;2 5;3 5;5 5;8 6;1 6;4 10;3 10;5 15;3 15;5 15;10 20;2 20;5 20;10 50;5 50;10 100;10 100;20"
+REPETITIONS=1000
+FORMULAS="2;1 3;1 3;2 3;3 3;6 4;2 4;3 4;4 4;9 5;2" #5;3 5;5 5;8 6;1 6;4 10;3 10;5 15;3 15;5 15;10 20;2 20;5 20;10 50;5 50;10 100;10 100;20"
 EVENT_RATES="1" 
 INDEX_RATES="1"
 LOG_LENGTH="5 10 20"
@@ -159,6 +159,8 @@ done
 
 info "Done! Following differences found:"
 diffs=$(ls ${REPORT_DIR} | grep diff)
-info "$diffs"
+echo "$diffs"
+
+echo "$diffs" > results.txt
 
 
