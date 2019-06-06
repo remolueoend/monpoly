@@ -586,10 +586,10 @@ let rec union _A = foldc _A (inserta _A);;
 
 let rec memberb _A xa = list_member (the (ceq _A)) (list_of_dlist _A xa);;
 
-let rec equal_option _A x0 x1 = match x0, x1 with None, Some x2 -> false
-                          | Some x2, None -> false
-                          | Some x2, Some y2 -> eq _A x2 y2
-                          | None, None -> true;;
+let rec equal_optiona _A x0 x1 = match x0, x1 with None, Some x2 -> false
+                           | Some x2, None -> false
+                           | Some x2, Some y2 -> eq _A x2 y2
+                           | None, None -> true;;
 
 let rec rbt_comp_lookup
   c x1 k = match c, x1, k with c, Empty, k -> None
@@ -603,7 +603,7 @@ let rec equal_unita u v = true;;
 
 let equal_unit = ({equal = equal_unita} : unit equal);;
 
-let rec membera _A t x = equal_option equal_unit (lookup _A t x) (Some ());;
+let rec membera _A t x = equal_optiona equal_unit (lookup _A t x) (Some ());;
 
 let rec member (_A1, _A2)
   x xa1 = match x, xa1 with
@@ -1552,6 +1552,14 @@ and cless_eq_set (_A1, _A2, _A3, _A4)
 let rec ccompare_set (_A1, _A2, _A3, _A4) =
   ({ccompare = ccompare_seta (_A1, _A2, _A3, _A4)} : 'a set ccompare);;
 
+let rec equal_lista _A
+  x0 x1 = match x0, x1 with [], x21 :: x22 -> false
+    | x21 :: x22, [] -> false
+    | x21 :: x22, y21 :: y22 -> eq _A x21 y21 && equal_lista _A x22 y22
+    | [], [] -> true;;
+
+let rec equal_list _A = ({equal = equal_lista _A} : ('a list) equal);;
+
 let rec equality_list
   eq_a x1 x2 = match eq_a, x1, x2 with
     eq_a, x :: xa, y :: ya -> eq_a x y && equality_list eq_a xa ya
@@ -1728,6 +1736,8 @@ let ccompare_chara : (char -> char -> ordera) option = Some compare_char;;
 
 let ccompare_char = ({ccompare = ccompare_chara} : char ccompare);;
 
+let rec equal_option _A = ({equal = equal_optiona _A} : ('a option) equal);;
+
 let rec equality_option
   eq_a x1 x2 = match eq_a, x1, x2 with eq_a, Some x, Some y -> eq_a x y
     | eq_a, Some x, None -> false
@@ -1875,6 +1885,30 @@ type ('b, 'a) comp_fun_idem = Abs_comp_fun_idem of ('b -> 'a -> 'a);;
 type 'a semilattice_set = Abs_semilattice_set of ('a -> 'a -> 'a);;
 
 type ('a, 'b) mstate_ext = Mstate_ext of nat * 'a mformula * nat * 'b;;
+
+let rec rBT_Impl_rbt_all
+  p x1 = match p, x1 with
+    p, Branch (c, l, k, v, r) ->
+      p k v && (rBT_Impl_rbt_all p l && rBT_Impl_rbt_all p r)
+    | p, Empty -> true;;
+
+let rec all _A xb xc = rBT_Impl_rbt_all xb (impl_of _A xc);;
+
+let rec ball (_A1, _A2)
+  x0 p = match x0, p with
+    RBT_set rbt, p ->
+      (match ccompare _A2
+        with None ->
+          failwith "Ball RBT_set: ccompare = None"
+            (fun _ -> ball (_A1, _A2) (RBT_set rbt) p)
+        | Some _ -> all _A2 (fun k _ -> p k) rbt)
+    | DList_set dxs, p ->
+        (match ceq _A1
+          with None ->
+            failwith "Ball DList_set: ceq = None"
+              (fun _ -> ball (_A1, _A2) (DList_set dxs) p)
+          | Some _ -> dlist_all _A1 p dxs)
+    | Set_Monad xs, p -> list_all p xs;;
 
 let rec maps f x1 = match f, x1 with f, [] -> []
                | f, x :: xs -> f x @ maps f xs;;
@@ -2232,8 +2266,6 @@ let rec foldr f x1 = match f, x1 with f, [] -> id
 
 let rec filter (_A1, _A2) p a = inf_seta (_A1, _A2) a (Collect_set p);;
 
-let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
-
 let rec set_option (_A1, _A2, _A3)
   = function None -> bot_set (_A1, _A2, _A3)
     | Some x2 -> insert (_A1, _A2) x2 (bot_set (_A1, _A2, _A3));;
@@ -2254,11 +2286,17 @@ let rec join1 _A
     | ([], vb :: vc) -> None;;
 
 let rec join (_A1, _A2, _A3)
-  x xa1 y = match x, xa1, y with
-    x, false, y ->
-      minus_set
-        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2))) x
-        (join (_A1, _A2, _A3) x true y)
+  a x1 b = match a, x1, b with
+    a, false, b ->
+      filter
+        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+        (fun aa ->
+          ball ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)))
+            b (fun ba ->
+                not (equal_optiona (equal_list (equal_option _A3))
+                      (join1 _A3 (aa, ba)) (Some aa))))
+        a
     | a, true, b ->
         sup_setb
           (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
@@ -2320,12 +2358,6 @@ let rec matcha _A
     | Var vb :: va, [] -> None
     | v :: va, [] -> None
     | [], v :: va -> None;;
-
-let rec equal_list _A
-  x0 x1 = match x0, x1 with [], x21 :: x22 -> false
-    | x21 :: x22, [] -> false
-    | x21 :: x22, y21 :: y22 -> eq _A x21 y21 && equal_list _A x22 y22
-    | [], [] -> true;;
 
 let rec less_eq_enat q x1 = match q, x1 with Infinity_enat, Enat n -> false
                        | q, Infinity_enat -> true
@@ -2551,7 +2583,7 @@ let rec meval (_A1, _A2, _A3)
                         (cproper_interval_list _A2), set_impl_list)),
                     set_impl_set)
                   (fun (ea, x) ->
-                    (if equal_list equal_char e ea
+                    (if equal_lista equal_char e ea
                       then insert ((ceq_list _A1), (ccompare_list _A2)) x
                              (set_empty ((ceq_list _A1), (ccompare_list _A2))
                                (of_phantom set_impl_lista))
