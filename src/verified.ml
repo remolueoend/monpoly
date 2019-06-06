@@ -1750,11 +1750,6 @@ let rec ceq_optiona _A
 
 let rec ceq_option _A = ({ceq = ceq_optiona _A} : ('a option) ceq);;
 
-let rec set_impl_optiona _A = Phantom (of_phantom (set_impl _A));;
-
-let rec set_impl_option _A =
-  ({set_impl = set_impl_optiona _A} : ('a option) set_impl);;
-
 let rec comparator_option
   comp_a x1 x2 = match comp_a, x1, x2 with comp_a, Some x, Some y -> comp_a x y
     | comp_a, Some x, None -> Gt
@@ -2338,11 +2333,6 @@ let rec join (_A1, _A2, _A3)
 
 let rec fun_upd _A f a b = (fun x -> (if eq _A x a then b else f x));;
 
-let rec these (_A1, _A2, _A3)
-  a = image ((ceq_option _A1), (ccompare_option _A2)) (_A1, _A2, _A3) the
-        (filter ((ceq_option _A1), (ccompare_option _A2))
-          (fun x -> not (is_none x)) a);;
-
 let rec rep_I (Abs_I x) = x;;
 
 let rec left x = fst (rep_I x);;
@@ -2560,36 +2550,34 @@ let rec meval (_A1, _A2, _A3)
            in
           (zs, MAnd (phia, pos, psia, bufa)))
     | n, t, db, MPred (e, ts) ->
-        ([these ((ceq_list (ceq_option _A1)),
-                  (ccompare_list (ccompare_option _A2)), set_impl_list)
-            (image ((ceq_list _A1), (ccompare_list _A2))
-              ((ceq_option (ceq_list (ceq_option _A1))),
-                (ccompare_option (ccompare_list (ccompare_option _A2))),
-                (set_impl_option set_impl_list))
-              (comp (map_option (fun f -> tabulate f zero_nat n))
-                (matcha _A3 ts))
-              (sup_setb
-                (finite_UNIV_list, cenum_list, (ceq_list _A1),
-                  (cproper_interval_list _A2), set_impl_list)
-                (image
-                  ((ceq_prod (ceq_list ceq_char) (ceq_list _A1)),
-                    (ccompare_prod (ccompare_list ccompare_char)
-                      (ccompare_list _A2)))
-                  ((ceq_set
-                     (cenum_list, (ceq_list _A1),
-                       (cproper_interval_list _A2).ccompare_cproper_interval)),
-                    (ccompare_set
-                      (finite_UNIV_list, (ceq_list _A1),
-                        (cproper_interval_list _A2), set_impl_list)),
-                    set_impl_set)
-                  (fun (ea, x) ->
-                    (if equal_lista equal_char e ea
-                      then insert ((ceq_list _A1), (ccompare_list _A2)) x
-                             (set_empty ((ceq_list _A1), (ccompare_list _A2))
-                               (of_phantom set_impl_lista))
-                      else set_empty ((ceq_list _A1), (ccompare_list _A2))
-                             (of_phantom set_impl_lista)))
-                  db)))],
+        ([sup_setb
+            (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
+              (cproper_interval_list (ccompare_option _A2)), set_impl_list)
+            (image
+              ((ceq_prod (ceq_list ceq_char) (ceq_list _A1)),
+                (ccompare_prod (ccompare_list ccompare_char)
+                  (ccompare_list _A2)))
+              ((ceq_set
+                 (cenum_list, (ceq_list (ceq_option _A1)),
+                   (cproper_interval_list
+                     (ccompare_option _A2)).ccompare_cproper_interval)),
+                (ccompare_set
+                  (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                    (cproper_interval_list (ccompare_option _A2)),
+                    set_impl_list)),
+                set_impl_set)
+              (fun (ea, x) ->
+                (if equal_lista equal_char e ea
+                  then set_option
+                         ((ceq_list (ceq_option _A1)),
+                           (ccompare_list (ccompare_option _A2)), set_impl_list)
+                         (map_option (fun f -> tabulate f zero_nat n)
+                           (matcha _A3 ts x))
+                  else set_empty
+                         ((ceq_list (ceq_option _A1)),
+                           (ccompare_list (ccompare_option _A2)))
+                         (of_phantom set_impl_lista)))
+              db)],
           MPred (e, ts))
     | n, t, db, MRel rel -> ([rel], MRel rel);;
 
