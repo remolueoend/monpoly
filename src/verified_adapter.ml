@@ -20,12 +20,26 @@ let deoptionalize  =
   let is_some = function Some _ -> true | _ -> false in
   List.map (function | Some x -> x | None -> assert false) << List.filter (is_some)
 
-
 let index_of =
   let rec index_of_rec c x lst = match lst with
       | [] -> raise(Failure "Not Found")
       | hd::tl -> if (hd=x) then c else index_of_rec (c+1) x tl  in
   index_of_rec 0
+
+let cst_eq = function
+| (Int a, Int b) -> a = b
+| (Str a, Str b) -> a = b
+| (Float a, Float b) -> a = b
+| _ -> false
+
+let cst_ord a b =
+  let c = Pervasives.compare a b in
+  if c < 0 then Lt else if c > 0 then Gt else Eqa
+
+(* FIXME: Quick & dirty. Some of the type classes have assumptions! *)
+let domain_ceq = { ceq = Some (fun a b -> cst_eq (a, b)) }
+let domain_ccompare = { ccompare = Some cst_ord }
+let domain_equal = { equal = (fun a b -> cst_eq (a, b)) }
 
 let convert_term fvl bvl = function
   | Cst c -> Const c
@@ -93,7 +107,7 @@ let convert_formula f =
 
 let convert_db md = 
   let convert_relations db = 
-    Set (List.flatten 
+    db_code (domain_ceq, domain_ccompare) (List.flatten 
                   (List.map 
                     (fun t -> 
                       let (name,_) = (Table.get_schema t) in 
@@ -104,18 +118,10 @@ let convert_db md =
 (* (Verified.Monpoly.nat * Predicate.cst option list) Verified.Monpoly.set -> (timestamp * relation) *)
 let convert_violations vs =
   let vsl = match vs with
-    | Set l -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) l
-    | Coset _ -> failwith "Impossible!" in
+    | RBT_set rbt -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) (verdict_code domain_ccompare rbt)
+    | _ -> failwith "Impossible!" in
   let qtps = List.sort_uniq (fun x y -> x - y) (List.map fst vsl) in
   let qmap tp = List.filter (fun (tp', _) -> tp = tp') vsl in
   List.map
     (fun qtp -> (qtp, Relation.make_relation ((List.map (Tuple.make_tuple<<deoptionalize<<snd) (qmap qtp)))))
     qtps
-
-let cst_eq = function
-| (Int a, Int b) -> a = b
-| (Str a, Str b) -> a = b
-| (Float a, Float b) -> a = b
-| _ -> false
-
-let equality =  { equal = (fun a b -> cst_eq (a, b))  }

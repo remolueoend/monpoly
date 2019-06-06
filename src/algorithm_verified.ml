@@ -38,7 +38,7 @@ open IntMap
 
 let monitor logfile f =
   let closed = (free_vars f = []) in
-  let init_state = Monpoly.minit_safe equality (convert_formula f) in
+  let init_state = Monpoly.minit_safe (domain_ceq, domain_ccompare, domain_equal) (convert_formula f) in
   let lexbuf = Log.log_open logfile in
   let init_i = 0 in
   let init_ts = MFOTL.ts_invalid in
@@ -57,7 +57,7 @@ let monitor logfile f =
     if d.ts >= ts then
       (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
       let tpts = add d.tp d.ts tpts in
-      let (vs, new_state) = Monpoly.mstep equality (convert_db d) state in
+      let (vs, new_state) = Monpoly.mstep (domain_ceq, domain_ccompare, domain_equal) (convert_db d) state in
       let vs = convert_violations vs in
       List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
       let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
