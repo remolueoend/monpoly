@@ -1876,8 +1876,6 @@ type 'a semilattice_set = Abs_semilattice_set of ('a -> 'a -> 'a);;
 
 type ('a, 'b) mstate_ext = Mstate_ext of nat * 'a mformula * nat * 'b;;
 
-let rec rev xs = fold (fun a b -> a :: b) xs [];;
-
 let rec maps f x1 = match f, x1 with f, [] -> []
                | f, x :: xs -> f x @ maps f xs;;
 
@@ -2236,139 +2234,9 @@ let rec filter (_A1, _A2) p a = inf_seta (_A1, _A2) a (Collect_set p);;
 
 let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
 
-let rec productb _A _B
-  dxs1 dxs2 =
-    Abs_dlist
-      (foldc _A (fun a -> foldc _B (fun c -> (fun b -> (a, c) :: b)) dxs2) dxs1
-        []);;
-
-let rec rbt_product
-  f rbt1 rbt2 =
-    rbtreeify
-      (rev (folda
-             (fun a b ->
-               folda (fun c d -> (fun e -> ((a, c), f a b c d) :: e)) rbt2)
-             rbt1 []));;
-
-let rec productd _A _B
-  xc xd xe = Mapping_RBT (rbt_product xc (impl_of _A xd) (impl_of _B xe));;
-
-let rec producta _A _B
-  rbt1 rbt2 = productd _A _B (fun _ _ _ _ -> ()) rbt1 rbt2;;
-
-let rec productc (_A1, _A2, _A3) (_B1, _B2, _B3)
-  a2 b2 = match a2, b2 with
-    RBT_set rbt1, RBT_set rbt2 ->
-      (match ccompare _A2
-        with None ->
-          failwith "product RBT_set RBT_set: ccompare1 = None"
-            (fun _ ->
-              productc (_A1, _A2, _A3) (_B1, _B2, _B3) (RBT_set rbt1)
-                (RBT_set rbt2))
-        | Some _ ->
-          (match ccompare _B2
-            with None ->
-              failwith "product RBT_set RBT_set: ccompare2 = None"
-                (fun _ ->
-                  productc (_A1, _A2, _A3) (_B1, _B2, _B3) (RBT_set rbt1)
-                    (RBT_set rbt2))
-            | Some _ -> RBT_set (producta _A2 _B2 rbt1 rbt2)))
-    | a2, RBT_set rbt2 ->
-        (match ccompare _B2
-          with None ->
-            failwith "product RBT_set: ccompare2 = None"
-              (fun _ ->
-                productc (_A1, _A2, _A3) (_B1, _B2, _B3) a2 (RBT_set rbt2))
-          | Some _ ->
-            foldb _B2
-              (fun y ->
-                sup_seta ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2))
-                  (image (_A1, _A2)
-                    ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                      (set_impl_prod _A3 _B3))
-                    (fun x -> (x, y)) a2))
-              rbt2
-              (bot_set
-                ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                  (set_impl_prod _A3 _B3))))
-    | RBT_set rbt1, b2 ->
-        (match ccompare _A2
-          with None ->
-            failwith "product RBT_set: ccompare1 = None"
-              (fun _ ->
-                productc (_A1, _A2, _A3) (_B1, _B2, _B3) (RBT_set rbt1) b2)
-          | Some _ ->
-            foldb _A2
-              (fun x ->
-                sup_seta ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2))
-                  (image (_B1, _B2)
-                    ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                      (set_impl_prod _A3 _B3))
-                    (fun a -> (x, a)) b2))
-              rbt1
-              (bot_set
-                ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                  (set_impl_prod _A3 _B3))))
-    | DList_set dxs, DList_set dys ->
-        (match ceq _A1
-          with None ->
-            failwith "product DList_set DList_set: ceq1 = None"
-              (fun _ ->
-                productc (_A1, _A2, _A3) (_B1, _B2, _B3) (DList_set dxs)
-                  (DList_set dys))
-          | Some _ ->
-            (match ceq _B1
-              with None ->
-                failwith "product DList_set DList_set: ceq2 = None"
-                  (fun _ ->
-                    productc (_A1, _A2, _A3) (_B1, _B2, _B3) (DList_set dxs)
-                      (DList_set dys))
-              | Some _ -> DList_set (productb _A1 _B1 dxs dys)))
-    | a1, DList_set dys ->
-        (match ceq _B1
-          with None ->
-            failwith "product DList_set2: ceq = None"
-              (fun _ ->
-                productc (_A1, _A2, _A3) (_B1, _B2, _B3) a1 (DList_set dys))
-          | Some _ ->
-            foldc _B1
-              (fun y ->
-                sup_seta ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2))
-                  (image (_A1, _A2)
-                    ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                      (set_impl_prod _A3 _B3))
-                    (fun x -> (x, y)) a1))
-              dys (bot_set
-                    ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                      (set_impl_prod _A3 _B3))))
-    | DList_set dxs, b1 ->
-        (match ceq _A1
-          with None ->
-            failwith "product DList_set1: ceq = None"
-              (fun _ ->
-                productc (_A1, _A2, _A3) (_B1, _B2, _B3) (DList_set dxs) b1)
-          | Some _ ->
-            foldc _A1
-              (fun x ->
-                sup_seta ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2))
-                  (image (_B1, _B2)
-                    ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                      (set_impl_prod _A3 _B3))
-                    (fun a -> (x, a)) b1))
-              dxs (bot_set
-                    ((ceq_prod _A1 _B1), (ccompare_prod _A2 _B2),
-                      (set_impl_prod _A3 _B3))))
-    | Set_Monad xs, Set_Monad ys ->
-        Set_Monad
-          (fold (fun x -> fold (fun y -> (fun a -> (x, y) :: a)) ys) xs [])
-    | a, b ->
-        Collect_set
-          (fun (x, y) -> member (_A1, _A2) x a && member (_B1, _B2) y b);;
-
-let rec these (_A1, _A2, _A3)
-  a = image ((ceq_option _A1), (ccompare_option _A2)) (_A1, _A2, _A3) the
-        (filter ((ceq_option _A1), (ccompare_option _A2))
-          (fun x -> not (is_none x)) a);;
+let rec set_option (_A1, _A2, _A3)
+  = function None -> bot_set (_A1, _A2, _A3)
+    | Some x2 -> insert (_A1, _A2) x2 (bot_set (_A1, _A2, _A3));;
 
 let rec join1 _A
   = function ([], []) -> Some []
@@ -2386,48 +2254,56 @@ let rec join1 _A
     | ([], vb :: vc) -> None;;
 
 let rec join (_A1, _A2, _A3)
-  a pos b =
-    (if pos
-      then these ((ceq_list (ceq_option _A1)),
-                   (ccompare_list (ccompare_option _A2)), set_impl_list)
-             (image
-               ((ceq_prod (ceq_list (ceq_option _A1))
-                  (ceq_list (ceq_option _A1))),
-                 (ccompare_prod (ccompare_list (ccompare_option _A2))
-                   (ccompare_list (ccompare_option _A2))))
-               ((ceq_option (ceq_list (ceq_option _A1))),
-                 (ccompare_option (ccompare_list (ccompare_option _A2))),
-                 (set_impl_option set_impl_list))
-               (join1 _A3)
-               (productc
-                 ((ceq_list (ceq_option _A1)),
-                   (ccompare_list (ccompare_option _A2)), set_impl_list)
-                 ((ceq_list (ceq_option _A1)),
-                   (ccompare_list (ccompare_option _A2)), set_impl_list)
-                 a b))
-      else minus_set
-             ((ceq_list (ceq_option _A1)),
-               (ccompare_list (ccompare_option _A2)))
-             a (these
-                 ((ceq_list (ceq_option _A1)),
-                   (ccompare_list (ccompare_option _A2)), set_impl_list)
-                 (image
-                   ((ceq_prod (ceq_list (ceq_option _A1))
-                      (ceq_list (ceq_option _A1))),
-                     (ccompare_prod (ccompare_list (ccompare_option _A2))
-                       (ccompare_list (ccompare_option _A2))))
-                   ((ceq_option (ceq_list (ceq_option _A1))),
-                     (ccompare_option (ccompare_list (ccompare_option _A2))),
-                     (set_impl_option set_impl_list))
-                   (join1 _A3)
-                   (productc
-                     ((ceq_list (ceq_option _A1)),
-                       (ccompare_list (ccompare_option _A2)), set_impl_list)
-                     ((ceq_list (ceq_option _A1)),
-                       (ccompare_list (ccompare_option _A2)), set_impl_list)
-                     a b))));;
+  x xa1 y = match x, xa1, y with
+    x, false, y ->
+      minus_set
+        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2))) x
+        (join (_A1, _A2, _A3) x true y)
+    | a, true, b ->
+        sup_setb
+          (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
+            (cproper_interval_list (ccompare_option _A2)), set_impl_list)
+          (image
+            ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+            ((ceq_set
+               (cenum_list, (ceq_list (ceq_option _A1)),
+                 (cproper_interval_list
+                   (ccompare_option _A2)).ccompare_cproper_interval)),
+              (ccompare_set
+                (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                  (cproper_interval_list (ccompare_option _A2)),
+                  set_impl_list)),
+              set_impl_set)
+            (fun aa ->
+              sup_setb
+                (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
+                  (cproper_interval_list (ccompare_option _A2)), set_impl_list)
+                (image
+                  ((ceq_list (ceq_option _A1)),
+                    (ccompare_list (ccompare_option _A2)))
+                  ((ceq_set
+                     (cenum_list, (ceq_list (ceq_option _A1)),
+                       (cproper_interval_list
+                         (ccompare_option _A2)).ccompare_cproper_interval)),
+                    (ccompare_set
+                      (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                        (cproper_interval_list (ccompare_option _A2)),
+                        set_impl_list)),
+                    set_impl_set)
+                  (fun ba ->
+                    set_option
+                      ((ceq_list (ceq_option _A1)),
+                        (ccompare_list (ccompare_option _A2)), set_impl_list)
+                      (join1 _A3 (aa, ba)))
+                  b))
+            a);;
 
 let rec fun_upd _A f a b = (fun x -> (if eq _A x a then b else f x));;
+
+let rec these (_A1, _A2, _A3)
+  a = image ((ceq_option _A1), (ccompare_option _A2)) (_A1, _A2, _A3) the
+        (filter ((ceq_option _A1), (ccompare_option _A2))
+          (fun x -> not (is_none x)) a);;
 
 let rec rep_I (Abs_I x) = x;;
 
