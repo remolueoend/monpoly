@@ -1,6 +1,6 @@
 module Monpoly : sig
   type nat
-  val integer_of_nat : nat -> Big_int.big_int
+  val integer_of_nat : nat -> Z.t
   type 'a equal = {equal : 'a -> 'a -> bool}
   val equal : 'a equal -> 'a -> 'a -> bool
   type 'a ceq = {ceq : ('a -> 'a -> bool) option}
@@ -17,7 +17,7 @@ module Monpoly : sig
   type 'a set = Collect_set of ('a -> bool) | DList_set of 'a set_dlist |
     RBT_set of ('a, unit) mapping_rbt | Set_Monad of 'a list |
     Complement of 'a set
-  val nat_of_integer : Big_int.big_int -> nat
+  val nat_of_integer : Z.t -> nat
   type 'a trm = Var of nat | Const of 'a
   type char
   type enat = Enat of nat | Infinity_enat
@@ -47,12 +47,11 @@ module Monpoly : sig
         (nat * ('a option) list) list
 end = struct
 
-type nat = Nat of Big_int.big_int;;
+type nat = Nat of Z.t;;
 
 let rec integer_of_nat (Nat x) = x;;
 
-let rec equal_nata
-  m n = Big_int.eq_big_int (integer_of_nat m) (integer_of_nat n);;
+let rec equal_nata m n = Z.equal (integer_of_nat m) (integer_of_nat n);;
 
 type 'a equal = {equal : 'a -> 'a -> bool};;
 let equal _A = _A.equal;;
@@ -65,11 +64,9 @@ let less _A = _A.less;;
 
 let rec min _A a b = (if less_eq _A a b then a else b);;
 
-let rec less_eq_nat
-  m n = Big_int.le_big_int (integer_of_nat m) (integer_of_nat n);;
+let rec less_eq_nat m n = Z.leq (integer_of_nat m) (integer_of_nat n);;
 
-let rec less_nat
-  m n = Big_int.lt_big_int (integer_of_nat m) (integer_of_nat n);;
+let rec less_nat m n = Z.lt (integer_of_nat m) (integer_of_nat n);;
 
 let ord_nat = ({less_eq = less_eq_nat; less = less_nat} : nat ord);;
 
@@ -144,7 +141,7 @@ let linorder_nat = ({order_linorder = order_nat} : nat linorder);;
 
 let finite_UNIV_nata : (nat, bool) phantom = Phantom false;;
 
-let zero_nat : nat = Nat Big_int.zero_big_int;;
+let zero_nat : nat = Nat Z.zero;;
 
 let card_UNIV_nata : (nat, nat) phantom = Phantom zero_nat;;
 
@@ -189,17 +186,15 @@ let ccompare _A = _A.ccompare;;
 
 let ccompare_nat = ({ccompare = ccompare_nata} : nat ccompare);;
 
-let ord_integer =
-  ({less_eq = Big_int.le_big_int; less = Big_int.lt_big_int} :
-    Big_int.big_int ord);;
+let ord_integer = ({less_eq = Z.leq; less = Z.lt} : Z.t ord);;
 
 let rec minus_nat
-  m n = Nat (max ord_integer Big_int.zero_big_int
-              (Big_int.sub_big_int (integer_of_nat m) (integer_of_nat n)));;
+  m n = Nat (max ord_integer Z.zero
+              (Z.sub (integer_of_nat m) (integer_of_nat n)));;
 
 type num = One | Bit0 of num | Bit1 of num;;
 
-let one_nat : nat = Nat (Big_int.big_int_of_int 1);;
+let one_nat : nat = Nat (Z.of_int 1);;
 
 let rec proper_interval_nat
   no x1 = match no, x1 with no, None -> true
@@ -455,8 +450,7 @@ let rec compare_height
             (Branch (_, ta, _, _, _), Branch (_, txa, _, _, _))))
         -> compare_height (skip_black sxa) sa ta (skip_black txa));;
 
-let rec plus_nat
-  m n = Nat (Big_int.add_big_int (integer_of_nat m) (integer_of_nat n));;
+let rec plus_nat m n = Nat (Z.add (integer_of_nat m) (integer_of_nat n));;
 
 let rec suc n = plus_nat n one_nat;;
 
@@ -467,59 +461,26 @@ let rec size_list x = gen_length zero_nat x;;
 
 let rec fst (x1, x2) = x1;;
 
-let rec nat_of_integer k = Nat (max ord_integer Big_int.zero_big_int k);;
+let rec nat_of_integer k = Nat (max ord_integer Z.zero k);;
 
 let rec apfst f (x, y) = (f x, y);;
 
-let rec sgn_integer
-  k = (if Big_int.eq_big_int k Big_int.zero_big_int then Big_int.zero_big_int
-        else (if Big_int.lt_big_int k Big_int.zero_big_int
-               then (Big_int.minus_big_int (Big_int.big_int_of_int 1))
-               else (Big_int.big_int_of_int 1)));;
+let rec map_prod f g (a, b) = (f a, g b);;
 
-let rec apsnd f (x, y) = (x, f y);;
-
-let rec comp f g = (fun x -> f (g x));;
-
-let rec divmod_integer
-  k l = (if Big_int.eq_big_int k Big_int.zero_big_int
-          then (Big_int.zero_big_int, Big_int.zero_big_int)
-          else (if Big_int.eq_big_int l Big_int.zero_big_int
-                 then (Big_int.zero_big_int, k)
-                 else comp (comp apsnd Big_int.mult_big_int) sgn_integer l
-                        (if Big_int.eq_big_int (sgn_integer k) (sgn_integer l)
-                          then Big_int.quomod_big_int (Big_int.abs_big_int k)
-                                 (Big_int.abs_big_int l)
-                          else (let (r, s) =
-                                  Big_int.quomod_big_int (Big_int.abs_big_int k)
-                                    (Big_int.abs_big_int l)
-                                  in
-                                 (if Big_int.eq_big_int s Big_int.zero_big_int
-                                   then (Big_int.minus_big_int r,
-  Big_int.zero_big_int)
-                                   else (Big_int.sub_big_int
-   (Big_int.minus_big_int r) (Big_int.big_int_of_int 1),
-  Big_int.sub_big_int (Big_int.abs_big_int l) s))))));;
-
-let rec snd (x1, x2) = x2;;
-
-let rec modulo_integer k l = snd (divmod_integer k l);;
-
-let rec modulo_nat
-  m n = Nat (modulo_integer (integer_of_nat m) (integer_of_nat n));;
-
-let rec divide_integer k l = fst (divmod_integer k l);;
-
-let rec divide_nat
-  m n = Nat (divide_integer (integer_of_nat m) (integer_of_nat n));;
-
-let rec divmod_nat m n = (divide_nat m n, modulo_nat m n);;
+let rec divmod_nat
+  m n = (let k = integer_of_nat m in
+         let l = integer_of_nat n in
+          map_prod nat_of_integer nat_of_integer
+            (if Z.equal k Z.zero then (Z.zero, Z.zero)
+              else (if Z.equal l Z.zero then (Z.zero, k)
+                     else (fun k l -> if Z.equal Z.zero l then (Z.zero, l) else
+                            Z.div_rem (Z.abs k) (Z.abs l))
+                            k l)));;
 
 let rec rbtreeify_g
   n kvs =
     (if equal_nata n zero_nat || equal_nata n one_nat then (Empty, kvs)
-      else (let (na, r) =
-              divmod_nat n (nat_of_integer (Big_int.big_int_of_int 2)) in
+      else (let (na, r) = divmod_nat n (nat_of_integer (Z.of_int 2)) in
              (if equal_nata r zero_nat
                then (let (t1, (k, v) :: kvsa) = rbtreeify_g na kvs in
                       apfst (fun a -> Branch (B, t1, k, v, a))
@@ -533,8 +494,7 @@ and rbtreeify_f
       else (if equal_nata n one_nat
              then (let (k, v) :: kvsa = kvs in
                     (Branch (R, Empty, k, v, Empty), kvsa))
-             else (let (na, r) =
-                     divmod_nat n (nat_of_integer (Big_int.big_int_of_int 2)) in
+             else (let (na, r) = divmod_nat n (nat_of_integer (Z.of_int 2)) in
                     (if equal_nata r zero_nat
                       then (let (t1, (k, v) :: kvsa) = rbtreeify_f na kvs in
                              apfst (fun a -> Branch (B, t1, k, v, a))
@@ -683,6 +643,8 @@ let rec meet _A
         (impl_of _A xe));;
 
 let rec filterb _A xb xc = Abs_dlist (filtera xb (list_of_dlist _A xc));;
+
+let rec comp f g = (fun x -> f (g x));;
 
 let rec inf_seta (_A1, _A2)
   g ga = match g, ga with
@@ -872,6 +834,8 @@ type ('a, 'b) generator = Generator of (('b -> bool) * ('b -> 'a * 'b));;
 let rec generator (Generator x) = x;;
 
 let rec has_next g = fst (generator g);;
+
+let rec snd (x1, x2) = x2;;
 
 let rec next g = snd (generator g);;
 
@@ -1670,46 +1634,44 @@ type 'a zero_neq_one =
 let rec of_bool _A = function true -> one _A.one_zero_neq_one
                      | false -> zero _A.zero_zero_neq_one;;
 
-let one_integera : Big_int.big_int = (Big_int.big_int_of_int 1);;
+let one_integera : Z.t = (Z.of_int 1);;
 
-let zero_integer = ({zero = Big_int.zero_big_int} : Big_int.big_int zero);;
+let zero_integer = ({zero = Z.zero} : Z.t zero);;
 
-let one_integer = ({one = one_integera} : Big_int.big_int one);;
+let one_integer = ({one = one_integera} : Z.t one);;
 
 let zero_neq_one_integer =
   ({one_zero_neq_one = one_integer; zero_zero_neq_one = zero_integer} :
-    Big_int.big_int zero_neq_one);;
+    Z.t zero_neq_one);;
 
 let rec integer_of_char
   (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
-    Big_int.add_big_int
-      (Big_int.mult_big_int
-        (Big_int.add_big_int
-          (Big_int.mult_big_int
-            (Big_int.add_big_int
-              (Big_int.mult_big_int
-                (Big_int.add_big_int
-                  (Big_int.mult_big_int
-                    (Big_int.add_big_int
-                      (Big_int.mult_big_int
-                        (Big_int.add_big_int
-                          (Big_int.mult_big_int
-                            (Big_int.add_big_int
-                              (Big_int.mult_big_int
-                                (of_bool zero_neq_one_integer b7)
-                                (Big_int.big_int_of_int 2))
-                              (of_bool zero_neq_one_integer b6))
-                            (Big_int.big_int_of_int 2))
-                          (of_bool zero_neq_one_integer b5))
-                        (Big_int.big_int_of_int 2))
-                      (of_bool zero_neq_one_integer b4))
-                    (Big_int.big_int_of_int 2))
-                  (of_bool zero_neq_one_integer b3))
-                (Big_int.big_int_of_int 2))
-              (of_bool zero_neq_one_integer b2))
-            (Big_int.big_int_of_int 2))
-          (of_bool zero_neq_one_integer b1))
-        (Big_int.big_int_of_int 2))
+    Z.add (Z.mul
+            (Z.add
+              (Z.mul
+                (Z.add
+                  (Z.mul
+                    (Z.add
+                      (Z.mul
+                        (Z.add
+                          (Z.mul
+                            (Z.add
+                              (Z.mul
+                                (Z.add
+                                  (Z.mul (of_bool zero_neq_one_integer b7)
+                                    (Z.of_int 2))
+                                  (of_bool zero_neq_one_integer b6))
+                                (Z.of_int 2))
+                              (of_bool zero_neq_one_integer b5))
+                            (Z.of_int 2))
+                          (of_bool zero_neq_one_integer b4))
+                        (Z.of_int 2))
+                      (of_bool zero_neq_one_integer b3))
+                    (Z.of_int 2))
+                  (of_bool zero_neq_one_integer b2))
+                (Z.of_int 2))
+              (of_bool zero_neq_one_integer b1))
+            (Z.of_int 2))
       (of_bool zero_neq_one_integer b0);;
 
 let rec nat_of_char c = Nat (integer_of_char c);;
@@ -2861,15 +2823,14 @@ let rec db_code (_A1, _A2)
           (set_impl_prod set_impl_list set_impl_list));;
 
 let rec bit_cut_integer
-  k = (if Big_int.eq_big_int k Big_int.zero_big_int
-        then (Big_int.zero_big_int, false)
+  k = (if Z.equal k Z.zero then (Z.zero, false)
         else (let (r, s) =
-                Big_int.quomod_big_int (Big_int.abs_big_int k)
-                  (Big_int.abs_big_int (Big_int.big_int_of_int 2))
+                (fun k l -> if Z.equal Z.zero l then (Z.zero, l) else Z.div_rem
+                  (Z.abs k) (Z.abs l))
+                  k (Z.of_int 2)
                 in
-               ((if Big_int.lt_big_int Big_int.zero_big_int k then r
-                  else Big_int.sub_big_int (Big_int.minus_big_int r) s),
-                 Big_int.eq_big_int s (Big_int.big_int_of_int 1))));;
+               ((if Z.lt Z.zero k then r else Z.sub (Z.neg r) s),
+                 Z.equal s (Z.of_int 1))));;
 
 let rec char_of_integer
   k = (let (q0, b0) = bit_cut_integer k in
@@ -2885,8 +2846,8 @@ let rec char_of_integer
 
 let rec explode
   s = map char_of_integer
-        (let s = s in let rec exp i l = if i < 0 then l else exp (i - 1) (let k = Char.code (Bytes.get s i) in
-      if k < 128 then Big_int.big_int_of_int k :: l else failwith "Non-ASCII character in literal") in exp (Bytes.length s - 1) []);;
+        (let s = s in let rec exp i l = if i < 0 then l else exp (i - 1) (let k = Char.code (String.get s i) in
+      if k < 128 then Z.of_int k :: l else failwith "Non-ASCII character in literal") in exp (String.length s - 1) []);;
 
 let rec verdict_code _A
   = keysa (ccompare_prod ccompare_nat (ccompare_list (ccompare_option _A)));;

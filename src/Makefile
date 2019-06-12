@@ -3,14 +3,14 @@ OCAMLC = ocamlfind ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
-FLAGS = -noassert -unsafe-string -package qcheck -linkpkg # -w A
+FLAGS = -noassert -unsafe-string -package qcheck -package zarith -linkpkg # -w A
 JSFLAGS = -package str -package unix -package js_of_ocaml -package lwt -package js_of_ocaml.syntax -syntax camlp4o
 # FLAGS = -ccopt -static
 
 ifeq "$(OCAML)" "$(OCAMLOPT)"
   O = cmx
   A = cmxa
-  LIBS =  str.$(A) nums.$(A) 
+  LIBS =  str.$(A) nums.$(A)
   OCAMLDEPFLAGS = -native
 else
   O = cmo
@@ -28,7 +28,7 @@ MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
 	  helper.mli domain_set.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
 	  murmur_hash3.mli hypercube_slicer.mli verified_adapter.mli
 
-OURMLI = $(MLI) log.mli algorithm_verified.mli algorithm.mli 
+OURMLI = $(MLI) log.mli algorithm_verified.mli algorithm.mli
 
 ALLMLI = $(OURMLI) formula_parser.mli log_parser.mli
 
