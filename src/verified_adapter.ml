@@ -1,5 +1,5 @@
 open MFOTL
-open Verified.Monpoly
+open Verified.Monitor
 open Predicate
 open Relation
 open Helper
@@ -115,7 +115,7 @@ let convert_db md =
                     (Db.get_tables db))) in
   (convert_relations md.db, nat_of_float md.ts)
 
-(* (Verified.Monpoly.nat * Predicate.cst option list) Verified.Monpoly.set -> (timestamp * relation) *)
+(* (Verified.Monitor.nat * Predicate.cst option list) Verified.Monitor.set -> (timestamp * relation) *)
 let convert_violations vs =
   let vsl = match vs with
     | RBT_set rbt -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) (verdict_code domain_ccompare rbt)

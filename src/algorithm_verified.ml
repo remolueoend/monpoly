@@ -1,5 +1,4 @@
 open MFOTL
-open Verified
 open Verified_adapter
 
 
@@ -38,11 +37,11 @@ open IntMap
 
 let monitor logfile f =
   let closed = (free_vars f = []) in
-  let init_state = Monpoly.minit_safe (domain_ceq, domain_ccompare, domain_equal) (convert_formula f) in
+  let init_state = Verified.Monitor.minit_safe (domain_ceq, domain_ccompare, domain_equal) (convert_formula f) in
   let lexbuf = Log.log_open logfile in
   let init_i = 0 in
   let init_ts = MFOTL.ts_invalid in
-  let rec loop state tpts tp ts = 
+  let rec loop state tpts tp ts =
     let finish () =
       if Misc.debugging Dbg_perf then
         Perf.check_log_end tp ts
@@ -53,15 +52,15 @@ let monitor logfile f =
     | MonpolyCommand {c; parameters} -> finish ()
     | MonpolyTestTuple st -> finish ()
     | MonpolyError s -> finish ()
-    | MonpolyData d -> 
+    | MonpolyData d ->
     if d.ts >= ts then
       (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
       let tpts = add d.tp d.ts tpts in
-      let (vs, new_state) = Monpoly.mstep (domain_ceq, domain_ccompare, domain_equal) (convert_db d) state in
+      let (vs, new_state) = Verified.Monitor.mstep (domain_ceq, domain_ccompare, domain_equal) (convert_db d) state in
       let vs = convert_violations vs in
       List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
       let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
-      loop new_state tpts d.tp d.ts 
+      loop new_state tpts d.tp d.ts
     else
       if !Misc.stop_at_out_of_order_ts then
         let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \

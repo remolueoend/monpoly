@@ -1,4 +1,4 @@
-module Monpoly : sig
+module Monitor : sig
   type nat
   val integer_of_nat : nat -> Z.t
   type 'a equal = {equal : 'a -> 'a -> bool}
@@ -2852,4 +2852,4 @@ let rec explode
 let rec verdict_code _A
   = keysa (ccompare_prod ccompare_nat (ccompare_list (ccompare_option _A)));;
 
-end;; (*struct Monpoly*)
+end;; (*struct Monitor*)

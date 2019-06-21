@@ -1,12 +1,11 @@
 open MFOTL
-open Verified
 open Predicate
 open Relation
 open Helper
 
-val convert_formula: formula -> cst Monpoly.formula
-val convert_db: monpolyData -> (Monpoly.char list * cst list) Monpoly.set * Monpoly.nat
-val convert_violations: (Verified.Monpoly.nat * Predicate.cst option list) Verified.Monpoly.set -> (int * relation) list
-val domain_ceq: cst Monpoly.ceq
-val domain_ccompare: cst Monpoly.ccompare
-val domain_equal: cst Monpoly.equal
+val convert_formula: formula -> cst Verified.Monitor.formula
+val convert_db: monpolyData -> (Verified.Monitor.char list * cst list) Verified.Monitor.set * Verified.Monitor.nat
+val convert_violations: (Verified.Monitor.nat * Predicate.cst option list) Verified.Monitor.set -> (int * relation) list
+val domain_ceq: cst Verified.Monitor.ceq
+val domain_ccompare: cst Verified.Monitor.ccompare
+val domain_equal: cst Verified.Monitor.equal
