@@ -94,6 +94,7 @@ rule
   | "{"                      { f "LBC" lexbuf; LCB }
   | "}"                      { f "RCB" lexbuf; RCB }
   | ","                      { f "COM" lexbuf; COM }
+  | ";"                      { f "SEM" lexbuf; SEM }
 
   | string as lxm            { f "STR" lexbuf; STR (strip lxm) }
 

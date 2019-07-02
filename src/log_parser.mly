@@ -159,6 +159,12 @@
 
   (* let parse_error str = () *)
 
+  let invalid_db lookahead =
+    if !Misc.ignore_parse_errors then
+      DataTuple { ts = ts_invalid; db = Db.make_db []; lookahead; }
+    else
+      raise Parsing.Parse_error
+
 
 (*
   Below functions are only relevant for the manual specification of the mappings from values to state partitions
@@ -223,7 +229,7 @@ let make_key str = match Misc.nsplit str ":" with
 %}
 
 
-%token AT LPA RPA LCB RCB COM
+%token AT LPA RPA LCB RCB COM SEM
 %token <string> STR
 %token EOF
 %token CMD
@@ -254,26 +260,17 @@ tsdb:
       | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
       | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
       | CMD slicing_test EOC    { $2 }
-      | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
-      | AT STR db CMD           { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
-      | AT STR db EOF           { f "tsdb(last)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; } }
+      | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; lookahead = true } }
+      | AT STR db CMD           { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; lookahead = true } }
+      | AT STR db EOF           { f "tsdb(last)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; lookahead = true } }
+      | AT STR db SEM           { f "tsdb(sem)";    DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; lookahead = false } }
       | AT EOF                  { f "tsdb(ts eof)"; ErrorTuple "end of file" }
-      | CMD EOF                 { f "tsdb(ts eof)"; ErrorTuple "end of file" }
-      | EOF                     { f "tsdb(eof)";    ErrorTuple "enf of file" }
+      | EOF                     { f "tsdb(eof)";    ErrorTuple "end of file" }
 
-      | AT STR error AT         { f "tsdb(next-err)";
-          if !Misc.ignore_parse_errors then
-             DataTuple { ts = ts_invalid; db = Db.make_db []; }
-          else
-            raise Parsing.Parse_error
-        }
-
-      | AT STR error EOF        { f "tsdb(last-err)";
-                                  if !Misc.ignore_parse_errors then
-                                     DataTuple { ts = ts_invalid; db = Db.make_db []; }
-                                  else
-                                    raise Parsing.Parse_error
-                                }
+      | AT STR error AT         { f "tsdb(next-err)"; invalid_db true }
+      | AT STR error CMD        { f "tsdb(next-err)"; invalid_db true }
+      | AT STR error EOF        { f "tsdb(last-err)"; invalid_db true }
+      | AT STR error SEM        { f "tsdb(sem-err)";  invalid_db false }
 
 db:
       | table db                { f "db(list)"; add_table $2 $1 }
