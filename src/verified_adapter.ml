@@ -60,9 +60,9 @@ let convert_interval (l,r) =
     | CBnd a ->  Some a
     | Inf -> None in
     match um with
-    | None -> interval (nat_of_float lm, Infinity_enat)
+    | None -> interval (nat_of_float lm) Infinity_enat
     | Some um ->  if lm <= um then
-                  interval (nat_of_float lm, enat_of_float um)
+                  interval (nat_of_float lm) (enat_of_float um)
                   else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
                   raise (UnsupportedFragment msg)
 

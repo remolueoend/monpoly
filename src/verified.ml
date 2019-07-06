@@ -34,7 +34,7 @@ module Monitor : sig
       (char list * 'a list) set * nat ->
         ('a, unit) mstate_ext ->
           (nat * ('a option) list) set * ('a, unit) mstate_ext
-  val interval : nat * enat -> i
+  val interval : nat -> enat -> i
   val minit_safe :
     'a ceq * 'a ccompare * 'a equal -> 'a formula -> ('a, unit) mstate_ext
   val db_code :
@@ -2744,8 +2744,8 @@ let rec mstep (_A1, _A2, _A3)
           (plus_nat (mstate_i st) (size_list xs), m, mstate_n st, ())));;
 
 let rec interval
-  i = Abs_I (if less_eq_enat (Enat (fst i)) (snd i) then i
-              else rep_I (failwith "undefined"));;
+  l r = Abs_I (if less_eq_enat (Enat l) r then (l, r)
+                else rep_I (failwith "undefined"));;
 
 let rec equal_enat x0 x1 = match x0, x1 with Enat nat, Infinity_enat -> false
                      | Infinity_enat, Enat nat -> false
