@@ -4,13 +4,16 @@ RUN sudo apt-get update \
     && sudo apt-get install -y \
     subversion \
     m4 \
+    libgmp-dev \
     && sudo rm -rf /var/lib/apt/lists/* 
 
 # RUN opam init -y \
-RUN opam switch create 4.06.1 \
+RUN opam update \
+    && opam switch create 4.06.1 \
     && opam install \
        ocamlfind \
        qcheck \
+       zarith \
        num
 
 # RUN useradd -ms /bin/bash monply

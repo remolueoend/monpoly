@@ -13,13 +13,10 @@ RUN apt-get update \
         nano \
         scala \
         software-properties-common \
-    && add-apt-repository ppa:linuxuprising/java \
+    && add-apt-repository ppa:openjdk-r/ppa \
     && apt-get update \
-    && echo debconf shared/accepted-oracle-license-v1-2 select true |  debconf-set-selections \
-    && echo debconf shared/accepted-oracle-license-v1-2 seen true |  debconf-set-selections \ 
     && apt-get install --no-install-recommends -y \ 
-       oracle-java11-installer \
-       oracle-java11-set-default \
+       openjdk-11-jdk \
     && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8 \
