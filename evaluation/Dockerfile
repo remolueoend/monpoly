@@ -1,4 +1,4 @@
-FROM infsec/monpoly:1.2.0 as build
+FROM infsec/monpoly:1.3.0 as build
 
 FROM ubuntu:18.04
 
