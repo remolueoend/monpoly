@@ -2165,54 +2165,26 @@ proof -
          (MFOTL.MatchP (point (\<tau> \<sigma> ne - t)) (from_mregex ms \<phi>s))) (lookup X ms))" for t X
     unfolding aux0_def using safe mr mrs
     apply (subst lookup_default_def)
-    apply (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def
-        finite_RPDs
+    apply (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def finite_RPDs * RPDs_trans
+        intro!: qtable_union[OF qtable_r\<delta>[OF _ _ qtables] qtable_safe_r\<epsilon>[OF _ _ _ qtables],
+          of ms "fv_regex r" "\<lambda>v r. MFOTL.sat \<sigma> v (ne - Suc 0) (formula.MatchP (point 0) r)" _ ms for ms]
+        qtable_cong[OF qtable_r\<delta>[OF _ _ qtables],
+          of ms "fv_regex r" "\<lambda>v r. MFOTL.sat \<sigma> v (ne - Suc 0) (formula.MatchP (point (\<tau> \<sigma> (ne - Suc 0) - \<tau> \<sigma> i)) r)" for ms i]
         dest!: assms(1)[unfolded wf_matchP_aux_def, THEN conjunct2, THEN conjunct1, rule_format]
-        split: option.splits if_splits)
-      apply (metis (no_types, hide_lams) Suc_leD \<tau>_mono diff_Suc_Suc dual_order.trans gr0_conv_Suc minus_nat.diff_0 order_refl)
-     apply (rule qtable_union[OF qtable_r\<delta>[where \<phi>s=\<phi>s]])
-           apply (simp add: * )
-          apply (simp add: * )
-         apply (rule qtables)
-        apply (rule ballI)
-        apply (drule bspec)
-         apply (erule set_mp[rotated]) back
-         apply (simp add: * )
-        apply assumption
-      apply (rule qtable_safe_r\<epsilon>)
-         apply (rule * )
-         apply assumption
-        apply (simp add: * )
-       apply (simp add: * )
-      apply (rule qtables)
-     apply (subst sat_MatchP_rec)
-     apply (auto) []
-    apply (rule qtable_cong[OF qtable_r\<delta>])
-          apply (erule * )
-         apply (rule equalityD1)
-         apply (erule * )
-        apply (rule qtables)
-       apply (rule ballI)
-       apply (drule bspec)
-        apply (erule set_mp[rotated]) back
-        apply (erule * )
-       apply assumption
-     apply simp
-    apply (subst (2) sat_MatchP_rec)
-    apply simp
-    apply safe
-         apply simp
-        apply simp
-       apply auto []
+        elim!: bspec split: option.splits if_splits)
+          apply (metis (no_types, hide_lams) Suc_leD \<tau>_mono diff_Suc_Suc dual_order.trans gr0_conv_Suc minus_nat.diff_0 order_refl)
+
+         apply (auto simp: sat_MatchP_rec[of \<sigma> _ ne])
+        apply (erule bspec)
+        apply (simp add: * RPDs_trans)
+       apply (auto) []
        apply (drule bspec, assumption) back
        apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self less_le_trans not_add_less2 not_le)
-
-      apply auto []
       apply (drule bspec, assumption) back
-      apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self le_add2 order_trans)
+      apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self less_le_trans not_add_less2 not_le)
      apply (metis (no_types, lifting) Suc_pred \<tau>_mono diff_le_self le_\<tau>_less le_antisym not_less_eq)
     apply (erule bexI[rotated])
-    apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self le_add2 order_trans)
+    apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self less_le_trans not_add_less2 not_le)
     done
   then have in_aux0_le_\<tau>: "(t, X) \<in> set aux0 \<Longrightarrow> t \<le> \<tau> \<sigma> ne" for t X
     by (meson \<tau>_mono diff_le_self le_trans)
