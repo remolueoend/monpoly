@@ -974,13 +974,11 @@ next
     by (cases "MFOTL.future_reach_regex r") auto
   with MatchF obtain j where "Suc i' \<le> progress_regex \<sigma> r j"
     by auto
-  ultimately show ?case using \<open>i < i'\<close>
-    apply (auto intro!: exI[of _ "j"] cInf_greatest)
-    apply (metis \<tau>_mono add.commute le_add2 le_trans)
-    apply (drule spec[of _ "i'"])
-    apply (auto simp: not_le)
-     apply (meson Suc_le_lessD dual_order.trans progress_regex_le)
-    using less_\<tau>D less_le_trans by fastforce
+  moreover have "i \<le> x" if "\<tau> \<sigma> i' \<le> b + \<tau> \<sigma> x" "b + \<tau> \<sigma> i < \<tau> \<sigma> i'" for x
+    using less_\<tau>D[of \<sigma> i] that less_le_trans by fastforce
+  ultimately show ?case using \<open>i < i'\<close> progress_regex_le[of \<sigma> r j] \<tau>_mono[of _ j \<sigma>] less_\<tau>D[of \<sigma> i] 
+    by (auto 0 3 intro!: exI[of _ "j"] cInf_greatest simp: ac_simps Suc_le_eq trans_le_add2
+      dest: spec[of _ "i'"] spec[of _ j])
 next
   case (Plus r s)
   from Plus.prems have "MFOTL.future_reach_regex r \<noteq> \<infinity>"
@@ -1469,9 +1467,7 @@ lemma minit0_Neg_other: "\<lbrakk>\<forall>t1 t2. \<phi> \<noteq> MFOTL.Eq t1 t2
   \<forall>\<psi>\<^sub>1 \<psi>\<^sub>2. \<not> (\<phi> = MFOTL.Or (MFOTL.Neg \<psi>\<^sub>1) \<psi>\<^sub>2 \<and> safe_formula \<psi>\<^sub>2 \<and> fv \<psi>\<^sub>2 \<subseteq> fv \<psi>\<^sub>1);
   \<forall>\<psi>\<^sub>1 \<psi>\<^sub>2 \<psi>\<^sub>2'. \<not> (\<phi> = MFOTL.Or (MFOTL.Neg \<psi>\<^sub>1) \<psi>\<^sub>2 \<and> \<not>(safe_formula \<psi>\<^sub>2 \<and> MFOTL.fv \<psi>\<^sub>2 \<subseteq> MFOTL.fv \<psi>\<^sub>1) \<and> \<psi>\<^sub>2 = MFOTL.Neg \<psi>\<^sub>2') \<rbrakk>
   \<Longrightarrow> minit0 n (MFOTL.Neg \<phi>) = MNeg (minit0 n \<phi>)"
-  apply simp
-  apply (split formula.split)+
-  by auto
+  by (subst minit0.simps, (split formula.split)+) auto
 
 lemma fv_regex_alt: "safe_regex m g r \<Longrightarrow> MFOTL.fv_regex r = (\<Union>\<phi> \<in> atms r. MFOTL.fv \<phi>)"
   by (induct m g r rule: safe_regex_induct) auto
@@ -2937,12 +2933,15 @@ next
        dest: mbuf2_take_add' elim!: list.rel_mono_strong)
 next
   case (MNeg \<phi>)
-  from MNeg.prems show ?case
-    apply (cases pred: wf_mformula)
-     apply (auto intro!: wf_mformula.Neg dest!: MNeg.IH
-       simp add: list.rel_map qtable_empty_unit_table dest: qtable_empty_implies_empty_or_unit
-       elim!: list.rel_mono_strong)
+  have *: "qtable n {} (mem_restr R) (\<lambda>v. P v) X \<Longrightarrow> 
+    \<not> qtable n {} (mem_restr R) (\<lambda>v. \<not> P v) empty_table \<Longrightarrow> x \<in> X \<Longrightarrow> False" for P x X
     using qtable_empty_implies_empty_or_unit qtable_unit_empty_table by fastforce
+  from MNeg.prems show ?case
+    by (cases pred: wf_mformula)
+      (auto 0 4 intro!: wf_mformula.Neg dest!: MNeg.IH
+       simp add: list.rel_map
+       dest: qtable_empty_implies_empty_or_unit qtable_unit_empty_table intro!: qtable_empty_unit_table
+       elim!: list.rel_mono_strong elim: *)
 next
   case (MExists \<phi>)
   from MExists.prems show ?case
