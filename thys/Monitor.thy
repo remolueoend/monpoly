@@ -2648,7 +2648,7 @@ lemma wf_mbufn_map_tl:
     dest: rel_funD[OF tl_transfer]  elim!: list_all3_mono_strong le_neq_implies_less)
 
 lemma list_all3_list_all2I: "list_all3 (\<lambda>x y z. Q x z) xs ys zs \<Longrightarrow> list_all2 Q xs zs"
- by (induct xs ys zs rule: list_all3.induct) auto
+  by (induct xs ys zs rule: list_all3.induct) auto
 
 lemma mbuf2t_take_eqD:
   assumes "mbuf2t_take f z buf nts = (z', buf', nts')"
@@ -2685,13 +2685,13 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: mbufnt_take.induct)
   case 2
   then have *: "list_all2 R [Suc i..<j] (tl nts)"
     by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
-  from 2 show ?case
+  have [simp]: "Suc (i + (length nts - Suc 0)) = i + length nts" if "nts \<noteq> []"
+    using that by (fastforce simp flip: length_greater_0_conv)
+  with 2 show ?case
     using wf_mbufn_in_set_Mini[OF 2(2)] wf_mbufn_notin_set[OF 2(2)]
-    apply (subst (asm) mbufnt_take.simps)
-    apply (auto simp: wf_mbufn_def dest!: IH(2)[rotated, OF _ wf_mbufn_map_tl[OF 2(2)] *]
+    by (subst (asm) mbufnt_take.simps) (force simp: wf_mbufn_def
+        dest!: IH(2)[rotated, OF _ wf_mbufn_map_tl[OF 2(2)] *]
         split: if_splits prod.splits)
-     apply fastforce
-    by (metis Suc_pred add_Suc_right length_greater_0_conv)
 qed
 
 lemma mbuf2t_take_induct[consumes 5, case_names base step]:
@@ -2708,6 +2708,12 @@ lemma mbuf2t_take_induct[consumes 5, case_names base step]:
     (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
        elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated] split: prod.split)
 
+lemma list_all2_hdD:
+  assumes "list_all2 P [i..<j] xs" "xs \<noteq> []"
+  shows "P i (hd xs)" "i < j"
+  using assms unfolding list_all2_conv_all_nth
+  by (auto simp: hd_conv_nth intro: zero_less_diff[THEN iffD1] dest!: spec[of _ 0])
+
 lemma mbufnt_take_induct[consumes 5, case_names base step]:
   assumes "mbufnt_take f z buf nts = (z', buf', nts')"
     and "wf_mbufn i js Ps buf"
@@ -2723,34 +2729,16 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: mbufnt_take.induct)
   then have *: "list_all2 R [Suc i..<j] (tl nts)"
     by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
   note mbufnt_take.simps[simp del]
-  from 1(2-6) show ?case
-    unfolding wf_mbufn_def using  wf_mbufn_in_set_Mini[OF 1(3)] wf_mbufn_notin_set[OF 1(3)]
-  apply (subst (asm) mbufnt_take.simps)
-  apply (auto simp add: simp del: list.map
-    elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated]
-    split: prod.split if_splits)
-      apply (auto simp:  list_all3_Cons neq_Nil_conv) [2]
-    apply blast
-      apply fastforce
-    subgoal premises prems
-      using 1(1)[rotated,OF _ wf_mbufn_map_tl[OF 1(3)] * _ 1(7), simplified prems, OF refl] prems
-      apply auto
-      apply (drule meta_mp)
-      using not_less_eq_eq apply fastforce
-      apply (drule meta_mp)
-       apply (metis hd_upt list.rel_sel upt_rec)
-      apply (drule meta_mp)
-       apply (rule 1(7))
-           apply auto
-      by (metis Suc_pred add_Suc_right length_greater_0_conv)
-    apply (drule 1(1)[rotated, OF _ wf_mbufn_map_tl[OF 1(3)] *])
-         apply (auto intro!: 1(7) simp: list_all3_conv_all_nth list_all2_conv_all_nth
-        Suc_le_eq hd_conv_nth dest: spec[of _ 0])
-    apply (drule spec, drule mp, assumption)
-    apply safe
-    apply (drule spec[of _ 0]) back
-    apply (auto simp: in_set_conv_nth hd_conv_nth)
-    done
+  from 1(2-6) have "i = Min (set js)" if "js \<noteq> []" "nts = []"
+    using that unfolding wf_mbufn_def using wf_mbufn_in_set_Mini[OF 1(3)]
+    by (fastforce simp: list_all3_Cons neq_Nil_conv)
+  with 1(2-7) list_all2_hdD[OF 1(4)] show ?case
+    unfolding wf_mbufn_def using wf_mbufn_in_set_Mini[OF 1(3)] wf_mbufn_notin_set[OF 1(3)]
+    by (subst (asm) mbufnt_take.simps)
+      (auto simp add: list.rel_map Suc_le_eq
+        elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated]
+          list_all3_mono_strong[THEN list_all3_list_all2I[of _ _ js]] list_all2_hdD
+        dest!: 1(1)[rotated, OF _ wf_mbufn_map_tl[OF 1(3)] * _ 1(7)] split: prod.split if_splits)
 qed
 
 lemma mbuf2_take_add':
