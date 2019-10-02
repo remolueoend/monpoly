@@ -6,7 +6,7 @@ session MFOTL_Monitor2 (AFP) = "Containers" +
     Monitor
   theories [condition = ISABELLE_OCAMLFIND, document=false]
     Monitor_Code
-    (*Examples*)
+    Examples
   document_files
     "root.tex"
     "root.bib"

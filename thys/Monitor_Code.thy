@@ -7,9 +7,9 @@ theory Monitor_Code
 begin
 (*>*)
 
-derive ccompare MFOTL.trm
-derive (eq) ceq MFOTL.trm
-derive (rbt) set_impl MFOTL.trm
+derive ccompare Formula.trm
+derive (eq) ceq Formula.trm
+derive (rbt) set_impl Formula.trm
 derive (eq) ceq Monitor.mregex
 derive ccompare Monitor.mregex
 derive (rbt) set_impl Monitor.mregex
@@ -90,17 +90,17 @@ lemma LPDs_code[code]: "LPDs r = LPDs_aux {r}"
 
 export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
   nat_of_integer integer_of_nat enat literal.explode db_code set interval RBT_set verdict_code
-  MFOTL.Var MFOTL.Const
-  MFOTL.Pred MFOTL.Eq MFOTL.Neg MFOTL.Or MFOTL.Exists
-  MFOTL.Prev MFOTL.Next MFOTL.Since MFOTL.Until MFOTL.MatchP MFOTL.MatchF
+  Formula.Var Formula.Const
+  Formula.Pred Formula.Eq Formula.Neg Formula.Or Formula.Exists
+  Formula.Prev Formula.Next Formula.Since Formula.Until Formula.MatchP Formula.MatchF
   checking OCaml?
 
 export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
   nat_of_integer integer_of_nat enat literal.explode db_code set interval RBT_set verdict_code
-  MFOTL.Var MFOTL.Const
-  MFOTL.Pred MFOTL.Eq MFOTL.Neg MFOTL.Or MFOTL.Exists
-  MFOTL.Prev MFOTL.Next MFOTL.Since MFOTL.Until MFOTL.MatchP MFOTL.MatchF
-  MFOTL.Wild MFOTL.Test MFOTL.Plus MFOTL.Times MFOTL.Star
+  Formula.Var Formula.Const
+  Formula.Pred Formula.Eq Formula.Neg Formula.Or Formula.Exists
+  Formula.Prev Formula.Next Formula.Since Formula.Until Formula.MatchP Formula.MatchF
+  Formula.Wild Formula.Test Formula.Plus Formula.Times Formula.Star
   safe_formula
   minit_safe mstep in OCaml module_name Monitor file_prefix "verified"
 

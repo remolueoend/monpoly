@@ -1,32 +1,32 @@
 (*<*)
 theory Abstract_Monitor
-  imports MFOTL
+  imports Formula
 begin
 (*>*)
 
 section \<open>Abstract Specification of a Monitor\<close>
 
 locale monitorable =
-  fixes monitorable :: "'a MFOTL.formula \<Rightarrow> bool"
+  fixes monitorable :: "'a Formula.formula \<Rightarrow> bool"
 
 text \<open>The following locale specifies the desired behavior ouf a monitor abstractly.\<close>
 
 locale monitor = monitorable +
   fixes
-    M :: "'a MFOTL.formula \<Rightarrow> 'a MFOTL.prefix \<Rightarrow> (nat \<times> 'a option list) set"
+    M :: "'a Formula.formula \<Rightarrow> 'a Formula.prefix \<Rightarrow> (nat \<times> 'a option list) set"
   assumes
     mono_monitor: "monitorable \<phi> \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow> M \<phi> \<pi> \<subseteq> M \<phi> \<pi>'"
     and sound_monitor: "monitorable \<phi> \<Longrightarrow> (i, v) \<in> M \<phi> \<pi> \<Longrightarrow>
-      i < plen \<pi> \<and> wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> MFOTL.sat \<sigma> (map the v) i \<phi>)"
+      i < plen \<pi> \<and> wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> (map the v) i \<phi>)"
     and complete_monitor: "monitorable \<phi> \<Longrightarrow> prefix_of \<pi> \<sigma> \<Longrightarrow>
-      i < plen \<pi> \<Longrightarrow> wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v \<Longrightarrow>
-      (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> MFOTL.sat \<sigma> (map the v) i \<phi>) \<Longrightarrow> \<exists>\<pi>'. prefix_of \<pi>' \<sigma> \<and> (i, v) \<in> M \<phi> \<pi>'"
+      i < plen \<pi> \<Longrightarrow> wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<Longrightarrow>
+      (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> (map the v) i \<phi>) \<Longrightarrow> \<exists>\<pi>'. prefix_of \<pi>' \<sigma> \<and> (i, v) \<in> M \<phi> \<pi>'"
 
 locale slicable_monitor = monitor +
-  assumes monitor_slice: "mem_restr S v \<Longrightarrow> (i, v) \<in> M \<phi> (MFOTL.pslice \<phi> S \<pi>) \<longleftrightarrow> (i, v) \<in> M \<phi> \<pi>"
+  assumes monitor_slice: "mem_restr S v \<Longrightarrow> (i, v) \<in> M \<phi> (Formula.pslice \<phi> S \<pi>) \<longleftrightarrow> (i, v) \<in> M \<phi> \<pi>"
 
 locale monitor_pre_progress = monitorable +
-  fixes progress :: "'a MFOTL.trace \<Rightarrow> 'a MFOTL.formula \<Rightarrow> nat \<Rightarrow> nat"
+  fixes progress :: "'a Formula.trace \<Rightarrow> 'a Formula.formula \<Rightarrow> nat \<Rightarrow> nat"
   assumes
     progress_mono: "j \<le> j' \<Longrightarrow> progress \<sigma> \<phi> j \<le> progress \<sigma> \<phi> j'"
     and progress_le: "progress \<sigma> \<phi> j \<le> j"
@@ -37,9 +37,9 @@ locale monitor_progress = monitor_pre_progress +
     progress \<sigma> \<phi> (plen \<pi>) = progress \<sigma>' \<phi> (plen \<pi>)"
 begin
 
-definition verdicts :: "'a MFOTL.formula \<Rightarrow> 'a MFOTL.prefix \<Rightarrow> (nat \<times> 'a tuple) set" where
-  "verdicts \<phi> \<pi> = {(i, v). wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v \<and>
-    (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<and> MFOTL.sat \<sigma> (map the v) i \<phi>)}"
+definition verdicts :: "'a Formula.formula \<Rightarrow> 'a Formula.prefix \<Rightarrow> (nat \<times> 'a tuple) set" where
+  "verdicts \<phi> \<pi> = {(i, v). wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and>
+    (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma> (map the v) i \<phi>)}"
 
 lemma verdicts_mono: "\<pi> \<le> \<pi>' \<Longrightarrow> verdicts \<phi> \<pi> \<subseteq> verdicts \<phi> \<pi>'"
   unfolding verdicts_def
@@ -98,17 +98,17 @@ qed
 locale monitor_timed_progress = monitor_pre_progress +
   assumes progress_time_conv: "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i \<Longrightarrow> progress \<sigma> \<phi> j = progress \<sigma>' \<phi> j"
     and progress_sat_cong: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of \<pi> \<sigma>' \<Longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<Longrightarrow>
-      MFOTL.sat \<sigma> v i \<phi> \<longleftrightarrow> MFOTL.sat \<sigma>' v i \<phi>"
+      Formula.sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' v i \<phi>"
 begin
 
 lemma progress_map_conv: "progress (map_\<Gamma> f \<sigma>) \<phi> j = progress (map_\<Gamma> g \<sigma>) \<phi> j"
   by (auto intro: progress_time_conv)
 
-lemma progress_slice_conv: "progress (MFOTL.slice \<phi>' R \<sigma>) \<phi> j = progress (MFOTL.slice \<phi>' R' \<sigma>) \<phi> j"
-  unfolding MFOTL.slice_def using progress_map_conv .
+lemma progress_slice_conv: "progress (Formula.slice \<phi>' R \<sigma>) \<phi> j = progress (Formula.slice \<phi>' R' \<sigma>) \<phi> j"
+  unfolding Formula.slice_def using progress_map_conv .
 
-lemma progress_slice: "progress (MFOTL.slice \<phi> R \<sigma>) \<phi> j = progress \<sigma> \<phi> j"
-  using progress_map_conv[where g=id] by (simp add: MFOTL.slice_def)
+lemma progress_slice: "progress (Formula.slice \<phi> R \<sigma>) \<phi> j = progress \<sigma> \<phi> j"
+  using progress_map_conv[where g=id] by (simp add: Formula.slice_def)
 
 end
 
@@ -116,8 +116,8 @@ sublocale monitor_timed_progress \<subseteq> monitor_progress
   by (unfold_locales, auto intro: progress_time_conv \<tau>_prefix_conv)
 
 lemma (in monitor_timed_progress) verdicts_alt:
-  "verdicts \<phi> \<pi> = {(i, v). wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v \<and>
-    (\<exists>\<sigma>. prefix_of \<pi> \<sigma> \<and> i < progress \<sigma> \<phi> (plen \<pi>) \<and> MFOTL.sat \<sigma> (map the v) i \<phi>)}"
+  "verdicts \<phi> \<pi> = {(i, v). wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and>
+    (\<exists>\<sigma>. prefix_of \<pi> \<sigma> \<and> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma> (map the v) i \<phi>)}"
   unfolding verdicts_def
   using ex_prefix_of[of \<pi>]
   by (auto dest: progress_prefix_conv[of \<pi> _ _ \<phi>] elim!: progress_sat_cong[THEN iffD1, rotated -1])
@@ -126,46 +126,46 @@ sublocale monitor_timed_progress \<subseteq> slicable_monitor monitorable verdic
 proof
   fix S :: "'a list set" and v i \<phi> \<pi>
   assume *: "mem_restr S v"
-  show "((i, v) \<in> verdicts \<phi> (MFOTL.pslice \<phi> S \<pi>)) = ((i, v) \<in> verdicts \<phi> \<pi>)" (is "?L = ?R")
+  show "((i, v) \<in> verdicts \<phi> (Formula.pslice \<phi> S \<pi>)) = ((i, v) \<in> verdicts \<phi> \<pi>)" (is "?L = ?R")
   proof
     assume ?L
     with * show ?R unfolding verdicts_def
       by (auto simp: progress_slice fvi_less_nfv wf_tuple_def elim!: mem_restrE
         box_equals[OF sat_slice_iff sat_fv_cong sat_fv_cong, symmetric, THEN iffD1, rotated -1]
-        dest: spec[of _ "MFOTL.slice \<phi> S _"] prefix_of_pslice_slice)
+        dest: spec[of _ "Formula.slice \<phi> S _"] prefix_of_pslice_slice)
   next
     assume ?R
     with * show ?L unfolding verdicts_alt
       by (auto simp: progress_slice fvi_less_nfv wf_tuple_def elim!: mem_restrE
         box_equals[OF sat_slice_iff sat_fv_cong sat_fv_cong, symmetric, THEN iffD2, rotated -1]
-        intro: exI[of _ "MFOTL.slice \<phi> S _"] prefix_of_pslice_slice)
+        intro: exI[of _ "Formula.slice \<phi> S _"] prefix_of_pslice_slice)
   qed
 qed
 
 text \<open>Past-only Formulas.\<close>
 
-fun past_only :: "'a MFOTL.formula \<Rightarrow> bool" and past_only_regex :: "'a MFOTL.regex \<Rightarrow> bool" where
-  "past_only (MFOTL.Pred _ _) = True"
-| "past_only (MFOTL.Eq _ _) = True"
-| "past_only (MFOTL.Neg \<psi>) = past_only \<psi>"
-| "past_only (MFOTL.Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
-| "past_only (MFOTL.Exists \<psi>) = past_only \<psi>"
-| "past_only (MFOTL.Prev _ \<psi>) = past_only \<psi>"
-| "past_only (MFOTL.Next _ _) = False"
-| "past_only (MFOTL.Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
-| "past_only (MFOTL.Until \<alpha> _ \<beta>) = False"
-| "past_only (MFOTL.MatchP _ r) = past_only_regex r"
-| "past_only (MFOTL.MatchF _ _) = False"
-| "past_only_regex MFOTL.Wild = True"
-| "past_only_regex (MFOTL.Test \<phi>) = past_only \<phi>"
-| "past_only_regex (MFOTL.Plus r s) = (past_only_regex r \<and> past_only_regex s)"
-| "past_only_regex (MFOTL.Times r s) = (past_only_regex r \<and> past_only_regex s)"
-| "past_only_regex (MFOTL.Star r) = past_only_regex r"
+fun past_only :: "'a Formula.formula \<Rightarrow> bool" and past_only_regex :: "'a Formula.regex \<Rightarrow> bool" where
+  "past_only (Formula.Pred _ _) = True"
+| "past_only (Formula.Eq _ _) = True"
+| "past_only (Formula.Neg \<psi>) = past_only \<psi>"
+| "past_only (Formula.Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Formula.Exists \<psi>) = past_only \<psi>"
+| "past_only (Formula.Prev _ \<psi>) = past_only \<psi>"
+| "past_only (Formula.Next _ _) = False"
+| "past_only (Formula.Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Formula.Until \<alpha> _ \<beta>) = False"
+| "past_only (Formula.MatchP _ r) = past_only_regex r"
+| "past_only (Formula.MatchF _ _) = False"
+| "past_only_regex Formula.Wild = True"
+| "past_only_regex (Formula.Test \<phi>) = past_only \<phi>"
+| "past_only_regex (Formula.Plus r s) = (past_only_regex r \<and> past_only_regex s)"
+| "past_only_regex (Formula.Times r s) = (past_only_regex r \<and> past_only_regex s)"
+| "past_only_regex (Formula.Star r) = past_only_regex r"
 
 lemma past_only_sat:
   assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
-  shows "i < plen \<pi> \<Longrightarrow> past_only \<phi> \<Longrightarrow> MFOTL.sat \<sigma> v i \<phi> = MFOTL.sat \<sigma>' v i \<phi>"
-    and "j < plen \<pi> \<Longrightarrow> past_only_regex r \<Longrightarrow> MFOTL.match \<sigma> v r i j = MFOTL.match \<sigma>' v r i j"
+  shows "i < plen \<pi> \<Longrightarrow> past_only \<phi> \<Longrightarrow> Formula.sat \<sigma> v i \<phi> = Formula.sat \<sigma>' v i \<phi>"
+    and "j < plen \<pi> \<Longrightarrow> past_only_regex r \<Longrightarrow> Formula.match \<sigma> v r i j = Formula.match \<sigma>' v r i j"
 proof (induction \<phi> and r arbitrary: v i and v i j)
   case (Pred e ts)
   with \<Gamma>_prefix_conv[OF assms] show ?case by simp
@@ -188,13 +188,13 @@ next
   case (Star r)
   show ?case unfolding match.simps
   proof (rule iffI)
-    assume "(MFOTL.match \<sigma> v r)\<^sup>*\<^sup>* i j"
-    then show "(MFOTL.match \<sigma>' v r)\<^sup>*\<^sup>* i j" using Star.prems
+    assume "(Formula.match \<sigma> v r)\<^sup>*\<^sup>* i j"
+    then show "(Formula.match \<sigma>' v r)\<^sup>*\<^sup>* i j" using Star.prems
       by (induct rule: rtranclp.induct) (auto dest!: Star.IH[THEN iffD1, rotated -1]
         intro: rtranclp.intros(2)[rotated] le_less_trans match_le)
   next
-    assume "(MFOTL.match \<sigma>' v r)\<^sup>*\<^sup>* i j"
-    then show "(MFOTL.match \<sigma> v r)\<^sup>*\<^sup>* i j" using Star.prems
+    assume "(Formula.match \<sigma>' v r)\<^sup>*\<^sup>* i j"
+    then show "(Formula.match \<sigma> v r)\<^sup>*\<^sup>* i j" using Star.prems
       by (induct rule: rtranclp.induct) (auto dest!: Star.IH[THEN iffD2, rotated -1]
         intro: rtranclp.intros(2)[rotated] le_less_trans match_le)
   qed

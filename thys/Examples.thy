@@ -6,17 +6,17 @@ begin
 
 section \<open>Examples\<close>
 
-abbreviation "TT \<equiv> MFOTL.Eq (MFOTL.Const ''_'') (MFOTL.Const ''_'')"
-abbreviation "Eventually I \<psi> \<equiv> MFOTL.Until TT I \<psi>"
+abbreviation "TT \<equiv> Formula.Eq (Formula.Const ''_'') (Formula.Const ''_'')"
+abbreviation "Eventually I \<psi> \<equiv> Formula.Until TT I \<psi>"
 
-definition "\<phi>\<^sub>e\<^sub>x = MFOTL.And_Not (MFOTL.Pred ''A'' [MFOTL.Var 0])
-  (Eventually (interval 1 2) (MFOTL.Exists (MFOTL.Pred ''B'' [MFOTL.Var 1, MFOTL.Var 0])))"
-
+definition "\<phi>\<^sub>e\<^sub>x = Formula.And_Not (Formula.Pred ''A'' [Formula.Var 0])
+  (Eventually (interval 1 2) (Formula.Exists (Formula.Pred ''B'' [Formula.Var 1, Formula.Var 0])))"
+(*
 lemma "mmonitorable \<phi>\<^sub>e\<^sub>x" by eval
-
+*)
 text \<open>Offline monitoring:\<close>
 
-lift_definition \<pi>\<^sub>e\<^sub>x :: "string MFOTL.prefix" is
+lift_definition \<pi>\<^sub>e\<^sub>x :: "string Formula.prefix" is
   "[ ({(''A'', [''d'']), (''A'', [''e''])}, 1)
    , ({(''B'', [''d'', ''f''])}, 2)
    , ({(''B'', [''e'', ''f''])}, 5)
@@ -35,36 +35,35 @@ lemma "fst m1 = {}" by eval
 lemma "fst m2 = {}" by eval
 lemma "fst m3 = {(0, [Some ''e''])}" by eval
 
-
 text \<open>Operation of the monitor:\<close>
 
-lemma "minit \<phi>\<^sub>e\<^sub>x = \<lparr>
+value "minit \<phi>\<^sub>e\<^sub>x"
+value "\<lparr>
   mstate_i = 0,
   mstate_m =
-    MAnd (MPred ''A'' [MFOTL.Var 0]) False
-     (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [MFOTL.Var 1, MFOTL.Var 0]))
+    MAnd (MPred ''A'' [Formula.Var 0]) False
+     (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
        ([], []) [] [])
      ([], []),
-  mstate_n = 1\<rparr>"
-  by eval
+  mstate_n = 1\<rparr> :: char list mstate"
 
-lemma "mstate_m (snd m1) = MAnd (MPred ''A'' [MFOTL.Var 0]) False
-  (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [MFOTL.Var 1, MFOTL.Var 0]))
+value "mstate_m (snd m1)"
+value "MAnd (MPred ''A'' [Formula.Var 0]) False
+  (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
     ([], []) [] [(1, {[None]}, {})])
-  ([{[Some ''d''], [Some ''e'']}], [])"
-  by eval
+  ([{[Some ''d''], [Some ''e'']}], []) :: char list mformula"
 
-lemma "mstate_m (snd m2) = MAnd (MPred ''A'' [MFOTL.Var 0]) False
-  (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [MFOTL.Var 1, MFOTL.Var 0]))
+value "mstate_m (snd m2)"
+value "MAnd (MPred ''A'' [Formula.Var 0]) False
+  (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
    ([], []) [] [(1, {[None]}, {[Some ''d'']}), (2, {[None]}, {})])
-  ([{[Some ''d''], [Some ''e'']}, {}], [])"
-  by eval
+  ([{[Some ''d''], [Some ''e'']}, {}], []) :: char list mformula"
 
-lemma "mstate_m (snd m3) = MAnd (MPred ''A'' [MFOTL.Var 0]) False
-  (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [MFOTL.Var 1, MFOTL.Var 0]))
+value "mstate_m (snd m3)"
+value "MAnd (MPred ''A'' [Formula.Var 0]) False
+  (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
     ([], []) [] [(5, {[None]}, {})])
-  ([{}], [])"
-  by eval
+  ([{}], []) :: char list mformula"
 
 (*<*)
 end

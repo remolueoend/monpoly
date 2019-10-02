@@ -1,5 +1,5 @@
 (*<*)
-theory MFOTL
+theory Formula
   imports Interval Trace Table "HOL-Library.Lattice_Syntax"
 begin
 (*>*)
@@ -590,12 +590,12 @@ qed auto
 lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
   by blast
 
-primrec atms :: "'a MFOTL.regex \<Rightarrow> 'a MFOTL.formula set" where
-  "atms (MFOTL.Test \<phi>) = (if safe_formula \<phi> then {\<phi>} else case \<phi> of MFOTL.Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {})"
-| "atms MFOTL.Wild = {}"
-| "atms (MFOTL.Plus r s) = atms r \<union> atms s"
-| "atms (MFOTL.Times r s) = atms r \<union> atms s"
-| "atms (MFOTL.Star r) = atms r"
+primrec atms :: "'a regex \<Rightarrow> 'a formula set" where
+  "atms (Test \<phi>) = (if safe_formula \<phi> then {\<phi>} else case \<phi> of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {})"
+| "atms Wild = {}"
+| "atms (Plus r s) = atms r \<union> atms s"
+| "atms (Times r s) = atms r \<union> atms s"
+| "atms (Star r) = atms r"
 
 lemma finite_atms[simp]: "finite (atms r)"
   by (induct r) (auto split: formula.splits)
@@ -680,7 +680,7 @@ lemma safe_formula_induct[consumes 1]:
     and "\<And>I r. safe_regex Past Safe r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
     and "\<And>I r. safe_regex Future Safe r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
   shows "P \<phi>"
-  by (rule safe_formula_regex_induct[where r = MFOTL.Wild and Q = "\<lambda>b g r. safe_regex b g r \<and> (\<forall>\<phi> \<in> atms r. P \<phi>)"])
+  by (rule safe_formula_regex_induct[where r = Wild and Q = "\<lambda>b g r. safe_regex b g r \<and> (\<forall>\<phi> \<in> atms r. P \<phi>)"])
     (auto simp: assms split: if_splits modality.splits)
 
 lemma safe_regex_induct[consumes 1, case_names Wild Test Plus Times Star]:
@@ -694,8 +694,8 @@ lemma safe_regex_induct[consumes 1, case_names Wild Test Plus Times Star]:
       safe_regex b (case b of Future \<Rightarrow> g | Past \<Rightarrow> Unsafe) s \<Longrightarrow> Q b (case b of Future \<Rightarrow> g | Past \<Rightarrow> Unsafe) s \<Longrightarrow> Q b g (Times r s)"
     and "\<And>b g r. g = Unsafe \<Longrightarrow> safe_regex b g r \<Longrightarrow> Q b g r \<Longrightarrow> Q b g (Star r)"
   shows "Q b g r"
-proof (rule safe_formula_regex_induct[where \<phi> = MFOTL.TT and P = safe_formula])
-  fix \<phi> :: "'a MFOTL.formula"
+proof (rule safe_formula_regex_induct[where \<phi> = TT and P = safe_formula])
+  fix \<phi> :: "'a formula"
   assume "\<forall>t1 t2. \<phi> \<noteq> Eq t1 t2"
     "\<forall>\<psi>\<^sub>1 \<psi>\<^sub>2. \<not> (\<phi> = Or (Neg \<psi>\<^sub>1) \<psi>\<^sub>2 \<and> safe_formula \<psi>\<^sub>2 \<and> fv \<psi>\<^sub>2 \<subseteq> fv \<psi>\<^sub>1)"
     "\<forall>\<psi>\<^sub>1 \<psi>\<^sub>2 \<psi>\<^sub>2'. \<not> (\<phi> = Or (Neg \<psi>\<^sub>1) \<psi>\<^sub>2 \<and> \<not> (safe_formula \<psi>\<^sub>2 \<and> fv \<psi>\<^sub>2 \<subseteq> fv \<psi>\<^sub>1) \<and> \<psi>\<^sub>2 = Neg \<psi>\<^sub>2')"
