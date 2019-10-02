@@ -88,6 +88,15 @@ lemma LPDs_code[code]: "LPDs r = LPDs_aux {r}"
   by (rule saturate_commute[where C="LPDs r"])
      (auto simp: mono_def subset_singleton_iff LPDs_refl LPDs_trans finite_LPDs)
 
+lemma is_empty_table_unfold [code_unfold]:
+  "X = empty_table \<longleftrightarrow> Set.is_empty X"
+  "empty_table = X \<longleftrightarrow> Set.is_empty X"
+  "Cardinality.eq_set X empty_table \<longleftrightarrow> Set.is_empty X"
+  "Cardinality.eq_set empty_table X \<longleftrightarrow> Set.is_empty X"
+  "set_eq X empty_table \<longleftrightarrow> Set.is_empty X"
+  "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
+  unfolding set_eq_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
+
 export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
   nat_of_integer integer_of_nat enat literal.explode db_code set interval RBT_set verdict_code
   Formula.Var Formula.Const
