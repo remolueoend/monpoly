@@ -2,6 +2,9 @@ BIN = ~/bin/
 VER = 1.1.7
 USERNAME ?= $(shell bash -c 'read -r -p "Username: " uuu; echo $$uuu')
 IMAGENAME ?= $(shell bash -c 'read -r -p "Image name: " iii; echo $$iii')
+ISABELLE=isabelle
+export ISABELLE
+
 
 all: monpoly
 
@@ -13,6 +16,14 @@ monpoly:
 	cd src && $(MAKE) monpoly
 	cp src/monpoly monpoly
 
+verimon: isabelle clean
+	cd src && $(MAKE) monpoly
+	cp src/monpoly monpoly
+
+isabelle: 
+	cd thys && $(MAKE) verimon 
+	cp thys/verified.ocaml src/verified.ml
+	
 merger: 
 	cd tools && $(MAKE) merger
 
