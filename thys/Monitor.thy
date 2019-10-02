@@ -2159,33 +2159,27 @@ proof -
       using safe RPDs_safe RPDs_safe_fv_regex mr from_mregex_to_mregex RPDs_ok to_mregex_ok RPDs_trans
       by fastforce+
   } note * = this
-  have in_aux0_1: "(t, X) \<in> set aux0 \<Longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> ne \<and> \<tau> \<sigma> ne - t \<le> right I \<and>
+  have **: "\<tau> \<sigma> ne - (\<tau> \<sigma> i + \<tau> \<sigma> ne - \<tau> \<sigma> (ne - Suc 0)) = \<tau> \<sigma> (ne - Suc 0) - \<tau> \<sigma> i" for i
+    by (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self le_add2 order_trans)
+  have ***: "\<tau> \<sigma> i = \<tau> \<sigma> ne"
+    if  "\<tau> \<sigma> ne \<le> \<tau> \<sigma> i" "\<tau> \<sigma> i \<le> \<tau> \<sigma> (ne - Suc 0)" "ne > 0" for i
+    by (metis (no_types, lifting) Suc_pred \<tau>_mono diff_le_self le_\<tau>_less le_antisym not_less_eq that)
+  then have in_aux0_1: "(t, X) \<in> set aux0 \<Longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> ne \<and> \<tau> \<sigma> ne - t \<le> right I \<and>
       (\<exists>i. \<tau> \<sigma> i = t) \<and>
       (\<forall>ms\<in>RPDs mr. qtable n (fv_regex r) (mem_restr R) (\<lambda>v. MFOTL.sat \<sigma> (map the v) ne
          (MFOTL.MatchP (point (\<tau> \<sigma> ne - t)) (from_mregex ms \<phi>s))) (lookup X ms))" for t X
     unfolding aux0_def using safe mr mrs
-    apply (subst lookup_default_def)
-    apply (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def finite_RPDs * RPDs_trans
-        intro!: qtable_union[OF qtable_r\<delta>[OF _ _ qtables] qtable_safe_r\<epsilon>[OF _ _ _ qtables],
-          of ms "fv_regex r" "\<lambda>v r. MFOTL.sat \<sigma> v (ne - Suc 0) (formula.MatchP (point 0) r)" _ ms for ms]
+    by (subst lookup_default_def)
+      (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def finite_RPDs * ** RPDs_trans diff_le_mono2
+        intro!: sat_MatchP_rec["of" \<sigma> _ ne, THEN iffD2]
+        qtable_union[OF qtable_r\<delta>[OF _ _ qtables] qtable_safe_r\<epsilon>[OF _ _ _ qtables],
+          of ms "fv_regex r" "\<lambda>v r. MFOTL.sat \<sigma> v (ne - Suc 0) (MFOTL.MatchP (point 0) r)" _ ms for ms]
         qtable_cong[OF qtable_r\<delta>[OF _ _ qtables],
-          of ms "fv_regex r" "\<lambda>v r. MFOTL.sat \<sigma> v (ne - Suc 0) (formula.MatchP (point (\<tau> \<sigma> (ne - Suc 0) - \<tau> \<sigma> i)) r)" for ms i]
+          of ms "fv_regex r" "\<lambda>v r. MFOTL.sat \<sigma> v (ne - Suc 0) (MFOTL.MatchP (point (\<tau> \<sigma> (ne - Suc 0) - \<tau> \<sigma> i)) r)"
+            _ _  "(\<lambda>v. MFOTL.sat \<sigma> (map the v) ne (MFOTL.MatchP (point (\<tau> \<sigma> ne - \<tau> \<sigma> i))  (from_mregex ms \<phi>s)))" for ms i]
         dest!: assms(1)[unfolded wf_matchP_aux_def, THEN conjunct2, THEN conjunct1, rule_format]
-        elim!: bspec split: option.splits if_splits)
-          apply (metis (no_types, hide_lams) Suc_leD \<tau>_mono diff_Suc_Suc dual_order.trans gr0_conv_Suc minus_nat.diff_0 order_refl)
-
-         apply (auto simp: sat_MatchP_rec[of \<sigma> _ ne])
-        apply (erule bspec)
-        apply (simp add: * RPDs_trans)
-       apply (auto) []
-       apply (drule bspec, assumption) back
-       apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self less_le_trans not_add_less2 not_le)
-      apply (drule bspec, assumption) back
-      apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self less_le_trans not_add_less2 not_le)
-     apply (metis (no_types, lifting) Suc_pred \<tau>_mono diff_le_self le_\<tau>_less le_antisym not_less_eq)
-    apply (erule bexI[rotated])
-    apply (metis (no_types, lifting) Nat.diff_diff_right \<tau>_mono add.commute add_diff_cancel_left diff_le_self less_le_trans not_add_less2 not_le)
-    done
+          sat_MatchP_rec["of" \<sigma> _ ne, THEN iffD1]
+        elim!: bspec order.trans[OF _ \<tau>_mono] bexI[rotated] split: option.splits if_splits) (* slow 7 sec *)
   then have in_aux0_le_\<tau>: "(t, X) \<in> set aux0 \<Longrightarrow> t \<le> \<tau> \<sigma> ne" for t X
     by (meson \<tau>_mono diff_le_self le_trans)
   have in_aux0_2: "ne \<noteq> 0 \<Longrightarrow> t \<le> \<tau> \<sigma> (ne-1) \<Longrightarrow> \<tau> \<sigma> ne - t \<le> right I \<Longrightarrow> \<exists>i. \<tau> \<sigma> i = t \<Longrightarrow>
