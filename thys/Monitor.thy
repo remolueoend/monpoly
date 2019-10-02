@@ -654,7 +654,7 @@ definition update_since :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rig
       | x # aux' \<Rightarrow> (if fst x = nt then (fst x, snd x \<union> rel2) # aux' else (nt, rel2) # x # aux'))
     in (foldr (\<union>) [rel. (t, rel) \<leftarrow> aux, nt - t \<le> right I, left I \<le> nt - t] {}, filter (\<lambda>(t, _). enat (nt - t) \<le> right I) aux))"
 
-abbreviation "lookup \<equiv> Mapping.lookup_default empty_table"
+definition "lookup = Mapping.lookup_default empty_table"
 
 fun unsafe_\<epsilon> where
   "unsafe_\<epsilon> guard \<phi>s MWild = empty_table"
@@ -699,15 +699,24 @@ fun l\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table)
 | "l\<delta> \<kappa> X \<phi>s (MTimes r s) = l\<delta> (\<lambda>t. \<kappa> (MTimes t s)) X \<phi>s r \<union> unsafe_\<epsilon> (l\<delta> \<kappa> X \<phi>s s) \<phi>s r"
 | "l\<delta> \<kappa> X \<phi>s (MStar r) = l\<delta> (\<lambda>t. \<kappa> (MTimes t (MStar r))) X \<phi>s r"
 
+lift_definition tabulate :: "'a list \<Rightarrow> ('a \<Rightarrow> 'b table) \<Rightarrow> ('a, 'b table) mapping"
+  is "\<lambda>ks f. (map_of (List.map_filter (\<lambda>k. let fk = f k in if fk = empty_table then None else Some (k, fk)) ks))" .
+
+lemma lookup_tabulate: 
+  "distinct xs \<Longrightarrow> lookup (tabulate xs f) x = (if x \<in> set xs then f x else empty_table)"
+  unfolding lookup_default_def lookup_def
+  by transfer (auto simp: Let_def map_filter_def map_of_eq_None_iff o_def image_image dest!: map_of_SomeD
+    split: if_splits option.splits)
+
 definition update_matchP :: "nat \<Rightarrow> \<I> \<Rightarrow> mregex \<Rightarrow> mregex list \<Rightarrow> 'a table list \<Rightarrow> ts \<Rightarrow>
   'a mr\<delta>aux \<Rightarrow> 'a table \<times> 'a mr\<delta>aux" where
   "update_matchP n I mr mrs rels nt aux =
-    (let aux = (case [(t, Mapping.tabulate mrs (\<lambda>mr. 
+    (let aux = (case [(t, tabulate mrs (\<lambda>mr. 
         r\<delta> id rel rels mr \<union> (if t = nt then safe_r\<epsilon> n rels mr else {}))). 
       (t, rel) \<leftarrow> aux, enat (nt - t) \<le> right I]
-      of [] \<Rightarrow> [(nt, Mapping.tabulate mrs (safe_r\<epsilon> n rels))]
+      of [] \<Rightarrow> [(nt, tabulate mrs (safe_r\<epsilon> n rels))]
       | x # aux' \<Rightarrow> (if fst x = nt then x # aux'
-                     else (nt, Mapping.tabulate mrs (safe_r\<epsilon> n rels)) # x # aux'))
+                     else (nt, tabulate mrs (safe_r\<epsilon> n rels)) # x # aux'))
     in (foldr (\<union>) [lookup rel mr. (t, rel) \<leftarrow> aux, left I \<le> nt - t] {}, aux))"
 
 definition update_until :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> ts \<Rightarrow> 'a muaux \<Rightarrow> 'a muaux" where
@@ -723,12 +732,12 @@ fun eval_until :: "\<I> \<Rightarrow> ts \<Rightarrow> 'a muaux \<Rightarrow> 'a
 
 definition update_matchF_base where
   "update_matchF_base n I mr mrs rels nt =
-     (let X = Mapping.tabulate mrs (safe_l\<epsilon> n rels)
+     (let X = tabulate mrs (safe_l\<epsilon> n rels)
      in ([(nt, rels, if left I = 0 then lookup X mr else empty_table)], X))"
 
 definition update_matchF_step where
   "update_matchF_step I mr mrs nt = (\<lambda>(t, rels', rel) (aux', X).
-     (let Y = Mapping.tabulate mrs (l\<delta> id X rels')
+     (let Y = tabulate mrs (l\<delta> id X rels')
      in ((t, rels', if mem (nt - t) I then rel \<union> lookup Y mr else rel) # aux', Y)))"
 
 definition update_matchF :: "nat \<Rightarrow> \<I> \<Rightarrow> mregex \<Rightarrow> mregex list \<Rightarrow> 'a table list \<Rightarrow> ts \<Rightarrow> 'a ml\<delta>aux \<Rightarrow> 'a ml\<delta>aux" where
@@ -748,7 +757,7 @@ primrec map_split where
 
 primrec meval :: "nat \<Rightarrow> ts \<Rightarrow> 'a Formula.database \<Rightarrow> 'a mformula \<Rightarrow> 'a table list \<times> 'a mformula" where
   "meval n t db (MRel rel) = ([rel], MRel rel)"
-| "meval n t db (MPred e ts) = ([(\<lambda>f. tabulate f 0 n) ` Option.these
+| "meval n t db (MPred e ts) = ([(\<lambda>f. Table.tabulate f 0 n) ` Option.these
     (match ts ` (\<Union>(e', x)\<in>db. if e = e' then {x} else {}))], MPred e ts)"
 | "meval n t db (MAnd \<phi> pos \<psi> buf) =
     (let (xs, \<phi>) = meval n t db \<phi>; (ys, \<psi>) = meval n t db \<psi>;
@@ -1289,7 +1298,7 @@ definition wf_matchP_aux :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a
       (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
       (\<forall>ms \<in> RPDs mr. qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) (ne-1)
          (Formula.MatchP (point (\<tau> \<sigma> (ne-1) - t)) (from_mregex ms \<phi>s)))
-         (Mapping.lookup_default empty_table X ms)))) \<and>
+         (lookup X ms)))) \<and>
     (\<forall>t. ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne-1) \<and> \<tau> \<sigma> (ne-1) - t \<le> right I \<and> (\<exists>i. \<tau> \<sigma> i = t) \<longrightarrow>
       (\<exists>X. (t, X) \<in> set aux))"
 
@@ -1492,7 +1501,8 @@ lemma wf_mstate_minit: "safe_formula \<phi> \<Longrightarrow> wf_mstate \<phi> p
 
 subsubsection \<open>Evaluation\<close>
 
-lemma match_wf_tuple: "Some f = match ts xs \<Longrightarrow> wf_tuple n (\<Union>t\<in>set ts. Formula.fv_trm t) (tabulate f 0 n)"
+lemma match_wf_tuple: "Some f = match ts xs \<Longrightarrow>
+  wf_tuple n (\<Union>t\<in>set ts. Formula.fv_trm t) (Table.tabulate f 0 n)"
   by (induction ts xs arbitrary: f rule: match.induct)
     (fastforce simp: wf_tuple_def split: if_splits option.splits)+
 
@@ -1503,18 +1513,18 @@ lemma match_fvi_trm_Some: "Some f = match ts xs \<Longrightarrow> t \<in> set ts
   by (induction ts xs arbitrary: f rule: match.induct) (auto split: if_splits option.splits)
 
 lemma match_eval_trm: "\<forall>t\<in>set ts. \<forall>i\<in>Formula.fv_trm t. i < n \<Longrightarrow> Some f = match ts xs \<Longrightarrow>
-    map (Formula.eval_trm (tabulate (\<lambda>i. the (f i)) 0 n)) ts = xs"
+    map (Formula.eval_trm (Table.tabulate (\<lambda>i. the (f i)) 0 n)) ts = xs"
 proof (induction ts xs arbitrary: f rule: match.induct)
   case (3 x ts y ys)
   from 3(1)[symmetric] 3(2,3) show ?case
     by (auto 0 3 dest: match_fvi_trm_Some sym split: option.splits if_splits intro!: eval_trm_fv_cong)
 qed (auto split: if_splits)
 
-lemma wf_tuple_tabulate_Some: "wf_tuple n A (tabulate f 0 n) \<Longrightarrow> x \<in> A \<Longrightarrow> x < n \<Longrightarrow> \<exists>y. f x = Some y"
+lemma wf_tuple_tabulate_Some: "wf_tuple n A (Table.tabulate f 0 n) \<Longrightarrow> x \<in> A \<Longrightarrow> x < n \<Longrightarrow> \<exists>y. f x = Some y"
   unfolding wf_tuple_def by auto
 
 lemma ex_match: "wf_tuple n (\<Union>t\<in>set ts. Formula.fv_trm t) v \<Longrightarrow> \<forall>t\<in>set ts. \<forall>x\<in>Formula.fv_trm t. x < n \<Longrightarrow>
-    \<exists>f. match ts (map (Formula.eval_trm (map the v)) ts) = Some f \<and> v = tabulate f 0 n"
+    \<exists>f. match ts (map (Formula.eval_trm (map the v)) ts) = Some f \<and> v = Table.tabulate f 0 n"
 proof (induction ts "map (Formula.eval_trm (map the v)) ts" arbitrary: v rule: match.induct)
   case (3 x ts y ys)
   then show ?case
@@ -1528,7 +1538,7 @@ proof (induction ts "map (Formula.eval_trm (map the v)) ts" arbitrary: v rule: m
       *: "map (Formula.eval_trm (map the v)) ts = map (Formula.eval_trm (map the (v[x := None]))) ts"
       by (auto simp: wf_tuple_def nth_list_update intro!: eval_trm_fv_cong)
     from False 3(2-4) obtain f where
-      "match ts (map (Formula.eval_trm (map the v)) ts) = Some f" "v[x := None] = tabulate f 0 n"
+      "match ts (map (Formula.eval_trm (map the v)) ts) = Some f" "v[x := None] = Table.tabulate f 0 n"
       unfolding *
       by (atomize_elim, intro 3(1)[of "v[x := None]"])
         (auto simp: wf_tuple_def nth_list_update intro!: eval_trm_fv_cong)
@@ -2143,7 +2153,7 @@ lemma update_matchP:
     and "qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) ne (Formula.MatchP I r)) rel"
 proof -
   let ?wf_tuple = "\<lambda>v. wf_tuple n (Formula.fv_regex r) v"
-  let ?update = "\<lambda>rel t. Mapping.tabulate mrs (\<lambda>mr. 
+  let ?update = "\<lambda>rel t. tabulate mrs (\<lambda>mr. 
     r\<delta> id rel rels mr \<union> (if t = \<tau> \<sigma> ne then safe_r\<epsilon> n rels mr else {}))"
   note sat.simps[simp del]
 
@@ -2169,8 +2179,7 @@ proof -
       (\<forall>ms\<in>RPDs mr. qtable n (fv_regex r) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) ne
          (Formula.MatchP (point (\<tau> \<sigma> ne - t)) (from_mregex ms \<phi>s))) (lookup X ms))" for t X
     unfolding aux0_def using safe mr mrs
-    by (subst lookup_default_def)
-      (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def finite_RPDs * ** RPDs_trans diff_le_mono2
+    by (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def finite_RPDs * ** RPDs_trans diff_le_mono2
         intro!: sat_MatchP_rec["of" \<sigma> _ ne, THEN iffD2]
         qtable_union[OF qtable_r\<delta>[OF _ _ qtables] qtable_safe_r\<epsilon>[OF _ _ _ qtables],
           of ms "fv_regex r" "\<lambda>v r. Formula.sat \<sigma> v (ne - Suc 0) (Formula.MatchP (point 0) r)" _ ms for ms]
@@ -2200,9 +2209,9 @@ proof -
     using in_aux0_2 by (cases "ne = 0") (auto)
 
   have aux'_eq: "aux' = (case aux0 of
-      [] \<Rightarrow> [(\<tau> \<sigma> ne, Mapping.tabulate mrs (safe_r\<epsilon> n rels))]
+      [] \<Rightarrow> [(\<tau> \<sigma> ne, tabulate mrs (safe_r\<epsilon> n rels))]
     | x # aux' \<Rightarrow> (if fst x = \<tau> \<sigma> ne then x # aux'
-       else (\<tau> \<sigma> ne, Mapping.tabulate mrs (safe_r\<epsilon> n rels)) # x # aux'))"
+       else (\<tau> \<sigma> ne, tabulate mrs (safe_r\<epsilon> n rels)) # x # aux'))"
     using result_eq unfolding aux0_def update_matchP_def Let_def by simp
   have sorted_aux': "sorted_wrt (\<lambda>x y. fst x > fst y) aux'"
     unfolding aux'_eq
@@ -2217,7 +2226,7 @@ proof -
     with aux' show ?thesis 
       unfolding aux'_eq using safe mrs qtables aux0_Nil *
       by (auto simp: zero_enat_def[symmetric] sat_MatchP_rec[where i=ne]
-          lookup_default_def lookup_tabulate finite_RPDs split: option.splits
+          lookup_tabulate finite_RPDs split: option.splits
           intro!: qtable_cong[OF qtable_safe_r\<epsilon>]
           dest: spec[of _ "\<tau> \<sigma> (ne-1)"])
   next
@@ -2239,12 +2248,12 @@ proof -
           by auto
       next
         case False
-        with aux' Cons t have "X = Mapping.tabulate mrs (safe_r\<epsilon> n rels)"
+        with aux' Cons t have "X = tabulate mrs (safe_r\<epsilon> n rels)"
           unfolding aux'_eq using sorted_aux0 in_aux0_le_\<tau>[of "fst a" "snd a"] by auto
         with aux' Cons t False show ?thesis
           unfolding aux'_eq using safe mrs qtables * in_aux0_2[of "\<tau> \<sigma> (ne-1)"] in_aux0_le_\<tau>[of "fst a" "snd a"] sorted_aux0
           by (auto simp: sat_MatchP_rec[where i=ne] sat.simps(3) zero_enat_def[symmetric] enat_0_iff not_le
-              lookup_default_def lookup_tabulate finite_RPDs split: option.splits
+              lookup_tabulate finite_RPDs split: option.splits
               intro!: qtable_cong[OF qtable_safe_r\<epsilon>] dest!: le_\<tau>_less meta_mp)
       qed
     next
@@ -2381,7 +2390,7 @@ proof -
   unfolding wf_matchF_invar_def wf_matchF_aux_def update_matchF_base_def mr prod.case Let_def mrs
   using safe
   by (auto simp: * from_mregex qtables qtable_empty_iff zero_enat_def[symmetric]
-    lookup_tabulate lookup_default_def finite_LPDs eps_match less_Suc_eq LPDs_refl
+    lookup_tabulate finite_LPDs eps_match less_Suc_eq LPDs_refl
     intro!: qtable_cong[OF qtable_safe_l\<epsilon>[where \<phi>s=\<phi>s]] intro: qtables exI[of _ j]
     split: option.splits)
 qed
@@ -2419,8 +2428,8 @@ proof -
         Q="\<lambda>v r. Formula.match \<sigma> v r (Suc i) (i + length aux)", OF _ _ qtables]])
         (auto simp: wf_matchF_invar_def * LPDs_trans lpd_match[of i] elim!: bspec)
   } note l\<delta> = this
-  have "lookup (Mapping.tabulate mrs f) ms = f ms" if "ms \<in> LPDs mr" for ms and f :: "mregex \<Rightarrow> 'a table"
-    using that mrs  by (fastforce simp: lookup_default_def lookup_tabulate finite_LPDs split: option.splits)+
+  have "lookup (tabulate mrs f) ms = f ms" if "ms \<in> LPDs mr" for ms and f :: "mregex \<Rightarrow> 'a table"
+    using that mrs  by (fastforce simp: lookup_tabulate finite_LPDs split: option.splits)+
   then show ?thesis
     using wf mr mrs entry nt LPDs_trans
     by (auto 0 3 simp: Let_def wf_matchF_invar_def update_matchF_step_def wf_matchF_aux_def mr * LPDs_refl
