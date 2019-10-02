@@ -2410,53 +2410,25 @@ proof -
       using safe LPDs_safe LPDs_safe_fv_regex mr from_mregex_to_mregex LPDs_ok to_mregex_ok LPDs_trans
       by fastforce+
   } note * = this
-  show ?thesis
-    using wf mr mrs entry nt
-    apply (cases st)
-    apply hypsubst
-    unfolding wf_matchF_invar_def update_matchF_step_def Let_def mr prod.case
-    apply safe
-     apply (subst lookup_default_def)
-     apply (auto simp: Let_def wf_matchF_aux_def mr * LPDs_refl
-        list_all2_Cons1 append_eq_Cons_conv upt_eq_Cons_conv Suc_le_eq qtables
-        lookup_tabulate finite_LPDs id_def
-        split: if_splits prod.splits) []
-       apply (rule qtable_union[OF rel qtable_l\<delta>[where \<phi>s=\<phi>s]])
-           apply (simp_all add: * LPDs_refl)
-         apply (rule qtables)
-        apply (rule ballI)
-        apply (erule bspec)
-    using LPDs_trans LPDs_refl apply blast
-       apply safe
-    subgoal for aux X v j
-      apply (auto simp add: less_Suc_eq from_mregex)
-      apply (subst (asm) (3) lpd_match)
-       apply auto
-      done
-    subgoal for aux X v j
-      apply (auto simp add: from_mregex)
-      done
-    subgoal for aux X v r
-      apply (auto simp add: from_mregex intro!: exI[of _ "i + length aux"])
-      apply (subst lpd_match)
-       apply auto
-      done
-      apply (rule qtable_cong[OF rel]; auto simp: less_Suc_eq)
-     apply (rule qtable_cong[OF rel]; auto simp: less_Suc_eq)
-    apply (subst lookup_default_def)
-    apply (auto simp: Let_def wf_matchF_aux_def mr * LPDs_refl
-        list_all2_Cons1 append_eq_Cons_conv upt_eq_Cons_conv Suc_le_eq qtables
-        lookup_tabulate finite_LPDs id_def
-        split: if_splits prod.splits) []
-    apply (rule qtable_cong[OF qtable_l\<delta>[where \<phi>s=\<phi>s]])
-         apply (simp_all add: *)
-      apply (rule qtables)
-     apply (rule ballI)
-     apply (erule bspec)
-    using LPDs_trans LPDs_refl apply blast
-    apply (subst (2) lpd_match)
-     apply auto
-    done
+  { fix aux X ms
+    assume "st = (aux, X)" "ms \<in> LPDs mr"
+    with wf mr have "qtable n (fv_regex r) (mem_restr R)
+      (\<lambda>v. MFOTL.match \<sigma> (map the v) (from_mregex ms \<phi>s) i (i + length aux))
+      (l\<delta> (\<lambda>x. x) X rels ms)"
+      by (intro qtable_cong[OF qtable_l\<delta>[where \<phi>s=\<phi>s and A="fv_regex r" and
+        Q="\<lambda>v r. MFOTL.match \<sigma> v r (Suc i) (i + length aux)", OF _ _ qtables]])
+        (auto simp: wf_matchF_invar_def * LPDs_trans lpd_match[of i] elim!: bspec)
+  } note l\<delta> = this
+  have "lookup (Mapping.tabulate mrs f) ms = f ms" if "ms \<in> LPDs mr" for ms and f :: "mregex \<Rightarrow> 'a table"
+    using that mrs  by (fastforce simp: lookup_default_def lookup_tabulate finite_LPDs split: option.splits)+
+  then show ?thesis
+    using wf mr mrs entry nt LPDs_trans
+    by (auto 0 3 simp: Let_def wf_matchF_invar_def update_matchF_step_def wf_matchF_aux_def mr * LPDs_refl
+      list_all2_Cons1 append_eq_Cons_conv upt_eq_Cons_conv Suc_le_eq qtables
+      lookup_tabulate finite_LPDs id_def l\<delta> from_mregex less_Suc_eq
+      intro!: qtable_union[OF rel l\<delta>] qtable_cong[OF rel]
+      intro: exI[of _ "i + length _"]
+      split: if_splits prod.splits)
 qed
 
 lemma wf_update_matchF_invar:
