@@ -13,6 +13,7 @@ derive (rbt) set_impl MFOTL.trm
 derive (eq) ceq Monitor.mregex
 derive ccompare Monitor.mregex
 derive (rbt) set_impl Monitor.mregex
+derive (rbt) mapping_impl Monitor.mregex
 derive (no) cenum Monitor.mregex
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -35,7 +36,7 @@ lemma meval_MPred'': "meval n t db (MPred e ts) = ([
   unfolding meval_MPred' these_UNION o_def prod.case_distrib[of Option.these]
   by (auto simp: Option.these_def map_option_case image_iff split: if_splits option.splits)
 
-lemmas meval_code[code] = meval.simps(1) meval_MPred'' meval.simps(3-9)
+lemmas meval_code[code] = meval.simps(1) meval_MPred'' meval.simps(3-12)
 
 definition db_code :: "(char list \<times> 'a list) list \<Rightarrow> (char list \<times> 'a list) set" where
   "db_code = set"
