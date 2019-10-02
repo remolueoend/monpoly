@@ -2514,7 +2514,7 @@ and fvi_regex (_A1, _A2)
 
 let rec semilattice_set_apply (Abs_semilattice_set x) = x;;
 
-let rec is_empty _A
+let rec is_emptya _A
   xa = (match impl_ofa _A xa with Empty -> true
          | Branch (_, _, _, _, _) -> false);;
 
@@ -2547,7 +2547,7 @@ let rec set_fold1 (_A1, _A2, _A3)
           failwith "set_fold1 RBT_set: ccompare = None"
             (fun _ -> set_fold1 (_A1, _A2, _A3) f (RBT_set rbt))
         | Some _ ->
-          (if is_empty _A2 rbt
+          (if is_emptya _A2 rbt
             then failwith "set_fold1 RBT_set: empty set"
                    (fun _ -> set_fold1 (_A1, _A2, _A3) f (RBT_set rbt))
             else fold1 _A2 (semilattice_set_apply f) rbt))
@@ -2663,6 +2663,58 @@ let rec rPDs
         (insert (ceq_mregex, ccompare_mregex) r
           (set_empty (ceq_mregex, ccompare_mregex)
             (of_phantom set_impl_mregexa)));;
+
+let rec exhaustive_above_fusion
+  proper_interval g y s =
+    (if has_next g s
+      then (let (x, sa) = next g s in
+             not (proper_interval (Some y) (Some x)) &&
+               exhaustive_above_fusion proper_interval g x sa)
+      else not (proper_interval (Some y) None));;
+
+let rec exhaustive_fusion
+  proper_interval g s =
+    has_next g s &&
+      (let (x, sa) = next g s in
+        not (proper_interval None (Some x)) &&
+          exhaustive_above_fusion proper_interval g x sa);;
+
+let rec card _A = card _A;;
+
+let rec is_UNIV (_A1, _A2, _A3, _A4)
+  = function
+    RBT_set rbt ->
+      (match ccompare _A3.ccompare_cproper_interval
+        with None ->
+          failwith "is_UNIV RBT_set: ccompare = None"
+            (fun _ -> is_UNIV (_A1, _A2, _A3, _A4) (RBT_set rbt))
+        | Some _ ->
+          of_phantom (finite_UNIV _A1.finite_UNIV_card_UNIV) &&
+            exhaustive_fusion (cproper_interval _A3) rbt_keys_generator
+              (init _A3.ccompare_cproper_interval rbt))
+    | a -> (let aa =
+              card _A1 (top_set (_A2, _A3.ccompare_cproper_interval, _A4)) in
+            let b = card _A1 a in
+             (if less_nat zero_nat aa then equal_nata aa b
+               else (if less_nat zero_nat b then false
+                      else failwith "is_UNIV called on infinite type and set"
+                             (fun _ -> is_UNIV (_A1, _A2, _A3, _A4) a))));;
+
+let rec is_empty (_A1, _A2, _A3, _A4)
+  = function Complement a -> is_UNIV (_A1, _A2, _A3, _A4) a
+    | RBT_set rbt ->
+        (match ccompare _A3.ccompare_cproper_interval
+          with None ->
+            failwith "is_empty RBT_set: ccompare = None"
+              (fun _ -> is_empty (_A1, _A2, _A3, _A4) (RBT_set rbt))
+          | Some _ -> is_emptya _A3.ccompare_cproper_interval rbt)
+    | DList_set dxs ->
+        (match ceq _A2
+          with None ->
+            failwith "is_empty DList_set: ceq = None"
+              (fun _ -> is_empty (_A1, _A2, _A3, _A4) (DList_set dxs))
+          | Some _ -> nulla _A2 dxs)
+    | Set_Monad xs -> null xs;;
 
 let rec impl_of (Alist x) = x;;
 
@@ -2783,8 +2835,6 @@ let rec r_delta (_A1, _A2, _A3)
         r_delta (_A1, _A2, _A3) (fun t -> kappa (MTimes (MStar r, t))) x phi_s
           r;;
 
-let rec eq_set (_A1, _A2, _A3, _A4) = set_eq (_A2, _A3, _A4);;
-
 let rec tabulatea _A (_B1, _B2)
   xa x =
     Mapping
@@ -2792,13 +2842,11 @@ let rec tabulatea _A (_B1, _B2)
         (map_filter
           (fun k ->
             (let fk = x k in
-              (if eq_set
-                    (card_UNIV_list, cenum_list, (ceq_list (ceq_option _B1)),
-                      (ccompare_list (ccompare_option _B2)))
-                    fk (empty_table
-                         ((ceq_list (ceq_option _B1)),
-                           (ccompare_list (ccompare_option _B2)),
-                           set_impl_list))
+              (if is_empty
+                    (card_UNIV_list, (ceq_list (ceq_option _B1)),
+                      (cproper_interval_list (ccompare_option _B2)),
+                      set_impl_list)
+                    fk
                 then None else Some (k, fk))))
           xa));;
 
@@ -3181,13 +3229,11 @@ let rec meval (_A1, _A2, _A3)
     | n, t, db, MNeg phi ->
         (let (xs, phia) = meval (_A1, _A2, _A3) n t db phi in
           (map (fun r ->
-                 (if eq_set
-                       (card_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
-                         (ccompare_list (ccompare_option _A2)))
-                       r (empty_table
-                           ((ceq_list (ceq_option _A1)),
-                             (ccompare_list (ccompare_option _A2)),
-                             set_impl_list))
+                 (if is_empty
+                       (card_UNIV_list, (ceq_list (ceq_option _A1)),
+                         (cproper_interval_list (ccompare_option _A2)),
+                         set_impl_list)
+                       r
                    then unit_table (_A1, _A2) n
                    else empty_table
                           ((ceq_list (ceq_option _A1)),
@@ -3279,6 +3325,8 @@ let rec equal_safety x0 x1 = match x0, x1 with Safe, Unsafe -> false
                        | Unsafe, Safe -> false
                        | Unsafe, Unsafe -> true
                        | Safe, Safe -> true;;
+
+let rec eq_set (_A1, _A2, _A3, _A4) = set_eq (_A2, _A3, _A4);;
 
 let rec safe_formula (_A1, _A2)
   = function Eq (t1, t2) -> is_Const t1 || is_Const t2
