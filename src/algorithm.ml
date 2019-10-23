@@ -1059,9 +1059,9 @@ let rec eval f neval crt discard =
                 assert(j1 = j2);
                 if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
                   begin
-                    f1union := Relation.union !f1union rel1;
                     let resj = comp rel2 !f1union in
                     res := Relation.union !res resj;
+                    f1union := Relation.union !f1union rel1;
                     let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
                     let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
                     assert (not (is_last1 && is_last2));
