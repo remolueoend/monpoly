@@ -89,6 +89,15 @@ definition join :: "'a table \<Rightarrow> bool \<Rightarrow> 'a table \<Rightar
 
 value "join ({}::nat table) True {}"
 
+lemma join_empty_table_True1: "join empty_table True X = empty_table"
+  unfolding join_def by (simp add: empty_table_def)
+
+lemma join_empty_table_True2: "join X True empty_table = empty_table"
+  unfolding join_def by (simp add: empty_table_def)
+
+lemma join_empty_table_False: "join empty_table False X = empty_table"
+  unfolding join_def by (simp add: empty_table_def)
+
 lemma join_True_code[code]: "join A True B = (\<Union>a \<in> A. \<Union>b \<in> B. set_option (join1 (a, b)))"
   unfolding join_def by (force simp: Option.these_def image_iff)
 
@@ -386,6 +395,13 @@ qed
 
 lemma qtable_cong: "qtable n A P Q X \<Longrightarrow> A = B \<Longrightarrow> (\<And>v. P v \<Longrightarrow> Q v \<longleftrightarrow> Q' v) \<Longrightarrow> qtable n B P Q' X"
   by (auto simp: qtable_def)
+
+lemma join_distr: "\<forall>A B. join (A \<union> B) pos C = join A pos C \<union> join B pos C"
+  apply auto
+    apply (smt UN_E UN_I UnE join_False_code join_True_code mem_Collect_eq)
+   apply (smt UN_E UN_I UnCI join_False_code join_True_code mem_Collect_eq)
+  apply (smt UN_E UN_I basic_trans_rules(31) join_False_code join_True_code mem_Collect_eq sup_ge2)
+  done
 
 (*<*)
 end
