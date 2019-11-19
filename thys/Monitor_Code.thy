@@ -110,7 +110,7 @@ export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_R
   Formula.Pred Formula.Eq Formula.Neg Formula.Or Formula.Exists
   Formula.Prev Formula.Next Formula.Since Formula.Until Formula.MatchP Formula.MatchF
   Formula.Wild Formula.Test Formula.Plus Formula.Times Formula.Star
-  safe_formula
+  safe_formula convert_multiway
   minit_safe mstep in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

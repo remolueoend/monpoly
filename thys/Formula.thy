@@ -199,29 +199,21 @@ next
   qed simp
 qed
 
-lemma foldl_max_infinity1:
+lemma foldl_max_infinity:
   "foldl max \<infinity> (l::enat list) = \<infinity>"
   by (induction l) auto
 
-lemma foldl_max_infinity2:
-  "\<infinity> \<in> set (l::enat list) \<Longrightarrow> foldl max r l = \<infinity>"
+lemma foldl_max_infinity_iff: "r \<noteq> \<infinity> \<Longrightarrow> foldl max r (l::enat list) = \<infinity> \<longleftrightarrow> \<infinity> \<in> set l"
 proof (induct l arbitrary: r)
   case Nil
-  then show ?case by auto
+  then show ?case by simp
 next
   case (Cons a l)
-  have "foldl max r (a # l) = foldl max (max r a) l" by simp
-  then show ?case using Cons foldl_max_infinity1 by auto
+  then show ?case by (cases a) (auto simp: foldl_max_infinity)
 qed
 
-lemma future_reach_Ands_neq_infinity:
-  assumes bounded: "future_reach (Ands l) \<noteq> \<infinity>"
-  shows "\<And>z. z \<in> set l \<Longrightarrow> future_reach z \<noteq> \<infinity>"
-proof -
-  from bounded have "\<infinity> \<notin> future_reach ` set l"
-    using foldl_max_infinity2 by auto
-  then show "\<And>z. z \<in> set l \<Longrightarrow> future_reach z \<noteq> \<infinity>" by force
-qed
+lemma future_reach_Ands_bounded: "future_reach (Ands l) \<noteq> \<infinity> \<longleftrightarrow> (\<forall>\<phi>\<in>set l. future_reach \<phi> \<noteq> \<infinity>)"
+  by (force simp: foldl_max_infinity_iff)
 
 subsubsection \<open>Semantics\<close>
 
@@ -590,6 +582,9 @@ next
   then show ?case by (cases a) simp_all
 qed
 
+lemma fvi_remove_neg[simp]: "fvi b (remove_neg \<phi>) = fvi b \<phi>"
+  by (cases \<phi>) simp_all
+
 lemma partition_cong[fundef_cong]:
   "xs = ys \<Longrightarrow> (\<And>x. x\<in>set xs \<Longrightarrow> f x = g x) \<Longrightarrow> partition f xs = partition g ys"
   by (induction xs arbitrary: ys) auto
@@ -612,7 +607,7 @@ and safe_regex :: "modality \<Rightarrow> safety \<Rightarrow> 'a regex \<Righta
 | "safe_formula (Neg \<phi>) = (fv \<phi> = {} \<and> safe_formula \<phi>)"
 | "safe_formula (Or \<phi> \<psi>) = (fv \<psi> = fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
-   list_all safe_formula (map remove_neg neg) \<and> (\<Union>x\<in>set neg. fv x) \<subseteq> (\<Union>x\<in>set pos. fv x))"
+   list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "safe_formula (Exists \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
@@ -1141,10 +1136,11 @@ proof (induction \<phi> rule: get_and_list.induct)
   then show ?case using posneg using Bex_set_list_ex by fastforce
 qed simp_all
 
-lemma fv_convert_multiway:
+lemma
   fixes \<phi> :: "'a formula" and r :: "'a regex"
-  shows "safe_formula \<phi> \<Longrightarrow> fvi b (convert_multiway \<phi>) = fvi b \<phi>"
-    and "safe_regex m g r \<Longrightarrow> fvi_regex b (convert_multiway_regex r) = fvi_regex b r"
+  shows fv_convert_multiway: "safe_formula \<phi> \<Longrightarrow> fvi b (convert_multiway \<phi>) = fvi b \<phi>"
+    and fv_regex_convert_multiway:
+      "safe_regex m g r \<Longrightarrow> fvi_regex b (convert_multiway_regex r) = fvi_regex b r"
 proof (induction \<phi> and m g r arbitrary: b and b rule: safe_formula_safe_regex.induct)
   case (5 \<phi> \<psi>)
   show ?case proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
@@ -1216,10 +1212,10 @@ proof (induction \<phi>)
   with Ands show ?case by (simp add: foldl_Max)
 qed auto
 
-lemma safe_convert_multiway:
+lemma
   fixes \<phi> :: "'a formula" and r :: "'a regex"
-  shows "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
-    and "safe_regex m g r \<Longrightarrow> safe_regex m g (convert_multiway_regex r)"
+  shows safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
+    and safe_regex_convert_multiway: "safe_regex m g r \<Longrightarrow> safe_regex m g (convert_multiway_regex r)"
 proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
   case (5 \<phi> \<psi>)
   then have "safe_formula \<phi>" by simp
@@ -1308,7 +1304,7 @@ proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
         have "(\<Union>x\<in>(set (get_or_list ?c\<psi>)). fvi b (Neg x)) = fvi b ?c\<psi>" using fv_get_or by auto
         then have "(\<Union>x\<in>(set (map Neg (get_or_list ?c\<psi>))). fvi b x) = fvi b ?c\<psi>" by auto
         then show "(\<Union>x\<in>(set (map Neg (get_or_list ?c\<psi>))). fvi b x) = fvi b \<psi>"
-          by (simp add: fv_convert_multiway(1)[OF \<open>safe_formula \<psi>\<close>])
+          by (simp add: fv_convert_multiway[OF \<open>safe_formula \<psi>\<close>])
       qed
       have "safe_formula ?b"
       proof -
@@ -1402,12 +1398,13 @@ next
     with "17.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
     with False 17 show ?thesis by simp
   qed
-qed (auto simp: fv_convert_multiway)
+qed (auto simp: fv_convert_multiway fv_regex_convert_multiway)
 
-lemma future_reach_convert_multiway:
+lemma
   fixes \<phi> :: "'a formula" and r :: "'a regex"
-  shows "safe_formula \<phi> \<Longrightarrow> future_reach (convert_multiway \<phi>) = future_reach \<phi>"
-    and "safe_regex m g r \<Longrightarrow> future_reach_regex (convert_multiway_regex r) = future_reach_regex r"
+  shows future_reach_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_reach (convert_multiway \<phi>) = future_reach \<phi>"
+    and future_reach_regex_convert_multiway:
+      "safe_regex m g r \<Longrightarrow> future_reach_regex (convert_multiway_regex r) = future_reach_regex r"
 proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
   case (5 \<phi> \<psi>)
   then have "safe_formula \<phi>" by simp
@@ -1435,16 +1432,16 @@ proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
       moreover have "future_reach ?c\<psi> = Max (future_reach ` (set (get_and_list ?c\<psi>)))"
         using \<open>safe_formula \<psi>'\<close> by (simp add: future_reach_get_and safe_convert_multiway)
       moreover have "future_reach ?b = Max (future_reach ` (set ((get_and_list ?c\<phi>) @ (get_and_list ?c\<psi>))))"
-        unfolding b_def using safe_convert_multiway(1)[OF \<open>safe_formula \<phi>\<close>]
+        unfolding b_def using safe_convert_multiway[OF \<open>safe_formula \<phi>\<close>]
         by (simp add: foldl_Max image_Un get_and_nonempty del: foldl_append)
       moreover have "... = Max ((future_reach ` (set (get_and_list ?c\<phi>))) \<union> (future_reach ` (set (get_and_list ?c\<psi>))))"
         by (simp add: image_Un)
       moreover have "... = max (Max (future_reach ` (set (get_and_list ?c\<phi>)))) (Max (future_reach ` (set (get_and_list ?c\<psi>))))"
       proof -
         have "get_and_list ?c\<phi> \<noteq> []"
-          using get_and_nonempty safe_convert_multiway(1) \<open>safe_formula \<phi>\<close> by blast
+          using get_and_nonempty safe_convert_multiway \<open>safe_formula \<phi>\<close> by blast
         moreover have "get_and_list ?c\<psi> \<noteq> []"
-          using get_and_nonempty safe_convert_multiway(1) \<open>safe_formula \<psi>'\<close> by blast
+          using get_and_nonempty safe_convert_multiway \<open>safe_formula \<psi>'\<close> by blast
         ultimately show ?thesis by (simp add: Max_Un)
       qed
       ultimately show ?thesis unfolding And_def \<open>\<psi> = Neg \<psi>'\<close> by simp
@@ -1468,16 +1465,16 @@ proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
       moreover have "future_reach ?c\<psi> = Max (future_reach ` (set (get_or_list ?c\<psi>)))"
         using \<open>safe_formula \<psi>\<close> by (simp add: future_reach_get_or safe_convert_multiway)
       moreover have "future_reach ?b = Max (future_reach ` (set ((get_and_list ?c\<phi>) @ (map Neg (get_or_list ?c\<psi>)))))"
-        unfolding b_def using safe_convert_multiway(1)[OF \<open>safe_formula \<phi>\<close>]
+        unfolding b_def using safe_convert_multiway[OF \<open>safe_formula \<phi>\<close>]
         by (simp add: foldl_Max image_Un get_and_nonempty get_or_nonempty image_image del: foldl_append)
       moreover have "... = Max ((future_reach ` (set (get_and_list ?c\<phi>))) \<union> (future_reach ` (set (map Neg (get_or_list ?c\<psi>)))))"
         by (simp add: image_Un)
       moreover have "... = max (Max (future_reach ` (set (get_and_list ?c\<phi>)))) (Max (future_reach ` (set (get_or_list ?c\<psi>))))"
       proof -
         have "get_and_list ?c\<phi> \<noteq> []"
-          using get_and_nonempty safe_convert_multiway(1) \<open>safe_formula \<phi>\<close> by blast
+          using get_and_nonempty safe_convert_multiway \<open>safe_formula \<phi>\<close> by blast
         moreover have "get_or_list ?c\<psi> \<noteq> []"
-          using get_or_nonempty safe_convert_multiway(1) \<open>safe_formula \<psi>\<close> by blast
+          using get_or_nonempty safe_convert_multiway \<open>safe_formula \<psi>\<close> by blast
         ultimately show ?thesis  by (simp add: Max_Un image_image)
       qed
       ultimately show ?thesis unfolding And_Not_def by simp
@@ -1515,10 +1512,10 @@ next
   qed
 qed auto
 
-lemma sat_convert_multiway:
+lemma
   fixes \<phi> :: "'a formula" and r :: "'a regex"
-  shows "safe_formula \<phi> \<Longrightarrow> sat \<sigma> v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> v i \<phi>"
-    and "safe_regex m g r \<Longrightarrow> match \<sigma> v (convert_multiway_regex r) i j \<longleftrightarrow> match \<sigma> v r i j"
+  shows sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> v i \<phi>"
+    and match_convert_multiway: "safe_regex m g r \<Longrightarrow> match \<sigma> v (convert_multiway_regex r) i j \<longleftrightarrow> match \<sigma> v r i j"
 proof (induction \<phi> and m g r arbitrary: v i and v i j rule: safe_formula_safe_regex.induct)
   case (5 \<phi> \<psi>)
   then have "safe_formula \<phi>" by simp

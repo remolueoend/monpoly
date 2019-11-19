@@ -6,8 +6,7 @@ begin
 
 section \<open>Examples\<close>
 
-abbreviation "TT \<equiv> Formula.Eq (Formula.Const ''_'') (Formula.Const ''_'')"
-abbreviation "Eventually I \<psi> \<equiv> Formula.Until TT I \<psi>"
+abbreviation "Eventually I \<psi> \<equiv> Formula.Until Formula.TT I \<psi>"
 
 definition "\<phi>\<^sub>e\<^sub>x = Formula.And_Not (Formula.Pred ''A'' [Formula.Var 0])
   (Eventually (interval 1 2) (Formula.Exists (Formula.Pred ''B'' [Formula.Var 1, Formula.Var 0])))"

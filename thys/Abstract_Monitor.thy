@@ -149,6 +149,7 @@ fun past_only :: "'a Formula.formula \<Rightarrow> bool" and past_only_regex :: 
 | "past_only (Formula.Eq _ _) = True"
 | "past_only (Formula.Neg \<psi>) = past_only \<psi>"
 | "past_only (Formula.Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Formula.Ands l) = (\<forall>\<alpha>\<in>set l. past_only \<alpha>)"
 | "past_only (Formula.Exists \<psi>) = past_only \<psi>"
 | "past_only (Formula.Prev _ \<psi>) = past_only \<psi>"
 | "past_only (Formula.Next _ _) = False"
@@ -169,6 +170,9 @@ lemma past_only_sat:
 proof (induction \<phi> and r arbitrary: v i and v i j)
   case (Pred e ts)
   with \<Gamma>_prefix_conv[OF assms] show ?case by simp
+next
+  case (Ands l)
+  with \<Gamma>_prefix_conv[OF assms] show ?case by (simp add: list_all_iff)
 next
   case (Prev I \<phi>)
   with \<tau>_prefix_conv[OF assms] show ?case by (simp split: nat.split)
