@@ -1,10 +1,10 @@
 (*<*)
 theory Monitor
   imports Abstract_Monitor
-    Generic_Join_Correctness
     "HOL-Library.While_Combinator"
     "HOL-Library.Mapping"
     "Deriving.Derive"
+    "Generic_Join.Generic_Join_Correctness"
 begin
 (*>*)
 
@@ -3358,6 +3358,17 @@ lemma nth_filter2: "i < length xs \<Longrightarrow> P (xs ! i) \<Longrightarrow>
   (\<And>i'. i' < length (filter P xs) \<Longrightarrow> Q (filter P xs ! i')) \<Longrightarrow> Q (xs ! i)"
   by (smt filter_set list_update_id mem_Collect_eq member_filter set_conv_nth)
 
+lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
+  by (simp add: qtable_def table_empty)
+
+lemma qtable_empty_unit_table:
+  "qtable n {} R P empty_table \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) (unit_table n)"
+  by (auto intro: qtable_unit_table simp add: qtable_empty_iff)
+
+lemma qtable_unit_empty_table:
+  "qtable n {} R P (unit_table n) \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
+  by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty unit_table_def)
+
 lemma meval:
   assumes "wf_mformula \<sigma> j n R \<phi> \<phi>'"
   shows "case meval n (\<tau> \<sigma> j) (\<Gamma> \<sigma> j) \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (Suc j) n R \<phi>\<^sub>n \<phi>' \<and>
@@ -3514,12 +3525,12 @@ next
   case (MNeg \<phi>)
   have *: "qtable n {} (mem_restr R) (\<lambda>v. P v) X \<Longrightarrow>
     \<not> qtable n {} (mem_restr R) (\<lambda>v. \<not> P v) empty_table \<Longrightarrow> x \<in> X \<Longrightarrow> False" for P x X
-    using qtable_empty_implies_empty_or_unit qtable_unit_empty_table by fastforce
+    using nullary_qtable_cases qtable_unit_empty_table by fastforce
   from MNeg.prems show ?case
     by (cases pred: wf_mformula)
       (auto 0 4 intro!: wf_mformula.Neg dest!: MNeg.IH
        simp add: list.rel_map
-       dest: qtable_empty_implies_empty_or_unit qtable_unit_empty_table intro!: qtable_empty_unit_table
+       dest: nullary_qtable_cases qtable_unit_empty_table intro!: qtable_empty_unit_table
        elim!: list.rel_mono_strong elim: *)
 next
   case (MExists \<phi>)

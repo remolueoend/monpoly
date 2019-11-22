@@ -1,6 +1,6 @@
 (*<*)
 theory Formula
-  imports Interval Trace Table "HOL-Library.Lattice_Syntax"
+  imports Interval Trace "MFOTL_Monitor.Table" "HOL-Library.Lattice_Syntax"
 begin
 (*>*)
 
