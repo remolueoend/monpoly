@@ -572,16 +572,6 @@ fun remove_neg :: "'a formula \<Rightarrow> 'a formula" where
   "remove_neg (Neg \<phi>) = \<phi>"
 | "remove_neg \<phi> = \<phi>"
 
-lemma remove_neg_inverse:
-  "list_all is_Neg l \<Longrightarrow> l = map Neg (map remove_neg l)"
-proof (induction l)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons a l)
-  then show ?case by (cases a) simp_all
-qed
-
 lemma fvi_remove_neg[simp]: "fvi b (remove_neg \<phi>) = fvi b \<phi>"
   by (cases \<phi>) simp_all
 

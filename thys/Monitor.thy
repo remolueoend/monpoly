@@ -2917,8 +2917,8 @@ lemma list_all3_mono_strong: "list_all3 P xs ys zs \<Longrightarrow>
   list_all3 Q xs ys zs"
   by (induct xs ys zs rule: list_all3.induct) (auto intro: list_all3.intros)
 
-abbreviation Mini where
-  "Mini i js \<equiv> (if js = [] then i else Min (set js))"
+definition Mini where
+  "Mini i js = (if js = [] then i else Min (set js))"
 
 lemma wf_mbufn_in_set_Mini:
   assumes "wf_mbufn i js Ps buf"
@@ -2930,7 +2930,7 @@ proof (elim exE conjE)
     using that assms unfolding wf_mbufn_def list_all3_conv_all_nth in_set_conv_nth by auto
   moreover assume "k < length buf" "buf ! k = []"
   ultimately show ?thesis using assms
-    unfolding wf_mbufn_def list_all3_conv_all_nth
+    unfolding Mini_def wf_mbufn_def list_all3_conv_all_nth
     by (auto 0 4 dest!: spec[of _ k] intro: Min_eqI simp: in_set_conv_nth)
 qed
 
@@ -2979,11 +2979,13 @@ proof (induction f z buf arbitrary: i z' buf' rule: mbufn_take.induct)
       moreover from True rec.prems(2) have "i \<in> set js"
         by (fastforce simp: in_set_conv_nth list_all3_conv_all_nth list_all2_iff)
       ultimately have "Mini i js = i"
+        unfolding Mini_def
         by (auto intro!: antisym[OF Min.coboundedI Min.boundedI])
       with rec.prems nonempty True show ?thesis by simp
     next
       case False
-      from nonempty rec.prems(2) have "Mini i js = Mini (Suc i) js" by auto
+      from nonempty rec.prems(2) have "Mini i js = Mini (Suc i) js"
+        unfolding Mini_def by auto
       show ?thesis
         unfolding \<open>Mini i js = Mini (Suc i) js\<close>
       proof (rule rec.IH)
@@ -3016,7 +3018,7 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: mbufnt_take.induct)
   from 1 show ?case
     using wf_mbufn_in_set_Mini[OF 1(2)]
     by (subst (asm) mbufnt_take.simps)
-      (force simp: wf_mbufn_def split: if_splits prod.splits elim!: list_all3_mono_strong
+      (force simp: Mini_def wf_mbufn_def split: if_splits prod.splits elim!: list_all3_mono_strong
       dest!: IH(1)[rotated, OF _ wf_mbufn_map_tl[OF 1(2)] *])
   case 2
   then have *: "list_all2 R [Suc i..<j] (tl nts)"
@@ -3025,7 +3027,7 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: mbufnt_take.induct)
     using that by (fastforce simp flip: length_greater_0_conv)
   with 2 show ?case
     using wf_mbufn_in_set_Mini[OF 2(2)] wf_mbufn_notin_set[OF 2(2)]
-    by (subst (asm) mbufnt_take.simps) (force simp: wf_mbufn_def
+    by (subst (asm) mbufnt_take.simps) (force simp: Mini_def wf_mbufn_def
         dest!: IH(2)[rotated, OF _ wf_mbufn_map_tl[OF 2(2)] *]
         split: if_splits prod.splits)
 qed
@@ -3062,7 +3064,7 @@ proof (induction f z buf arbitrary: i z' buf' rule: mbufn_take.induct)
   case rec: (1 f z buf)
   show ?case proof (cases "buf = []")
     case True
-    with rec.prems show ?thesis by simp
+    with rec.prems show ?thesis unfolding Mini_def by simp
   next
     case nonempty: False
     show ?thesis proof (cases "[] \<in> set buf")
@@ -3072,14 +3074,15 @@ proof (induction f z buf arbitrary: i z' buf' rule: mbufn_take.induct)
       moreover from True rec.prems(2) have "i \<in> set js"
         by (fastforce simp: in_set_conv_nth list_all3_conv_all_nth list_all2_iff)
       ultimately have "Mini i js = i"
+        unfolding Mini_def
         by (auto intro!: antisym[OF Min.coboundedI Min.boundedI])
       with rec.prems nonempty True show ?thesis by simp
     next
       case False
       with nonempty rec.prems(2) have more: "Suc i \<le> Mini i js"
-        using diff_is_0_eq not_le
+        using diff_is_0_eq not_le unfolding Mini_def
         by (fastforce simp: in_set_conv_nth list_all3_conv_all_nth list_all2_iff)
-      then have "Mini i js = Mini (Suc i) js" by auto
+      then have "Mini i js = Mini (Suc i) js" unfolding Mini_def by auto
       show ?thesis
         unfolding \<open>Mini i js = Mini (Suc i) js\<close>
       proof (rule rec.IH)
@@ -3095,7 +3098,7 @@ proof (induction f z buf arbitrary: i z' buf' rule: mbufn_take.induct)
             elim!: list_all3_mono_strong dest: list.rel_sel[THEN iffD1])
         show "\<And>k xs z. Suc i \<le> k \<Longrightarrow> Suc k \<le> Mini (Suc i) js \<Longrightarrow>
           list_all2 (\<lambda>P. P k) Ps xs \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f xs z)"
-          by (rule rec.prems(4)) auto
+          by (rule rec.prems(4)) (auto simp: Mini_def)
       qed
     qed
   qed
@@ -3118,11 +3121,11 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: mbufnt_take.induct)
   note mbufnt_take.simps[simp del]
   from 1(2-6) have "i = Min (set js)" if "js \<noteq> []" "nts = []"
     using that unfolding wf_mbufn_def using wf_mbufn_in_set_Mini[OF 1(3)]
-    by (fastforce simp: list_all3_Cons neq_Nil_conv)
+    by (fastforce simp: Mini_def list_all3_Cons neq_Nil_conv)
   with 1(2-7) list_all2_hdD[OF 1(4)] show ?case
     unfolding wf_mbufn_def using wf_mbufn_in_set_Mini[OF 1(3)] wf_mbufn_notin_set[OF 1(3)]
     by (subst (asm) mbufnt_take.simps)
-      (auto simp add: list.rel_map Suc_le_eq
+      (auto simp add: Mini_def list.rel_map Suc_le_eq
         elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated]
           list_all3_mono_strong[THEN list_all3_list_all2I[of _ _ js]] list_all2_hdD
         dest!: 1(1)[rotated, OF _ wf_mbufn_map_tl[OF 1(3)] * _ 1(7)] split: prod.split if_splits)
@@ -3207,7 +3210,7 @@ lemma mbufnt_take_add':
   shows "wf_mbufn' \<sigma> j' n R r buf'"
     and "wf_ts_regex \<sigma> j' r nts'"
   using pre_buf pre_nts mr safe xss \<open>j \<le> j'\<close> unfolding wf_mbufn'_def wf_ts_regex_def
-  by (auto 0 3 simp: list.rel_map to_mregex_empty_progress to_mregex_nonempty_progress
+  by (auto 0 3 simp: list.rel_map to_mregex_empty_progress to_mregex_nonempty_progress Mini_def
     intro: progress_mono[OF \<open>j \<le> j'\<close>] list.rel_refl_strong progress_le
     dest: list_all2_lengthD elim!: mbufnt_take_eqD[OF eq wf_mbufn_add])
 
@@ -3249,7 +3252,7 @@ lemma mbufnt_take_add_induct'[consumes 6, case_names base step]:
   using pre_buf pre_nts \<open>j \<le> j'\<close> to_mregex_progress[OF safe mr, of \<sigma> j'] to_mregex_empty_progress[OF safe, of mr \<sigma> j] base
   unfolding wf_mbufn'_def mr prod.case
   by (fastforce dest!: mbufnt_take_induct[OF eq wf_mbufn_add[OF _ xss] pre_nts, of U]
-    simp: list.rel_map le_imp_diff_is_add ac_simps
+    simp: list.rel_map le_imp_diff_is_add ac_simps Mini_def
     intro: progress_mono[OF \<open>j \<le> j'\<close>] list.rel_refl_strong progress_le
     intro!: base step  dest: list_all2_lengthD split: if_splits)
 
@@ -3317,46 +3320,59 @@ proof (rule qtableI)
     by (simp add: list_all3_conv_all_nth list_all2_conv_all_nth qtable_def)
   moreover from neg have "list_all2 (\<lambda>A X. table n A X \<and> wf_set n A) A_neg L_neg"
     by (simp add: list_all3_conv_all_nth list_all2_conv_all_nth qtable_def)
-  ultimately have wf_L: "list_all2 (\<lambda>A X. table n A X \<and> wf_set n A) (A_pos @ A_neg) (L_pos @ L_neg)"
+  ultimately have L: "list_all2 (\<lambda>A X. table n A X \<and> wf_set n A) (A_pos @ A_neg) (L_pos @ L_neg)"
     by (rule list_all2_appendI)
-  note in_join_iff = mmulti_join_correct[OF \<open>A_pos \<noteq> []\<close> wf_L]
+  note in_join_iff = mmulti_join_correct[OF \<open>A_pos \<noteq> []\<close> L]
   from 1 have take_eq: "take (length A_pos) (L_pos @ L_neg) = L_pos"
     by (auto dest!: list_all2_lengthD)
   from 1 have drop_eq: "drop (length A_pos) (L_pos @ L_neg) = L_neg"
     by (auto dest!: list_all2_lengthD)
+
   note mmulti_join.simps[simp del]
   show "table n C (mmulti_join A_pos A_neg L)"
     unfolding C_eq L_eq table_def by (simp add: in_join_iff)
-  show "\<And>x. x \<in> mmulti_join A_pos A_neg L \<Longrightarrow> wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x"
-    unfolding L_eq in_join_iff drop_eq
-    apply clarify
-    apply (rule Qs[THEN iffD2])
-      apply assumption+
-    apply (rule conjI)
-    using pos restrict_pos apply (simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def)
-    using neg restrict_neg apply (simp (no_asm_use) add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def)
-    by (meson fv_subset Sup_le_iff nth_mem wf_tuple_restrict_simple)
-  show "\<And>x. wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<Longrightarrow> x \<in> mmulti_join A_pos A_neg L"
+  show "Q x" if "x \<in> mmulti_join A_pos A_neg L" "wf_tuple n C x" "P x" for x
+    using that(2,3)
+  proof (rule Qs[THEN iffD2, OF _ _ conjI])
+    have pos': "list_all2 (\<lambda>A. (\<in>) (restrict A x)) A_pos L_pos"
+       and neg': "list_all2 (\<lambda>A. (\<notin>) (restrict A x)) A_neg L_neg"
+      using that(1) unfolding L_eq in_join_iff take_eq drop_eq by simp_all
+    show "list_all2 (\<lambda>A Qi. Qi (restrict A x)) A_pos Q_pos"
+      using pos pos' restrict_pos that(2,3)
+      by (simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def)
+    have fv_subset': "\<And>i. i < length A_neg \<Longrightarrow> A_neg ! i \<subseteq> C"
+      using fv_subset unfolding C_eq by (auto simp: Sup_le_iff)
+    show "list_all2 (\<lambda>A Qi. \<not> Qi (restrict A x)) A_neg Q_neg"
+      using neg neg' restrict_neg that(2,3)
+      by (auto simp: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def
+          wf_tuple_restrict_simple[OF _ fv_subset'])
+  qed
+  show "x \<in> mmulti_join A_pos A_neg L" if "wf_tuple n C x" "P x" "Q x" for x
     unfolding L_eq in_join_iff take_eq drop_eq
-    apply (intro conjI)
-      apply (simp add: C_eq)
-     apply (frule (2) Qs[THEN iffD1, THEN conjunct1])
-    using pos restrict_pos apply (simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def)
-     apply (simp add: C_eq Sup_upper wf_tuple_restrict_simple)
-    apply (frule (2) Qs[THEN iffD1, THEN conjunct2])
-    using neg restrict_neg apply (simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def)
-    by auto
+  proof (intro conjI)
+    from that have pos': "list_all2 (\<lambda>A Qi. Qi (restrict A x)) A_pos Q_pos"
+      and neg': "list_all2 (\<lambda>A Qi. \<not> Qi (restrict A x)) A_neg Q_neg"
+      using Qs[THEN iffD1] by auto
+    show "wf_tuple n (\<Union>A\<in>set A_pos. A) x"
+      using \<open>wf_tuple n C x\<close> unfolding C_eq by simp
+    show "list_all2 (\<lambda>A. (\<in>) (restrict A x)) A_pos L_pos"
+      using pos pos' restrict_pos that(1,2)
+      by (simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def
+          C_eq wf_tuple_restrict_simple[OF _ Sup_upper])
+    show "list_all2 (\<lambda>A. (\<notin>) (restrict A x)) A_neg L_neg"
+      using neg neg' restrict_neg that(1,2)
+      by (auto simp: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def)
+  qed
 qed
 
-lemma nth_filter1: "i < length (filter P xs) \<Longrightarrow>
+lemma nth_filter: "i < length (filter P xs) \<Longrightarrow>
   (\<And>i'. i' < length xs \<Longrightarrow> P (xs ! i') \<Longrightarrow> Q (xs ! i')) \<Longrightarrow> Q (filter P xs ! i)"
-  apply (induction "filter P xs" arbitrary: xs)
-   apply simp
-  by (metis (no_types, lifting) in_set_conv_nth mem_Collect_eq set_filter)
+  by (metis (lifting) in_set_conv_nth set_filter mem_Collect_eq)
 
-lemma nth_filter2: "i < length xs \<Longrightarrow> P (xs ! i) \<Longrightarrow>
-  (\<And>i'. i' < length (filter P xs) \<Longrightarrow> Q (filter P xs ! i')) \<Longrightarrow> Q (xs ! i)"
-  by (smt filter_set list_update_id mem_Collect_eq member_filter set_conv_nth)
+lemma nth_partition: "i < length xs \<Longrightarrow>
+  (\<And>i'. i' < length (filter P xs) \<Longrightarrow> Q (filter P xs ! i')) \<Longrightarrow>
+  (\<And>i'. i' < length (filter (Not \<circ> P) xs) \<Longrightarrow> Q (filter (Not \<circ> P) xs ! i')) \<Longrightarrow> Q (xs ! i)"
+  by (metis (no_types, lifting) in_set_conv_nth set_filter mem_Collect_eq comp_apply)
 
 lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
   by (simp add: qtable_def table_empty)
@@ -3395,6 +3411,8 @@ next
        dest: mbuf2_take_add' elim!: list.rel_mono_strong)
 next
   case (MAnds A_pos A_neg l buf)
+  note mbufn_take.simps[simp del] mbufn_add.simps[simp del] mmulti_join.simps[simp del]
+
   from MAnds.prems obtain pos neg l' where
     wf_l: "list_all2 (wf_mformula \<sigma> j n R) l (pos @ map remove_neg neg)" and
     wf_buf: "wf_mbufn (progress \<sigma> (formula.Ands l') j) (map (\<lambda>\<psi>. progress \<sigma> \<psi> j) (pos @ map remove_neg neg))
@@ -3406,115 +3424,76 @@ next
     fv_subset: "\<Union> (set A_neg) \<subseteq> \<Union> (set A_pos)" and
     "\<phi>' = Formula.Ands l'"
     by (cases pred: wf_mformula) simp
-  note mbufn_take.simps[simp del] mbufn_add.simps[simp del] mmulti_join.simps[simp del]
   have progress_eq: "progress \<sigma> (formula.Ands l') (Suc j) =
       Mini (progress \<sigma> (formula.Ands l') j) (map (\<lambda>\<psi>. progress \<sigma> \<psi> (Suc j)) (pos @ map remove_neg neg))"
     using \<open>pos \<noteq> []\<close> posneg
-    by (auto simp: image_Un[symmetric] Collect_disj_eq[symmetric] intro!: arg_cong[where f=Min])
-  have "A_pos \<noteq> []"using \<open>pos \<noteq> []\<close> A_eq by simp
-  have "list_all Formula.is_Neg neg" using posneg safe_neg
-    apply (simp add: list.pred_map)
-    apply (erule list.pred_mono_strong)
-    subgoal for \<psi> by (cases \<psi>) simp_all
-    done
-  then have sat_neg: "list_all (\<lambda>\<psi>. Formula.sat \<sigma> (map the v) i (remove_neg \<psi>) \<longleftrightarrow> \<not> Formula.sat \<sigma> (map the v) i \<psi>) neg" for v i
-    apply (rule list.pred_mono_strong)
-    subgoal for \<psi> by (cases \<psi>) simp_all
-    done
+    by (auto simp: Mini_def image_Un[symmetric] Collect_disj_eq[symmetric] intro!: arg_cong[where f=Min])
+
+  have join_ok: "qtable n (\<Union> (fv ` set l')) (mem_restr R)
+        (\<lambda>v. list_all (Formula.sat \<sigma> (map the v) k) l')
+        (mmulti_join A_pos A_neg L)"
+    if args_ok: "list_all2 (\<lambda>x. qtable n (fv x) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) k x))
+        (pos @ map remove_neg neg) L"
+    for k L
+  proof (rule qtable_mmulti_join)
+    let ?ok = "\<lambda>A Qi X. qtable n A (mem_restr R) Qi X \<and> wf_set n A"
+    let ?L_pos = "take (length A_pos) L"
+    let ?L_neg = "drop (length A_pos) L"
+    have 1: "length pos \<le> length L"
+      using args_ok by (auto dest!: list_all2_lengthD)
+    show "list_all3 ?ok A_pos (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) k \<psi>) pos) ?L_pos"
+      using args_ok wf_l unfolding A_eq
+      by (auto simp add: list_all3_conv_all_nth list_all2_conv_all_nth nth_append
+            split: if_splits intro!: wf_mformula_wf_set[of \<sigma> j n R]
+            dest: order.strict_trans2[OF _ 1])
+    from args_ok have prems_neg: "list_all2 (\<lambda>\<psi>. qtable n (fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) k (remove_neg \<psi>))) neg ?L_neg"
+      by (auto simp: A_eq list_all2_append1 list.rel_map)
+    show "list_all3 ?ok A_neg (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) k (remove_neg \<psi>)) neg) ?L_neg"
+      using prems_neg wf_l unfolding A_eq
+      by (auto simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length nth_append less_diff_conv
+          split: if_splits intro!: wf_mformula_wf_set[of \<sigma> j n R _ "remove_neg _", simplified])
+    show "\<Union>(fv ` set l') = \<Union>(set A_pos)"
+      using fv_subset posneg unfolding A_eq by auto
+    show "L = take (length A_pos) L @ drop (length A_pos) L" by simp
+    show "A_pos \<noteq> []" using \<open>pos \<noteq> []\<close> A_eq by simp
+
+    fix x :: "'a tuple"
+    assume "wf_tuple n (\<Union> (fv ` set l')) x" and "mem_restr R x"
+    then show "list_all (\<lambda>A. mem_restr R (restrict A x)) A_pos"
+      and "list_all (\<lambda>A. mem_restr R (restrict A x)) A_neg"
+      by (simp_all add: list.pred_set)
+
+    have "list_all Formula.is_Neg neg"
+      using posneg safe_neg
+      by (auto simp add: list.pred_map elim!: list.pred_mono_strong
+          intro: formula.exhaust[of \<psi> "Formula.is_Neg \<psi>" for \<psi>])
+    then have "list_all (\<lambda>\<psi>. Formula.sat \<sigma> (map the v) i (remove_neg \<psi>) \<longleftrightarrow>
+      \<not> Formula.sat \<sigma> (map the v) i \<psi>) neg" for v i
+      by (fastforce simp: Formula.is_Neg_def elim!: list.pred_mono_strong)
+    then show "list_all (Formula.sat \<sigma> (map the x) k) l' =
+       (list_all2 (\<lambda>A Qi. Qi (restrict A x)) A_pos
+         (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) k \<psi>) pos) \<and>
+        list_all2 (\<lambda>A Qi. \<not> Qi (restrict A x)) A_neg
+         (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) k
+                       (remove_neg \<psi>))
+           neg))"
+      using posneg
+      by (auto simp add: A_eq list_all2_conv_all_nth list_all_length sat_the_restrict
+          elim: nth_filter nth_partition[where P=safe_formula and Q="Formula.sat _ _ _"])
+  qed fact
+
   show ?case
     unfolding \<open>\<phi>' = Formula.Ands l'\<close>
-    apply (split prod.split)
-    apply safe
-     apply (clarsimp split: prod.splits)
-     apply (rule wf_mformula.Ands[where l_pos=pos and l_neg=neg])
-            apply (simp add: list.rel_map)
-            apply (rule list.rel_mono_strong[OF wf_l])
-            apply (drule (1) MAnds.IH)
-            apply (simp split: prod.splits)
-           apply (simp only: progress_eq)
-           apply (erule wf_mbufn_take)
-           apply (rule wf_mbufn_add)
-             apply (rule wf_buf)
-            apply (simp add: map2_map_map map_append[symmetric] list_all3_map list_all3_list_all2_conv del: map_append)
-            apply (rule list.rel_flip[THEN iffD2, unfolded conversep_iff[abs_def]])
-            apply (rule list.rel_mono_strong[OF wf_l])
-            apply (drule (1) MAnds.IH)
-            apply (simp split: prod.splits)
-           apply (simp add: list.rel_map map_append[symmetric] del: map_append)
-           apply (rule list.rel_refl)
-           apply (rule progress_mono)
-           apply simp
-          apply (rule posneg)
-         apply (rule \<open>pos \<noteq> []\<close>)
-        apply (rule safe_neg)
-       apply (rule A_eq)+
-     apply (rule fv_subset)
-    apply (clarsimp simp only: meval.simps Let_def prod.inject progress_eq split: prod.splits)
-    apply (erule mbufn_take_induct)
-      apply (rule wf_mbufn_add)
-        apply (rule wf_buf)
-       apply (simp add: map2_map_map map_append[symmetric] list_all3_map list_all3_list_all2_conv del: map_append)
-       apply (rule list.rel_flip[THEN iffD2, unfolded conversep_iff[abs_def]])
-       apply (rule list.rel_mono_strong[OF wf_l])
-       apply (drule (1) MAnds.IH)
-       apply (simp split: prod.splits)
-      apply (simp add: list.rel_map map_append[symmetric] del: map_append)
-      apply (rule list.rel_refl)
-      apply (rule progress_mono)
-      apply simp
-     apply simp
-    apply (simp only: upt_Suc_append)
-    apply (erule list_all2_appendI)
-    apply simp
-    subgoal premises prems for i L proof (rule qtable_mmulti_join)
-      let ?ok = "\<lambda>A Qi X. qtable n A (mem_restr R) Qi X \<and> wf_set n A"
-      let ?L_pos = "take (length A_pos) L"
-      let ?L_neg = "drop (length A_pos) L"
-      have 1: "length pos \<le> length L"
-        using prems(3) by (auto dest!: list_all2_lengthD)
-      show "list_all3 ?ok A_pos (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) i \<psi>) pos) ?L_pos"
-        using prems(3) wf_l unfolding A_eq apply (auto simp add: list_all3_conv_all_nth list_all2_conv_all_nth nth_append split: if_splits intro!: wf_mformula_wf_set[of \<sigma> j n R])
-        apply (drule spec)
-        apply clarify
-        apply (drule mp)
-         apply (erule order.strict_trans2[OF _ 1])
-        by auto
-      from prems(3) have prems_neg: "list_all2 (\<lambda>\<psi>. qtable n (fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i (remove_neg \<psi>))) neg ?L_neg"
-        by (auto simp: A_eq list_all2_append1 list.rel_map)
-      show "list_all3 ?ok A_neg (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) i (remove_neg \<psi>)) neg) ?L_neg"
-        using prems_neg wf_l unfolding A_eq apply (auto simp add: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length nth_append split: if_splits)
-        apply (subst fvi_remove_neg[symmetric])
-        apply (rule wf_mformula_wf_set[of \<sigma> j n R])
-        apply (drule spec[where x="_ + length pos"])
-        apply (drule conjunct2)
-        apply (drule mp)
-        using less_diff_conv apply blast
-        by auto
-      show "\<Union>(fv ` set l') = \<Union>(set A_pos)"
-        using fv_subset posneg unfolding A_eq by auto
-      show "L = take (length A_pos) L @ drop (length A_pos) L" by simp
-
-      fix x :: "'a tuple"
-      assume "wf_tuple n (\<Union> (fv ` set l')) x" and "mem_restr R x"
-      then show "list_all (\<lambda>A. mem_restr R (restrict A x)) A_pos"
-        and "list_all (\<lambda>A. mem_restr R (restrict A x)) A_neg"
-        by (simp_all add: list.pred_set)
-      show "list_all id (map (Formula.sat \<sigma> (map the x) i) l') =
-         (list_all2 (\<lambda>A Qi. Qi (restrict A x)) A_pos
-           (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) i \<psi>) pos) \<and>
-          list_all2 (\<lambda>A Qi. \<not> Qi (restrict A x)) A_neg
-           (map (\<lambda>\<psi> v. Formula.sat \<sigma> (map the v) i
-                         (remove_neg \<psi>))
-             neg))"
-        using posneg sat_neg apply (auto simp add: A_eq list_all2_conv_all_nth list_all_length sat_the_restrict elim: nth_filter1)
-        subgoal for k
-          apply (cases "safe_formula (l' ! k)")
-           apply (auto elim: nth_filter2[where P=safe_formula])[]
-          apply (auto elim: nth_filter2[where P="Not \<circ> safe_formula"])
-          done
-        done
-    qed fact+
-    done
+    by (auto 0 3 simp add: list.rel_map progress_eq map2_map_map list_all3_map
+        list_all3_list_all2_conv list.pred_map
+        simp del: set_append map_append progress.simps split: prod.splits
+        intro!: wf_mformula.Ands[OF _ _ posneg \<open>pos \<noteq> []\<close> safe_neg A_eq fv_subset]
+           list.rel_mono_strong[OF wf_l] wf_mbufn_add[OF wf_buf]
+           list.rel_flip[THEN iffD1, OF list.rel_mono_strong, OF wf_l]
+           list.rel_refl progress_mono join_ok
+        dest!: MAnds.IH[rotated]
+        elim!: wf_mbufn_take list_all2_appendI
+        elim: mbufn_take_induct[OF _ wf_mbufn_add[OF wf_buf]])
 next
   case (MOr \<phi> \<psi> buf)
   from MOr.prems show ?case
@@ -3865,7 +3844,7 @@ next
       unfolding wf_ts_regex_def
       by (intro mbufnt_take_eqD(2)[OF eq1 wf_mbufn_add[where js'="map (\<lambda>\<phi>. progress \<sigma> \<phi> (Suc j)) \<psi>s",
         OF buf[unfolded wf_mbufn'_def mr prod.case]]])
-        (auto simp: progress_mono progress_regex_le progress_le to_mregex_progress[OF safe mr]
+        (auto simp: progress_mono progress_regex_le progress_le to_mregex_progress[OF safe mr] Mini_def
          list_all3_map map2_map_map list_all3_list_all2_conv list.rel_map list.rel_flip[symmetric, of _ \<psi>s \<phi>s]
          list_all2_Cons1 elim!: list.rel_mono_strong intro!: list.rel_refl_strong dest!: MMatchF.IH)
     have "i \<le> progress \<sigma> (Formula.MatchF I r) (Suc j) \<Longrightarrow>
