@@ -151,6 +151,7 @@ fun past_only :: "'a Formula.formula \<Rightarrow> bool" and past_only_regex :: 
 | "past_only (Formula.Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Formula.Ands l) = (\<forall>\<alpha>\<in>set l. past_only \<alpha>)"
 | "past_only (Formula.Exists \<psi>) = past_only \<psi>"
+| "past_only (Formula.Agg _ _ _ _ \<psi>) = past_only \<psi>"
 | "past_only (Formula.Prev _ \<psi>) = past_only \<psi>"
 | "past_only (Formula.Next _ _) = False"
 | "past_only (Formula.Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"

@@ -29,6 +29,7 @@ and mmonitorable_regex_exec :: "modality \<Rightarrow> safety \<Rightarrow> 'a F
     \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (Formula.fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
+| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y \<notin> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi> \<and> right I \<noteq> \<infinity>)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
@@ -122,17 +123,17 @@ next
     by fastforce
   ultimately show ?case using posnegm by simp
 next
-  case (12 \<phi> I \<psi>)
+  case (13 \<phi> I \<psi>)
   then show ?case
     unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
     by (fastforce split: formula.splits)
 next
-  case (13 \<phi> I \<psi>)
+  case (14 \<phi> I \<psi>)
   then show ?case
     unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
     by (fastforce simp: plus_eq_enat_iff split: formula.splits)
 next
-  case (17 b g \<phi>)
+  case (18 b g \<phi>)
   then show ?case
     by (cases \<phi>) auto
 qed (auto simp add: plus_eq_enat_iff minus_eq_enat_iff max_def
@@ -192,17 +193,17 @@ next
   qed
   ultimately show ?case unfolding mmonitorable_def ..
 next
-  case (12 \<phi> I \<psi>)
+  case (13 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (fastforce split: formula.splits)
 next
-  case (13 \<phi> I \<psi>)
+  case (14 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (fastforce simp: one_enat_def split: formula.splits)
 next
-  case (17 b g \<phi>)
+  case (18 b g \<phi>)
   then show ?case
     by (cases \<phi>) (auto simp: mmonitorable_regex_def mmonitorable_def)
 qed (auto simp add: mmonitorable_def mmonitorable_regex_def one_enat_def)
@@ -638,6 +639,7 @@ datatype 'a mformula =
   | MOr "'a mformula" "'a mformula" "'a mbuf2"
   | MNeg "'a mformula"
   | MExists "'a mformula"
+  | MAgg bool nat "('a \<times> enat) set \<Rightarrow> 'a" nat "'a Formula.env \<Rightarrow> 'a" "'a mformula"
   | MPrev \<I> "'a mformula" bool "'a table list" "ts list"
   | MNext \<I> "'a mformula" bool "ts list"
   | MSince bool "'a mformula" \<I> "'a mformula" "'a mbuf2" "ts list" "'a msaux"
@@ -681,6 +683,7 @@ function (sequential) minit0 :: "nat \<Rightarrow> 'a Formula.formula \<Rightarr
     let vneg = map fv neg in
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) []))"
 | "minit0 n (Formula.Exists \<phi>) = MExists (minit0 (Suc n) \<phi>)"
+| "minit0 n (Formula.Agg y \<omega> b f \<phi>) = MAgg (fv \<phi> \<subseteq> {..<b}) y \<omega> b f (minit0 (n + b) \<phi>)"
 | "minit0 n (Formula.Prev I \<phi>) = MPrev I (minit0 n \<phi>) True [] []"
 | "minit0 n (Formula.Next I \<phi>) = MNext I (minit0 n \<phi>) True []"
 | "minit0 n (Formula.Since \<phi> I \<psi>) = (if safe_formula \<phi>
@@ -811,6 +814,20 @@ definition update_since :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rig
       | x # aux' \<Rightarrow> (if fst x = nt then (fst x, snd x \<union> rel2) # aux' else (nt, rel2) # x # aux'))
     in (foldr (\<union>) [rel. (t, rel) \<leftarrow> aux, nt - t \<le> right I, left I \<le> nt - t] {}, filter (\<lambda>(t, _). enat (nt - t) \<le> right I) aux))"
 
+primrec these_list :: "'a option list \<Rightarrow> 'a list" where
+  "these_list [] = []"
+| "these_list (x # xs) = (case x of Some y \<Rightarrow> y # these_list xs | None \<Rightarrow> these_list xs)"
+
+definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> (('a \<times> enat) set \<Rightarrow> 'a) \<Rightarrow> nat \<Rightarrow>
+  ('a Formula.env \<Rightarrow> 'a) \<Rightarrow> 'a table \<Rightarrow> 'a table" where
+  "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = {}
+    then singleton_table n y (\<omega> {})
+    else (\<lambda>k.
+      let group = Set.filter (\<lambda>x. drop b x = k) rel;
+        images = (f \<circ> these_list) ` group;
+        M = (\<lambda>y. (y, enat (card (Set.filter (\<lambda>x. f (these_list x) = y) group)))) ` images
+      in k[y:=Some (\<omega> M)]) ` (drop b) ` rel)"
+
 definition "lookup = Mapping.lookup_default empty_table"
 
 fun unsafe_\<epsilon> where
@@ -933,6 +950,8 @@ primrec meval :: "nat \<Rightarrow> ts \<Rightarrow> 'a Formula.database \<Right
     (let (xs, \<phi>) = meval n t db \<phi> in (map (\<lambda>r. (if r = empty_table then unit_table n else empty_table)) xs, MNeg \<phi>))"
 | "meval n t db (MExists \<phi>) =
     (let (xs, \<phi>) = meval (Suc n) t db \<phi> in (map (\<lambda>r. tl ` r) xs, MExists \<phi>))"
+| "meval n t db (MAgg g0 y \<omega> b f \<phi>) =
+    (let (xs, \<phi>) = meval (n + b) t db \<phi> in (map (eval_agg n g0 y \<omega> b f) xs, MAgg g0 y \<omega> b f \<phi>))"
 | "meval n t db (MPrev I \<phi> first buf nts) =
     (let (xs, \<phi>) = meval n t db \<phi>;
       (zs, buf, nts) = mprev_next I (buf @ xs) (nts @ [t])
@@ -996,6 +1015,7 @@ and progress_regex :: "'a Formula.trace \<Rightarrow> 'a Formula.regex \<Rightar
 | "progress \<sigma> (Formula.Or \<phi> \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
 | "progress \<sigma> (Formula.Ands l) j = (if l = [] then j else Min (set (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) l)))"
 | "progress \<sigma> (Formula.Exists \<phi>) j = progress \<sigma> \<phi> j"
+| "progress \<sigma> (Formula.Agg y \<omega> b f \<phi>) j = progress \<sigma> \<phi> j"
 | "progress \<sigma> (Formula.Prev I \<phi>) j = (if j = 0 then 0 else min (Suc (progress \<sigma> \<phi> j)) j)"
 | "progress \<sigma> (Formula.Next I \<phi>) j = progress \<sigma> \<phi> j - 1"
 | "progress \<sigma> (Formula.Since \<phi> I \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
@@ -1435,16 +1455,6 @@ proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
     qed
   qed
 next
-  case (12 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 12 show ?thesis by simp
-  next
-    case False
-    with "12.prems" obtain \<phi>' where "\<phi> = Formula.Neg \<phi>'" by (simp split: formula.splits)
-    with False 12 show ?thesis by simp
-  qed
-next
   case (13 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
@@ -1455,14 +1465,24 @@ next
     with False 13 show ?thesis by simp
   qed
 next
-  case (17 m g \<phi>)
+  case (14 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 17 show ?thesis by simp
+    with 14 show ?thesis by simp
   next
     case False
-    with "17.prems" obtain \<phi>' where "\<phi> = Formula.Neg \<phi>'" by (simp split: formula.splits)
-    with False 17 show ?thesis by simp
+    with "14.prems" obtain \<phi>' where "\<phi> = Formula.Neg \<phi>'" by (simp split: formula.splits)
+    with False 14 show ?thesis by simp
+  qed
+next
+  case (18 m g \<phi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 18 show ?thesis by simp
+  next
+    case False
+    with "18.prems" obtain \<phi>' where "\<phi> = Formula.Neg \<phi>'" by (simp split: formula.splits)
+    with False 18 show ?thesis by simp
   qed
 qed auto
 
@@ -1630,6 +1650,9 @@ definition wf_matchF_invar where
        qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v.
          Formula.match \<sigma> (map the v) (from_mregex ms \<phi>s) i (i + length aux - 1)) (lookup Y ms)))"
 
+definition lift_envs' :: "nat \<Rightarrow> 'a list set \<Rightarrow> 'a list set" where
+  "lift_envs' b R = (\<lambda>(xs,ys). xs @ ys) ` ({xs. length xs = b} \<times> R)"
+
 inductive wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow>
   nat \<Rightarrow> 'a list set \<Rightarrow> 'a mformula \<Rightarrow> 'a Formula.formula \<Rightarrow> bool"
   for \<sigma> j where
@@ -1665,6 +1688,10 @@ inductive wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow>
     wf_mformula \<sigma> j n R (MNeg \<phi>) (Formula.Neg \<phi>')"
 | Exists: "wf_mformula \<sigma> j (Suc n) (lift_envs R) \<phi> \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j n R (MExists \<phi>) (Formula.Exists \<phi>')"
+| Agg: "wf_mformula \<sigma> j (n + b) (lift_envs' b R) \<phi> \<phi>' \<Longrightarrow>
+    y \<notin> Formula.fv \<phi>' \<Longrightarrow>
+    g0 = (Formula.fv \<phi>' \<subseteq> {..<b}) \<Longrightarrow>
+    wf_mformula \<sigma> j n R (MAgg g0 y \<omega> b f \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
 | Prev: "wf_mformula \<sigma> j n R \<phi> \<phi>' \<Longrightarrow>
     first \<longleftrightarrow> j = 0 \<Longrightarrow>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>'))
@@ -1814,31 +1841,34 @@ next
   case (11 \<phi>)
   then show ?case by (auto simp: fvi_Suc_bound intro!: wf_mformula.Exists)
 next
-  case (12 I \<phi>)
-  then show ?case by (auto intro!: wf_mformula.Prev)
+  case (12 y \<omega> b f \<phi>)
+  then show ?case by (auto intro!: wf_mformula.Agg "12.IH" fvi_plus_bound)
 next
   case (13 I \<phi>)
-  then show ?case by (auto intro!: wf_mformula.Next)
+  then show ?case by (auto intro!: wf_mformula.Prev)
 next
-  case (14 \<phi> I \<psi>)
-  then show ?case by (auto intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0 wf_since_aux_Nil)
+  case (14 I \<phi>)
+  then show ?case by (auto intro!: wf_mformula.Next)
 next
   case (15 \<phi> I \<psi>)
   then show ?case by (auto intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0 wf_since_aux_Nil)
 next
   case (16 \<phi> I \<psi>)
-  then show ?case by (auto intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0 wf_until_aux_Nil)
+  then show ?case by (auto intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0 wf_since_aux_Nil)
 next
   case (17 \<phi> I \<psi>)
   then show ?case by (auto intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0 wf_until_aux_Nil)
 next
-  case (18 I r)
+  case (18 \<phi> I \<psi>)
+  then show ?case by (auto intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0 wf_until_aux_Nil)
+next
+  case (19 I r)
   then show ?case
     by (auto simp: list.rel_map fv_regex_alt split: prod.split
         intro!: wf_mformula.MatchP list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchP_aux_Nil
         dest!: to_mregex_atms)
 next
-  case (19 I r)
+  case (20 I r)
   then show ?case
     by (auto simp: list.rel_map fv_regex_alt split: prod.split
         intro!: wf_mformula.MatchF list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchF_aux_Nil

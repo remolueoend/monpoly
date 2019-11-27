@@ -1,6 +1,9 @@
 (*<*)
 theory Formula
-  imports Interval Trace "MFOTL_Monitor.Table" "HOL-Library.Lattice_Syntax"
+  imports Interval
+    Trace
+    "MFOTL_Monitor.Table"
+    "HOL-Library.Lattice_Syntax"
 begin
 (*>*)
 
@@ -37,6 +40,7 @@ lemma eval_trm_fv_cong: "\<forall>x\<in>fv_trm t. v ! x = v' ! x \<Longrightarro
 
 qualified datatype (discs_sels) 'a formula = Pred name "'a trm list" | Eq "'a trm" "'a trm"
   | Neg "'a formula" | Or "'a formula" "'a formula" | Ands "'a formula list" | Exists "'a formula"
+  | Agg nat "('a \<times> enat) set \<Rightarrow> 'a" nat "'a env \<Rightarrow> 'a" "'a formula"
   | Prev \<I> "'a formula" | Next \<I> "'a formula"
   | Since "'a formula" \<I> "'a formula" | Until "'a formula" \<I> "'a formula"
   | MatchF \<I> "'a regex" | MatchP \<I> "'a regex"
@@ -55,6 +59,7 @@ qualified primrec fvi :: "nat \<Rightarrow> 'a formula \<Rightarrow> nat set" an
 | "fvi b (Or \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (Ands \<phi>s) = (let xs = map (fvi b) \<phi>s in \<Union>x\<in>set xs. x)"
 | "fvi b (Exists \<phi>) = fvi (Suc b) \<phi>"
+| "fvi b (Agg y \<omega> b' f \<phi>) = fvi (b + b') \<phi> \<union> (if b \<le> y then {y - b} else {})"
 | "fvi b (Prev I \<phi>) = fvi b \<phi>"
 | "fvi b (Next I \<phi>) = fvi b \<phi>"
 | "fvi b (Since \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
@@ -84,22 +89,48 @@ lemma finite_fvi[simp]:
   shows "finite (fvi b \<phi>)" "finite (fvi_regex b r)"
   by (induction \<phi> and r arbitrary: b and b rule: formula.induct regex.induct) simp_all
 
-lemma fvi_trm_Suc: "x \<in> fvi_trm (Suc b) t \<longleftrightarrow> Suc x \<in> fvi_trm b t"
+lemma fvi_trm_plus: "x \<in> fvi_trm (b + c) t \<longleftrightarrow> x + c \<in> fvi_trm b t"
   by (cases t) auto
 
-lemma fvi_Suc:
+lemma fvi_plus:
   fixes \<phi> :: "'a formula" and r :: "'a regex"
-  shows "x \<in> fvi (Suc b) \<phi> \<longleftrightarrow> Suc x \<in> fvi b \<phi>" "x \<in> fvi_regex (Suc b) r \<longleftrightarrow> Suc x \<in> fvi_regex b r"
-  by (induction \<phi> and r arbitrary: b and b rule: formula.induct regex.induct) (simp_all add: fvi_trm_Suc)
+  shows "x \<in> fvi (b + c) \<phi> \<longleftrightarrow> x + c \<in> fvi b \<phi>" "x \<in> fvi_regex (b + c) r \<longleftrightarrow> x + c \<in> fvi_regex b r"
+proof (induction \<phi> and r arbitrary: b and b rule: formula.induct regex.induct)
+  case (Exists \<phi>)
+  then show ?case by force
+next
+  case (Agg y \<omega> b' f \<phi>)
+  have *: "b + c + b' = b + b' + c" by simp
+  from Agg show ?case by (force simp: *)
+qed (simp_all add: fvi_trm_plus)
+
+lemma fvi_Suc:
+  "x \<in> fvi (Suc b) \<phi> \<longleftrightarrow> Suc x \<in> fvi b \<phi>"
+  "x \<in> fvi_regex (Suc b) r \<longleftrightarrow> Suc x \<in> fvi_regex b r"
+  using fvi_plus[where c=1] by simp_all
+
+lemma fvi_plus_bound:
+  assumes "\<forall>i\<in>fvi (b + c) \<phi>. i < n"
+  shows "\<forall>i\<in>fvi b \<phi>. i < n + c"
+proof
+  fix i
+  assume "i \<in> fvi b \<phi>"
+  show "i < n + c"
+  proof (cases "i < c")
+    case True
+    then show ?thesis by simp
+  next
+    case False
+    then obtain i' where "i = i' + c"
+      using nat_le_iff_add by (auto simp: not_less)
+    with assms \<open>i \<in> fvi b \<phi>\<close> show ?thesis by (simp add: fvi_plus)
+  qed
+qed
 
 lemma fvi_Suc_bound:
   assumes "\<forall>i\<in>fvi (Suc b) \<phi>. i < n"
   shows "\<forall>i\<in>fvi b \<phi>. i < Suc n"
-proof
-  fix i
-  assume "i \<in> fvi b \<phi>"
-  with assms show "i < Suc n" by (cases i) (simp_all add: fvi_Suc)
-qed
+  using assms fvi_plus_bound[where c=1] by simp
 
 lemma fvi_regex_Suc_bound:
   assumes "\<forall>i\<in>fvi_regex (Suc b) \<phi>. i < n"
@@ -166,6 +197,7 @@ qualified primrec future_reach :: "'a formula \<Rightarrow> enat" and future_rea
 | "future_reach (Or \<phi> \<psi>) = max (future_reach \<phi>) (future_reach \<psi>)"
 | "future_reach (Ands l) = foldl max 0 (map future_reach l)"
 | "future_reach (Exists \<phi>) = future_reach \<phi>"
+| "future_reach (Agg y \<omega> b f \<phi>) = future_reach \<phi>"
 | "future_reach (Prev I \<phi>) = future_reach \<phi> - left I"
 | "future_reach (Next I \<phi>) = future_reach \<phi> + right I + 1"
 | "future_reach (Since \<phi> I \<psi>) = max (future_reach \<phi>) (future_reach \<psi> - left I)"
@@ -217,6 +249,14 @@ lemma future_reach_Ands_bounded: "future_reach (Ands l) \<noteq> \<infinity> \<l
 
 subsubsection \<open>Semantics\<close>
 
+definition "ecard A = (if finite A then card A else \<infinity>)"
+
+qualified definition fv_env :: "'a formula \<Rightarrow> 'a env \<Rightarrow> 'a env" where
+  "fv_env \<phi> v = [v ! x. x \<leftarrow> [0..<nfv \<phi>], x \<in> fv \<phi>]"
+
+lemma fv_env_fv_cong: "\<forall>x\<in>fv \<phi>. v ! x = v' ! x \<Longrightarrow> fv_env \<phi> v = fv_env \<phi> v'"
+  unfolding fv_env_def by (auto intro!: arg_cong[where f=concat] cong: map_cong)
+
 qualified primrec sat :: "'a trace \<Rightarrow> 'a env \<Rightarrow> nat \<Rightarrow> 'a formula \<Rightarrow> bool"
               and match :: "'a trace \<Rightarrow> 'a env \<Rightarrow> 'a regex \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool"where
   "sat \<sigma> v i (Pred r ts) = ((r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i)"
@@ -225,6 +265,9 @@ qualified primrec sat :: "'a trace \<Rightarrow> 'a env \<Rightarrow> nat \<Righ
 | "sat \<sigma> v i (Or \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<or> sat \<sigma> v i \<psi>)"
 | "sat \<sigma> v i (Ands l) = list_all id (map (sat \<sigma> v i) l)"
 | "sat \<sigma> v i (Exists \<phi>) = (\<exists>z. sat \<sigma> (z # v) i \<phi>)"
+| "sat \<sigma> v i (Agg y \<omega> b f \<phi>) =
+    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> (zs @ v) i \<phi> \<and> f (fv_env \<phi> (zs @ v)) = x} \<and> Zs \<noteq> {}}
+    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {..<b}) \<and> v ! y = \<omega> M)"
 | "sat \<sigma> v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<phi>)"
 | "sat \<sigma> v i (Next I \<phi>) = (mem (\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i) I \<and> sat \<sigma> v (Suc i) \<phi>)"
 | "sat \<sigma> v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>))"
@@ -515,9 +558,9 @@ next
   then show ?case  unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
 next
   case (Ands l)
-  have "\<And>\<phi>. \<phi> \<in> (set l) \<Longrightarrow> sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>"
+  have "\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>"
   proof -
-    fix \<phi> assume "\<phi> \<in> (set l)"
+    fix \<phi> assume "\<phi> \<in> set l"
     then have "fv \<phi> \<subseteq> fv (Ands l)" using fv_subset_Ands by blast
     then have "\<forall>x\<in>fv \<phi>. v!x = v'!x" using Ands.prems by blast
     then show "sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>" using Ands.hyps \<open>\<phi> \<in> set l\<close> by blast
@@ -526,6 +569,18 @@ next
 next
   case (Exists \<phi>)
   then show ?case unfolding sat.simps by (intro iff_exI) (simp add: fvi_Suc nth_Cons')
+next
+  case (Agg y \<omega> b f \<phi>)
+  have "v ! y = v' ! y"
+    using Agg.prems by simp
+  moreover have "sat \<sigma> (zs @ v) i \<phi> = sat \<sigma> (zs @ v') i \<phi>" if "length zs = b" for zs
+    using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
+        nth_append fvi_plus(1)[where b=0 and c=b, simplified])
+  moreover have "f (fv_env \<phi> (zs @ v)) = f (fv_env \<phi> (zs @ v'))" if "length zs = b" for zs
+    using that Agg.prems by (simp add: fv_env_fv_cong[where v="zs @ v" and v'="zs @ v'"]
+        nth_append fvi_plus(1)[where b=0 and c=b, simplified])
+  ultimately show ?case
+    by (simp cong: conj_cong)
 next
   case (Star r)
   then show ?case by (auto intro!: arg_cong[of _ _ rtranclp])
@@ -597,8 +652,9 @@ and safe_regex :: "modality \<Rightarrow> safety \<Rightarrow> 'a regex \<Righta
 | "safe_formula (Neg \<phi>) = (fv \<phi> = {} \<and> safe_formula \<phi>)"
 | "safe_formula (Or \<phi> \<psi>) = (fv \<psi> = fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
-   list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
+    list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "safe_formula (Exists \<phi>) = (safe_formula \<phi>)"
+| "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y \<notin> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Since \<phi> I \<psi>) = (fv \<phi> \<subseteq> fv \<psi> \<and>
@@ -713,6 +769,7 @@ lemma safe_formula_regex_induct[consumes 2]:
               fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
     and "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
     and "\<And>\<phi>. P \<phi> \<Longrightarrow> P (Exists \<phi>)"
+    and "\<And>y \<omega> b f \<phi>. y \<notin> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Next I \<phi>)"
     and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
@@ -750,21 +807,21 @@ next
     using "8.IH"(2)[OF posneg refl _ _ "8.prems"(2)] safe_remove_neg by (simp add: list_all_iff)
   ultimately show ?case using "8.IH"(1) "8.prems" assms(10) posneg by simp
 next
-  case (12 \<phi> I \<psi>)
-  then show ?case
-  proof (cases \<phi>)
-    case (Ands l)
-    then show ?thesis using "12.IH"(1) "12.IH"(3) "12.prems" assms(16) by auto
-  qed (auto 0 3 elim!: disjE_Not2 intro: assms)
-next
   case (13 \<phi> I \<psi>)
   then show ?case
   proof (cases \<phi>)
     case (Ands l)
-    then show ?thesis using "13.IH"(1) "13.IH"(3) "13.prems" assms(18) by auto
+    then show ?thesis using "13.IH"(1) "13.IH"(3) "13.prems" assms(17) by auto
   qed (auto 0 3 elim!: disjE_Not2 intro: assms)
 next
-  case (17 b g \<phi>)
+  case (14 \<phi> I \<psi>)
+  then show ?case
+  proof (cases \<phi>)
+    case (Ands l)
+    then show ?thesis using "14.IH"(1) "14.IH"(3) "14.prems" assms(19) by auto
+  qed (auto 0 3 elim!: disjE_Not2 intro: assms)
+next
+  case (18 b g \<phi>)
   then show ?case
     by (auto split: if_splits formula.splits simp: assms)
 qed (auto intro: assms)
@@ -787,6 +844,7 @@ lemma safe_formula_induct[consumes 1]:
               fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
     and "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
     and "\<And>\<phi>. P \<phi> \<Longrightarrow> P (Exists \<phi>)"
+    and "\<And>y \<omega> b f \<phi>. y \<notin> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Next I \<phi>)"
     and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
@@ -837,6 +895,7 @@ qualified primrec matches :: "'a env \<Rightarrow> 'a formula \<Rightarrow> name
 | "matches v (Or \<phi> \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
 | "matches v (Ands l) e = list_ex id (map (\<lambda>\<phi>. matches v \<phi> e) l)"
 | "matches v (Exists \<phi>) e = (\<exists>z. matches (z # v) \<phi> e)"
+| "matches v (Agg y \<omega> b f \<phi>) e = (\<exists>zs. length zs = b \<and> matches (zs @ v) \<phi> e)"
 | "matches v (Prev I \<phi>) e = matches v \<phi> e"
 | "matches v (Next I \<phi>) e = matches v \<phi> e"
 | "matches v (Since \<phi> I \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
@@ -871,6 +930,12 @@ next
 next
   case (Exists \<phi>)
   then show ?case unfolding matches.simps by (intro iff_exI) (simp add: fvi_Suc nth_Cons')
+next
+  case (Agg y \<omega> b f \<phi>)
+  have "matches (zs @ v) \<phi> e = matches (zs @ v') \<phi> e" if "length zs = b" for zs
+    using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
+        nth_append fvi_plus(1)[where b=0 and c=b, simplified])
+  then show ?case by auto
 qed (auto 5 0 simp add: nth_Cons')
 
 abbreviation relevant_events where
@@ -932,9 +997,13 @@ next
 next
   case (Exists \<phi>)
   have "sat \<sigma> (z # v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (z # v) i \<phi>" for z
-    thm Exists.IH[of "{z # v | v. v \<in> S}"]
     using Exists.prems by (auto intro!: Exists.IH[of "{z # v | v. v \<in> S}"])
   then show ?case by simp
+next
+  case (Agg y \<omega> b f \<phi>)
+  have "sat \<sigma> (zs @ v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (zs @ v) i \<phi>" if "length zs = b" for zs
+    using that Agg.prems by (auto intro!: Agg.IH[where S="{zs @ v | v. v \<in> S}"])
+  then show ?case by (simp cong: conj_cong)
 next
   case (Prev I \<phi>)
   then show ?case by (auto cong: nat.case_cong)
@@ -1081,6 +1150,7 @@ fun convert_multiway :: "'a formula \<Rightarrow> 'a formula" and convert_multiw
     | _ \<Rightarrow> Neg \<phi>))"
 | "convert_multiway (Or \<phi> \<psi>) = Or (convert_multiway \<phi>) (convert_multiway \<psi>)"
 | "convert_multiway (Exists \<phi>) = Exists (convert_multiway \<phi>)"
+| "convert_multiway (Agg y \<omega> b f \<phi>) = Agg y \<omega> b f (convert_multiway \<phi>)"
 | "convert_multiway (Prev r \<phi> ) = Prev r (convert_multiway \<phi>)"
 | "convert_multiway (Next r \<phi>) = Next r (convert_multiway \<phi>)"
 | "convert_multiway (Since \<phi> r \<psi>) = (if safe_formula \<phi> then
@@ -1146,16 +1216,6 @@ proof (induction \<phi> and m g r arbitrary: b and b rule: safe_formula_safe_reg
       by (auto simp: fv_get_and fv_get_or)
   qed
 next
-  case (12 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 12 show ?thesis by simp
-  next
-    case False
-    with "12.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 12 show ?thesis by simp
-  qed
-next
   case (13 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
@@ -1166,14 +1226,24 @@ next
     with False 13 show ?thesis by simp
   qed
 next
-  case (17 m g \<phi>)
+  case (14 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 17 show ?thesis by simp
+    with 14 show ?thesis by simp
   next
     case False
-    with "17.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 17 show ?thesis by simp
+    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 14 show ?thesis by simp
+  qed
+next
+  case (18 m g \<phi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 18 show ?thesis by simp
+  next
+    case False
+    with "18.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 18 show ?thesis by simp
   qed
 qed auto
 
@@ -1359,16 +1429,6 @@ proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
     qed
   qed
 next
-  case (12 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 12 show ?thesis by (simp add: fv_convert_multiway)
-  next
-    case False
-    with "12.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 12 show ?thesis by (simp add: fv_convert_multiway)
-  qed
-next
   case (13 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
@@ -1379,14 +1439,24 @@ next
     with False 13 show ?thesis by (simp add: fv_convert_multiway)
   qed
 next
-  case (17 m g \<phi>)
+  case (14 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 17 show ?thesis by simp
+    with 14 show ?thesis by (simp add: fv_convert_multiway)
   next
     case False
-    with "17.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 17 show ?thesis by simp
+    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 14 show ?thesis by (simp add: fv_convert_multiway)
+  qed
+next
+  case (18 m g \<phi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 18 show ?thesis by simp
+  next
+    case False
+    with "18.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 18 show ?thesis by simp
   qed
 qed (auto simp: fv_convert_multiway fv_regex_convert_multiway)
 
@@ -1471,16 +1541,6 @@ proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
     qed
   qed
 next
-  case (12 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 12 show ?thesis by simp
-  next
-    case False
-    with "12.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 12 show ?thesis by simp
-  qed
-next
   case (13 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
@@ -1491,14 +1551,24 @@ next
     with False 13 show ?thesis by simp
   qed
 next
-  case (17 m g \<phi>)
+  case (14 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 17 show ?thesis by simp
+    with 14 show ?thesis by simp
   next
     case False
-    with "17.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 17 show ?thesis by simp
+    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 14 show ?thesis by simp
+  qed
+next
+  case (18 m g \<phi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 18 show ?thesis by simp
+  next
+    case False
+    with "18.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 18 show ?thesis by simp
   qed
 qed auto
 
@@ -1552,15 +1622,9 @@ proof (induction \<phi> and m g r arbitrary: v i and v i j rule: safe_formula_sa
     qed
   qed
 next
-  case (12 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 12 show ?thesis by simp
-  next
-    case False
-    with "12.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 12 show ?thesis by simp
-  qed
+  case (10 y \<omega> b f \<phi>)
+  then show ?case
+    by (simp add: fv_env_def nfv_def fv_convert_multiway cong: conj_cong)
 next
   case (13 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
@@ -1572,17 +1636,27 @@ next
     with False 13 show ?thesis by simp
   qed
 next
-  case (17 m g \<phi>)
+  case (14 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 17 show ?thesis by simp
+    with 14 show ?thesis by simp
   next
     case False
-    with "17.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 17 show ?thesis by simp
+    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 14 show ?thesis by simp
   qed
 next
-  case (21 m g r)
+  case (18 m g \<phi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 18 show ?thesis by simp
+  next
+    case False
+    with "18.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 18 show ?thesis by simp
+  qed
+next
+  case (22 m g r)
   then show ?case
     by (auto elim!: rtranclp_mono[OF predicate2I, THEN predicate2D, rotated])
 qed (auto cong: nat.case_cong)
