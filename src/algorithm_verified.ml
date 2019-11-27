@@ -1,7 +1,7 @@
 open MFOTL
 open Verified_adapter
 
-
+let no_mw = ref false
 
 let rec show_results closed i q tsq rel =
   if !Misc.stop_at_first_viol && Relation.cardinal rel > 1 then
@@ -37,7 +37,9 @@ open IntMap
 
 let monitor logfile f =
   let closed = (free_vars f = []) in
-  let init_state = Verified.Monitor.minit_safe (domain_ceq, domain_ccompare, domain_equal) (convert_formula f) in
+  let cf = convert_formula f in
+  let cf = if !no_mw then cf else Verified.Monitor.convert_multiway (domain_ccompare, domain_equal) cf in
+  let init_state = Verified.Monitor.minit_safe (domain_ceq, domain_ccompare, domain_equal) cf in
   let lexbuf = Log.log_open logfile in
   let init_i = 0 in
   let init_ts = MFOTL.ts_invalid in

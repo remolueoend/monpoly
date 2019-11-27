@@ -7,6 +7,9 @@ theory Monitor_Code
 begin
 (*>*)
 
+lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Cardinality.card'" by simp
+declare [[code drop: card]] Set_Impl.card_code[code]
+
 derive ccompare Formula.trm
 derive (eq) ceq Formula.trm
 derive (rbt) set_impl Formula.trm
@@ -36,13 +39,13 @@ lemma meval_MPred'': "meval n t db (MPred e ts) = ([
   unfolding meval_MPred' these_UNION o_def prod.case_distrib[of Option.these]
   by (auto simp: Option.these_def map_option_case image_iff split: if_splits option.splits)
 
-lemmas meval_code[code] = meval.simps(1) meval_MPred'' meval.simps(3-12)
+lemmas meval_code[code] = meval.simps(1) meval_MPred'' meval.simps(3-13)
 
-definition db_code :: "(char list \<times> 'a list) list \<Rightarrow> (char list \<times> 'a list) set" where
-  "db_code = set"
+definition mk_db :: "(char list \<times> 'a list) list \<Rightarrow> (char list \<times> 'a list) set" where
+  "mk_db = set"
 
-definition verdict_code :: "_ \<Rightarrow> (nat \<times> 'a :: ccompare option list) list" where
-  "verdict_code = RBT_Set2.keys"
+definition rbt_verdict :: "_ \<Rightarrow> (nat \<times> 'a :: ccompare option list) list" where
+  "rbt_verdict = RBT_Set2.keys"
 
 lemma saturate_commute:
   assumes "\<And>s. r \<in> g s" "\<And>s. g (insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
@@ -97,21 +100,19 @@ lemma is_empty_table_unfold [code_unfold]:
   "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
   unfolding set_eq_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
 
-export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
-  nat_of_integer integer_of_nat enat literal.explode db_code set interval RBT_set verdict_code
-  Formula.Var Formula.Const
-  Formula.Pred Formula.Eq Formula.Neg Formula.Or Formula.Exists
-  Formula.Prev Formula.Next Formula.Since Formula.Until Formula.MatchP Formula.MatchF
+export_code convert_multiway minit_safe mstep
   checking OCaml?
 
-export_code HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt set_RBT set_impl phantom
-  nat_of_integer integer_of_nat enat literal.explode db_code set interval RBT_set verdict_code
-  Formula.Var Formula.Const
-  Formula.Pred Formula.Eq Formula.Neg Formula.Or Formula.Exists
-  Formula.Prev Formula.Next Formula.Since Formula.Until Formula.MatchP Formula.MatchF
-  Formula.Wild Formula.Test Formula.Plus Formula.Times Formula.Star
-  safe_formula
-  minit_safe mstep in OCaml module_name Monitor file_prefix "verified"
+export_code
+  (*type classes*)
+  HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt
+  (*basic types*)
+  nat_of_integer integer_of_nat enat literal.explode interval mk_db RBT_set rbt_verdict
+  (*term and formula constructors*)
+  Formula.Var Formula.Pred
+  (*main functions*)
+  convert_multiway minit_safe mstep
+  in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)
 end

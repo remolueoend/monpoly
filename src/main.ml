@@ -56,7 +56,7 @@ let usage_string =
   "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]
                [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]
                [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]
-               [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
+               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
                [-ignore_parse_errors] [-stop_at_out_of_order_ts]
                [-stop_at_first_viol] [-load <file>]"
 
@@ -193,6 +193,7 @@ let _ =
     "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
     "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
     "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
+    "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
   ]
     (fun _ -> ())
     usage_string;

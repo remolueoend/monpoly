@@ -107,7 +107,7 @@ let convert_formula f =
 
 let convert_db md =
   let convert_relations db =
-    db_code (domain_ceq, domain_ccompare) (List.flatten
+    mk_db (domain_ceq, domain_ccompare) (List.flatten
                   (List.map
                     (fun t ->
                       let (name,_) = (Table.get_schema t) in
@@ -118,7 +118,7 @@ let convert_db md =
 (* (Verified.Monitor.nat * Predicate.cst option list) Verified.Monitor.set -> (timestamp * relation) *)
 let convert_violations vs =
   let vsl = match vs with
-    | RBT_set rbt -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) (verdict_code domain_ccompare rbt)
+    | RBT_set rbt -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) (rbt_verdict domain_ccompare rbt)
     | _ -> failwith "Impossible!" in
   let qtps = List.sort_uniq (fun x y -> x - y) (List.map fst vsl) in
   let qmap tp = List.filter (fun (tp', _) -> tp = tp') vsl in

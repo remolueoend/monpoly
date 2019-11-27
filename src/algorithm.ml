@@ -1020,7 +1020,7 @@ let rec eval f neval crt discard =
               begin (* clean up from previous evaluation *)
                 assert (j = q-1);
                 ignore(Dllist.pop_first inf.listrel1);
-                if not (Dllist.is_last inf.listrel1 !crt1_j) then
+                if not (Dllist.is_empty inf.listrel1) && not (Dllist.is_last inf.listrel1 !crt1_j) then
                   begin
                     crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
                     iter1 ()
@@ -1059,10 +1059,11 @@ let rec eval f neval crt discard =
                 assert(j1 = j2);
                 if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
                   begin
-                    f1union := Relation.union !f1union rel1;
                     let resj = comp rel2 !f1union in
                     res := Relation.union !res resj;
-                    let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
+                    f1union := Relation.union !f1union rel1;
+                    let is_last1 = Dllist.is_empty inf.listrel1 ||
+                                   Dllist.is_last inf.listrel1 !crt1_j in
                     let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
                     assert (not (is_last1 && is_last2));
                     if (not is_last1) && (not is_last2) then

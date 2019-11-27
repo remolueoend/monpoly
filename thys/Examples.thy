@@ -6,14 +6,14 @@ begin
 
 section \<open>Examples\<close>
 
-abbreviation "TT \<equiv> Formula.Eq (Formula.Const ''_'') (Formula.Const ''_'')"
-abbreviation "Eventually I \<psi> \<equiv> Formula.Until TT I \<psi>"
+abbreviation "Eventually I \<psi> \<equiv> Formula.Until Formula.TT I \<psi>"
 
-definition "\<phi>\<^sub>e\<^sub>x = Formula.And_Not (Formula.Pred ''A'' [Formula.Var 0])
-  (Eventually (interval 1 2) (Formula.Exists (Formula.Pred ''B'' [Formula.Var 1, Formula.Var 0])))"
-(*
+definition \<phi>\<^sub>e\<^sub>x :: "string Formula.formula" where
+  "\<phi>\<^sub>e\<^sub>x = Formula.And_Not (Formula.Pred ''A'' [Formula.Var 0])
+    (Eventually (interval 1 2) (Formula.Exists (Formula.Pred ''B'' [Formula.Var 1, Formula.Var 0])))"
+
 lemma "mmonitorable \<phi>\<^sub>e\<^sub>x" by eval
-*)
+
 text \<open>Offline monitoring:\<close>
 
 lift_definition \<pi>\<^sub>e\<^sub>x :: "string Formula.prefix" is

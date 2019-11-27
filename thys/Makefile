@@ -9,3 +9,4 @@ all: verimon
 
 verimon:
 	$(ISABELLE) build -d'$p' -evD .
+	cp verified.ocaml ../src/verified.ml
