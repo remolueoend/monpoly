@@ -141,6 +141,11 @@ proof
   with assms show "i < Suc n" by (cases i) (simp_all add: fvi_Suc)
 qed
 
+lemma fvi_iff_fv:
+  "x \<in> fvi b \<phi> \<longleftrightarrow> x + b \<in> fv \<phi>"
+  "x \<in> fvi_regex b r \<longleftrightarrow> x + b \<in> fv_regex r"
+  using fvi_plus[where b=0 and c=b] by simp_all
+
 qualified definition nfv :: "'a formula \<Rightarrow> nat" where
   "nfv \<phi> = Max (insert 0 (Suc ` fv \<phi>))"
 
@@ -575,10 +580,10 @@ next
     using Agg.prems by simp
   moreover have "sat \<sigma> (zs @ v) i \<phi> = sat \<sigma> (zs @ v') i \<phi>" if "length zs = b" for zs
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
-        nth_append fvi_plus(1)[where b=0 and c=b, simplified])
+        nth_append fvi_iff_fv(1)[where b=b])
   moreover have "f (fv_env \<phi> (zs @ v)) = f (fv_env \<phi> (zs @ v'))" if "length zs = b" for zs
     using that Agg.prems by (simp add: fv_env_fv_cong[where v="zs @ v" and v'="zs @ v'"]
-        nth_append fvi_plus(1)[where b=0 and c=b, simplified])
+        nth_append fvi_iff_fv(1)[where b=b])
   ultimately show ?case
     by (simp cong: conj_cong)
 next
@@ -654,7 +659,7 @@ and safe_regex :: "modality \<Rightarrow> safety \<Rightarrow> 'a regex \<Righta
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
     list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "safe_formula (Exists \<phi>) = (safe_formula \<phi>)"
-| "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y \<notin> fv \<phi>)"
+| "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Since \<phi> I \<psi>) = (fv \<phi> \<subseteq> fv \<psi> \<and>
@@ -769,7 +774,7 @@ lemma safe_formula_regex_induct[consumes 2]:
               fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
     and "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
     and "\<And>\<phi>. P \<phi> \<Longrightarrow> P (Exists \<phi>)"
-    and "\<And>y \<omega> b f \<phi>. y \<notin> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
+    and "\<And>y \<omega> b f \<phi>. y + b \<notin> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Next I \<phi>)"
     and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
@@ -844,7 +849,7 @@ lemma safe_formula_induct[consumes 1]:
               fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
     and "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
     and "\<And>\<phi>. P \<phi> \<Longrightarrow> P (Exists \<phi>)"
-    and "\<And>y \<omega> b f \<phi>. y \<notin> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
+    and "\<And>y \<omega> b f \<phi>. y + b \<notin> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Next I \<phi>)"
     and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
@@ -934,7 +939,7 @@ next
   case (Agg y \<omega> b f \<phi>)
   have "matches (zs @ v) \<phi> e = matches (zs @ v') \<phi> e" if "length zs = b" for zs
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
-        nth_append fvi_plus(1)[where b=0 and c=b, simplified])
+        nth_append fvi_iff_fv(1)[where b=b])
   then show ?case by auto
 qed (auto 5 0 simp add: nth_Cons')
 

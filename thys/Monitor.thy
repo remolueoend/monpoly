@@ -29,7 +29,7 @@ and mmonitorable_regex_exec :: "modality \<Rightarrow> safety \<Rightarrow> 'a F
     \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (Formula.fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y \<notin> Formula.fv \<phi>)"
+| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y + b \<notin> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi> \<and> right I \<noteq> \<infinity>)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
@@ -820,13 +820,99 @@ primrec these_list :: "'a option list \<Rightarrow> 'a list" where
 
 definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> (('a \<times> enat) set \<Rightarrow> 'a) \<Rightarrow> nat \<Rightarrow>
   ('a Formula.env \<Rightarrow> 'a) \<Rightarrow> 'a table \<Rightarrow> 'a table" where
-  "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = {}
+  "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = empty_table
     then singleton_table n y (\<omega> {})
     else (\<lambda>k.
       let group = Set.filter (\<lambda>x. drop b x = k) rel;
         images = (f \<circ> these_list) ` group;
         M = (\<lambda>y. (y, enat (card (Set.filter (\<lambda>x. f (these_list x) = y) group)))) ` images
       in k[y:=Some (\<omega> M)]) ` (drop b) ` rel)"
+
+
+(*TODO: move back before wf_mformula*)
+definition lift_envs' :: "nat \<Rightarrow> 'a list set \<Rightarrow> 'a list set" where
+  "lift_envs' b R = (\<lambda>(xs,ys). xs @ ys) ` ({xs. length xs = b} \<times> R)"
+
+lemma mem_restr_lift_envs'_append[simp]:
+  "length xs = b \<Longrightarrow> mem_restr (lift_envs' b R) (xs @ ys) = mem_restr R ys"
+  unfolding mem_restr_def
+  apply safe
+   apply (simp add: list_all2_append1)
+   apply (auto simp add: lift_envs'_def)
+  apply (rule exI[where x="map the xs"])
+  apply simp
+  apply (erule bexI[rotated])
+  apply (rule list_all2_appendI)
+   apply (simp add: list.rel_map)
+   apply (rule list.rel_refl)
+   apply simp
+  by assumption
+
+lemma mem_restr_upd_None: "mem_restr R xs \<Longrightarrow> mem_restr R (xs[i:=None])"
+  unfolding mem_restr_def
+  apply clarify
+  apply (erule bexI[rotated])
+  apply (simp add: list_all2_conv_all_nth)
+  apply clarsimp
+  apply (case_tac "ia = i")
+  by auto
+
+(*TODO: move*)
+lemma qtable_eval_agg:
+  assumes inner: "qtable (n + b) (Formula.fv \<phi>) (mem_restr (lift_envs' b R))
+      (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel"
+    and n: "\<forall>x\<in>Formula.fv (Formula.Agg y \<omega> b f \<phi>). x < n"
+    and fresh: "y + b \<notin> Formula.fv \<phi>"
+    and g0: "g0 = (Formula.fv \<phi> \<subseteq> {..<b})"
+  shows "qtable n (Formula.fv (Formula.Agg y \<omega> b f \<phi>)) (mem_restr R)
+      (\<lambda>v. Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)) (eval_agg n g0 y \<omega> b f rel)"
+      (is "qtable _ ?fv _ ?Q ?rel'")
+proof -
+  define M where "M = (\<lambda>v. {(x, ecard Zs) | x Zs.
+      Zs = {zs. length zs = b \<and> Formula.sat \<sigma> (zs @ v) i \<phi> \<and> f (Formula.fv_env \<phi> (zs @ v)) = x} \<and>
+      Zs \<noteq> {}})"
+  show ?thesis proof (cases "g0 \<and> rel = empty_table")
+    case True
+    then have all_bound: "Formula.fvi b \<phi> = {}"
+      by (auto simp: g0 fvi_iff_fv(1)[where b=b])
+    show ?thesis proof (rule qtableI)
+      show "table n ?fv ?rel'" by (simp add: eval_agg_def True all_bound)
+    next
+      fix v
+      assume "wf_tuple n ?fv v" "mem_restr R v"
+      have M_empty: "M (map the v) = {}"
+        using inner unfolding True[THEN conjunct2] qtable_empty_iff
+        apply (clarsimp simp: M_def all_bound)
+        subgoal for zs
+          apply (drule spec[where x="map2 (\<lambda>z i. if i \<in> Formula.fv \<phi> then Some z else None) zs [0..<b] @ v[y:=None]"])
+          apply simp
+          apply (safe; erule notE)
+          using \<open>wf_tuple n ?fv v\<close> apply (clarsimp simp: wf_tuple_def nth_append
+               fvi_iff_fv(1)[where b="length zs"])
+            apply (metis True g0 le_add_diff_inverse2 lessThan_iff less_diff_conv2 linorder_not_less nth_list_update nth_list_update_neq subsetD)
+           apply (rule mem_restr_upd_None[OF \<open>mem_restr R v\<close>])
+          apply (erule sat_fv_cong[THEN iffD1, rotated])
+          using fresh True apply (auto simp: nth_append g0)
+          done
+        done
+      show "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
+        if "v \<in> eval_agg n g0 y \<omega> b f rel"
+        using M_empty[unfolded M_def] True that n
+        by (simp add: eval_agg_def g0 singleton_table_def)
+      have "v \<in> singleton_table n y (the (v ! y))" "length v = n"
+        using \<open>wf_tuple n ?fv v\<close> unfolding wf_tuple_def singleton_table_def
+        by (auto simp add: tabulate_alt all_bound map_nth
+             intro!: trans[OF map_cong[where g="(!) v", simplified nth_map, OF refl], symmetric])
+      then show "v \<in> eval_agg n g0 y \<omega> b f rel"
+        if "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
+        using M_empty[unfolded M_def] True that n
+        by (simp add: eval_agg_def g0)
+    qed
+  next
+    case False
+    then show ?thesis sorry (*TODO*)
+  qed
+qed
 
 definition "lookup = Mapping.lookup_default empty_table"
 
@@ -1650,9 +1736,6 @@ definition wf_matchF_invar where
        qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v.
          Formula.match \<sigma> (map the v) (from_mregex ms \<phi>s) i (i + length aux - 1)) (lookup Y ms)))"
 
-definition lift_envs' :: "nat \<Rightarrow> 'a list set \<Rightarrow> 'a list set" where
-  "lift_envs' b R = (\<lambda>(xs,ys). xs @ ys) ` ({xs. length xs = b} \<times> R)"
-
 inductive wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow>
   nat \<Rightarrow> 'a list set \<Rightarrow> 'a mformula \<Rightarrow> 'a Formula.formula \<Rightarrow> bool"
   for \<sigma> j where
@@ -1689,7 +1772,8 @@ inductive wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow>
 | Exists: "wf_mformula \<sigma> j (Suc n) (lift_envs R) \<phi> \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j n R (MExists \<phi>) (Formula.Exists \<phi>')"
 | Agg: "wf_mformula \<sigma> j (n + b) (lift_envs' b R) \<phi> \<phi>' \<Longrightarrow>
-    y \<notin> Formula.fv \<phi>' \<Longrightarrow>
+    y < n \<Longrightarrow>
+    y + b \<notin> Formula.fv \<phi>' \<Longrightarrow>
     g0 = (Formula.fv \<phi>' \<subseteq> {..<b}) \<Longrightarrow>
     wf_mformula \<sigma> j n R (MAgg g0 y \<omega> b f \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
 | Prev: "wf_mformula \<sigma> j n R \<phi> \<phi>' \<Longrightarrow>
@@ -3319,6 +3403,9 @@ proof (induction pred: wf_mformula)
     by (auto dest: bspec[where x="remove_neg _"])
   then show ?case using Ands.hyps(2) by auto
 next
+  case (Agg n b R \<phi> \<phi>' y g0 \<omega> f)
+  then show ?case by (auto 0 3 simp add: fvi_iff_fv[where b=b])
+next
   case (MatchP r n R \<phi>s mr mrs buf nts I aux)
   then obtain \<phi>s' where conv: "to_mregex r = (mr, \<phi>s')" by blast
   with MatchP have "\<forall>\<phi>'\<in>set \<phi>s'. \<forall>x\<in>fv \<phi>'. x < n"
@@ -3549,6 +3636,13 @@ next
         intro!: wf_mformula.Exists dest!: MExists.IH qtable_project_fv
         elim!: list.rel_mono_strong table_fvi_tl qtable_cong sat_fv_cong[THEN iffD1, rotated -1]
         split: if_splits)+
+next
+  case (MAgg y \<omega> b f \<phi>)
+  from MAgg.prems show ?case
+    using wf_mformula_wf_set[OF MAgg.prems, unfolded wf_set_def]
+    by (cases pred: wf_mformula)
+      (auto simp add: list.rel_map simp del: sat.simps fvi.simps split: prod.split
+        intro!: wf_mformula.Agg dest!: MAgg.IH elim!: list.rel_mono_strong qtable_eval_agg)
 next
   case (MPrev I \<phi> first buf nts)
   from MPrev.prems show ?case
