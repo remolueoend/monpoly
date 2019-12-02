@@ -333,11 +333,11 @@ let string_of_formula str g =
           ^
           Predicate.string_of_term (Var x)
           ^
-          if glist <> [] then
+          (if glist <> [] then
               "; "
               ^
               Misc.string_of_list_ext "" "" "," (fun z -> Predicate.string_of_term (Var z)) glist
-          else ""
+          else "")
           ^
           " "
           ^
