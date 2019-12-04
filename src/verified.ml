@@ -3248,19 +3248,30 @@ let rec r_delta (_A1, _A2, _A3)
         r_delta (_A1, _A2, _A3) (fun t -> kappa (MTimes (MStar r, t))) x phi_s
           r;;
 
+let rec rbt_comp_bulkload
+  c xs = foldr (fun (a, b) -> rbt_comp_insert c a b) xs Empty;;
+
+let rec bulkload _A
+  xa = Mapping_RBT (rbt_comp_bulkload (the (ccompare _A)) xa);;
+
 let rec tabulatea _A (_B1, _B2)
-  xa x =
-    Mapping
-      (map_of _A
-        (map_filter
-          (fun k ->
-            (let fk = x k in
-              (if is_empty
-                    (card_UNIV_list, (ceq_list (ceq_option _B1)),
-                      (cproper_interval_list (ccompare_option _B2)))
-                    fk
-                then None else Some (k, fk))))
-          xa));;
+  xs f =
+    (match ccompare _A
+      with None ->
+        failwith "tabulate RBT_Mapping: ccompare = None"
+          (fun _ -> tabulatea _A (_B1, _B2) xs f)
+      | Some _ ->
+        RBT_Mapping
+          (bulkload _A
+            (map_filter
+              (fun k ->
+                (let fk = f k in
+                  (if is_empty
+                        (card_UNIV_list, (ceq_list (ceq_option _B1)),
+                          (cproper_interval_list (ccompare_option _B2)))
+                        fk
+                    then None else Some (k, fk))))
+              xs)));;
 
 let rec right x = snd (rep_I x);;
 
@@ -3270,7 +3281,7 @@ let rec update_matchP (_A1, _A2, _A3)
        (match
          maps (fun (t, rel) ->
                 (if less_eq_enat (Enat (minus_nat nt t)) (right i)
-                  then [(t, tabulatea equal_mregex (_A1, _A2) mrs
+                  then [(t, tabulatea ccompare_mregex (_A1, _A2) mrs
                               (fun mra ->
                                 sup_seta
                                   ((ceq_list (ceq_option _A1)),
@@ -3285,11 +3296,11 @@ let rec update_matchP (_A1, _A2, _A3)
                   else []))
            aux
          with [] ->
-           [(nt, tabulatea equal_mregex (_A1, _A2) mrs
+           [(nt, tabulatea ccompare_mregex (_A1, _A2) mrs
                    (safe_r_epsilon (_A1, _A2, _A3) n rels))]
          | x :: auxa ->
            (if equal_nata (fst x) nt then x :: auxa
-             else (nt, tabulatea equal_mregex (_A1, _A2) mrs
+             else (nt, tabulatea ccompare_mregex (_A1, _A2) mrs
                          (safe_r_epsilon (_A1, _A2, _A3) n rels)) ::
                     x :: auxa))
        in
@@ -3348,7 +3359,7 @@ let rec update_matchF_step (_A1, _A2, _A3)
   i mr mrs nt =
     (fun (t, (rels, rel)) (aux, x) ->
       (let y =
-         tabulatea equal_mregex (_A1, _A2) mrs
+         tabulatea ccompare_mregex (_A1, _A2) mrs
            (l_delta (_A1, _A2, _A3) id x rels)
          in
         ((t, (rels,
@@ -3388,7 +3399,7 @@ let rec safe_l_epsilon (_A1, _A2, _A3)
 let rec update_matchF_base (_A1, _A2, _A3)
   n i mr mrs rels nt =
     (let x =
-       tabulatea equal_mregex (_A1, _A2) mrs
+       tabulatea ccompare_mregex (_A1, _A2) mrs
          (safe_l_epsilon (_A1, _A2, _A3) n rels)
        in
       ([(nt, (rels,
