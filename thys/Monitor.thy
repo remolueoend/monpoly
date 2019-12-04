@@ -29,7 +29,7 @@ and mmonitorable_regex_exec :: "modality \<Rightarrow> safety \<Rightarrow> 'a F
     \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (Formula.fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y + b \<notin> Formula.fv \<phi>)"
+| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y + b \<notin> Formula.fv \<phi> \<and> {..<b} \<subseteq> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi> \<and> right I \<noteq> \<infinity>)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
@@ -814,18 +814,14 @@ definition update_since :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rig
       | x # aux' \<Rightarrow> (if fst x = nt then (fst x, snd x \<union> rel2) # aux' else (nt, rel2) # x # aux'))
     in (foldr (\<union>) [rel. (t, rel) \<leftarrow> aux, nt - t \<le> right I, left I \<le> nt - t] {}, filter (\<lambda>(t, _). enat (nt - t) \<le> right I) aux))"
 
-primrec these_list :: "'a option list \<Rightarrow> 'a list" where
-  "these_list [] = []"
-| "these_list (x # xs) = (case x of Some y \<Rightarrow> y # these_list xs | None \<Rightarrow> these_list xs)"
-
 definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> (('a \<times> enat) set \<Rightarrow> 'a) \<Rightarrow> nat \<Rightarrow>
   ('a Formula.env \<Rightarrow> 'a) \<Rightarrow> 'a table \<Rightarrow> 'a table" where
   "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = empty_table
     then singleton_table n y (\<omega> {})
     else (\<lambda>k.
       let group = Set.filter (\<lambda>x. drop b x = k) rel;
-        images = (f \<circ> these_list) ` group;
-        M = (\<lambda>y. (y, enat (card (Set.filter (\<lambda>x. f (these_list x) = y) group)))) ` images
+        images = (f \<circ> List.map_filter id) ` group;
+        M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. f (List.map_filter id x) = y) group))) ` images
       in k[y:=Some (\<omega> M)]) ` (drop b) ` rel)"
 
 
@@ -857,12 +853,64 @@ lemma mem_restr_upd_None: "mem_restr R xs \<Longrightarrow> mem_restr R (xs[i:=N
   apply (case_tac "ia = i")
   by auto
 
+lemma mem_restr_drop: "mem_restr (lift_envs' b R) xs \<Longrightarrow> mem_restr R (drop b xs)"
+  unfolding mem_restr_def lift_envs'_def
+  by (auto simp: append_eq_conv_conj list_all2_append2)
+
+lemma mem_restr_dropD: "b \<le> length xs \<Longrightarrow> mem_restr R (drop b xs) \<Longrightarrow> mem_restr (lift_envs' b R) xs"
+  unfolding mem_restr_def lift_envs'_def
+  apply (auto simp: list_all2_append2)
+  apply (rule exI[where x="take b (map the xs)"])
+  apply auto
+  apply (erule bexI[rotated])
+  apply (rule exI[where x="take b xs"], rule exI[where x="drop b xs"])
+  by (auto simp: list.rel_map dest: list_all2_lengthD intro!: list_all2_takeI list.rel_refl)  
+
+lemma map_filter_conv_fv_env:
+  assumes wf_tuple: "wf_tuple n (Formula.fv \<phi>) xs"
+    and bound: "\<forall>x\<in>Formula.fv \<phi>. x < n"
+  shows "List.map_filter id xs = Formula.fv_env \<phi> (map the xs)"
+proof -
+  from bound have "Formula.nfv \<phi> \<le> n" 
+    unfolding Formula.nfv_def by (auto intro!: Max.boundedI)
+  then have "[0..<n] = [0..<Formula.nfv \<phi>] @ [Formula.nfv \<phi>..<n]"
+    using le_Suc_ex upt_add_eq_append by blast
+  moreover have "[v ! x. x \<leftarrow> [Formula.nfv \<phi>..<n], x \<in> fv \<phi>] = []" for v :: "'a tuple"
+    using fvi_less_nfv by fastforce
+  ultimately have "Formula.fv_env \<phi> v = [v ! x. x \<leftarrow> [0..<n], x \<in> fv \<phi>]" for v
+    unfolding Formula.fv_env_def by auto
+  also have "... (map the xs) = List.map_filter id xs"
+    using wf_tuple unfolding wf_tuple_def List.map_filter_def
+    apply (subst (2) concat_map_singleton[where f=id and xs=xs, unfolded list.map_id, symmetric])
+    apply (subst filter_concat)
+    apply (subst map_concat)
+    apply (rule arg_cong[where f=concat])
+    apply (rule list_eq_iff_nth_eq[THEN iffD2])
+    by auto
+  finally show ?thesis ..
+qed
+
+lemma wf_tuple_append: "wf_tuple a A xs \<Longrightarrow> wf_tuple b B ys \<Longrightarrow>
+  a + b = n \<Longrightarrow> A \<union> (\<lambda>x. x + a) ` B = C \<Longrightarrow> \<forall>x\<in>A. x < a \<Longrightarrow> wf_tuple n C (xs @ ys)"
+  unfolding wf_tuple_def by (auto 0 3 simp: nth_append image_iff)
+
+lemma wf_tuple_map_Some: "length xs = n \<Longrightarrow> {..<n} \<subseteq> A \<Longrightarrow> wf_tuple n A (map Some xs)"
+  unfolding wf_tuple_def by auto
+
+lemma wf_tuple_drop: "wf_tuple n' A' xs \<Longrightarrow> n + b = n' \<Longrightarrow> \<forall>x<n. x \<in> A \<longleftrightarrow> x + b \<in> A' \<Longrightarrow>
+   wf_tuple n A (drop b xs)"
+  unfolding wf_tuple_def by (auto simp: add.commute)
+
+lemma ecard_image: "inj_on f A \<Longrightarrow> ecard (f ` A) = ecard A"
+  unfolding ecard_def by (auto simp: card_image dest: finite_imageD)
+
 (*TODO: move*)
 lemma qtable_eval_agg:
   assumes inner: "qtable (n + b) (Formula.fv \<phi>) (mem_restr (lift_envs' b R))
       (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel"
     and n: "\<forall>x\<in>Formula.fv (Formula.Agg y \<omega> b f \<phi>). x < n"
     and fresh: "y + b \<notin> Formula.fv \<phi>"
+    and b_fv: "{..<b} \<subseteq> Formula.fv \<phi>"
     and g0: "g0 = (Formula.fv \<phi> \<subseteq> {..<b})"
   shows "qtable n (Formula.fv (Formula.Agg y \<omega> b f \<phi>)) (mem_restr R)
       (\<lambda>v. Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)) (eval_agg n g0 y \<omega> b f rel)"
@@ -910,7 +958,279 @@ proof -
     qed
   next
     case False
-    then show ?thesis sorry (*TODO*)
+    have union_fv: "{..<b} \<union> (\<lambda>x. x + b) ` Formula.fvi b \<phi> = fv \<phi>"
+      using b_fv
+      apply (auto simp: fvi_iff_fv[where b=b] image_iff Ball_def)
+      by (metis le_add_diff_inverse2 not_less)
+    {
+      fix x
+      assume x: "x \<in> rel" "mem_restr (lift_envs' b R) x"
+      then have 1: "wf_tuple (b + n) (fv \<phi>) (map Some zs @ drop (length zs) x)"
+        if "length zs = b" for zs
+        using that inner unfolding qtable_def
+        apply clarify
+        apply (subst wf_tuple_append[where a=b and b=n and A="{..<b}" and B="Formula.fvi b \<phi>"])
+             apply (rule wf_tuple_map_Some)
+              apply simp
+             apply simp
+            apply (rule wf_tuple_drop[where n'="n + length zs" and A'="fv \<phi>"])
+              apply (unfold table_def)[]
+              apply (erule (1) bspec)
+             apply simp
+            apply (simp add: fvi_iff_fv[where b="length zs"])
+           apply simp
+        using union_fv apply simp
+         apply simp
+        apply simp
+        done
+      have 2: "(length zs = b \<and> Formula.sat \<sigma> (zs @ map the (drop b x)) i \<phi> \<and>
+          f (Formula.fv_env \<phi> (zs @ map the (drop b x))) = y) \<longleftrightarrow>
+        (\<exists>a. a \<in> rel \<and> take b a = map Some zs \<and> drop b a = drop b x \<and> f (List.map_filter id a) = y)" for y zs
+        using x inner 1[of zs] unfolding qtable_def
+        apply auto
+           apply (rule exI[where x="map Some zs @ drop (length zs) x"])
+           apply (drule spec[where x="map Some zs @ drop (length zs) x"])
+           apply (simp add: mem_restr_drop add.commute)
+           apply (subst map_filter_conv_fv_env[OF 1[of zs]])
+             apply simp
+        using n apply simp
+            apply (metis add.commute fvi_plus_bound plus_nat.add_0)
+           apply simp
+          apply (metis add.commute add_diff_cancel_right' append_take_drop_id length_append length_drop length_map table_def wf_tuple_length)
+         apply (drule spec[where x="map Some zs @ drop (length zs) x"])
+         apply (drule conjunct1)
+         apply (subgoal_tac "length zs = b")
+          apply simp
+          apply (metis append_take_drop_id mem_restr_drop)
+         apply (metis add.commute add_diff_cancel_right' append_take_drop_id length_append length_drop length_map table_def wf_tuple_length)
+        apply (subst map_filter_conv_fv_env[OF 1[of zs], simplified, symmetric])
+          apply (metis add.commute add_diff_cancel_right' append_take_drop_id length_append length_drop length_map table_def wf_tuple_length)
+        using n apply simp
+         apply (metis add.commute fvi_plus_bound plus_nat.add_0)
+        apply (metis append_take_drop_id)
+        done
+      have 3: "map Some (map the (take b a)) = take b a" if "a \<in> rel" for a
+        using that b_fv inner[unfolded qtable_def, THEN conjunct1]
+        unfolding table_def wf_tuple_def
+        by (auto simp: list_eq_iff_nth_eq)
+      define M' where "M' = (\<lambda>k. let group = Set.filter (\<lambda>x. drop b x = k) rel;
+          images = (f \<circ> List.map_filter id) ` group
+        in (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. f (List.map_filter id x) = y) group))) ` images)"
+      have "M' (drop b x) = M (map the (drop b x))"
+        unfolding M'_def M_def
+        apply (simp add: False Let_def image_def Set.filter_def 2)
+        apply auto
+           apply (subst ecard_image[symmetric, where f="\<lambda>zs. map Some zs @ drop b x"])
+            apply (rule inj_onI)
+            apply simp
+           apply (rule arg_cong[where f=ecard])
+           apply (auto simp: image_iff)[]
+              apply (metis "3" append_take_drop_id)
+             apply (metis append_take_drop_id)
+            apply (metis append_take_drop_id drop_append drop_drop length_map)
+           apply (metis append_take_drop_id)
+          apply (metis "3")
+         apply metis
+        apply (subst ecard_image[symmetric, where f="\<lambda>zs. map Some zs @ drop b x"])
+         apply (rule inj_onI)
+         apply simp
+        apply (rule arg_cong[where f=ecard])
+        apply (auto simp: image_iff)[]
+           apply (metis append_take_drop_id)
+          apply (metis append_take_drop_id drop_append drop_drop length_map)
+         apply (metis append_take_drop_id)
+        by (metis "3" append_take_drop_id)
+    }
+    then have alt: "v \<in> eval_agg n g0 y \<omega> b f rel \<longleftrightarrow>
+        v \<in> (\<lambda>k. k[y:=Some (\<omega> (M (map the k)))]) ` drop b ` rel"
+      if "mem_restr R v" for v
+      using that unfolding eval_agg_def
+      apply (simp add: False Let_def)
+      apply safe
+       apply (thin_tac "v = _")
+       apply (drule meta_spec)
+       apply (drule (1) meta_mp)
+       apply (drule meta_mp)
+        apply (drule mem_restr_upd_None[where i=y])
+        apply simp
+        apply (rule mem_restr_dropD)
+      using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
+         apply simp
+        apply (subst list_update_id[where i=y and xs="drop b _", symmetric])
+      subgoal foo premises p for xa proof -
+        from p(1) have "drop b xa ! y = None"
+          using fresh n inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
+          by (simp add: add.commute)
+        with p(2) show ?thesis by simp
+      qed
+       apply simp
+      apply (thin_tac "v = _")
+      apply (drule meta_spec)
+      apply (drule (1) meta_mp)
+      apply (drule meta_mp)
+       apply (drule mem_restr_upd_None[where i=y])
+       apply simp
+       apply (rule mem_restr_dropD)
+      using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
+        apply simp
+       apply (subst list_update_id[where i=y and xs="drop b _", symmetric])
+       apply (rule foo; assumption)
+      apply (rule rev_image_eqI)
+       apply (erule imageI)
+      apply simp
+      done
+    show ?thesis proof (rule qtableI)
+      show "table n ?fv ?rel'"
+        using inner[unfolded qtable_def, THEN conjunct1] n
+        apply (clarsimp simp: eval_agg_def False table_def wf_tuple_def Let_def nth_list_update)
+        by (metis add.commute fvi_iff_fv(1))
+    next
+      fix v
+      assume "wf_tuple n ?fv v" "mem_restr R v"
+      show "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
+        if "v \<in> eval_agg n g0 y \<omega> b f rel"
+        using that unfolding alt[OF \<open>mem_restr R v\<close>]
+        apply simp
+        apply (intro conjI impI)
+         apply (erule notE[of "All _", rotated])
+         apply clarsimp
+        subgoal for a
+          apply (rule exI[where x="map the (take b a)"])
+          using inner apply (clarsimp simp: qtable_def)
+          apply (intro conjI)
+           apply (simp add: table_def[unfolded wf_tuple_def])
+          apply (subst sat_fv_cong[where v'="map the a"])
+          apply (smt \<open>wf_tuple n (fv (formula.Agg y \<omega> b f \<phi>)) v\<close> add.commute add_diff_inverse_nat add_right_imp_eq append_take_drop_id drop_map fresh length_append length_list_update length_map map_update nth_append nth_list_update_neq table_def take_map wf_tuple_length)
+          apply (drule spec[where x=a])
+          apply (drule conjunct1)
+          apply simp
+          apply (erule mp)
+          apply (rule mem_restr_dropD)
+           apply (simp add: table_def wf_tuple_def)
+          using \<open>mem_restr R v\<close> apply simp
+          apply (drule mem_restr_upd_None[where i=y])
+          apply simp
+          apply (subst list_update_id[where i=y and xs="drop b _", symmetric])
+          subgoal premises p proof -
+            from p(2) have "drop b a ! y = None"
+              using fresh n inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
+              by (simp add: add.commute)
+            with p(4) show ?thesis by simp
+          qed
+          done
+        apply (elim imageE)
+        subgoal premises p for u w
+          apply (subst conj_cong[OF refl, of "length zs = b" "_ zs \<and> _ zs = x" "_ zs x" for zs x])
+           apply (rule conj_cong)
+            apply (rule sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
+          subgoal foo for zs
+            using p fresh apply (clarsimp simp: nth_append)
+            by (metis add.commute add_diff_inverse_nat map_update nth_list_update_neq)
+           apply (rule arg_cong[where f="\<lambda>x. f x = _"])
+           apply (rule fv_env_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
+           apply (erule foo)
+          apply (subst (4) conj_commute)
+          apply (subst conj_assoc)
+          apply (subst conj_cong[OF refl, of "length zs = b" "_ zs = x \<and> _ zs" "_ zs x" for zs x])
+           apply (rule conj_cong)
+            apply (rule arg_cong[where f="\<lambda>x. f x = _"])
+            apply (rule fv_env_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
+            apply (erule foo)
+           apply (rule sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
+           apply (erule foo)
+          apply (subst p(1))
+          apply (subgoal_tac "y < length u")
+           apply (simp add: M_def)
+          apply meson
+          using \<open>wf_tuple n (fv (formula.Agg y \<omega> b f \<phi>)) v\<close> p n wf_tuple_length by force
+        done
+      show "v \<in> eval_agg n g0 y \<omega> b f rel"
+        if "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
+        using that unfolding alt[OF \<open>mem_restr R v\<close>]
+        apply (clarsimp simp: image_image)
+        apply (subst (asm) conj_cong[OF refl, of "length zs = b" "_ zs \<and> _ zs = x" "_ zs x" for zs x])
+         apply (rule conj_cong)
+          apply (rule sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the (v[y:=None])" for zs])
+        subgoal foo for zs
+          using fresh apply (clarsimp simp: nth_append)
+          by (metis add.commute add_diff_inverse_nat map_update nth_list_update_neq)
+         apply (rule arg_cong[where f="\<lambda>x. f x = _"])
+         apply (rule fv_env_fv_cong[where v="zs @ map the v" and v'="zs @ map the (v[y:=None])" for zs])
+         apply (erule (1) foo)
+        apply (subst (asm) (4) conj_commute)
+        apply (subst (asm) conj_assoc)
+        apply (subst (asm) conj_cong[OF refl, of "length zs = b" "_ zs = x \<and> _ zs" "_ zs x" for zs x])
+         apply (rule conj_cong)
+          apply (rule arg_cong[where f="\<lambda>x. f x = _"])
+          apply (rule fv_env_fv_cong[where v="zs @ map the v" and v'="zs @ map the (v[y:=None])" for zs])
+          apply (erule (1) foo)
+         apply (rule sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the (v[y:=None])" for zs])
+         apply (erule (1) foo)
+        apply (subgoal_tac "\<exists>zs. length zs = b \<and> map Some zs @ v[y:=None] \<in> rel")
+         apply clarify
+         apply (rule rev_image_eqI)
+          apply assumption
+         apply simp
+         apply (rule list_eq_iff_nth_eq[THEN iffD2])
+         apply (clarsimp simp: nth_list_update)
+        subgoal for zs i
+          apply (cases "i = y")
+           apply (subgoal_tac "\<exists>x. v ! y = Some x")
+            apply (clarsimp simp: M_def)
+            apply meson
+          using \<open>wf_tuple n ?fv v\<close> n apply (auto simp: wf_tuple_def)[]
+          apply simp
+          done
+        apply (cases "fv \<phi> \<subseteq> {..<b}")
+        apply (frule False[unfolded g0 de_Morgan_conj disj_not1, rule_format])
+         apply (clarsimp simp: empty_table_def ex_in_conv[symmetric])
+        subgoal for a
+          apply (rule exI[where x="take b (map the a)"])
+          apply safe
+          using inner apply (simp add: qtable_def table_def[unfolded wf_tuple_def])
+          apply (simp add: take_map)
+          apply (subgoal_tac "map (Some \<circ> the) (take b a) = take b a")
+           apply (subgoal_tac "v[y:=None] = drop b a")
+            apply simp
+           apply (rule list_eq_iff_nth_eq[THEN iffD2])
+          using inner apply (clarsimp simp: qtable_def table_def[unfolded wf_tuple_def])
+          apply (drule (1) bspec[where x=a])
+          using \<open>wf_tuple n ?fv v\<close>[unfolded wf_tuple_def] apply simp
+           apply (metis add.commute b_fv fvi_iff_fv(1) lessThan_iff nat_add_left_cancel_less not_add_less1 nth_list_update nth_list_update_neq subset_antisym)
+          apply (subst map_cong[where g=id, OF refl, simplified])
+          using inner apply (clarsimp simp: qtable_def table_def[unfolded wf_tuple_def] in_set_conv_nth)
+           apply (metis option.collapse add.commute b_fv lessThan_iff subset_antisym trans_less_add1)
+          apply simp
+          done
+        apply (drule not_mono)
+        apply (drule (1) mp)
+        apply clarify
+        apply (subst (asm) sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the (v[y:=None])" for zs])
+        using fresh apply (clarsimp simp: nth_append)
+         apply (metis (no_types, lifting) add.commute add_diff_inverse_nat map_update nth_list_update_neq)
+        using inner apply (clarsimp simp: qtable_def table_def[unfolded wf_tuple_def])
+        subgoal for a zs
+          apply (drule spec[where x="map Some zs @ (v[y:=None])"])
+          apply (drule conjunct2)
+          apply (drule mp)
+           apply simp
+           apply (rule conjI)
+            apply (subst wf_tuple_append[where a=b and b=n and A="{..<b}" and B="Formula.fvi b \<phi>"])
+                 apply (rule wf_tuple_map_Some)
+                  apply simp
+                 apply simp
+          using \<open>wf_tuple n ?fv v\<close> apply simp
+                apply (smt fresh fvi_iff_fv(1) insert_iff length_list_update nth_list_update_eq nth_list_update_neq wf_tuple_def)
+               apply simp
+          using union_fv apply simp
+             apply simp
+            apply simp
+           apply (rule mem_restr_upd_None)
+           apply (rule \<open>mem_restr R v\<close>)
+          apply simp
+          done
+        done
+    qed
   qed
 qed
 
@@ -1774,6 +2094,7 @@ inductive wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow>
 | Agg: "wf_mformula \<sigma> j (n + b) (lift_envs' b R) \<phi> \<phi>' \<Longrightarrow>
     y < n \<Longrightarrow>
     y + b \<notin> Formula.fv \<phi>' \<Longrightarrow>
+    {..<b} \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
     g0 = (Formula.fv \<phi>' \<subseteq> {..<b}) \<Longrightarrow>
     wf_mformula \<sigma> j n R (MAgg g0 y \<omega> b f \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
 | Prev: "wf_mformula \<sigma> j n R \<phi> \<phi>' \<Longrightarrow>
@@ -3637,12 +3958,12 @@ next
         elim!: list.rel_mono_strong table_fvi_tl qtable_cong sat_fv_cong[THEN iffD1, rotated -1]
         split: if_splits)+
 next
-  case (MAgg y \<omega> b f \<phi>)
+  case (MAgg g0 y \<omega> b f \<phi>)
   from MAgg.prems show ?case
     using wf_mformula_wf_set[OF MAgg.prems, unfolded wf_set_def]
     by (cases pred: wf_mformula)
       (auto simp add: list.rel_map simp del: sat.simps fvi.simps split: prod.split
-        intro!: wf_mformula.Agg dest!: MAgg.IH elim!: list.rel_mono_strong qtable_eval_agg)
+        intro!: wf_mformula.Agg qtable_eval_agg dest!: MAgg.IH elim!: list.rel_mono_strong)
 next
   case (MPrev I \<phi> first buf nts)
   from MPrev.prems show ?case
