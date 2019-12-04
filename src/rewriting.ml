@@ -544,8 +544,20 @@ let rec rr = function
     let _, b1 = rr f1 in
     let rr2, b2 = rr f2 in
     (rr2, b1 && b2)
-
+  | Frex (_,r) -> rr_re true r 
+  | Prex (_,r) -> rr_re false r 
   | _ -> failwith "[Rewriting.rr] internal error"
+  and rr_re future = function 
+  | Wild -> ([],true)
+  | Test f -> rr f
+  | Concat (r1,r2) -> let (rr1,b1) = rr_re future r1 in
+                      let (rr2,b2) = rr_re future r2 in
+                      (rr2, b1 && b2)
+  | Plus (r1, r2) ->  let (rr1,b1) = rr_re future r1 in
+                      let (rr2,b2) = rr_re future r2 in
+                      (List.filter (fun v -> List.mem v rr1) rr2, b1 && b2)
+  | Star r -> rr_re future r
+  
 
 
 
