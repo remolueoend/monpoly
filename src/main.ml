@@ -138,8 +138,10 @@ let main () =
     else
       begin
         (* read signature file *)
+        let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
-        let is_mon, pf, vartypes = Rewriting.check_formula sign f in
+        
+        let is_mon, pf, vartypes = check_formula !verified sign f in
         if !sigout then
           Predicate.print_vartypes_list vartypes
         else if is_mon && not !Misc.checkf then

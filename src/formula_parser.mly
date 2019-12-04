@@ -150,19 +150,26 @@
 %token <float> INT RAT
 %token <int*char> TU
 %token NOT AND OR IMPL EQUIV EX FA
-%token PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS SINCE UNTIL
+%token PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS SINCE UNTIL BAR FREX PREX
 %token CNT MIN MAX SUM AVG MED
 %token END
 %token EOF
 
 %right SINCE UNTIL
-%nonassoc PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS
+%nonassoc PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS 
 %nonassoc EX FA
 %left EQUIV
 %right IMPL
 %left OR
 %left AND
+%left ALT
+%left CONCAT
+%nonassoc LPA
 %nonassoc NOT
+%nonassoc BASE
+%nonassoc QM
+%nonassoc RPA
+
 
 %left PLUS MINUS          /* lowest precedence */
 %left STAR DIV            /* medium precedence */
@@ -210,6 +217,30 @@ formula:
   | formula SINCE formula           { f "f(sincedf)"; Since (dfintv,$1,$3) }
   | formula UNTIL interval formula  { f "f(until)"; Until ($3,$1,$4) }
   | formula UNTIL formula           { f "f(untildf)"; Until (dfintv,$1,$3) }
+
+  | FREX interval fregex             { f "f(frexd)"; Frex ($2,$3) }
+  | FREX fregex                      { f "f(frexdf)"; Frex (dfintv,$2) }
+  | PREX interval pregex             { f "f(prexd)"; Prex ($2,$3) }
+  | PREX pregex                      { f "f(prexdf)"; Prex (dfintv,$2) }
+
+fregex:
+  | LPA fregex RPA                   { f "r()"; $2 } 
+  | DOT                              { f "f(wild)"; Wild }
+  | formula                          { f "f(fbase)"; Concat(Test ($1),Wild)} %prec BASE
+  | formula QM                       { f "f(test)"; Test ($1)}
+  | fregex fregex                    { f "f(concat)"; Concat ($1,$2)}  %prec CONCAT
+  | fregex PLUS fregex               { f "f(plus)"; Plus ($1, $3)} %prec ALT
+  | fregex STAR                      { f "f(star)"; Star ($1)}
+
+pregex:
+  | LPA pregex RPA                   { f "r()"; $2 } 
+  | DOT                              { f "f(wild)"; Wild }
+  | formula                          { f "f(pbase)"; Concat(Wild,Test ($1))} %prec BASE
+  | formula QM                       { f "f(test)"; Test ($1)}
+  | pregex pregex                    { f "f(concat)"; Concat ($1,$2)}  %prec CONCAT
+  | pregex PLUS pregex               { f "f(plus)"; Plus ($1, $3)} %prec ALT
+  | pregex STAR                      { f "f(star)"; Star ($1)}
+
 
 aggreg:
   | CNT                     { f "agg(cnt)"; Cnt }

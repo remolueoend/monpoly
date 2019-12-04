@@ -43,6 +43,7 @@ open Misc
 open Predicate
 open MFOTL
 open Db
+open Verified
 
 
 let elim_double_negation f =
@@ -70,6 +71,14 @@ let elim_double_negation f =
     | PastAlways (intv, f) -> PastAlways (intv, elim f)
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
+    | Frex (intv, r) -> Frex (intv, elim_re r)
+    | Prex (intv, r) -> Prex (intv, elim_re r)
+  and elim_re = function
+  | Wild -> Wild
+  | Test f -> Test (elim f)
+  | Concat (r1,r2) -> Concat(elim_re r1, elim_re r2)
+  | Plus (r1,r2) -> Plus(elim_re r1, elim_re r2)
+  | Star r -> Star (elim_re r)
   in
   elim f
 
@@ -107,6 +116,14 @@ let simplify_terms f =
     | PastAlways (intv, f) -> PastAlways (intv, s f)
     | Since (intv, f1, f2) -> Since (intv, s f1, s f2)
     | Until (intv, f1, f2) -> Until (intv, s f1, s f2)
+    | Frex (intv, r) -> Frex (intv, s_re r)
+    | Prex (intv, r) -> Prex (intv, s_re r)
+  and s_re = function
+  | Wild -> Wild
+  | Test f -> Test (s f)
+  | Concat (r1,r2) -> Concat(s_re r1, s_re r2)
+  | Plus (r1,r2) -> Plus(s_re r1, s_re r2)
+  | Star r -> Star (s_re r)
   in
   s f
 
@@ -152,6 +169,14 @@ let rec elim_syntactic_sugar g =
     | PastAlways (intv, f) -> Neg (Once (intv, elim (Neg f)))
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
+    | Frex (intv, r) -> Frex (intv, elim_re r)
+    | Prex (intv, r) -> Prex (intv, elim_re r)
+  and elim_re = function
+  | Wild -> Wild
+  | Test f -> Test (elim f)
+  | Concat (r1,r2) -> Concat(elim_re r1, elim_re r2)
+  | Plus (r1,r2) -> Plus(elim_re r1, elim_re r2)
+  | Star r -> Star (elim_re r)
   in
   elim g
 
@@ -195,6 +220,14 @@ let push_negation g =
     | PastAlways (intv, f) -> PastAlways (intv, push f)
     | Since (intv, f1, f2) -> Since (intv, push f1, push f2)
     | Until (intv, f1, f2) -> Until (intv, push f1, push f2)
+    | Frex (intv, r) -> Frex (intv, push_re r)
+    | Prex (intv, r) -> Prex (intv, push_re r)
+  and push_re = function
+  | Wild -> Wild
+  | Test f -> Test (push f)
+  | Concat (r1,r2) -> Concat(push_re r1, push_re r2)
+  | Plus (r1,r2) -> Plus(push_re r1, push_re r2)
+  | Star r -> Star (push_re r)
   in
   push g
 
@@ -369,6 +402,8 @@ let rec is_monitorable f =
             | _ -> f1)
         in
         is_monitorable f1'
+  | Frex (intv , f) -> failwith "[Rewriting.is_monitorable] The future match operator |.|> can be used only with the -verified flag set"
+  | Prex (intv , f) -> failwith "[Rewriting.is_monitorable] The past match operator <|.| can be used only with the -verified flag set"
 
   (* These operators should have been eliminated *)
   | Implies _
@@ -715,6 +750,8 @@ let rec check_bounds = function
   | Once (_, f)
   | PastAlways (_, f)
     -> check_bounds f
+  | Prex (intv, r)
+    -> check_re_bounds r
 
   | And (f1, f2)
   | Or (f1, f2)
@@ -726,9 +763,20 @@ let rec check_bounds = function
   | Eventually (intv, f)
   | Always (intv, f)
     -> (check_bound intv) && (check_bounds f)
+  | Frex (intv, r)
+    -> (check_bound intv) && (check_re_bounds r)
 
   | Until (intv, f1, f2)
     -> (check_bound intv) && (check_bounds f1) && (check_bounds f2)
+and check_re_bounds = function
+  | Wild -> true
+  | Test f -> (check_bounds f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) 
+    -> (check_re_bounds r1) && (check_re_bounds r2)
+  | Star r -> (check_re_bounds r)
+
+  
 
 let rec is_future = function
   | Equal _
@@ -747,6 +795,8 @@ let rec is_future = function
   | PastAlways (_, f)
     -> is_future f
 
+  | Prex (_,r) -> is_re_future r
+
   | And (f1, f2)
   | Or (f1, f2)
   | Implies (f1, f2)
@@ -757,7 +807,14 @@ let rec is_future = function
   | Eventually (_, _)
   | Always (_, _)
   | Until (_, _, _)
+  | Frex (_,_)
     -> true
+and is_re_future = function 
+  | Wild -> false
+  | Test f -> (is_future f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) -> (is_re_future r1) || (is_re_future r2)
+  | Star r -> (is_re_future r)
 
 
 (* We check that
@@ -915,6 +972,9 @@ let rec check_syntax db_schema f =
     | Once (_,f)
     | Always (_,f)
     | PastAlways (_,f) -> check assign f
+    
+    | Frex (_,r) 
+    | Prex (_,r) -> check_re assign r
 
     | Exists (vl,f)
     | ForAll (vl,f) ->
@@ -953,6 +1013,14 @@ let rec check_syntax db_schema f =
     | Until (_,f1,f2) ->
       let assign1 = check assign f1 in
       union assign1 (check assign1 f2)
+  and check_re assign = function
+    | Wild -> []
+    | Test f -> check assign f
+    | Concat (r1,r2) 
+    | Plus (r1, r2) -> 
+      let assign1 = check_re assign r1 in
+      union assign1 (check_re assign1 r2)
+    | Star r -> check_re assign r
   in
   List.rev (check [] f)
 
@@ -965,7 +1033,7 @@ let print_reason str reason =
     print_endline msg
   | None -> failwith "[Rewriting.print_reason] internal error"
 
-let check_formula s f =
+let check_formula v s f =
   (* we first the formula's syntax *)
   let fv = check_syntax s f in
 
@@ -978,7 +1046,9 @@ let check_formula s f =
     end;
 
   if !Misc.no_rw then
-    let is_mon, reason = is_monitorable f in
+    let is_mon, reason = 
+      if v then Verified_adapter.is_monitorable f
+           else is_monitorable f in
     if !Misc.verbose || !Misc.checkf then
       begin
         MFOTL.printnl_formula "The input formula is:\n  " f;
@@ -996,7 +1066,9 @@ let check_formula s f =
     if (Misc.debugging Dbg_monitorable) && nf <> f then
       MFOTL.printnl_formula "The normalized formula is:\n  " nf;
 
-    let is_mon = is_monitorable nf in
+    let is_mon = 
+        if v then Verified_adapter.is_monitorable nf
+             else is_monitorable nf in
     let rf = if fst is_mon then nf else rewrite nf in
     if (Misc.debugging Dbg_monitorable) && rf <> nf then
       MFOTL.printnl_formula "The \"rewritten\" formula is:\n  " rf;
@@ -1019,7 +1091,11 @@ let check_formula s f =
         print_newline()
       end;
 
-    let is_mon = if not (fst is_mon) then is_monitorable rf else is_mon in
+    let is_mon = if not (fst is_mon) 
+                 then if v 
+                      then Verified_adapter.is_monitorable rf
+                      else is_monitorable rf
+                 else is_mon in
     if (not (fst is_mon)) then
       begin
         print_reason "The analyzed formula is NOT monitorable" (snd is_mon);

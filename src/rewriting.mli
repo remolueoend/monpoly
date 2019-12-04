@@ -60,7 +60,7 @@ val is_special_case: (var list) -> (var list) -> formula -> bool
 (** Returns [true] if the formula does not need to be evaluated
     independently. *)
 
-val check_formula: schema -> formula -> bool * formula * (var * tcst) list
+val check_formula: bool -> schema -> formula -> bool * formula * (var * tcst) list
 (** Returns [true, pf, vtypes] if the formula is monitorable by our
     implementation, where [pf] is a formula equivalent with input
     formula and [vtypes] is the list of free variables of [pf]
