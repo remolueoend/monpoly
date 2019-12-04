@@ -111,7 +111,7 @@ export_code
   (*term and formula constructors*)
   Formula.Var Formula.Pred
   (*main functions*)
-  convert_multiway minit_safe mstep
+  convert_multiway minit_safe mstep mmonitorable_exec
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

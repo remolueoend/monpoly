@@ -85,6 +85,8 @@ module Monitor : sig
     | Exists of 'a formula | Prev of i * 'a formula | Next of i * 'a formula |
     Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula
     | MatchF of i * 'a regex | MatchP of i * 'a regex
+  type safety
+  type modality
   type 'a mformula
   type ('a, 'b) mstate_ext
   val mstep :
@@ -93,6 +95,7 @@ module Monitor : sig
         ('a, unit) mstate_ext ->
           (nat * ('a option) list) set * ('a, unit) mstate_ext
   val interval : nat -> enat -> i
+  val mmonitorable_exec : 'a ccompare * 'a equal -> 'a formula -> bool
   val minit_safe :
     'a ceq * 'a ccompare * 'a equal -> 'a formula -> ('a, unit) mstate_ext
   val mk_db :
