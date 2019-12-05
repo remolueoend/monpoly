@@ -994,7 +994,8 @@ let rec check_syntax db_schema f =
       List.filter (fun (x,t) -> not (List.mem x vl)) (check assign' f)
 
     | Aggreg (y,op,x,glist,f) ->
-      let assign = check assign f in
+      let assign' = List.filter (fun (x,_) -> (List.mem x glist)) assign in
+      let assign = check assign' f in
       (* if List.assoc x assign = TStr then *)
       (*   failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^  *)
       (*          " should have an integer type"); *)
