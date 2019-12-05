@@ -990,8 +990,8 @@ let rec check_syntax db_schema f =
 
     | Exists (vl,f)
     | ForAll (vl,f) ->
-      List.filter (fun (x,t) -> not (List.mem x vl)) (check assign f)
-
+      let assign' = List.filter (fun (x,t) -> not (List.mem x vl)) assign in
+      List.filter (fun (x,t) -> not (List.mem x vl)) (check assign' f)
 
     | Aggreg (y,op,x,glist,f) ->
       let assign = check assign f in
