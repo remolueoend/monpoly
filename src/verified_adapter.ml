@@ -44,8 +44,8 @@ let domain_equal = { equal = (fun a b -> cst_eq (a, b)) }
 let convert_term fvl bvl = function
   | Cst c -> Const c
   | Var a -> Var (nat_of_integer (Z.of_int (try (index_of a bvl)
-                  with Failure s -> (List.length bvl) + (try index_of a fvl
-                      with Failure s -> List.length fvl))))
+                  with Failure s -> ((List.length bvl) + (try index_of a fvl
+                      with Failure s -> List.length fvl)))))
   | x -> let msg = "Unsupported term " ^ (string_of_term x) in
     raise (UnsupportedFragment msg)
 
@@ -74,6 +74,10 @@ let convert_interval (l,r) =
 let convert_formula f =
   let fvl = MFOTL.free_vars f in
   let truth = Equal ((Cst (Int 1)), (Cst (Int 1)))  in
+  let rec createExists n f = match n with 
+  | 0 -> f 
+  | n -> createExists (n-1) (Exists f)
+  in
   let rec convert_formula_vars bvl = function
   | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Pred (p,_,tl) -> Pred (explode p, List.map (fun t -> convert_term fvl bvl t) tl)
@@ -86,7 +90,7 @@ let convert_formula f =
   | Or (f1,f2) -> Or (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
   | Implies (f1,f2) -> convert_formula_vars bvl (Or ((Neg f1), f2))
   | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
-  | Exists (v,f) -> Exists (convert_formula_vars (v@bvl) f)
+  | Exists (v,f) -> createExists (List.length v) (convert_formula_vars (v@bvl) f)
   | ForAll (v,f) -> convert_formula_vars bvl (Neg (Exists (v,(Neg f))))
   | Aggreg (_,_,_,_,f) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
                           raise (UnsupportedFragment msg)
