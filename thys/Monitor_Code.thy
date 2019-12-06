@@ -10,6 +10,27 @@ begin
 lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Cardinality.card'" by simp
 declare [[code drop: card]] Set_Impl.card_code[code]
 
+instantiation enat :: ceq begin
+definition ceq_enat where "ceq_enat = Some ((=) :: enat \<Rightarrow> _)"
+
+instance by intro_classes (simp add: ceq_enat_def)
+end
+
+instantiation enat :: ccompare begin
+definition ccompare_enat :: "enat comparator option" where
+  "ccompare_enat = Some (\<lambda>x y. if x = y then Eq else if x < y then Lt else Gt)"
+
+instance by intro_classes
+    (auto simp: ccompare_enat_def split: if_splits intro!: comparator.intro)
+end
+
+instantiation enat :: set_impl begin
+definition set_impl_enat :: "(enat, set_impl) phantom" where
+  "set_impl_enat = phantom set_RBT"
+
+instance by intro_classes
+end
+
 derive ccompare Formula.trm
 derive (eq) ceq Formula.trm
 derive (rbt) set_impl Formula.trm
@@ -47,6 +68,9 @@ definition mk_db :: "(char list \<times> 'a list) list \<Rightarrow> (char list 
 definition rbt_verdict :: "_ \<Rightarrow> (nat \<times> 'a :: ccompare option list) list" where
   "rbt_verdict = RBT_Set2.keys"
 
+definition rbt_multiset :: "_ \<Rightarrow> ('a :: ccompare \<times> enat) list" where
+  "rbt_multiset = RBT_Set2.keys"
+
 lemma saturate_commute:
   assumes "\<And>s. r \<in> g s" "\<And>s. g (insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
   and terminates: "mono g" "\<And>X. X \<subseteq> C \<Longrightarrow> g X \<subseteq> C" "finite C"
@@ -58,7 +82,7 @@ proof (cases "g {} = {r}")
     by (subst (1 2) saturate_code; subst saturate_code) (simp add: Let_def)
 next
   case False
-  then show ?thesis 
+  then show ?thesis
     unfolding saturate_def while_def
     using while_option_finite_subset_Some[OF terminates] assms(1-3)
     by (subst while_option_commute_invariant[of "\<lambda>S. S = {} \<or> r \<in> S" "\<lambda>S. g S \<noteq> S" g "\<lambda>S. h S \<noteq> S" "insert r" h "{}", symmetric])
@@ -105,9 +129,10 @@ export_code convert_multiway minit_safe mstep
 
 export_code
   (*type classes*)
-  HOL.equal Collection_Eq.ceq Collection_Order.ccompare Eq Lt Gt
+  HOL.equal Collection_Eq.ceq Collection_Order.ccompare set_impl
   (*basic types*)
-  nat_of_integer integer_of_nat enat literal.explode interval mk_db RBT_set rbt_verdict
+  nat_of_integer integer_of_nat enat literal.explode interval mk_db RBT_set rbt_verdict rbt_multiset
+  Eq phantom set_RBT
   (*term and formula constructors*)
   Formula.Var Formula.Pred
   (*main functions*)

@@ -13,6 +13,9 @@ let nat_of_float f = if (float_of_int max_int) < f then (nat_of_int64 Int64.max_
 let enat_of_float f = Enat ((nat_of_int64 << Int64.of_float) f)
 let int_of_nat = Z.to_int << integer_of_nat (* Problem? *)
 let float_of_nat = Z.to_float << integer_of_nat (* Problem? *)
+let int_of_enat = function
+  | Enat n -> Z.to_int (integer_of_nat n)
+  | Infinity_enat -> failwith "[int_of_enat] internal error"
 let equal_nata m n = Z.equal (integer_of_nat m) (integer_of_nat n)
 
 let filterWith f p = List.map f << List.filter p
@@ -40,12 +43,15 @@ let cst_ord a b =
 let domain_ceq = { ceq = Some (fun a b -> cst_eq (a, b)) }
 let domain_ccompare = { ccompare = Some cst_ord }
 let domain_equal = { equal = (fun a b -> cst_eq (a, b)) }
+let domain_set_impl = { set_impl = Phantom Set_RBT }
+
+let convert_var fvl bvl a = nat_of_int (try (index_of a bvl)
+    with Failure s -> (List.length bvl) + (try index_of a fvl
+        with Failure s -> List.length fvl))
 
 let convert_term fvl bvl = function
   | Cst c -> Const c
-  | Var a -> Var (nat_of_integer (Z.of_int (try (index_of a bvl)
-                  with Failure s -> (List.length bvl) + (try index_of a fvl
-                      with Failure s -> List.length fvl))))
+  | Var a -> Var (convert_var fvl bvl a)
   | x -> let msg = "Unsupported term " ^ (string_of_term x) in
     raise (UnsupportedFragment msg)
 
@@ -66,10 +72,60 @@ let convert_interval (l,r) =
                   else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
                   raise (UnsupportedFragment msg)
 
+let eval_sum = function
+  | [] -> Float 0.
+  | x :: xs -> List.fold_left (fun a b -> match a, b with
+      | Int a, Int b -> Int (a + b)
+      | Float a, Float b -> Float (a +. b)
+      | _ -> failwith "[eval_sum] internal error") x xs
 
+let eval_avg = function
+  | [] -> Float 0.
+  | _ as xs ->
+    let s = match eval_sum xs with
+      | Float s -> s
+      | Int s -> float_of_int s
+      | _ -> failwith "[eval_avg] internal error"
+    in
+    Float (s /. float_of_int (List.length xs))
 
+let eval_med = function
+  | [] -> Float 0.
+  | _ as xs ->
+      let fmed a b =
+        match a, b with
+        | Int x, Int y -> Int ((x+y)/2)
+        | Float x, Float y -> Float ((x+.y)/.2.)
+        | _ -> failwith "[eval_med] type error"
+      in
+      let sorted = List.sort Pervasives.compare xs in
+      Misc.median sorted (List.length sorted) fmed
 
+let eval_cnt xs = Int (List.fold_left (fun a _ -> a + 1) 0 xs)
 
+let eval_min = function
+  | [] -> Float 0.
+  | x :: xs -> List.fold_left min x xs
+
+let eval_max = function
+  | [] -> Float 0.
+  | x :: xs -> List.fold_left max x xs
+
+let rec replicate x n xs = if n <= 0 then xs else replicate x (n-1) (x::xs)
+
+let list_of_multiset = function
+  | RBT_set rbt ->
+    let xs = rbt_multiset domain_ccompare rbt in
+    List.fold_left (fun xa (x, c) -> replicate x (int_of_enat c) xa) [] xs
+  | _ -> failwith "[convert_multiset] internal error"
+
+let convert_agg_op = function
+  | Avg -> (fun m -> eval_avg (list_of_multiset m))
+  | Cnt -> (fun m -> eval_cnt (list_of_multiset m))
+  | Med -> (fun m -> eval_med (list_of_multiset m))
+  | Min -> (fun m -> eval_min (list_of_multiset m))
+  | Max -> (fun m -> eval_max (list_of_multiset m))
+  | Sum -> (fun m -> eval_sum (list_of_multiset m))
 
 let convert_formula f =
   let fvl = MFOTL.free_vars f in
@@ -88,8 +144,16 @@ let convert_formula f =
   | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
   | Exists (v,f) -> Exists (convert_formula_vars (v@bvl) f)
   | ForAll (v,f) -> convert_formula_vars bvl (Neg (Exists (v,(Neg f))))
-  | Aggreg (_,_,_,_,f) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
-                          raise (UnsupportedFragment msg)
+  | Aggreg (y,op,x,glist,f) ->
+    let attr = MFOTL.free_vars f in
+    let bound = Misc.diff attr glist in
+    let bvl_f = bound @ bvl in
+    let posx = Misc.get_pos x
+      (List.filter (fun x -> List.mem x attr) (bvl_f @ fvl)) in
+    let comp = (fun t -> List.nth t posx) in
+    let f' = convert_formula_vars bvl_f f in
+    Agg (convert_var fvl bvl y, convert_agg_op op,
+      nat_of_int (List.length bound), comp, f')
   | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars bvl f))
   | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars bvl f))
   | Since (intv,f1,f2) -> Since (convert_formula_vars bvl f1,convert_interval intv,convert_formula_vars bvl f2)

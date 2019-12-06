@@ -864,14 +864,14 @@ lemma mem_restr_dropD: "b \<le> length xs \<Longrightarrow> mem_restr R (drop b 
   apply auto
   apply (erule bexI[rotated])
   apply (rule exI[where x="take b xs"], rule exI[where x="drop b xs"])
-  by (auto simp: list.rel_map dest: list_all2_lengthD intro!: list_all2_takeI list.rel_refl)  
+  by (auto simp: list.rel_map dest: list_all2_lengthD intro!: list_all2_takeI list.rel_refl)
 
 lemma map_filter_conv_fv_env:
   assumes wf_tuple: "wf_tuple n (Formula.fv \<phi>) xs"
     and bound: "\<forall>x\<in>Formula.fv \<phi>. x < n"
   shows "List.map_filter id xs = Formula.fv_env \<phi> (map the xs)"
 proof -
-  from bound have "Formula.nfv \<phi> \<le> n" 
+  from bound have "Formula.nfv \<phi> \<le> n"
     unfolding Formula.nfv_def by (auto intro!: Max.boundedI)
   then have "[0..<n] = [0..<Formula.nfv \<phi>] @ [Formula.nfv \<phi>..<n]"
     using le_Suc_ex upt_add_eq_append by blast

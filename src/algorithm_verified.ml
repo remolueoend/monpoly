@@ -58,7 +58,7 @@ let monitor logfile f =
     if d.ts >= ts then
       (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
       let tpts = add d.tp d.ts tpts in
-      let (vs, new_state) = Verified.Monitor.mstep (domain_ceq, domain_ccompare, domain_equal) (convert_db d) state in
+      let (vs, new_state) = Verified.Monitor.mstep (domain_ceq, domain_ccompare, domain_equal,domain_set_impl) (convert_db d) state in
       let vs = convert_violations vs in
       List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
       let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
