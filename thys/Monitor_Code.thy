@@ -124,6 +124,12 @@ lemma is_empty_table_unfold [code_unfold]:
   "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
   unfolding set_eq_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
 
+lemma tabulate_rbt_code[code]: "Monitor.tabulate (xs :: 'a :: ccompare list) f =
+  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''tabulate RBT_Mapping: ccompare = None'') (\<lambda>_. Monitor.tabulate (xs :: 'a :: ccompare list) f)
+  | _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.bulkload (List.map_filter (\<lambda>k. let fk = f k in if fk = empty_table then None else Some (k, fk)) xs)))"
+  unfolding tabulate.abs_eq RBT_Mapping_def
+  by (auto split: option.splits)
+
 export_code convert_multiway minit_safe mstep
   checking OCaml?
 
@@ -136,7 +142,7 @@ export_code
   (*term and formula constructors*)
   Formula.Var Formula.Pred
   (*main functions*)
-  convert_multiway minit_safe mstep
+  convert_multiway minit_safe mstep mmonitorable_exec
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

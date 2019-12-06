@@ -24,9 +24,9 @@ OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
 # The list of interface files
 MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
       tuple.mli relation.mli table.mli db.mli \
-      rewriting.mli filter_rel.mli filter_empty_tp.mli sliding.mli \
+      filter_rel.mli filter_empty_tp.mli sliding.mli \
 	  helper.mli domain_set.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
-	  murmur_hash3.mli hypercube_slicer.mli verified_adapter.mli
+	  murmur_hash3.mli hypercube_slicer.mli verified_adapter.mli rewriting.mli
 
 OURMLI = $(MLI) log.mli algorithm_verified.mli algorithm.mli
 

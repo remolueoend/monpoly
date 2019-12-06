@@ -130,6 +130,10 @@ let convert_agg_op = function
 let convert_formula f =
   let fvl = MFOTL.free_vars f in
   let truth = Equal ((Cst (Int 1)), (Cst (Int 1)))  in
+  let rec createExists n f = match n with 
+  | 0 -> f 
+  | n -> createExists (n-1) (Exists f)
+  in
   let rec convert_formula_vars bvl = function
   | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Pred (p,_,tl) -> Pred (explode p, List.map (fun t -> convert_term fvl bvl t) tl)
@@ -142,7 +146,7 @@ let convert_formula f =
   | Or (f1,f2) -> Or (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
   | Implies (f1,f2) -> convert_formula_vars bvl (Or ((Neg f1), f2))
   | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
-  | Exists (v,f) -> Exists (convert_formula_vars (v@bvl) f)
+  | Exists (v,f) -> createExists (List.length v) (convert_formula_vars (v@bvl) f)
   | ForAll (v,f) -> convert_formula_vars bvl (Neg (Exists (v,(Neg f))))
   | Aggreg (y,op,x,glist,f) ->
     let attr = MFOTL.free_vars f in
@@ -162,11 +166,19 @@ let convert_formula f =
   | Once (intv,f) -> convert_formula_vars bvl (Since (intv,truth,f))
   | Always (intv,f) -> convert_formula_vars bvl (Neg (Eventually (intv,(Neg f))))
   | PastAlways (intv,f) -> convert_formula_vars bvl (Neg (Once (intv,(Neg f))))
+  | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars bvl r)
+  | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars bvl r)
   | Less (t1,t2) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
                            raise (UnsupportedFragment msg)
   | LessEq (t1,t2) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
-  raise (UnsupportedFragment msg) in
-  convert_formula_vars [] f
+                           raise (UnsupportedFragment msg) 
+  and convert_re_vars bvl = function
+  | Wild -> Wild
+  | Test f -> Test (convert_formula_vars bvl f)
+  | Concat (r1,r2) -> Times (convert_re_vars bvl r1, convert_re_vars bvl r2)
+  | Plus (r1,r2) -> Plus (convert_re_vars bvl r1, convert_re_vars bvl r2)
+  | Star r -> Star (convert_re_vars bvl r) 
+  in convert_formula_vars [] f
 
 
 let convert_db md =
@@ -189,3 +201,7 @@ let convert_violations vs =
   List.map
     (fun qtp -> (qtp, Relation.make_relation ((List.map (Tuple.make_tuple<<deoptionalize<<snd) (qmap qtp)))))
     qtps
+
+
+let is_monitorable f = let s = (Verified.Monitor.mmonitorable_exec (domain_ccompare,domain_equal) << convert_formula) f
+                in (s, (if s then None else Some (f, "MFODL formula is not monitorable")))

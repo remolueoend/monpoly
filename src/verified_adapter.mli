@@ -3,6 +3,7 @@ open Predicate
 open Relation
 open Helper
 
+val is_monitorable: formula -> bool * (formula * string) option
 val convert_formula: formula -> cst Verified.Monitor.formula
 val convert_db: monpolyData -> (Verified.Monitor.char list * cst list) Verified.Monitor.set * Verified.Monitor.nat
 val convert_violations: (Verified.Monitor.nat * Predicate.cst option list) Verified.Monitor.set -> (int * relation) list

@@ -91,7 +91,14 @@ type formula =
   | PastAlways of (interval * formula)
   | Since of (interval * formula * formula)
   | Until of (interval * formula * formula)
-
+  | Frex of (interval * regex)
+  | Prex of (interval * regex)
+and regex = 
+  | Wild
+  | Test of formula
+  | Concat of (regex * regex)
+  | Plus of (regex * regex)
+  | Star of regex
 
 (** Operations on timestamps: *)
 
@@ -113,12 +120,15 @@ val in_interval: tsdiff -> interval -> bool
 (** Operations on formulas: *)
 
 val direct_subformulas: formula -> formula list
-  (** [direct_subformulas f] returns the list of all direct subformulas of [f]; hence not the
-      of all subformulas of [f], and not including [f]. *)
+  (** [direct_subformulas f] returns the list of all direct subformulas of [f]; hence not 
+       all subformulas of [f], and not including [f]. Regexes are ignored *)
 
 val is_temporal: formula -> bool
   (** [is_temporal f] returns [true] if the main connective of [f] is
       temporal. *)
+
+val is_mfodl: formula -> bool
+  (** [is_mfodl f] returns [true] if the formula contains future or past match operators *)
 
 val free_vars: formula -> var list
   (** [free_vars f] returns the list of free variables of [f]. *)

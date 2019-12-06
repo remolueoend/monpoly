@@ -1,8 +1,12 @@
 ISABELLE=isabelle
-afp=${AFP}
+ifeq (${AFP},)
+	p=$$AFP
+else
+	p=${AFP}/thys/
+endif
 
 all: verimon
 
 verimon:
-	$(ISABELLE) build -d"${afp}/thys/" -evD .
+	$(ISABELLE) build -d'$p' -evD .
 	cp verified.ocaml ../src/verified.ml

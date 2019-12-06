@@ -80,6 +80,11 @@ rule
   | ")"                         { f "RPA" lexbuf; RPA }
   | "["                         { f "LSB" lexbuf; LSB }
   | "]"                         { f "RSB" lexbuf; RSB }
+  | "|>" | "▷" 
+  | "FORWARD" | "MATCHF"        { f "FREX" lexbuf; FREX }
+  | "<|" | "◁" 
+  | "BACKWARD" | "MATCHP"       { f "PREX" lexbuf; PREX }
+  | "|"                         { f "BAR" lexbuf; BAR }
   | ","                         { f "COM" lexbuf; COM }
   | ";"                         { f "SC" lexbuf; SC }
   | "?"                         { f "QM" lexbuf; QM }
