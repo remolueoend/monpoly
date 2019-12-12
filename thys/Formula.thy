@@ -111,11 +111,11 @@ lemma fvi_Suc:
 
 lemma fvi_plus_bound:
   assumes "\<forall>i\<in>fvi (b + c) \<phi>. i < n"
-  shows "\<forall>i\<in>fvi b \<phi>. i < n + c"
+  shows "\<forall>i\<in>fvi b \<phi>. i < c + n"
 proof
   fix i
   assume "i \<in> fvi b \<phi>"
-  show "i < n + c"
+  show "i < c + n"
   proof (cases "i < c")
     case True
     then show ?thesis by simp
