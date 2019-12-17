@@ -13,10 +13,9 @@ section \<open>Concrete Monitor\<close>
 subsection \<open>Monitorable Formulas\<close>
 
 definition "mmonitorable \<phi> \<longleftrightarrow> safe_formula \<phi> \<and> Formula.future_reach \<phi> \<noteq> \<infinity>"
-definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Formula.future_reach_regex r \<noteq> \<infinity>"
+definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Regex.max_regex Formula.future_reach r \<noteq> \<infinity>"
 
-fun mmonitorable_exec :: "'a Formula.formula \<Rightarrow> bool"
-and mmonitorable_regex_exec :: "modality \<Rightarrow> safety \<Rightarrow> 'a Formula.regex \<Rightarrow> bool" where
+fun mmonitorable_exec :: "'a Formula.formula \<Rightarrow> bool" where
   "mmonitorable_exec (Formula.Eq t1 t2) = (Formula.is_Const t1 \<or> Formula.is_Const t2)"
 | "mmonitorable_exec (Formula.Neg (Formula.Eq (Formula.Const x) (Formula.Const y))) = True"
 | "mmonitorable_exec (Formula.Neg (Formula.Eq (Formula.Var x) (Formula.Var y))) = (x = y)"
@@ -36,14 +35,8 @@ and mmonitorable_regex_exec :: "modality \<Rightarrow> safety \<Rightarrow> 'a F
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> right I \<noteq> \<infinity> \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
-| "mmonitorable_exec (Formula.MatchP I r) = mmonitorable_regex_exec Past Safe r"
-| "mmonitorable_exec (Formula.MatchF I r) = (mmonitorable_regex_exec Future Safe r \<and> right I \<noteq> \<infinity>)"
-| "mmonitorable_regex_exec b g Formula.Wild = True"
-| "mmonitorable_regex_exec b g (Formula.Test \<phi>) = (mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)))"
-| "mmonitorable_regex_exec b g (Formula.Plus r s) = ((g = Unsafe \<or> fv_regex r = fv_regex s) \<and> mmonitorable_regex_exec b g r \<and> mmonitorable_regex_exec b g s)"
-| "mmonitorable_regex_exec Future g (Formula.Times r s) = ((g = Unsafe \<or> fv_regex r \<subseteq> fv_regex s) \<and> mmonitorable_regex_exec Future Unsafe r \<and> mmonitorable_regex_exec Future g s)"
-| "mmonitorable_regex_exec Past g (Formula.Times r s) = ((g = Unsafe \<or> fv_regex s \<subseteq> fv_regex r) \<and> mmonitorable_regex_exec Past g r \<and> mmonitorable_regex_exec Past Unsafe s)"
-| "mmonitorable_regex_exec b g (Formula.Star r) = (g = Unsafe \<and> mmonitorable_regex_exec b g r)"
+| "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Safe r"
+| "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Future Safe r \<and> right I \<noteq> \<infinity>)"
 
 lemma plus_eq_enat_iff: "a + b = enat i \<longleftrightarrow> (\<exists>j k. a = enat j \<and> b = enat k \<and> j + k = i)"
   by (cases a; cases b) auto
@@ -57,11 +50,14 @@ lemma le_enat_iff: "a \<le> enat i \<longleftrightarrow> (\<exists>j. a = enat j
 lemma less_enat_iff: "a < enat i \<longleftrightarrow> (\<exists>j. a = enat j \<and> j < i)"
   by (cases a) auto
 
+lemma cases_Neg_iff:
+   "(case \<phi> of formula.Neg \<psi> \<Rightarrow> P \<psi> | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<psi>. \<phi> = formula.Neg \<psi> \<and> P \<psi>)"
+  by (cases \<phi>) auto
+
 lemma safe_formula_mmonitorable_exec:
-  fixes \<phi> :: "'a Formula.formula" and r :: "'a Formula.regex"
+  fixes \<phi> :: "'a Formula.formula"
   shows "safe_formula \<phi> \<Longrightarrow> Formula.future_reach \<phi> \<noteq> \<infinity> \<Longrightarrow> mmonitorable_exec \<phi>"
-  and "safe_regex b g r \<Longrightarrow> Formula.future_reach_regex r \<noteq> \<infinity> \<Longrightarrow> mmonitorable_regex_exec b g r"
-proof (induct \<phi> and b g r rule: safe_formula_safe_regex.induct)
+proof (induct \<phi> rule: safe_formula.induct)
   case (5 \<phi> \<psi>)
   then show ?case
     unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
@@ -133,21 +129,26 @@ next
     unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
     by (fastforce simp: plus_eq_enat_iff split: formula.splits)
 next
-  case (18 b g \<phi>)
+  case (15 I r)
   then show ?case
-    by (cases \<phi>) auto
+    by (auto 0 3 elim!: safe_regex_mono[rotated] simp: minus_eq_enat_iff cases_Neg_iff
+      dest: max_regex_finite_eq[THEN iffD1, OF exI])
+next
+  case (16 I r)
+  then show ?case
+    by (auto 0 3 elim!: safe_regex_mono[rotated] simp: plus_eq_enat_iff cases_Neg_iff
+      dest: max_regex_finite_eq[THEN iffD1, OF exI])
 qed (auto simp add: plus_eq_enat_iff minus_eq_enat_iff max_def
   le_enat_iff less_enat_iff not_le split: if_splits)
 
 lemma mmonitorable_exec_mmonitorable:
-  fixes \<phi> :: "'a Formula.formula" and r :: "'a Formula.regex"
+  fixes \<phi> :: "'a Formula.formula"
   shows "mmonitorable_exec \<phi> \<Longrightarrow> mmonitorable \<phi>"
-  and "mmonitorable_regex_exec b g r \<Longrightarrow> mmonitorable_regex b g r"
-proof (induct \<phi> and b g r rule: mmonitorable_exec_mmonitorable_regex_exec.induct)
+proof (induct \<phi> rule: mmonitorable_exec.induct)
   case (5 \<phi> \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
-    by (fastforce split: formula.splits)
+    by (fastforce simp: cases_Neg_iff)
 next
   case (7 l)
   obtain poss negs where posnegs: "(poss, negs) = partition safe_formula l" by simp
@@ -196,16 +197,22 @@ next
   case (13 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
-    by (fastforce split: formula.splits)
+    by (fastforce simp: cases_Neg_iff)
 next
   case (14 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
-    by (fastforce simp: one_enat_def split: formula.splits)
+    by (fastforce simp: one_enat_def cases_Neg_iff)
 next
-  case (18 b g \<phi>)
+  case (15 I r)
   then show ?case
-    by (cases \<phi>) (auto simp: mmonitorable_regex_def mmonitorable_def)
+    by (auto elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
+      simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff minus_eq_enat_iff max_regex_finite_eq)
+next
+  case (16 I r)
+  then show ?case
+    by (auto 0 3 elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
+      simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff plus_eq_enat_iff one_enat_def max_regex_finite_eq)
 qed (auto simp add: mmonitorable_def mmonitorable_regex_def one_enat_def)
 
 lemma monitorable_formula_code[code]: "mmonitorable \<phi> = mmonitorable_exec \<phi>"
@@ -215,8 +222,7 @@ lemma monitorable_formula_code[code]: "mmonitorable \<phi> = mmonitorable_exec \
 subsection \<open>Handling Regular Expressions\<close>
 
 datatype mregex =
-  MWild
-| MEps
+  MSkip nat
 | MTestPos nat
 | MTestNeg nat
 | MPlus mregex mregex
@@ -224,8 +230,7 @@ datatype mregex =
 | MStar mregex
 
 primrec ok where
-  "ok _ MWild = True"
-| "ok _ MEps = True"
+  "ok _ (MSkip n) = True"
 | "ok m (MTestPos n) = (n < m)"
 | "ok m (MTestNeg n) = (n < m)"
 | "ok m (MPlus r s) = (ok m r \<and> ok m s)"
@@ -233,33 +238,31 @@ primrec ok where
 | "ok m (MStar r) = ok m r"
 
 primrec from_mregex where
-  "from_mregex MWild _ = Formula.Wild"
-| "from_mregex MEps _ = Formula.Test Formula.TT"
-| "from_mregex (MTestPos n) \<phi>s = Formula.Test (\<phi>s ! n)"
+  "from_mregex (MSkip n) _ = Regex.Skip n"
+| "from_mregex (MTestPos n) \<phi>s = Regex.Test (\<phi>s ! n)"
 | "from_mregex (MTestNeg n) \<phi>s = (if safe_formula (Formula.Neg (\<phi>s ! n)) then
-       Formula.Times (Formula.Star (Formula.Test Formula.FF))
-         (Formula.Times (Formula.Test (Formula.Neg (\<phi>s ! n))) (Formula.Star (Formula.Test Formula.FF))) \<comment> \<open>hack to produce a sound but unsafe formula\<close>
-     else Formula.Test (Formula.Neg (\<phi>s ! n)))"
-| "from_mregex (MPlus r s) \<phi>s = Formula.Plus (from_mregex r \<phi>s) (from_mregex s \<phi>s)"
-| "from_mregex (MTimes r s) \<phi>s = Formula.Times (from_mregex r \<phi>s) (from_mregex s \<phi>s)"
-| "from_mregex (MStar r) \<phi>s = Formula.Star (from_mregex r \<phi>s)"
+       Regex.Times (Regex.Star (Regex.Test Formula.FF))
+         (Regex.Times (Regex.Test (Formula.Neg (\<phi>s ! n))) (Regex.Star (Regex.Test Formula.FF))) \<comment> \<open>hack to produce a sound but unsafe formula\<close>
+     else Regex.Test (Formula.Neg (\<phi>s ! n)))"
+| "from_mregex (MPlus r s) \<phi>s = Regex.Plus (from_mregex r \<phi>s) (from_mregex s \<phi>s)"
+| "from_mregex (MTimes r s) \<phi>s = Regex.Times (from_mregex r \<phi>s) (from_mregex s \<phi>s)"
+| "from_mregex (MStar r) \<phi>s = Regex.Star (from_mregex r \<phi>s)"
 
 primrec to_mregex_exec where
-  "to_mregex_exec Formula.Wild xs = (MWild, xs)"
-| "to_mregex_exec (Formula.Test \<phi>) xs = (if safe_formula \<phi> then (MTestPos (length xs), xs @ [\<phi>])
-     else case \<phi> of Formula.Neg \<phi>' \<Rightarrow> (MTestNeg (length xs), xs @ [\<phi>']) | _ \<Rightarrow> (MEps, xs))"
-| "to_mregex_exec (Formula.Plus r s) xs =
+  "to_mregex_exec (Regex.Skip n) xs = (MSkip n, xs)"
+| "to_mregex_exec (Regex.Test \<phi>) xs = (if safe_formula \<phi> then (MTestPos (length xs), xs @ [\<phi>])
+     else case \<phi> of Formula.Neg \<phi>' \<Rightarrow> (MTestNeg (length xs), xs @ [\<phi>']) | _ \<Rightarrow> (MSkip 0, xs))"
+| "to_mregex_exec (Regex.Plus r s) xs =
      (let (mr, ys) = to_mregex_exec r xs; (ms, zs) = to_mregex_exec s ys
      in (MPlus mr ms, zs))"
-| "to_mregex_exec (Formula.Times r s) xs =
+| "to_mregex_exec (Regex.Times r s) xs =
      (let (mr, ys) = to_mregex_exec r xs; (ms, zs) = to_mregex_exec s ys
      in (MTimes mr ms, zs))"
-| "to_mregex_exec (Formula.Star r) xs =
+| "to_mregex_exec (Regex.Star r) xs =
      (let (mr, ys) = to_mregex_exec r xs in (MStar mr, ys))"
 
 primrec shift where
-  "shift MWild k = MWild"
-| "shift MEps k = MEps"
+  "shift (MSkip n) k = MSkip n"
 | "shift (MTestPos i) k = MTestPos (i + k)"
 | "shift (MTestNeg i) k = MTestNeg (i + k)"
 | "shift (MPlus r s) k = MPlus (shift r k) (shift s k)"
@@ -267,16 +270,16 @@ primrec shift where
 | "shift (MStar r) k = MStar (shift r k)"
 
 primrec to_mregex where
-  "to_mregex Formula.Wild = (MWild, [])"
-| "to_mregex (Formula.Test \<phi>) = (if safe_formula \<phi> then (MTestPos 0, [\<phi>])
-     else case \<phi> of Formula.Neg \<phi>' \<Rightarrow> (MTestNeg 0, [\<phi>']) | _ \<Rightarrow> (MEps, []))"
-| "to_mregex (Formula.Plus r s) =
+  "to_mregex (Regex.Skip n) = (MSkip n, [])"
+| "to_mregex (Regex.Test \<phi>) = (if safe_formula \<phi> then (MTestPos 0, [\<phi>])
+     else case \<phi> of Formula.Neg \<phi>' \<Rightarrow> (MTestNeg 0, [\<phi>']) | _ \<Rightarrow> (MSkip 0, []))"
+| "to_mregex (Regex.Plus r s) =
      (let (mr, ys) = to_mregex r; (ms, zs) = to_mregex s
      in (MPlus mr (shift ms (length ys)), ys @ zs))"
-| "to_mregex (Formula.Times r s) =
+| "to_mregex (Regex.Times r s) =
      (let (mr, ys) = to_mregex r; (ms, zs) = to_mregex s
      in (MTimes mr (shift ms (length ys)), ys @ zs))"
-| "to_mregex (Formula.Star r) =
+| "to_mregex (Regex.Star r) =
      (let (mr, ys) = to_mregex r in (MStar mr, ys))"
 
 lemma shift_0: "shift r 0 = r"
@@ -301,22 +304,30 @@ lemma from_mregex_cong: "ok m mr \<Longrightarrow> (\<forall>i < m. xs ! i = ys 
 
 lemma to_mregex_exec_ok:
   "to_mregex_exec r xs = (mr, ys) \<Longrightarrow> \<exists>zs. ys = xs @ zs \<and> set zs = atms r \<and> ok (length ys) mr"
-  by (induct r arbitrary: xs mr ys)
-    (fastforce split: if_splits prod.splits formula.splits elim: ok_mono)+
+  apply (induct r arbitrary: xs mr ys)
+      apply (auto split: if_splits prod.splits simp: atms_def elim: ok_mono)
+    apply (split formula.splits; fastforce elim: ok_mono)+
+   apply (fastforce split: if_splits prod.splits formula.splits simp: atms_def elim: ok_mono)
+  apply (fastforce split: if_splits prod.splits formula.splits simp: atms_def elim: ok_mono)
+  done
 
 lemma ok_shift: "ok (i + m) (Monitor.shift r i) \<longleftrightarrow> ok m r"
   by (induct r) auto
 
 lemma to_mregex_ok: "to_mregex r = (mr, ys) \<Longrightarrow> set ys = atms r \<and> ok (length ys) mr"
-  by (induct r arbitrary: mr ys)
-    (fastforce simp: ok_shift elim: ok_mono split: if_splits prod.splits formula.splits)+
+  apply (induct r arbitrary: mr ys)
+      apply (auto simp: ok_shift atms_def elim: ok_mono split: if_splits prod.splits)
+      apply (split formula.splits; fastforce simp: ok_shift elim: ok_mono)+
+  using ok_mono apply fastforce
+  using ok_mono apply fastforce
+  done
 
 lemma from_mregex_shift: "from_mregex (shift r (length xs)) (xs @ ys) = from_mregex r ys"
   by (induct r) (auto simp: nth_append)
 
 lemma from_mregex_to_mregex: "safe_regex m g r \<Longrightarrow> case_prod from_mregex (to_mregex r) = r"
-  by (induct r rule: safe_regex_induct)
-    (auto dest: to_mregex_ok intro!: from_mregex_cong simp: nth_append from_mregex_shift
+  by (induct r rule: safe_regex.induct)
+    (auto dest: to_mregex_ok intro!: from_mregex_cong simp: nth_append from_mregex_shift cases_Neg_iff
       split: prod.splits modality.splits)
 
 lemma from_mregex_eq: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, \<phi>s) \<Longrightarrow> from_mregex mr \<phi>s = r"
@@ -325,19 +336,24 @@ lemma from_mregex_eq: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, \<p
 lemma from_mregex_to_mregex_exec: "safe_regex m g r \<Longrightarrow> case_prod from_mregex (to_mregex_exec r xs) = r"
 proof (induct r arbitrary: xs rule: safe_regex_induct)
   case (Plus b g r s)
-  from Plus(1,2,4) Plus(3)[of xs] Plus(5)[of "snd (to_mregex_exec r xs)"] show ?case
+  from Plus(3) Plus(1)[of xs] Plus(2)[of "snd (to_mregex_exec r xs)"] show ?case
     by (auto split: prod.splits simp: nth_append dest: to_mregex_exec_ok
       intro!: from_mregex_cong[where m = "length (snd (to_mregex_exec r xs))"])
 next
-  case (Times b g r s)
-  from Times(1,2,4) Times(3)[of xs] Times(5)[of "snd (to_mregex_exec r xs)"] show ?case
+  case (TimesF g r s)
+  from TimesF(3) TimesF(2)[of xs] TimesF(1)[of "snd (to_mregex_exec r xs)"] show ?case
+    by (auto split: prod.splits simp: nth_append dest: to_mregex_exec_ok
+      intro!: from_mregex_cong[where m = "length (snd (to_mregex_exec r xs))"])
+next
+  case (TimesP g r s)
+  from TimesP(3) TimesP(1)[of xs] TimesP(2)[of "snd (to_mregex_exec r xs)"] show ?case
     by (auto split: prod.splits simp: nth_append dest: to_mregex_exec_ok
       intro!: from_mregex_cong[where m = "length (snd (to_mregex_exec r xs))"])
 next
   case (Star b g r)
-  from Star(1,2) Star(3)[of xs] show ?case
+  from Star(2) Star(1)[of xs] show ?case
     by (auto split: prod.splits)
-qed (auto split: prod.splits)
+qed (auto split: prod.splits simp: cases_Neg_iff)
 
 
 derive linorder mregex
@@ -356,8 +372,7 @@ definition "MTimesL r S = MTimes r ` S"
 definition "MTimesR R s = (\<lambda>r. MTimes r s) ` R"
 
 primrec LPD where
-  "LPD MWild = {MEps}"
-| "LPD MEps = {}"
+  "LPD (MSkip n) = (case n of 0 \<Rightarrow> {} | Suc m \<Rightarrow> {MSkip m})"
 | "LPD (MTestPos \<phi>) = {}"
 | "LPD (MTestNeg \<phi>) = {}"
 | "LPD (MPlus r s) = (LPD r \<union> LPD s)"
@@ -379,22 +394,22 @@ lemma LPDs_trans: "r \<in> LPD s \<Longrightarrow> s \<in> LPDs t \<Longrightarr
   by (force simp: LPDs_def LPDi_Suc_alt simp del: LPDi.simps intro: exI[of _ "Suc _"])
 
 lemma LPDi_Test:
-  "LPDi i (MEps) \<subseteq> {MEps}"
+  "LPDi i (MSkip 0) \<subseteq> {MSkip 0}"
   "LPDi i (MTestPos \<phi>) \<subseteq> {MTestPos \<phi>}"
   "LPDi i (MTestNeg \<phi>) \<subseteq> {MTestNeg \<phi>}"
   by (induct i) auto
 
 lemma LPDs_Test:
-  "LPDs (MEps) \<subseteq> {MEps}"
+  "LPDs (MSkip 0) \<subseteq> {MSkip 0}"
   "LPDs (MTestPos \<phi>) \<subseteq> {MTestPos \<phi>}"
   "LPDs (MTestNeg \<phi>) \<subseteq> {MTestNeg \<phi>}"
   unfolding LPDs_def using LPDi_Test by blast+
 
-lemma LPDi_Wild: "LPDi i (MWild) \<subseteq> {MWild, MEps}"
-  by (induct i) (auto dest: set_mp[OF LPDi_Test(1)])
+lemma LPDi_MSkip: "LPDi i (MSkip n) \<subseteq> MSkip ` {i. i \<le> n}"
+  by (induct i arbitrary: n) (auto dest: set_mp[OF LPDi_Test(1)] simp: le_Suc_eq split: nat.splits)
 
-lemma LPDs_Wild: "LPDs (MWild) \<subseteq> {MWild, MEps}"
-  unfolding LPDs_def using LPDi_Wild by auto
+lemma LPDs_MSkip: "LPDs (MSkip n) \<subseteq> MSkip ` {i. i \<le> n}"
+  unfolding LPDs_def using LPDi_MSkip by auto
 
 lemma LPDi_Plus: "LPDi i (MPlus r s) \<subseteq> {MPlus r s} \<union> LPDi i r \<union> LPDi i s"
   by (induct i arbitrary: r s) auto
@@ -426,11 +441,8 @@ lemma LPDs_Star: "LPDs (MStar r) \<subseteq> {MStar r} \<union> MTimesR (LPDs r)
 
 lemma finite_LPDs: "finite (LPDs r)"
 proof (induct r)
-  case MWild
-  then show ?case by (intro finite_subset[OF LPDs_Wild]) simp
-next
-  case (MEps)
-  then show ?case by (intro finite_subset[OF LPDs_Test(1)]) simp
+  case (MSkip n)
+  then show ?case by (intro finite_subset[OF LPDs_MSkip]) simp
 next
   case (MTestPos \<phi>)
   then show ?case by (intro finite_subset[OF LPDs_Test(2)]) simp
@@ -482,8 +494,7 @@ end
 section \<open>RPD\<close>
 
 primrec RPD where
-  "RPD MWild = {MEps}"
-| "RPD MEps = {}"
+  "RPD (MSkip n) = (case n of 0 \<Rightarrow> {} | Suc m \<Rightarrow> {MSkip m})"
 | "RPD (MTestPos \<phi>) = {}"
 | "RPD (MTestNeg \<phi>) = {}"
 | "RPD (MPlus r s) = (RPD r \<union> RPD s)"
@@ -505,32 +516,22 @@ lemma RPDs_trans: "r \<in> RPD s \<Longrightarrow> s \<in> RPDs t \<Longrightarr
   by (force simp: RPDs_def RPDi_Suc_alt simp del: RPDi.simps intro: exI[of _ "Suc _"])
 
 lemma RPDi_Test:
-  "RPDi i (MEps) \<subseteq> {MEps}"
+  "RPDi i (MSkip 0) \<subseteq> {MSkip 0}"
   "RPDi i (MTestPos \<phi>) \<subseteq> {MTestPos \<phi>}"
   "RPDi i (MTestNeg \<phi>) \<subseteq> {MTestNeg \<phi>}"
   by (induct i) auto
 
 lemma RPDs_Test:
-  "RPDs (MEps) \<subseteq> {MEps}"
+  "RPDs (MSkip 0) \<subseteq> {MSkip 0}"
   "RPDs (MTestPos \<phi>) \<subseteq> {MTestPos \<phi>}"
   "RPDs (MTestNeg \<phi>) \<subseteq> {MTestNeg \<phi>}"
   unfolding RPDs_def using RPDi_Test by blast+
 
-lemma MEps_RPDs_Wild: "MEps \<in> RPDs MWild"
-  unfolding RPDs_def by (auto intro: exI[of _ 1])
+lemma RPDi_MSkip: "RPDi i (MSkip n) \<subseteq> MSkip ` {i. i \<le> n}"
+  by (induct i arbitrary: n) (auto dest: set_mp[OF RPDi_Test(1)] simp: le_Suc_eq split: nat.splits)
 
-lemma RPDi_Wild: "RPDi i (MWild) \<subseteq> {MWild, MEps}"
-  by (induct i) (auto dest: set_mp[OF RPDi_Test(1)])
-
-lemma RPDs_Wild: "RPDs (MWild) \<subseteq> {MWild, MEps}"
-  unfolding RPDs_def using RPDi_Wild by auto
-
-lemma RPDs_base_eq:
-  "RPDs MWild = {MWild, MEps}"
-  "RPDs MEps = {MEps}"
-  "RPDs (MTestPos \<phi>) = {MTestPos \<phi>}"
-  "RPDs (MTestNeg \<phi>) = {MTestNeg \<phi>}"
-  using RPDs_Wild MEps_RPDs_Wild RPDs_refl RPDs_Test(1) RPDs_Test(2,3)[of \<phi>] by auto
+lemma RPDs_MSkip: "RPDs (MSkip n) \<subseteq> MSkip ` {i. i \<le> n}"
+  unfolding RPDs_def using RPDi_MSkip by auto
 
 lemma RPDi_Plus: "RPDi i (MPlus r s) \<subseteq> {MPlus r s} \<union> RPDi i r \<union> RPDi i s"
   by (induct i arbitrary: r s) auto
@@ -567,11 +568,8 @@ lemma RPDs_Star: "RPDs (MStar r) \<subseteq> {MStar r} \<union> MTimesL (MStar r
 
 lemma finite_RPDs: "finite (RPDs r)"
 proof (induct r)
-  case MWild
-  then show ?case by (intro finite_subset[OF RPDs_Wild]) simp
-next
-  case (MEps)
-  then show ?case by (intro finite_subset[OF RPDs_Test(1)]) simp
+  case MSkip
+  then show ?case by (intro finite_subset[OF RPDs_MSkip]) simp
 next
   case (MTestPos \<phi>)
   then show ?case by (intro finite_subset[OF RPDs_Test(2)]) simp
@@ -663,8 +661,21 @@ fun neq_rel :: "nat \<Rightarrow> 'a Formula.trm \<Rightarrow> 'a Formula.trm \<
 | "neq_rel n (Formula.Var x) (Formula.Var y) = (if x = y then empty_table else undefined)"
 | "neq_rel _ _ _ = undefined"
 
-lemma atms_size: "x \<in> atms r \<Longrightarrow> size x < size r"
-  by (induct r) (auto split: if_splits formula.splits)
+lemma regex_atms_size: "x \<in> regex.atms r \<Longrightarrow> size x < regex.size_regex size r"
+  by (induct r) auto
+
+lemma atms_size:
+  assumes "x \<in> atms r"
+  shows "size x < Regex.size_regex size r"
+proof -
+  { fix y assume "y \<in> regex.atms r" "case y of formula.Neg z \<Rightarrow> x = z | _ \<Rightarrow> False"
+    then have "size x < Regex.size_regex size r"
+      by (cases y rule: formula.exhaust) (auto dest: regex_atms_size)
+  }
+  with assms show ?thesis
+    unfolding atms_def
+    by (auto split: formula.splits dest: regex_atms_size)
+qed
 
 function (sequential) minit0 :: "nat \<Rightarrow> 'a Formula.formula \<Rightarrow> 'a mformula" where
   "minit0 n (Formula.Neg \<phi>) = (case \<phi> of
@@ -827,8 +838,7 @@ definition update_since :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rig
 definition "lookup = Mapping.lookup_default empty_table"
 
 fun unsafe_\<epsilon> where
-  "unsafe_\<epsilon> guard \<phi>s MWild = empty_table"
-| "unsafe_\<epsilon> guard \<phi>s MEps = guard"
+  "unsafe_\<epsilon> guard \<phi>s (MSkip n) = (if n = 0 then guard else empty_table)"
 | "unsafe_\<epsilon> guard \<phi>s (MTestPos i) = join guard True (\<phi>s ! i)"
 | "unsafe_\<epsilon> guard \<phi>s (MTestNeg i) = join guard False (\<phi>s ! i)"
 | "unsafe_\<epsilon> guard \<phi>s (MPlus r s) = unsafe_\<epsilon> guard \<phi>s r \<union> unsafe_\<epsilon> guard \<phi>s s"
@@ -836,24 +846,21 @@ fun unsafe_\<epsilon> where
 | "unsafe_\<epsilon> guard \<phi>s (MStar r) = guard"
 
 fun safe_r\<epsilon> where
-  "safe_r\<epsilon> n \<phi>s MWild = empty_table"
-| "safe_r\<epsilon> n \<phi>s MEps = unit_table n"
+  "safe_r\<epsilon> n \<phi>s (MSkip m) = (if m = 0 then unit_table n else empty_table)"
 | "safe_r\<epsilon> n \<phi>s (MTestPos i) = \<phi>s ! i"
 | "safe_r\<epsilon> n \<phi>s (MPlus r s) = safe_r\<epsilon> n \<phi>s r \<union> safe_r\<epsilon> n \<phi>s s"
 | "safe_r\<epsilon> n \<phi>s (MTimes r s) = unsafe_\<epsilon> (safe_r\<epsilon> n \<phi>s r) \<phi>s s"
 | "safe_r\<epsilon> n \<phi>s _ = undefined"
 
 fun safe_l\<epsilon> where
-  "safe_l\<epsilon> n \<phi>s MWild = empty_table"
-| "safe_l\<epsilon> n \<phi>s MEps = unit_table n"
+  "safe_l\<epsilon> n \<phi>s (MSkip m) = (if m = 0 then unit_table n else empty_table)"
 | "safe_l\<epsilon> n \<phi>s (MTestPos i) = \<phi>s ! i"
 | "safe_l\<epsilon> n \<phi>s (MPlus r s) = safe_l\<epsilon> n \<phi>s r \<union> safe_l\<epsilon> n \<phi>s s"
 | "safe_l\<epsilon> n \<phi>s (MTimes r s) = unsafe_\<epsilon> (safe_l\<epsilon> n \<phi>s s) \<phi>s r"
 | "safe_l\<epsilon> n \<phi>s _ = undefined"
 
 fun r\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table) mapping \<Rightarrow> 'a table list \<Rightarrow> mregex \<Rightarrow> 'a table"  where
-  "r\<delta> \<kappa> X \<phi>s MWild = lookup X (\<kappa> MEps)"
-| "r\<delta> \<kappa> X \<phi>s MEps = empty_table"
+  "r\<delta> \<kappa> X \<phi>s (MSkip n) = (case n of 0 \<Rightarrow> empty_table | Suc m \<Rightarrow> lookup X (\<kappa> (MSkip m)))"
 | "r\<delta> \<kappa> X \<phi>s (MTestPos i) = empty_table"
 | "r\<delta> \<kappa> X \<phi>s (MTestNeg i) = empty_table"
 | "r\<delta> \<kappa> X \<phi>s (MPlus r s) = r\<delta> \<kappa> X \<phi>s r \<union> r\<delta> \<kappa> X \<phi>s s"
@@ -861,8 +868,7 @@ fun r\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table)
 | "r\<delta> \<kappa> X \<phi>s (MStar r) = r\<delta> (\<lambda>t. \<kappa> (MTimes (MStar r) t)) X \<phi>s r"
 
 fun l\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table) mapping \<Rightarrow> 'a table list \<Rightarrow> mregex \<Rightarrow> 'a table" where
-  "l\<delta> \<kappa> X \<phi>s MWild = lookup X (\<kappa> MEps)"
-| "l\<delta> \<kappa> X \<phi>s MEps = empty_table"
+  "l\<delta> \<kappa> X \<phi>s (MSkip n) = (case n of 0 \<Rightarrow> empty_table | Suc m \<Rightarrow> lookup X (\<kappa> (MSkip m)))"
 | "l\<delta> \<kappa> X \<phi>s (MTestPos i) = empty_table"
 | "l\<delta> \<kappa> X \<phi>s (MTestNeg i) = empty_table"
 | "l\<delta> \<kappa> X \<phi>s (MPlus r s) = l\<delta> \<kappa> X \<phi>s r \<union> l\<delta> \<kappa> X \<phi>s s"
@@ -993,18 +999,9 @@ lemma mstep_alt: "mstep tdb st =
   unfolding mstep_def
   by (auto split: prod.split)
 
-
 subsection \<open>Verdict Delay\<close>
 
-lemmas formula_atms_induct = formula.induct[where ?P1.0 = P and
-  ?P2.0 = "\<lambda>r. \<forall>\<phi> \<in> atms r. P \<phi>" for P,
-  case_names Pred Eq Neg Or Exists Prev Next Since Until MatchF MatchP Wild Test Plus Times Star]
-
-lemma atms_size_estimation[termination_simp]: "x \<in> atms r \<Longrightarrow> size x < Suc (size r)"
-  by (induct r) (auto split: if_splits formula.splits)
-
-fun progress :: "'a Formula.trace \<Rightarrow> 'a Formula.formula \<Rightarrow> nat \<Rightarrow> nat"
-and progress_regex :: "'a Formula.trace \<Rightarrow> 'a Formula.regex \<Rightarrow> nat \<Rightarrow> nat" where
+fun progress :: "'a Formula.trace \<Rightarrow> 'a Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
   "progress \<sigma> (Formula.Pred e ts) j = j"
 | "progress \<sigma> (Formula.Eq t1 t2) j = j"
 | "progress \<sigma> (Formula.Neg \<phi>) j = progress \<sigma> \<phi> j"
@@ -1017,14 +1014,9 @@ and progress_regex :: "'a Formula.trace \<Rightarrow> 'a Formula.regex \<Rightar
 | "progress \<sigma> (Formula.Since \<phi> I \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
 | "progress \<sigma> (Formula.Until \<phi> I \<psi>) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j) \<longrightarrow> \<tau> \<sigma> i + right I \<ge> \<tau> \<sigma> k}"
-| "progress \<sigma> (Formula.MatchP I r) j = progress_regex \<sigma> r j"
+| "progress \<sigma> (Formula.MatchP I r) j = min_regex_default (progress \<sigma>) r j"
 | "progress \<sigma> (Formula.MatchF I r) j =
-    Inf {i. \<forall>k. k < j \<and> k \<le> progress_regex \<sigma> r j \<longrightarrow> \<tau> \<sigma> i + right I \<ge> \<tau> \<sigma> k}"
-| "progress_regex \<sigma> Formula.Wild j = j"
-| "progress_regex \<sigma> (Formula.Test \<phi>) j = progress \<sigma> \<phi> j"
-| "progress_regex \<sigma> (Formula.Plus r s) j = min (progress_regex \<sigma> r j) (progress_regex \<sigma> s j)"
-| "progress_regex \<sigma> (Formula.Times r s) j = min (progress_regex \<sigma> r j) (progress_regex \<sigma> s j)"
-| "progress_regex \<sigma> (Formula.Star r) j = progress_regex \<sigma> r j"
+    Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress \<sigma>) r j \<longrightarrow> \<tau> \<sigma> i + right I \<ge> \<tau> \<sigma> k}"
 
 lemma progress_And[simp]: "progress \<sigma> (Formula.And \<phi> \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
   unfolding Formula.And_def by simp
@@ -1032,10 +1024,8 @@ lemma progress_And[simp]: "progress \<sigma> (Formula.And \<phi> \<psi>) j = min
 lemma progress_And_Not[simp]: "progress \<sigma> (Formula.And_Not \<phi> \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
   unfolding Formula.And_Not_def by simp
 
-lemma
-  progress_mono: "j \<le> j' \<Longrightarrow> progress \<sigma> \<phi> j \<le> progress \<sigma> \<phi> j'" and
-  progress_regex_mono: "j \<le> j' \<Longrightarrow> progress_regex \<sigma> r j \<le> progress_regex \<sigma> r j'"
-proof (induction \<phi> and r)
+lemma progress_mono: "j \<le> j' \<Longrightarrow> progress \<sigma> \<phi> j \<le> progress \<sigma> \<phi> j'"
+proof (induction \<phi>)
   case (Ands l)
   then show ?case
     by (cases "l = []") (auto simp: image_iff intro!: Min.coboundedI[THEN order_trans])
@@ -1048,11 +1038,12 @@ next
   case (MatchF I r)
   then show ?case
     by (cases "right I")
-      (auto dest: trans_le_add1[OF \<tau>_mono] intro!: cInf_superset_mono)
-qed auto
+      (auto dest: trans_le_add1[OF \<tau>_mono] intro!: cInf_superset_mono min_regex_default_mono
+        elim!: less_le_trans order_trans)
+qed (auto intro: min_regex_default_mono)
 
-lemma progress_le: "progress \<sigma> \<phi> j \<le> j" and progress_regex_le: "progress_regex \<sigma> r j \<le> j"
-proof (induction \<phi> and r)
+lemma progress_le: "progress \<sigma> \<phi> j \<le> j"
+proof (induction \<phi>)
   case (Ands l)
   then show ?case
     by (cases "l = []")
@@ -1067,18 +1058,14 @@ next
   then show ?case
     by (cases "right I")
       (auto intro: trans_le_add1[OF \<tau>_mono] intro!: cInf_lower)
-qed auto
+qed (auto simp: min_regex_default_le)
 
 lemma progress_0[simp]: "progress \<sigma> \<phi> 0 = 0"
   using progress_le by auto
 
-lemma progress_regex_0[simp]: "progress_regex \<sigma> r 0 = 0"
-  using progress_regex_le by auto
-
 lemma
-  progress_ge: "Formula.future_reach \<phi> \<noteq> \<infinity> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> \<phi> j" and
-  progress_regex_ge: "Formula.future_reach_regex r \<noteq> \<infinity> \<Longrightarrow> \<exists>j. i \<le> progress_regex \<sigma> r j"
-proof (induction \<phi> and r arbitrary: i and i)
+  progress_ge: "Formula.future_reach \<phi> \<noteq> \<infinity> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> \<phi> j"
+proof (induction \<phi> arbitrary: i)
   case (Pred e ts)
   then show ?case by auto
 next
@@ -1171,10 +1158,19 @@ next
   then show ?case by blast
 next
   case (MatchP I r)
-  then show ?case
-    by (cases "Formula.future_reach_regex r") auto
+  define pick where "pick = (\<lambda>\<phi>. SOME j. i \<le> progress \<sigma> \<phi> j)"
+  from MatchP have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> i \<le> progress \<sigma> \<phi> (pick \<phi>)" for \<phi>
+    by (cases "max_regex Formula.future_reach r")
+      (auto dest!: max_regex_finite_eq[THEN iffD1, OF exI] simp: pick_def intro: someI_ex)
+  show ?case
+    by (auto simp: min_regex_default_alt[of r "progress \<sigma>", OF progress_le] progress_mono
+      intro!: exI[of _ "Max (insert i (pick ` regex.atms r))"] intro: order_trans[OF pick])
 next
   case (MatchF I r)
+  define pick where "pick = (\<lambda>i \<phi>. SOME j. i \<le> progress \<sigma> \<phi> j)"
+  from MatchF have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> i \<le> progress \<sigma> \<phi> (pick i \<phi>)" for i \<phi>
+    by (cases "max_regex Formula.future_reach r")
+      (auto dest!: max_regex_finite_eq[THEN iffD1, OF exI] simp: pick_def intro: someI_ex)
   from MatchF.prems obtain b where "right I = enat b"
     by (auto simp: plus_eq_enat_iff)
   moreover
@@ -1182,37 +1178,18 @@ next
     using ex_le_\<tau>[where x="\<tau> \<sigma> i + b + 1"] by (auto simp add: less_eq_Suc_le)
   then have 1: "\<tau> \<sigma> i + b < \<tau> \<sigma> i'" by simp
   moreover
-  from MatchF.prems have "Formula.future_reach_regex r \<noteq> \<infinity>"
-    by (cases "Formula.future_reach_regex r") auto
-  with MatchF obtain j where "Suc i' \<le> progress_regex \<sigma> r j"
-    by auto
+  from MatchF.prems have "max_regex Formula.future_reach r \<noteq> \<infinity>"
+    by (cases "max_regex Formula.future_reach r") auto
+  obtain j where "Suc i' \<le> min_regex_default (progress \<sigma>) r j"
+    unfolding min_regex_default_alt[of r "progress \<sigma>", OF progress_le]
+    by (atomize_elim) (auto simp: plus_eq_enat_iff progress_mono
+     intro: order_trans[OF pick[of _ "Suc i'"]]
+     intro!: exI[of _ "Max (insert (Suc i') (pick (Suc i') ` regex.atms r))"])
   moreover have "i \<le> x" if "\<tau> \<sigma> i' \<le> b + \<tau> \<sigma> x" "b + \<tau> \<sigma> i < \<tau> \<sigma> i'" for x
     using less_\<tau>D[of \<sigma> i] that less_le_trans by fastforce
-  ultimately show ?case using \<open>i < i'\<close> progress_regex_le[of \<sigma> r j] \<tau>_mono[of _ j \<sigma>] less_\<tau>D[of \<sigma> i]
+  ultimately show ?case using \<open>i < i'\<close> min_regex_default_le[of r "progress \<sigma>" j, OF progress_le] \<tau>_mono[of _ j \<sigma>] less_\<tau>D[of \<sigma> i]
     by (auto 0 3 intro!: exI[of _ "j"] cInf_greatest simp: ac_simps Suc_le_eq trans_le_add2
       dest: spec[of _ "i'"] spec[of _ j])
-next
-  case (Plus r s)
-  from Plus.prems have "Formula.future_reach_regex r \<noteq> \<infinity>"
-    by (cases "Formula.future_reach_regex r") (auto)
-  moreover from Plus.prems have "Formula.future_reach_regex s \<noteq> \<infinity>"
-    by (cases "Formula.future_reach_regex s") (auto)
-  ultimately obtain j1 j2 where "i \<le> progress_regex \<sigma> r j1" and "i \<le> progress_regex \<sigma> s j2"
-    using Plus.IH[of i] by blast
-  then have "i \<le> progress_regex \<sigma> (Formula.Plus r s) (max j1 j2)"
-    by (cases "j1 \<le> j2") (auto elim!: order.trans[OF _ progress_regex_mono])
-  then show ?case by blast
-next
-  case (Times r s)
-  from Times.prems have "Formula.future_reach_regex r \<noteq> \<infinity>"
-    by (cases "Formula.future_reach_regex r") (auto)
-  moreover from Times.prems have "Formula.future_reach_regex s \<noteq> \<infinity>"
-    by (cases "Formula.future_reach_regex s") (auto)
-  ultimately obtain j1 j2 where "i \<le> progress_regex \<sigma> r j1" and "i \<le> progress_regex \<sigma> s j2"
-    using Times.IH[of i] by blast
-  then have "i \<le> progress_regex \<sigma> (Formula.Times r s) (max j1 j2)"
-    by (cases "j1 \<le> j2") (auto elim!: order.trans[OF _ progress_regex_mono])
-  then show ?case by blast
 qed auto
 
 lemma cInf_restrict_nat:
@@ -1223,9 +1200,8 @@ lemma cInf_restrict_nat:
 
 lemma
   assumes "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-  shows progress_time_conv: "progress \<sigma> \<phi> j = progress \<sigma>' \<phi> j" and
-    progress_regex_time_conv: "progress_regex \<sigma> r j = progress_regex \<sigma>' r j"
-proof (induction \<phi> and r)
+  shows progress_time_conv: "progress \<sigma> \<phi> j = progress \<sigma>' \<phi> j"
+proof (induction \<phi>)
   case (Until \<phi>1 I \<phi>2)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
@@ -1248,9 +1224,9 @@ next
     using that by auto
   with MatchF show ?case using assms \<tau>_mono[THEN trans_le_add1]
     by (cases "right I"; cases j)
-      ((auto 6 0 intro!: box_equals[OF arg_cong[where f=Inf]
+      ((auto 6 0 simp: min_regex_default_alt progress_le intro!: box_equals[OF arg_cong[where f=Inf]
       cInf_restrict_nat[symmetric, where x="j-1"] cInf_restrict_nat[symmetric, where x="j-1"]]) [])+
-qed auto
+qed (auto simp: min_regex_default_alt progress_le)
 
 lemma Inf_UNIV_nat: "(Inf UNIV :: nat) = 0"
   by (simp add: cInf_eq_minimum)
@@ -1259,11 +1235,6 @@ lemma progress_prefix_conv:
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
   shows "progress \<sigma> \<phi> (plen \<pi>) = progress \<sigma>' \<phi> (plen \<pi>)"
   using assms by (auto intro: progress_time_conv \<tau>_prefix_conv)
-
-lemma progress_regex_prefix_conv:
-  assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
-  shows "progress_regex \<sigma> r (plen \<pi>) = progress_regex \<sigma>' r (plen \<pi>)"
-  using assms by (auto intro: progress_regex_time_conv \<tau>_prefix_conv)
 
 lemma bounded_rtranclp_mono:
   fixes n :: "'a :: linorder"
@@ -1276,11 +1247,10 @@ proof (induct rule: rtranclp_induct)
     by (auto elim!: rtrancl_into_rtrancl[to_pred, rotated])
 qed auto
 
-lemma
+lemma sat_prefix_conv: 
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
-  shows sat_prefix_conv: "i < progress \<sigma> \<phi> (plen \<pi>) \<Longrightarrow> Formula.sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' v i \<phi>"
-    and match_prefix_conv: "j < progress_regex \<sigma> r (plen \<pi>) \<Longrightarrow> Formula.match \<sigma> v r i j \<longleftrightarrow> Formula.match \<sigma>' v r i j"
-proof (induction \<phi> and r arbitrary: v i and v i j)
+  shows "i < progress \<sigma> \<phi> (plen \<pi>) \<Longrightarrow> Formula.sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' v i \<phi>"
+proof (induction \<phi> arbitrary: v i)
   case (Pred e ts)
   with \<Gamma>_prefix_conv[OF assms(1,2)] show ?case by simp
 next
@@ -1316,7 +1286,7 @@ next
   with Since \<tau>_prefix_conv[OF assms(1,2)] show ?case by auto
 next
   case (Until \<phi>1 I \<phi>2)
-  from Until.prems obtain b where [simp]: "right I = enat b"
+  from Until.prems obtain b where right[simp]: "right I = enat b"
     by (cases "right I") (auto simp add: Inf_UNIV_nat)
   from Until.prems obtain j where "\<tau> \<sigma> i + b + 1 \<le> \<tau> \<sigma> j"
     "j \<le> progress \<sigma> \<phi>1 (plen \<pi>)" "j \<le> progress \<sigma> \<phi>2 (plen \<pi>)"
@@ -1354,47 +1324,50 @@ next
 next
   case (MatchP I r)
   then have "i < plen \<pi>"
-    by (auto elim!: order.strict_trans2[OF _ progress_regex_le])
-  with MatchP \<tau>_prefix_conv[OF assms(1,2)] show ?case by auto
+    by (auto simp: min_regex_default_alt progress_le)
+  with MatchP have "Regex.match (Formula.sat \<sigma> v) r a b = Regex.match (Formula.sat \<sigma>' v) r a b"
+    if "b < min_regex_default (progress \<sigma>) r (plen \<pi>)" for a b using that
+    by (intro match_cong_strong) (auto simp: less_Suc_eq_le min_regex_default_alt progress_le)
+  with \<open>i < plen \<pi>\<close> MatchP \<tau>_prefix_conv[OF assms(1,2)] show ?case by auto
 next
   case (MatchF I r)
-  from MatchF.prems obtain b where [simp]: "right I = enat b"
+  from MatchF.prems obtain b where right[simp]: "right I = enat b"
     by (cases "right I") (auto simp add: Inf_UNIV_nat)
-  from MatchF.prems obtain j where "\<tau> \<sigma> i + b + 1 \<le> \<tau> \<sigma> j" "j \<le> progress_regex \<sigma> r (plen \<pi>)"
+  from MatchF.prems obtain j where "\<tau> \<sigma> i + b + 1 \<le> \<tau> \<sigma> j" "j \<le> min_regex_default (progress \<sigma>) r (plen \<pi>)"
     by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le dest!: le_cInf_iff[THEN iffD1, rotated -1])
-  then have 1: "k < progress_regex \<sigma> r (plen \<pi>)" if "\<tau> \<sigma> k \<le> \<tau> \<sigma> i + b" for k
-    using that by (fastforce elim!: order.strict_trans2[rotated] intro: less_\<tau>D[of \<sigma>])
-  have 2: "k < plen \<pi>" if "\<tau> \<sigma> k \<le> \<tau> \<sigma> i + b" for k
-    using 1[OF that] by (simp add: less_eq_Suc_le order.trans[OF _ progress_regex_le])
+  then have 1: "\<phi> \<in> regex.atms r \<Longrightarrow> k < progress \<sigma> \<phi> (plen \<pi>)" and 2: "k < plen \<pi>"
+    if "\<tau> \<sigma> k \<le> \<tau> \<sigma> i + b" for k \<phi>
+    using that by (fastforce elim!: order.strict_trans2[rotated]
+      simp: min_regex_default_alt progress_le intro: less_\<tau>D[of \<sigma>])+
 
   from MatchF.prems have "i < progress \<sigma>' (Formula.MatchF I r) (plen \<pi>)"
     unfolding progress_prefix_conv[OF assms(1,2)] .
-  then obtain j where "\<tau> \<sigma>' i + b + 1 \<le> \<tau> \<sigma>' j" "j \<le> progress_regex \<sigma>' r (plen \<pi>)"
+  then obtain j where "\<tau> \<sigma>' i + b + 1 \<le> \<tau> \<sigma>' j" "j \<le> min_regex_default (progress \<sigma>') r (plen \<pi>)"
     by atomize_elim (auto 0 4 simp add: less_eq_Suc_le not_le dest!: le_cInf_iff[THEN iffD1, rotated -1])
-  then have 11: "k < progress_regex \<sigma> r (plen \<pi>)" if "\<tau> \<sigma>' k \<le> \<tau> \<sigma>' i + b" for k
-    unfolding progress_regex_prefix_conv[OF assms(1,2)]
-    using that by (fastforce elim!: order.strict_trans2[rotated] intro: less_\<tau>D[of \<sigma>'])+
+  then have 11: "k < min_regex_default (progress \<sigma>) r (plen \<pi>)" if "\<tau> \<sigma>' k \<le> \<tau> \<sigma>' i + b" for k
+    using that using progress_prefix_conv[OF assms(1,2)]
+    by (auto 0 3 simp: min_regex_default_alt progress_le elim!: order.strict_trans2[rotated] intro: less_\<tau>D[of \<sigma>'])
   have 21: "k < plen \<pi>" if "\<tau> \<sigma>' k \<le> \<tau> \<sigma>' i + b" for k
-    using 11[OF that] by (simp add: less_eq_Suc_le order.trans[OF _ progress_regex_le])
-
-  show ?case unfolding sat.simps
-  proof ((intro ex_cong iffI; elim conjE), goal_cases LR RL)
-    case (LR j)
-    with MatchF.IH(1)[OF 1] \<tau>_prefix_conv[OF assms(1,2) 2] show ?case
-      by (auto 0 4 simp: le_diff_conv add.commute dest: less_imp_le order.trans[OF \<tau>_mono, rotated])
+    using 11[OF that] by (auto simp add: min_regex_default_alt progress_le)
+  show ?case unfolding sat.simps conj_commute[of "left I \<le> _" "_ \<le> _"]
+  proof (intro ex_cong conj_cong match_cong_strong MatchF.IH(1), goal_cases right left atms progress)
+    case (right j)
+    then show ?case
+      by (intro iffI)
+       ((subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 2, symmetric]; auto elim: order.trans[OF \<tau>_mono, rotated]),
+        (subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21]; auto elim: order.trans[OF \<tau>_mono, rotated]))
   next
-    case (RL j)
-    with MatchF.IH(1)[OF 11] \<tau>_prefix_conv[OF assms(1,2) 21] show ?case
-      by (auto 0 4 simp: le_diff_conv add.commute dest: less_imp_le order.trans[OF \<tau>_mono, rotated])
-  qed
-next
-  case (Times r s)
-  then show ?case
-    by (auto 0 3 intro!: relcomppI[rotated] dest: match_le[of \<sigma>' v s _ j])
-next
-  case (Star r)
-  then show ?case
-    by (auto elim!: bounded_rtranclp_mono[rotated 2] match_le)
+    case (left j)
+    then show ?case unfolding right enat_ord_code le_diff_conv add.commute[of b]
+      by (intro iffI)
+        ((subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21, symmetric]; auto elim: order.trans[OF \<tau>_mono, rotated]),
+         (subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21]; auto elim: order.trans[OF \<tau>_mono, rotated]))
+  next
+    case (progress j k z)
+    then show ?case unfolding right enat_ord_code le_diff_conv add.commute[of b]
+      by (elim 1[rotated])
+        (subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21]; auto elim: order.trans[OF \<tau>_mono, rotated])
+  qed simp
 qed auto
 
 lemma progress_remove_neg[simp]: "progress \<sigma> (remove_neg \<phi>) j = progress \<sigma> \<phi> j"
@@ -1409,11 +1382,9 @@ lemma safe_progress_get_and: "safe_formula \<phi> \<Longrightarrow>
   by (induction \<phi> rule: get_and_list.induct) auto
 
 lemma
-  fixes \<phi> :: "'a Formula.formula" and r :: "'a Formula.regex"
+  fixes \<phi> :: "'a Formula.formula"
   shows progress_convert_multiway: "safe_formula \<phi> \<Longrightarrow> progress \<sigma> (convert_multiway \<phi>) j = progress \<sigma> \<phi> j"
-    and progress_regex_convert_multiway:
-      "safe_regex m g r \<Longrightarrow> progress_regex \<sigma> (convert_multiway_regex r) j = progress_regex \<sigma> r j"
-proof (induction \<phi> and m g r rule: safe_formula_safe_regex.induct)
+proof (induction \<phi> rule: safe_formula.induct)
   case (5 \<phi> \<psi>)
   let ?c\<phi> = "convert_multiway \<phi>"
   from "5.prems" have "safe_formula \<phi>" by simp
@@ -1471,15 +1442,17 @@ next
     with False 14 show ?thesis by simp
   qed
 next
-  case (18 m g \<phi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 18 show ?thesis by simp
-  next
-    case False
-    with "18.prems" obtain \<phi>' where "\<phi> = Formula.Neg \<phi>'" by (simp split: formula.splits)
-    with False 18 show ?thesis by simp
-  qed
+  case (15 I r)
+  then show ?case
+    unfolding progress.simps regex.map convert_multiway.simps min_regex_default_map_regex
+    by (intro min_regex_default_cong) (auto dest: safe_regex_safe_formula)
+next
+  case (16 I r)
+  then have "min_regex_default (progress \<sigma>) (convert_multiway_regex r) j = min_regex_default (progress \<sigma>) r j"
+    unfolding min_regex_default_map_regex
+    by (intro min_regex_default_cong) (auto dest: safe_regex_safe_formula)
+  then show ?case
+    by auto
 qed auto
 
 
@@ -1555,9 +1528,9 @@ definition wf_mbuf2' :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> nat \<
     (\<lambda>i. qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<psi>)) buf"
 
 definition wf_mbufn' :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'a list set \<Rightarrow>
-  'a Formula.regex \<Rightarrow> 'a mbufn \<Rightarrow> bool" where
+  'a Formula.formula Regex.regex \<Rightarrow> 'a mbufn \<Rightarrow> bool" where
   "wf_mbufn' \<sigma> j n R r buf \<longleftrightarrow> (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
-    wf_mbufn (progress_regex \<sigma> r j) (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) \<phi>s)
+    wf_mbufn (min_regex_default (progress \<sigma>) r j) (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) \<phi>s)
     (map (\<lambda>\<phi> i. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>)) \<phi>s)
     buf) "
 
@@ -1572,8 +1545,8 @@ lemma wf_mbuf2'_UNIV_alt: "wf_mbuf2' \<sigma> j n UNIV \<phi> \<psi> buf \<longl
 definition wf_ts :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a Formula.formula \<Rightarrow> 'a Formula.formula \<Rightarrow> ts list \<Rightarrow> bool" where
   "wf_ts \<sigma> j \<phi> \<psi> ts \<longleftrightarrow> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)..<j] ts"
 
-definition wf_ts_regex :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a Formula.regex \<Rightarrow> ts list \<Rightarrow> bool" where
-  "wf_ts_regex \<sigma> j r ts \<longleftrightarrow> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [progress_regex \<sigma> r j..<j] ts"
+definition wf_ts_regex :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a  Formula.formula Regex.regex \<Rightarrow> ts list \<Rightarrow> bool" where
+  "wf_ts_regex \<sigma> j r ts \<longleftrightarrow> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min_regex_default (progress \<sigma>) r j..<j] ts"
 
 abbreviation "Sincep pos \<phi> I \<psi> \<equiv> Formula.Since (if pos then \<phi> else Formula.Neg \<phi>) I \<psi>"
 
@@ -1586,7 +1559,7 @@ definition wf_since_aux :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a 
       (\<exists>X. (t, X) \<in> set aux))"
 
 definition wf_matchP_aux :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a list set \<Rightarrow>
-    \<I> \<Rightarrow> 'a Formula.regex \<Rightarrow> 'a mr\<delta>aux \<Rightarrow> nat \<Rightarrow> bool" where
+    \<I> \<Rightarrow> 'a Formula.formula Regex.regex \<Rightarrow> 'a mr\<delta>aux \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_matchP_aux \<sigma> n R I r aux ne \<longleftrightarrow> sorted_wrt (\<lambda>x y. fst x > fst y) aux \<and>
     (\<forall>t X. (t, X) \<in> set aux \<longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne-1) \<and> \<tau> \<sigma> (ne-1) - t \<le> right I \<and> (\<exists>i. \<tau> \<sigma> i = t) \<and>
       (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
@@ -1630,13 +1603,13 @@ lemma wf_until_aux_UNIV_alt:
   unfolding wf_until_aux_def qtable_mem_restr_UNIV ..
 
 definition wf_matchF_aux :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a list set \<Rightarrow>
-    \<I> \<Rightarrow> 'a Formula.regex \<Rightarrow> 'a ml\<delta>aux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
+    \<I> \<Rightarrow> 'a Formula.formula Regex.regex \<Rightarrow> 'a ml\<delta>aux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_matchF_aux \<sigma> n R I r aux ne k \<longleftrightarrow> (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
       list_all2 (\<lambda>x i. case x of (t, rels, rel) \<Rightarrow> t = \<tau> \<sigma> i \<and>
         list_all2 (\<lambda>\<phi>. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v.
           Formula.sat \<sigma> (map the v) i \<phi>)) \<phi>s rels \<and>
         qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v. (\<exists>j. i \<le> j \<and> j < ne + length aux + k \<and> mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and>
-          Formula.match \<sigma> (map the v) r i j)) rel)
+          Regex.match (Formula.sat \<sigma> (map the v)) r i j)) rel)
     aux [ne..<ne+length aux])"
 
 definition wf_matchF_invar where
@@ -1644,7 +1617,7 @@ definition wf_matchF_invar where
      (case st of (aux, Y) \<Rightarrow> aux \<noteq> [] \<and> wf_matchF_aux \<sigma> n R I r aux i 0 \<and>
      (case to_mregex r of (mr, \<phi>s) \<Rightarrow> \<forall>ms \<in> LPDs mr.
        qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v.
-         Formula.match \<sigma> (map the v) (from_mregex ms \<phi>s) i (i + length aux - 1)) (lookup Y ms)))"
+         Regex.match (Formula.sat \<sigma> (map the v)) (from_mregex ms \<phi>s) i (i + length aux - 1)) (lookup Y ms)))"
 
 definition lift_envs' :: "nat \<Rightarrow> 'a list set \<Rightarrow> 'a list set" where
   "lift_envs' b R = (\<lambda>(xs,ys). xs @ ys) ` ({xs. length xs = b} \<times> R)"
@@ -1732,7 +1705,7 @@ inductive wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow>
     wf_mbufn' \<sigma> j n R r buf \<Longrightarrow>
     wf_ts_regex \<sigma> j r nts \<Longrightarrow>
     wf_matchF_aux \<sigma> n R I r aux (progress \<sigma> (Formula.MatchF I r) j) 0 \<Longrightarrow>
-    progress \<sigma> (Formula.MatchF I r) j + length aux = progress_regex \<sigma> r j \<Longrightarrow>
+    progress \<sigma> (Formula.MatchF I r) j + length aux = min_regex_default (progress \<sigma>) r j \<Longrightarrow>
     wf_mformula \<sigma> j n R (MMatchF I mr mrs \<phi>s buf nts aux) (Formula.MatchF I r)"
 
 definition wf_mstate :: "'a Formula.formula \<Rightarrow> 'a Formula.prefix \<Rightarrow> 'a list set \<Rightarrow> 'a mstate \<Rightarrow> bool" where
@@ -1756,7 +1729,7 @@ lemma wf_mbuf2'_0: "wf_mbuf2' \<sigma> 0 n R \<phi> \<psi> ([], [])"
 
 lemma wf_mbufn'_0: "to_mregex r = (mr, \<phi>s) \<Longrightarrow> wf_mbufn' \<sigma> 0 n R r (replicate (length \<phi>s) [])"
   unfolding wf_mbufn'_def wf_mbufn_def map_replicate_const[symmetric]
-  by (auto simp: list_all3_map intro: list_all3_refl)
+  by (auto simp: list_all3_map intro: list_all3_refl simp: min_regex_default_alt Min_eq_iff)
 
 lemma wf_ts_0: "wf_ts \<sigma> 0 \<phi> \<psi> []"
   unfolding wf_ts_def by simp
@@ -1783,7 +1756,8 @@ lemma minit0_Neg_other: "\<lbrakk>\<forall>t1 t2. \<phi> \<noteq> Formula.Eq t1 
   by (subst minit0.simps, (split formula.split)+) auto
 
 lemma fv_regex_alt: "safe_regex m g r \<Longrightarrow> Formula.fv_regex r = (\<Union>\<phi> \<in> atms r. Formula.fv \<phi>)"
-  by (induct m g r rule: safe_regex_induct) auto
+  unfolding fv_regex_alt atms_def
+  by (auto 0 3 dest: safe_regex_safe_formula)
 
 lemmas to_mregex_atms =
   to_mregex_ok[THEN conjunct1, THEN equalityD1, THEN set_mp, rotated]
@@ -1868,7 +1842,7 @@ next
 next
   case (20 I r)
   then show ?case
-    by (auto simp: list.rel_map fv_regex_alt split: prod.split
+    by (auto simp: list.rel_map fv_regex_alt min_regex_default_alt progress_le Min_eq_iff split: prod.split
         intro!: wf_mformula.MatchF list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchF_aux_Nil
         dest!: to_mregex_atms)
 qed
@@ -2416,7 +2390,7 @@ lemma in_foldr_UnE: "x \<in> foldr (\<union>) xs {} \<Longrightarrow> (\<And>A. 
 lemma sat_the_restrict: "fv \<phi> \<subseteq> A \<Longrightarrow> Formula.sat \<sigma> (map the (restrict A v)) i \<phi> = Formula.sat \<sigma> (map the v) i \<phi>"
   by (rule sat_fv_cong) (auto intro!: map_the_restrict)
 
-lemma eps_the_restrict: "fv_regex r \<subseteq> A \<Longrightarrow> Formula.eps \<sigma> (map the (restrict A v)) i r = Formula.eps \<sigma> (map the v) i r"
+lemma eps_the_restrict: "fv_regex r \<subseteq> A \<Longrightarrow> Regex.eps (Formula.sat \<sigma> (map the (restrict A v))) i r = Regex.eps (Formula.sat \<sigma> (map the v)) i r"
   by (rule eps_fv_cong) (auto intro!: map_the_restrict)
 
 lemma sorted_wrt_filter[simp]: "sorted_wrt R xs \<Longrightarrow> sorted_wrt R (filter P xs)"
@@ -2589,7 +2563,7 @@ lemma qtable_unsafe_\<epsilon>:
   and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
   and "fv_regex (from_mregex mr \<phi>s) \<subseteq> A" and "qtable n A (mem_restr R) Q guard"
   shows "qtable n A (mem_restr R)
-   (\<lambda>v. Formula.eps \<sigma> (map the v) i (from_mregex mr \<phi>s) \<and> Q v) (unsafe_\<epsilon> guard rels mr)"
+   (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s) \<and> Q v) (unsafe_\<epsilon> guard rels mr)"
   using assms
 proof (induct mr)
   case (MPlus mr1 mr2)
@@ -2608,12 +2582,12 @@ qed (auto split: prod.splits if_splits simp: qtable_empty_iff list_all2_conv_all
 lemma qtable_safe_r\<epsilon>:
   assumes "safe_regex Past Safe (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
   and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
-  shows "qtable n A (mem_restr R) (\<lambda>v. Formula.eps \<sigma> (map the v) i (from_mregex mr \<phi>s)) (safe_r\<epsilon> n rels mr)"
+  shows "qtable n A (mem_restr R) (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s)) (safe_r\<epsilon> n rels mr)"
   using assms
 proof (hypsubst, induct Past Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
-case Wild
+  case (Skip n)
   then show ?case
-    by (cases mr) (auto simp: qtable_empty_iff split: if_splits)
+    by (cases mr) (auto simp: qtable_empty_iff qtable_unit_table split: if_splits)
 next
   case (Test \<phi>)
   then show ?case
@@ -2623,24 +2597,24 @@ next
   then show ?case
     by (cases mr) (fastforce intro: qtable_union split: if_splits)+
 next
-  case (Times r s)
+  case (TimesP r s)
   then show ?case
     by (cases mr) (auto intro: qtable_cong[OF qtable_unsafe_\<epsilon>] split: if_splits)+
 next
   case (Star r)
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto split: if_splits)
 qed
 
 lemma qtable_safe_l\<epsilon>:
   assumes "safe_regex Future Safe (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
   and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
-  shows "qtable n A (mem_restr R) (\<lambda>v. Formula.eps \<sigma> (map the v) i (from_mregex mr \<phi>s)) (safe_l\<epsilon> n rels mr)"
+  shows "qtable n A (mem_restr R) (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s)) (safe_l\<epsilon> n rels mr)"
   using assms
 proof (hypsubst, induct Future Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
-case Wild
+  case (Skip n)
   then show ?case
-    by (cases mr) (auto simp: qtable_empty_iff split: if_splits)
+    by (cases mr) (auto simp: qtable_empty_iff qtable_unit_table split: if_splits)
 next
   case (Test \<phi>)
   then show ?case
@@ -2650,13 +2624,13 @@ next
   then show ?case
     by (cases mr) (fastforce intro: qtable_union split: if_splits)+
 next
-  case (Times r s)
+  case (TimesF r s)
   then show ?case
     by (cases mr) (auto intro: qtable_cong[OF qtable_unsafe_\<epsilon>] split: if_splits)+
 next
   case (Star r)
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto split: if_splits)
 qed
 
 lemma rtranclp_False: "(\<lambda>i j. False)\<^sup>*\<^sup>* = (=)"
@@ -2669,13 +2643,13 @@ qed
 
 inductive ok_rctxt for \<phi>s where
   "ok_rctxt \<phi>s id id"
-| "ok_rctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> ok_rctxt \<phi>s (\<lambda>t. \<kappa> (MTimes mr t)) (\<lambda>t. \<kappa>' (Formula.Times (from_mregex mr \<phi>s) t))"
+| "ok_rctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> ok_rctxt \<phi>s (\<lambda>t. \<kappa> (MTimes mr t)) (\<lambda>t. \<kappa>' (Regex.Times (from_mregex mr \<phi>s) t))"
 
 lemma ok_rctxt_swap: "ok_rctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> from_mregex (\<kappa> mr) \<phi>s = \<kappa>' (from_mregex mr \<phi>s)"
   by (induct \<kappa> \<kappa>' arbitrary: mr rule: ok_rctxt.induct) auto
 
-lemma ok_rctxt_cong: "ok_rctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> Formula.match \<sigma> v r = Formula.match \<sigma> v s \<Longrightarrow>
-  Formula.match \<sigma> v (\<kappa>' r) i j = Formula.match \<sigma> v (\<kappa>' s) i j"
+lemma ok_rctxt_cong: "ok_rctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> Regex.match (Formula.sat \<sigma> v) r = Regex.match (Formula.sat \<sigma> v) s \<Longrightarrow>
+  Regex.match (Formula.sat \<sigma> v) (\<kappa>' r) i j = Regex.match (Formula.sat \<sigma> v) (\<kappa>' s) i j"
   by (induct \<kappa> \<kappa>' arbitrary: r s rule: ok_rctxt.induct) simp_all
 
 lemma qtable_r\<delta>\<kappa>:
@@ -2684,13 +2658,14 @@ lemma qtable_r\<delta>\<kappa>:
   and "ok_rctxt \<phi>s \<kappa> \<kappa>'"
   and "\<forall>ms \<in> \<kappa> ` RPD mr. qtable n A (mem_restr R) (\<lambda>v. Q (map the v) (from_mregex ms \<phi>s)) (lookup rel ms)"
   shows "qtable n A (mem_restr R)
-  (\<lambda>v. \<exists>s \<in> Formula.rpd\<kappa> \<kappa>' \<sigma> (map the v) j (from_mregex mr \<phi>s). Q (map the v) s)
+  (\<lambda>v. \<exists>s \<in> Regex.rpd\<kappa> \<kappa>' (Formula.sat \<sigma> (map the v)) j (from_mregex mr \<phi>s). Q (map the v) s)
   (r\<delta> \<kappa> rel rels mr)"
   using assms
 proof (induct mr arbitrary: \<kappa> \<kappa>')
-  case MWild
+  case MSkip
   then show ?case
-    by (auto simp: rtranclp_False ok_rctxt_swap elim!: qtable_cong[OF _ _ ok_rctxt_cong[of _ \<kappa> \<kappa>']])
+    by (auto simp: rtranclp_False ok_rctxt_swap qtable_empty_iff
+      elim!: qtable_cong[OF _ _ ok_rctxt_cong[of _ \<kappa> \<kappa>']] split: nat.splits)
 next
   case (MPlus mr1 mr2)
   from MPlus(3-7) show ?case
@@ -2710,13 +2685,13 @@ lemmas qtable_r\<delta> = qtable_r\<delta>\<kappa>[OF _ _ _ ok_rctxt.intros(1), 
 
 inductive ok_lctxt for \<phi>s where
   "ok_lctxt \<phi>s id id"
-| "ok_lctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> ok_lctxt \<phi>s (\<lambda>t. \<kappa> (MTimes t mr)) (\<lambda>t. \<kappa>' (Formula.Times t (from_mregex mr \<phi>s)))"
+| "ok_lctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> ok_lctxt \<phi>s (\<lambda>t. \<kappa> (MTimes t mr)) (\<lambda>t. \<kappa>' (Regex.Times t (from_mregex mr \<phi>s)))"
 
 lemma ok_lctxt_swap: "ok_lctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> from_mregex (\<kappa> mr) \<phi>s = \<kappa>' (from_mregex mr \<phi>s)"
   by (induct \<kappa> \<kappa>' arbitrary: mr rule: ok_lctxt.induct) auto
 
-lemma ok_lctxt_cong: "ok_lctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> Formula.match \<sigma> v r = Formula.match \<sigma> v s \<Longrightarrow>
-  Formula.match \<sigma> v (\<kappa>' r) i j = Formula.match \<sigma> v (\<kappa>' s) i j"
+lemma ok_lctxt_cong: "ok_lctxt \<phi>s \<kappa> \<kappa>' \<Longrightarrow> Regex.match (Formula.sat \<sigma> v) r = Regex.match (Formula.sat \<sigma> v) s \<Longrightarrow>
+  Regex.match (Formula.sat \<sigma> v) (\<kappa>' r) i j = Regex.match (Formula.sat \<sigma> v) (\<kappa>' s) i j"
   by (induct \<kappa> \<kappa>' arbitrary: r s rule: ok_lctxt.induct) simp_all
 
 lemma qtable_l\<delta>\<kappa>:
@@ -2725,13 +2700,14 @@ lemma qtable_l\<delta>\<kappa>:
   and "ok_lctxt \<phi>s \<kappa> \<kappa>'"
   and "\<forall>ms \<in> \<kappa> ` LPD mr. qtable n A (mem_restr R) (\<lambda>v. Q (map the v) (from_mregex ms \<phi>s)) (lookup rel ms)"
   shows "qtable n A (mem_restr R)
-  (\<lambda>v. \<exists>s \<in> Formula.lpd\<kappa> \<kappa>' \<sigma> (map the v) j (from_mregex mr \<phi>s). Q (map the v) s)
+  (\<lambda>v. \<exists>s \<in> Regex.lpd\<kappa> \<kappa>' (Formula.sat \<sigma> (map the v)) j (from_mregex mr \<phi>s). Q (map the v) s)
   (l\<delta> \<kappa> rel rels mr)"
   using assms
 proof (induct mr arbitrary: \<kappa> \<kappa>')
-  case MWild
+  case MSkip
   then show ?case
-    by (auto simp: rtranclp_False ok_lctxt_swap elim!: qtable_cong[OF _ _ ok_rctxt_cong[of _ \<kappa> \<kappa>']])
+    by (auto simp: rtranclp_False ok_lctxt_swap qtable_empty_iff
+      elim!: qtable_cong[OF _ _ ok_rctxt_cong[of _ \<kappa> \<kappa>']] split: nat.splits)
 next
   case (MPlus mr1 mr2)
   from MPlus(3-7) show ?case
@@ -2751,27 +2727,34 @@ lemmas qtable_l\<delta> = qtable_l\<delta>\<kappa>[OF _ _ _ ok_lctxt.intros(1), 
 
 lemma RPD_fv_regex_le:
   "ms \<in> RPD mr \<Longrightarrow> fv_regex (from_mregex ms \<phi>s) \<subseteq> fv_regex (from_mregex mr \<phi>s)"
-  by (induct mr arbitrary: ms) (force simp: MTimesL_def)+
+  by (induct mr arbitrary: ms) (auto simp: MTimesL_def split: nat.splits)+
 
 lemma RPD_safe: "safe_regex Past g (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> RPD mr \<Longrightarrow> safe_regex Past g (from_mregex ms \<phi>s)"
 proof (induct Past g "from_mregex mr \<phi>s" arbitrary: mr ms rule: safe_regex_induct)
-  case Wild
+  case Skip
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto split: nat.splits)
 next
   case (Test g \<phi>)
   then show ?case
     by (cases mr) auto
 next
-  case (Plus g r s)
+  case (Plus g r s mrs)
   then show ?case
-    by (cases mr) auto
+  proof (cases mrs)
+    case (MPlus mr ms)
+    with Plus(3-5) show ?thesis
+      by (auto dest!: Plus(1,2))
+  qed auto
 next
-  case (Times g r s)
+  case (TimesP g r s mrs)
   then show ?case
-    by (cases mr; cases g)
-      (auto 0 4 simp: MTimesL_def dest: RPD_fv_regex_le split: modality.splits)
+  proof (cases mrs)
+    case (MTimes mr ms)
+    with TimesP(3-5) show ?thesis
+      by (cases g) (auto 0 4 simp: MTimesL_def dest: RPD_fv_regex_le split: modality.splits dest: TimesP(1,2))
+  qed auto
 next
   case (Star g r)
   then show ?case
@@ -2789,9 +2772,9 @@ lemma RPDs_safe: "safe_regex Past g (from_mregex mr \<phi>s) \<Longrightarrow>
 lemma RPD_safe_fv_regex: "safe_regex Past Safe (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> RPD mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
 proof (induct Past Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
-  case Wild
+  case (Skip n)
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto split: nat.splits)
 next
   case (Test \<phi>)
   then show ?case
@@ -2801,10 +2784,14 @@ next
   then show ?case
     by (cases mr) auto
 next
-  case (Times r s)
+  case (TimesP r s)
   then show ?case
     by (cases mr) (auto 0 3 simp: MTimesL_def dest: RPD_fv_regex_le split: modality.splits)
-qed auto
+next
+  case (Star r)
+  then show ?case 
+    by (cases mr) auto
+qed
 
 lemma RPDi_safe_fv_regex: "safe_regex Past Safe (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> RPDi n mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
@@ -2827,7 +2814,7 @@ next
   case (MStar mr)
   from MStar(2,3) show ?case
     by (auto elim: MStar(1) simp: MTimesL_def)
-qed auto
+qed (auto split: nat.splits)
 
 lemma RPDi_ok: "ok m mr \<Longrightarrow> ms \<in> RPDi n mr \<Longrightarrow> ok m ms"
   by (induct n arbitrary: ms mr) (auto intro: RPD_ok)
@@ -2837,27 +2824,34 @@ lemma RPDs_ok: "ok m mr \<Longrightarrow> ms \<in> RPDs mr \<Longrightarrow> ok 
 
 lemma LPD_fv_regex_le:
   "ms \<in> LPD mr \<Longrightarrow> fv_regex (from_mregex ms \<phi>s) \<subseteq> fv_regex (from_mregex mr \<phi>s)"
-  by (induct mr arbitrary: ms) (force simp: MTimesR_def)+
+  by (induct mr arbitrary: ms) (auto simp: MTimesR_def split: nat.splits)+
 
 lemma LPD_safe: "safe_regex Future g (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> LPD mr ==> safe_regex Future g (from_mregex ms \<phi>s)"
 proof (induct Future g "from_mregex mr \<phi>s" arbitrary: mr ms rule: safe_regex_induct)
-  case Wild
+  case Skip
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto split: nat.splits)
 next
   case (Test g \<phi>)
   then show ?case
     by (cases mr) auto
 next
-  case (Plus g r s)
+  case (Plus g r s mrs)
   then show ?case
-    by (cases mr) auto
+  proof (cases mrs)
+    case (MPlus mr ms)
+    with Plus(3-5) show ?thesis
+      by (auto dest!: Plus(1,2))
+  qed auto
 next
-  case (Times g r s)
+  case (TimesF g r s mrs)
   then show ?case
-    by (cases mr; cases g)
-      (auto 0 4 simp: MTimesR_def dest: LPD_fv_regex_le split: modality.splits)
+  proof (cases mrs)
+    case (MTimes mr ms)
+    with TimesF(3-5) show ?thesis
+      by (cases g) (auto 0 4 simp: MTimesR_def dest: LPD_fv_regex_le split: modality.splits dest: TimesF(1,2))
+  qed auto
 next
   case (Star g r)
   then show ?case
@@ -2875,9 +2869,9 @@ lemma LPDs_safe: "safe_regex Future g (from_mregex mr \<phi>s) \<Longrightarrow>
 lemma LPD_safe_fv_regex: "safe_regex Future Safe (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> LPD mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
 proof (induct Future Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
-  case Wild
+  case Skip
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto split: nat.splits)
 next
   case (Test \<phi>)
   then show ?case
@@ -2887,10 +2881,14 @@ next
   then show ?case
     by (cases mr) auto
 next
-  case (Times r s)
+  case (TimesF r s)
   then show ?case
     by (cases mr) (auto 0 3 simp: MTimesR_def dest: LPD_fv_regex_le split: modality.splits)
-qed auto
+next
+  case (Star r)
+  then show ?case
+    by (cases mr) auto
+qed
 
 lemma LPDi_safe_fv_regex: "safe_regex Future Safe (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> LPDi n mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
@@ -2913,7 +2911,7 @@ next
   case (MStar mr)
   from MStar(2,3) show ?case
     by (auto elim: MStar(1) simp: MTimesR_def)
-qed auto
+qed (auto split: nat.splits)
 
 lemma LPDi_ok: "ok m mr \<Longrightarrow> ms \<in> LPDi n mr \<Longrightarrow> ok m ms"
   by (induct n arbitrary: ms mr) (auto intro: LPD_ok)
@@ -3184,7 +3182,7 @@ lemma wf_matchF_invar_step:
     and mrs: "mrs = sorted_list_of_set (LPDs mr)"
     and qtables: "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
     and rel: "qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v. (\<exists>j. i \<le> j \<and> j < i + length (fst st) \<and> mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and>
-          Formula.match \<sigma> (map the v) r i j)) rel"
+          Regex.match (Formula.sat \<sigma> (map the v)) r i j)) rel"
     and entry: "entry = (\<tau> \<sigma> i, rels, rel)"
     and nt: "nt = \<tau> \<sigma> (i + length (fst st))"
   shows "wf_matchF_invar \<sigma> n R I r (update_matchF_step I mr mrs nt entry st) i"
@@ -3201,10 +3199,10 @@ proof -
   { fix aux X ms
     assume "st = (aux, X)" "ms \<in> LPDs mr"
     with wf mr have "qtable n (fv_regex r) (mem_restr R)
-      (\<lambda>v. Formula.match \<sigma> (map the v) (from_mregex ms \<phi>s) i (i + length aux))
+      (\<lambda>v. Regex.match (Formula.sat \<sigma> (map the v)) (from_mregex ms \<phi>s) i (i + length aux))
       (l\<delta> (\<lambda>x. x) X rels ms)"
       by (intro qtable_cong[OF qtable_l\<delta>[where \<phi>s=\<phi>s and A="fv_regex r" and
-        Q="\<lambda>v r. Formula.match \<sigma> v r (Suc i) (i + length aux)", OF _ _ qtables]])
+        Q="\<lambda>v r. Regex.match (Formula.sat \<sigma> v) r (Suc i) (i + length aux)", OF _ _ qtables]])
         (auto simp: wf_matchF_invar_def * LPDs_trans lpd_match[of i] elim!: bspec)
   } note l\<delta> = this
   have "lookup (tabulate mrs f) ms = f ms" if "ms \<in> LPDs mr" for ms and f :: "mregex \<Rightarrow> 'a table"
@@ -3277,7 +3275,7 @@ lemma wf_until_aux_Cons3: "wf_until_aux \<sigma> n R pos \<phi> I \<psi> ((t, a1
 
 lemma wf_matchF_aux_Cons3: "wf_matchF_aux \<sigma> n R I r ((t, rels, rel) # aux) ne i \<Longrightarrow>
   qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v. (\<exists>j. ne \<le> j \<and> j < Suc (ne + length aux + i) \<and> mem (\<tau> \<sigma> j - \<tau> \<sigma> ne) I \<and>
-    Formula.match \<sigma> (map the v) r ne j)) rel"
+    Regex.match (Formula.sat \<sigma> (map the v)) r ne j)) rel"
   unfolding wf_matchF_aux_def
   by (simp add: upt_conv_Cons del: upt_Suc split: prod.splits)
 
@@ -3591,18 +3589,21 @@ lemma mbuf2t_take_add':
   by (blast intro!: mbuf2t_take_eqD[OF eq] wf_mbuf2_add[OF _ xs ys] progress_mono[OF \<open>j \<le> j'\<close>]
       progress_le)+
 
-lemma ok_0_progress: "ok 0 mr \<Longrightarrow> progress_regex \<sigma> (from_mregex mr []) j = j"
+lemma ok_0_progress: "ok 0 mr \<Longrightarrow> min_regex_default (progress \<sigma>) (from_mregex mr []) j = j"
   by (induct mr) (auto simp: Formula.TT_def Formula.FF_def)
 
-lemma atms_empty_progress: "safe_regex m g r \<Longrightarrow> atms r = {} \<Longrightarrow> progress_regex \<sigma> r j = j"
-  by (induct r rule: safe_regex_induct) (auto split: if_splits)
+lemma atms_empty_progress: "safe_regex m g r \<Longrightarrow> atms r = {} \<Longrightarrow> min_regex_default (progress \<sigma>) r j = j"
+  by (induct r rule: safe_regex_induct) (auto split: if_splits simp: cases_Neg_iff)
 
 lemma to_mregex_empty_progress: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, []) \<Longrightarrow>
-  progress_regex \<sigma> r j = j"
+  min_regex_default (progress \<sigma>) r j = j"
   using from_mregex_eq ok_0_progress to_mregex_ok by fastforce
 
+lemma progress_regex_le: "min_regex_default (progress \<sigma>) r j \<le> j"
+  by (auto simp: min_regex_default_alt progress_le)
+
 lemma atms_nonempty_progress:
-  "safe_regex m g r \<Longrightarrow> atms r \<noteq> {} \<Longrightarrow> progress_regex \<sigma> r j = (MIN \<phi>\<in>atms r. progress \<sigma> \<phi> j)"
+  "safe_regex m g r \<Longrightarrow> atms r \<noteq> {} \<Longrightarrow> min_regex_default (progress \<sigma>) r j = (MIN \<phi>\<in>atms r. progress \<sigma> \<phi> j)"
 proof (induct r rule: safe_regex_induct)
   case (Plus m g r1 r2)
   then show ?case
@@ -3610,19 +3611,25 @@ proof (induct r rule: safe_regex_induct)
     by (cases "atms r1 = {} \<or> atms r2 = {}")
       (auto simp: Min_Un image_Un atms_empty_progress min_absorb1 min_absorb2 elim!: meta_mp)
 next
-  case (Times m g r1 r2)
+  case (TimesP g r1 r2)
   then show ?case
     using progress_regex_le[of \<sigma> r1 j] progress_regex_le[of \<sigma> r2 j]
     by (cases "atms r1 = {} \<or> atms r2 = {}")
       (auto simp: Min_Un image_Un atms_empty_progress min_absorb1 min_absorb2 elim!: meta_mp)
-qed (auto split: if_splits prod.splits formula.splits)
+next
+  case (TimesF g r1 r2)
+  then show ?case
+    using progress_regex_le[of \<sigma> r1 j] progress_regex_le[of \<sigma> r2 j]
+    by (cases "atms r1 = {} \<or> atms r2 = {}")
+      (auto simp: Min_Un image_Un atms_empty_progress min_absorb1 min_absorb2 elim!: meta_mp)
+qed (auto split: if_splits prod.splits simp: cases_Neg_iff)
 
 lemma to_mregex_nonempty_progress: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, \<phi>s) \<Longrightarrow> \<phi>s \<noteq> [] \<Longrightarrow>
-   progress_regex \<sigma> r j = (MIN \<phi>\<in>set \<phi>s. progress \<sigma> \<phi> j)"
+  min_regex_default (progress \<sigma>) r j = (MIN \<phi>\<in>set \<phi>s. progress \<sigma> \<phi> j)"
   using atms_nonempty_progress to_mregex_ok by fastforce
 
 lemma to_mregex_progress: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, \<phi>s) \<Longrightarrow>
-   progress_regex \<sigma> r j = (if \<phi>s = [] then j else (MIN \<phi>\<in>set \<phi>s. progress \<sigma> \<phi> j))"
+  min_regex_default (progress \<sigma>) r j = (if \<phi>s = [] then j else (MIN \<phi>\<in>set \<phi>s. progress \<sigma> \<phi> j))"
   using to_mregex_nonempty_progress to_mregex_empty_progress by auto
 
 lemma mbufnt_take_add':
@@ -3630,7 +3637,7 @@ lemma mbufnt_take_add':
     and safe: "safe_regex m g r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and pre_buf: "wf_mbufn' \<sigma> j n R r buf"
-    and pre_nts: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [progress_regex \<sigma> r j..<j'] nts"
+    and pre_nts: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min_regex_default (progress \<sigma>) r j..<j'] nts"
     and xss: "list_all3 list_all2
      (map (\<lambda>\<phi> i. qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>)) \<phi>s)
      (map2 upt (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) \<phi>s) (map (\<lambda>\<phi>. progress \<sigma> \<phi> j') \<phi>s)) xss"
@@ -3667,16 +3674,16 @@ lemma mbufnt_take_add_induct'[consumes 6, case_names base step]:
     and safe: "safe_regex m g r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and pre_buf: "wf_mbufn' \<sigma> j n R r buf"
-    and pre_nts: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [progress_regex \<sigma> r j..<j'] nts"
+    and pre_nts: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min_regex_default (progress \<sigma>) r j..<j'] nts"
     and xss: "list_all3 list_all2
      (map (\<lambda>\<phi> i. qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>)) \<phi>s)
      (map2 upt (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) \<phi>s) (map (\<lambda>\<phi>. progress \<sigma> \<phi> j') \<phi>s)) xss"
     and "j \<le> j'"
-    and base: "U (progress_regex \<sigma> r j) z"
-    and step: "\<And>k Xs z. progress_regex \<sigma> r j \<le> k \<Longrightarrow> Suc k \<le> progress_regex \<sigma> r j' \<Longrightarrow>
+    and base: "U (min_regex_default (progress \<sigma>) r j) z"
+    and step: "\<And>k Xs z. min_regex_default (progress \<sigma>) r j \<le> k \<Longrightarrow> Suc k \<le> min_regex_default (progress \<sigma>) r j' \<Longrightarrow>
       list_all2 (\<lambda>\<phi>. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) k \<phi>)) \<phi>s Xs \<Longrightarrow>
       U k z \<Longrightarrow> U (Suc k) (f Xs (\<tau> \<sigma> k) z)"
-  shows "U (progress_regex \<sigma> r j') z'"
+  shows "U (min_regex_default (progress \<sigma>) r j') z'"
   using pre_buf pre_nts \<open>j \<le> j'\<close> to_mregex_progress[OF safe mr, of \<sigma> j'] to_mregex_empty_progress[OF safe, of mr \<sigma> j] base
   unfolding wf_mbufn'_def mr prod.case
   by (fastforce dest!: mbufnt_take_induct[OF eq wf_mbufn_add[OF _ xss] pre_nts, of U]
@@ -3687,7 +3694,7 @@ lemma mbufnt_take_add_induct'[consumes 6, case_names base step]:
 lemma progress_Until_le: "progress \<sigma> (Formula.Until \<phi> I \<psi>) j \<le> min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
   by (cases "right I") (auto simp: trans_le_add1 intro!: cInf_lower)
 
-lemma progress_MatchF_le: "progress \<sigma> (Formula.MatchF I r) j \<le> progress_regex \<sigma> r j"
+lemma progress_MatchF_le: "progress \<sigma> (Formula.MatchF I r) j \<le> min_regex_default (progress \<sigma>) r j"
   by (cases "right I") (auto simp: trans_le_add1 intro!: cInf_lower)
 
 lemma list_all2_upt_Cons: "P a x \<Longrightarrow> list_all2 P [Suc a..<b] xs \<Longrightarrow> Suc a \<le> b \<Longrightarrow>
@@ -4210,7 +4217,7 @@ next
     and nts: "wf_ts_regex \<sigma> j r nts"
     and aux: "wf_matchP_aux \<sigma> n R I r aux (progress \<sigma> (Formula.MatchP I r) j)"
     by (cases pred: wf_mformula) (auto)
-  have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [progress_regex \<sigma> r j..<Suc j] (nts @ [\<tau> \<sigma> j])"
+  have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min_regex_default (progress \<sigma>) r j..<Suc j] (nts @ [\<tau> \<sigma> j])"
     using nts unfolding wf_ts_regex_def
     by (auto simp add: progress_regex_le intro: list_all2_appendI)
   have update: "wf_matchP_aux \<sigma> n R I r (snd (zs, aux')) (progress \<sigma> (Formula.MatchP I r) (Suc j)) \<and>
@@ -4258,10 +4265,10 @@ next
     and buf: "wf_mbufn' \<sigma> j n R r buf"
     and nts: "wf_ts_regex \<sigma> j r nts"
     and aux: "wf_matchF_aux \<sigma> n R I r aux (progress \<sigma> (Formula.MatchF I r) j) 0"
-    and length_aux: "progress \<sigma> (Formula.MatchF I r) j + length aux = progress_regex \<sigma> r j"
+    and length_aux: "progress \<sigma> (Formula.MatchF I r) j + length aux = min_regex_default (progress \<sigma>) r j"
     by (cases pred: wf_mformula) (auto)
   have nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i)
-    [progress_regex \<sigma> r j..<Suc j] (nts @ [\<tau> \<sigma> j])"
+    [min_regex_default (progress \<sigma>) r j..<Suc j] (nts @ [\<tau> \<sigma> j])"
     using nts unfolding wf_ts_regex_def
     by (auto simp add: progress_regex_le intro: list_all2_appendI)
   {
@@ -4271,7 +4278,7 @@ next
         (aux', buf', nts')"
       and eq2: "eval_matchF I mr (case nts' of [] \<Rightarrow> \<tau> \<sigma> j | nt # _ \<Rightarrow> nt) aux' = (zs, aux'')"
     have update1: "wf_matchF_aux \<sigma> n R I r aux' (progress \<sigma> (Formula.MatchF I r) j) 0 \<and>
-      progress \<sigma> (Formula.MatchF I r) j + length aux' = progress_regex \<sigma> r (Suc j)"
+      progress \<sigma> (Formula.MatchF I r) j + length aux' = min_regex_default (progress \<sigma>) r (Suc j)"
       using eval nts_snoc nts_snoc length_aux aux \<psi>s
       by (elim mbufnt_take_add_induct'[where j'="Suc j", OF eq1 safe mr buf])
         (auto simp: length_update_matchF
@@ -4287,10 +4294,10 @@ next
          list_all2_Cons1 elim!: list.rel_mono_strong intro!: list.rel_refl_strong dest!: MMatchF.IH)
     have "i \<le> progress \<sigma> (Formula.MatchF I r) (Suc j) \<Longrightarrow>
       wf_matchF_aux \<sigma> n R I r aux' i 0 \<Longrightarrow>
-      i + length aux' = progress_regex \<sigma> r (Suc j) \<Longrightarrow>
+      i + length aux' = min_regex_default (progress \<sigma>) r (Suc j) \<Longrightarrow>
       wf_matchF_aux \<sigma> n R I r aux'' (progress \<sigma> (Formula.MatchF I r) (Suc j)) 0 \<and>
         i + length zs = progress \<sigma> (Formula.MatchF I r) (Suc j) \<and>
-        i + length zs + length aux'' = progress_regex \<sigma> r (Suc j) \<and>
+        i + length zs + length aux'' = min_regex_default (progress \<sigma>) r (Suc j) \<and>
         list_all2 (\<lambda>i. qtable n (Formula.fv_regex r) (mem_restr R)
           (\<lambda>v. Formula.sat \<sigma> (map the v) i (Formula.MatchF I r)))
           [i..<i + length zs] zs" for i
@@ -4306,9 +4313,9 @@ next
       from Cons.prems(2) have 1: "t = \<tau> \<sigma> i"
         unfolding \<open>a = (t, rels, rel)\<close> by (rule wf_matchF_aux_Cons1)
       from Cons.prems(2) have 3: "qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v.
-        (\<exists>j\<ge>i. j < Suc (i + length aux') \<and> mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> Formula.match \<sigma> (map the v) r i j)) rel"
+        (\<exists>j\<ge>i. j < Suc (i + length aux') \<and> mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> Regex.match (Formula.sat \<sigma> (map the v)) r i j)) rel"
         unfolding \<open>a = (t, rels, rel)\<close> using wf_matchF_aux_Cons3 by force
-      from Cons.prems(3) have Suc_i_aux': "Suc i + length aux' = progress_regex \<sigma> r (Suc j)"
+      from Cons.prems(3) have Suc_i_aux': "Suc i + length aux' = min_regex_default (progress \<sigma>) r (Suc j)"
         by simp
       have "i \<ge> progress \<sigma> (Formula.MatchF I r) (Suc j)"
         if "enat (case nts' of [] \<Rightarrow> \<tau> \<sigma> j | nt # x \<Rightarrow> nt) \<le> enat t + right I"
@@ -4325,8 +4332,8 @@ next
         have le_progress_iff[simp]: "i \<le> progress \<sigma> \<phi> i \<longleftrightarrow> progress \<sigma> \<phi> i = i" for \<phi> i
           using progress_le[of \<sigma> \<phi> i] by auto
         have min_Suc[simp]: "min j (Suc j) = j" by auto
-        let ?X = "{i. \<forall>k. k < Suc j \<and> k \<le> progress_regex \<sigma> r (Suc j) \<longrightarrow> enat (\<tau> \<sigma> k) \<le> enat (\<tau> \<sigma> i) + right I}"
-        let ?min = "min j (progress_regex \<sigma> r (Suc j))"
+        let ?X = "{i. \<forall>k. k < Suc j \<and> k \<le> min_regex_default (progress \<sigma>) r (Suc j) \<longrightarrow> enat (\<tau> \<sigma> k) \<le> enat (\<tau> \<sigma> i) + right I}"
+        let ?min = "min j (min_regex_default (progress \<sigma>) r (Suc j))"
         have "\<tau> \<sigma> ?min \<le> \<tau> \<sigma> j"
           by (rule \<tau>_mono) auto
         from m have "?X \<noteq> {}"
@@ -4338,7 +4345,7 @@ next
               simp del: upt_Suc split: list.splits if_splits
               dest!: spec[of _ "?min"] less_le_trans[of "\<tau> \<sigma> i + m" "\<tau> \<sigma> _" "\<tau> \<sigma> _ + m"] less_\<tau>D)
       qed
-      moreover have *: "k < progress_regex \<sigma> r (Suc j)" if
+      moreover have *: "k < min_regex_default (progress \<sigma>) r (Suc j)" if
         "enat (\<tau> \<sigma> i) + right I < enat (case nts' of [] \<Rightarrow> \<tau> \<sigma> j | nt # x \<Rightarrow> nt)"
         "enat (\<tau> \<sigma> k - \<tau> \<sigma> i) \<le> right I" for k
       proof -

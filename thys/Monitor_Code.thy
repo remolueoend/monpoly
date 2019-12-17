@@ -139,8 +139,8 @@ export_code
   (*basic types*)
   nat_of_integer integer_of_nat enat literal.explode interval mk_db RBT_set rbt_verdict rbt_multiset
   Eq phantom set_RBT
-  (*term and formula constructors*)
-  Formula.Var Formula.Pred
+  (*term, formula, and regex constructors*)
+  Formula.Var Formula.Pred Regex.Skip Regex.Wild
   (*main functions*)
   convert_multiway minit_safe mstep mmonitorable_exec
   in OCaml module_name Monitor file_prefix "verified"

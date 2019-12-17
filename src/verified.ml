@@ -79,20 +79,21 @@ module Monitor : sig
   type 'a trm = Var of nat | Const of 'a
   type char
   type enat = Enat of nat | Infinity_enat
-  type i
-  type 'a regex = Wild | Test of 'a formula | Plus of 'a regex * 'a regex |
+  type 'a regex = Skip of nat | Test of 'a | Plus of 'a regex * 'a regex |
     Times of 'a regex * 'a regex | Star of 'a regex
-  and 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
+  type safety
+  type i
+  type modality
+  type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
     Neg of 'a formula | Or of 'a formula * 'a formula | Ands of 'a formula list
     | Exists of 'a formula |
     Agg of nat * (('a * enat) set -> 'a) * nat * ('a list -> 'a) * 'a formula |
     Prev of i * 'a formula | Next of i * 'a formula |
     Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula
-    | MatchF of i * 'a regex | MatchP of i * 'a regex
-  type safety
-  type modality
+    | MatchF of i * 'a formula regex | MatchP of i * 'a formula regex
   type 'a mformula
   type ('a, 'b) mstate_ext
+  val wild : 'a regex
   val mstep :
     'a ceq * 'a ccompare * 'a equal * 'a set_impl ->
       (char list * 'a list) set * nat ->
@@ -2201,118 +2202,92 @@ let rec ccompare_optiona _A
 let rec ccompare_option _A =
   ({ccompare = ccompare_optiona _A} : ('a option) ccompare);;
 
-type mregex = MWild | MEps | MTestPos of nat | MTestNeg of nat |
+type mregex = MSkip of nat | MTestPos of nat | MTestNeg of nat |
   MPlus of mregex * mregex | MTimes of mregex * mregex | MStar of mregex;;
 
 let rec equal_mregexa
-  x0 x1 = match x0, x1 with MTimes (x61, x62), MStar x7 -> false
-    | MStar x7, MTimes (x61, x62) -> false
-    | MPlus (x51, x52), MStar x7 -> false
-    | MStar x7, MPlus (x51, x52) -> false
-    | MPlus (x51, x52), MTimes (x61, x62) -> false
-    | MTimes (x61, x62), MPlus (x51, x52) -> false
-    | MTestNeg x4, MStar x7 -> false
-    | MStar x7, MTestNeg x4 -> false
-    | MTestNeg x4, MTimes (x61, x62) -> false
-    | MTimes (x61, x62), MTestNeg x4 -> false
-    | MTestNeg x4, MPlus (x51, x52) -> false
-    | MPlus (x51, x52), MTestNeg x4 -> false
-    | MTestPos x3, MStar x7 -> false
-    | MStar x7, MTestPos x3 -> false
-    | MTestPos x3, MTimes (x61, x62) -> false
-    | MTimes (x61, x62), MTestPos x3 -> false
-    | MTestPos x3, MPlus (x51, x52) -> false
-    | MPlus (x51, x52), MTestPos x3 -> false
-    | MTestPos x3, MTestNeg x4 -> false
-    | MTestNeg x4, MTestPos x3 -> false
-    | MEps, MStar x7 -> false
-    | MStar x7, MEps -> false
-    | MEps, MTimes (x61, x62) -> false
-    | MTimes (x61, x62), MEps -> false
-    | MEps, MPlus (x51, x52) -> false
-    | MPlus (x51, x52), MEps -> false
-    | MEps, MTestNeg x4 -> false
-    | MTestNeg x4, MEps -> false
-    | MEps, MTestPos x3 -> false
-    | MTestPos x3, MEps -> false
-    | MWild, MStar x7 -> false
-    | MStar x7, MWild -> false
-    | MWild, MTimes (x61, x62) -> false
-    | MTimes (x61, x62), MWild -> false
-    | MWild, MPlus (x51, x52) -> false
-    | MPlus (x51, x52), MWild -> false
-    | MWild, MTestNeg x4 -> false
-    | MTestNeg x4, MWild -> false
-    | MWild, MTestPos x3 -> false
-    | MTestPos x3, MWild -> false
-    | MWild, MEps -> false
-    | MEps, MWild -> false
-    | MStar x7, MStar y7 -> equal_mregexa x7 y7
-    | MTimes (x61, x62), MTimes (y61, y62) ->
-        equal_mregexa x61 y61 && equal_mregexa x62 y62
-    | MPlus (x51, x52), MPlus (y51, y52) ->
+  x0 x1 = match x0, x1 with MTimes (x51, x52), MStar x6 -> false
+    | MStar x6, MTimes (x51, x52) -> false
+    | MPlus (x41, x42), MStar x6 -> false
+    | MStar x6, MPlus (x41, x42) -> false
+    | MPlus (x41, x42), MTimes (x51, x52) -> false
+    | MTimes (x51, x52), MPlus (x41, x42) -> false
+    | MTestNeg x3, MStar x6 -> false
+    | MStar x6, MTestNeg x3 -> false
+    | MTestNeg x3, MTimes (x51, x52) -> false
+    | MTimes (x51, x52), MTestNeg x3 -> false
+    | MTestNeg x3, MPlus (x41, x42) -> false
+    | MPlus (x41, x42), MTestNeg x3 -> false
+    | MTestPos x2, MStar x6 -> false
+    | MStar x6, MTestPos x2 -> false
+    | MTestPos x2, MTimes (x51, x52) -> false
+    | MTimes (x51, x52), MTestPos x2 -> false
+    | MTestPos x2, MPlus (x41, x42) -> false
+    | MPlus (x41, x42), MTestPos x2 -> false
+    | MTestPos x2, MTestNeg x3 -> false
+    | MTestNeg x3, MTestPos x2 -> false
+    | MSkip x1, MStar x6 -> false
+    | MStar x6, MSkip x1 -> false
+    | MSkip x1, MTimes (x51, x52) -> false
+    | MTimes (x51, x52), MSkip x1 -> false
+    | MSkip x1, MPlus (x41, x42) -> false
+    | MPlus (x41, x42), MSkip x1 -> false
+    | MSkip x1, MTestNeg x3 -> false
+    | MTestNeg x3, MSkip x1 -> false
+    | MSkip x1, MTestPos x2 -> false
+    | MTestPos x2, MSkip x1 -> false
+    | MStar x6, MStar y6 -> equal_mregexa x6 y6
+    | MTimes (x51, x52), MTimes (y51, y52) ->
         equal_mregexa x51 y51 && equal_mregexa x52 y52
-    | MTestNeg x4, MTestNeg y4 -> equal_nata x4 y4
-    | MTestPos x3, MTestPos y3 -> equal_nata x3 y3
-    | MEps, MEps -> true
-    | MWild, MWild -> true;;
+    | MPlus (x41, x42), MPlus (y41, y42) ->
+        equal_mregexa x41 y41 && equal_mregexa x42 y42
+    | MTestNeg x3, MTestNeg y3 -> equal_nata x3 y3
+    | MTestPos x2, MTestPos y2 -> equal_nata x2 y2
+    | MSkip x1, MSkip y1 -> equal_nata x1 y1;;
 
 let equal_mregex = ({equal = equal_mregexa} : mregex equal);;
 
 let rec comparator_mregex
-  x0 x1 = match x0, x1 with MStar x, MStar yf -> comparator_mregex x yf
-    | MStar x, MTimes (yd, ye) -> Gt
-    | MStar x, MPlus (yb, yc) -> Gt
-    | MStar x, MTestNeg ya -> Gt
-    | MStar x, MTestPos y -> Gt
-    | MStar x, MEps -> Gt
-    | MStar x, MWild -> Gt
-    | MTimes (x, xa), MStar yf -> Lt
-    | MTimes (x, xa), MTimes (yd, ye) ->
-        (match comparator_mregex x yd with Eqa -> comparator_mregex xa ye
+  x0 x1 = match x0, x1 with MStar x, MStar yg -> comparator_mregex x yg
+    | MStar x, MTimes (ye, yf) -> Gt
+    | MStar x, MPlus (yc, yd) -> Gt
+    | MStar x, MTestNeg yb -> Gt
+    | MStar x, MTestPos ya -> Gt
+    | MStar x, MSkip y -> Gt
+    | MTimes (x, xa), MStar yg -> Lt
+    | MTimes (x, xa), MTimes (ye, yf) ->
+        (match comparator_mregex x ye with Eqa -> comparator_mregex xa yf
           | Lt -> Lt | Gt -> Gt)
-    | MTimes (x, xa), MPlus (yb, yc) -> Gt
-    | MTimes (x, xa), MTestNeg ya -> Gt
-    | MTimes (x, xa), MTestPos y -> Gt
-    | MTimes (x, xa), MEps -> Gt
-    | MTimes (x, xa), MWild -> Gt
-    | MPlus (x, xa), MStar yf -> Lt
-    | MPlus (x, xa), MTimes (yd, ye) -> Lt
-    | MPlus (x, xa), MPlus (yb, yc) ->
-        (match comparator_mregex x yb with Eqa -> comparator_mregex xa yc
+    | MTimes (x, xa), MPlus (yc, yd) -> Gt
+    | MTimes (x, xa), MTestNeg yb -> Gt
+    | MTimes (x, xa), MTestPos ya -> Gt
+    | MTimes (x, xa), MSkip y -> Gt
+    | MPlus (x, xa), MStar yg -> Lt
+    | MPlus (x, xa), MTimes (ye, yf) -> Lt
+    | MPlus (x, xa), MPlus (yc, yd) ->
+        (match comparator_mregex x yc with Eqa -> comparator_mregex xa yd
           | Lt -> Lt | Gt -> Gt)
-    | MPlus (x, xa), MTestNeg ya -> Gt
-    | MPlus (x, xa), MTestPos y -> Gt
-    | MPlus (x, xa), MEps -> Gt
-    | MPlus (x, xa), MWild -> Gt
-    | MTestNeg x, MStar yf -> Lt
-    | MTestNeg x, MTimes (yd, ye) -> Lt
-    | MTestNeg x, MPlus (yb, yc) -> Lt
-    | MTestNeg x, MTestNeg ya -> comparator_of (equal_nat, linorder_nat) x ya
-    | MTestNeg x, MTestPos y -> Gt
-    | MTestNeg x, MEps -> Gt
-    | MTestNeg x, MWild -> Gt
-    | MTestPos x, MStar yf -> Lt
-    | MTestPos x, MTimes (yd, ye) -> Lt
-    | MTestPos x, MPlus (yb, yc) -> Lt
-    | MTestPos x, MTestNeg ya -> Lt
-    | MTestPos x, MTestPos y -> comparator_of (equal_nat, linorder_nat) x y
-    | MTestPos x, MEps -> Gt
-    | MTestPos x, MWild -> Gt
-    | MEps, MStar yf -> Lt
-    | MEps, MTimes (yd, ye) -> Lt
-    | MEps, MPlus (yb, yc) -> Lt
-    | MEps, MTestNeg ya -> Lt
-    | MEps, MTestPos y -> Lt
-    | MEps, MEps -> Eqa
-    | MEps, MWild -> Gt
-    | MWild, MStar yf -> Lt
-    | MWild, MTimes (yd, ye) -> Lt
-    | MWild, MPlus (yb, yc) -> Lt
-    | MWild, MTestNeg ya -> Lt
-    | MWild, MTestPos y -> Lt
-    | MWild, MEps -> Lt
-    | MWild, MWild -> Eqa;;
+    | MPlus (x, xa), MTestNeg yb -> Gt
+    | MPlus (x, xa), MTestPos ya -> Gt
+    | MPlus (x, xa), MSkip y -> Gt
+    | MTestNeg x, MStar yg -> Lt
+    | MTestNeg x, MTimes (ye, yf) -> Lt
+    | MTestNeg x, MPlus (yc, yd) -> Lt
+    | MTestNeg x, MTestNeg yb -> comparator_of (equal_nat, linorder_nat) x yb
+    | MTestNeg x, MTestPos ya -> Gt
+    | MTestNeg x, MSkip y -> Gt
+    | MTestPos x, MStar yg -> Lt
+    | MTestPos x, MTimes (ye, yf) -> Lt
+    | MTestPos x, MPlus (yc, yd) -> Lt
+    | MTestPos x, MTestNeg yb -> Lt
+    | MTestPos x, MTestPos ya -> comparator_of (equal_nat, linorder_nat) x ya
+    | MTestPos x, MSkip y -> Gt
+    | MSkip x, MStar yg -> Lt
+    | MSkip x, MTimes (ye, yf) -> Lt
+    | MSkip x, MPlus (yc, yd) -> Lt
+    | MSkip x, MTestNeg yb -> Lt
+    | MSkip x, MTestPos ya -> Lt
+    | MSkip x, MSkip y -> comparator_of (equal_nat, linorder_nat) x y;;
 
 let rec less_eq_mregex x = le_of_comp comparator_mregex x;;
 
@@ -2465,26 +2440,27 @@ let rec cproper_interval_prod _A _B =
      cproper_interval = cproper_interval_proda _A _B}
     : ('a * 'b) cproper_interval);;
 
+type 'a regex = Skip of nat | Test of 'a | Plus of 'a regex * 'a regex |
+  Times of 'a regex * 'a regex | Star of 'a regex;;
+
 type ('b, 'a) alist = Alist of ('b * 'a) list;;
+
+type safety = Safe | Unsafe;;
 
 type i = Abs_I of (nat * enat);;
 
-type 'a regex = Wild | Test of 'a formula | Plus of 'a regex * 'a regex |
-  Times of 'a regex * 'a regex | Star of 'a regex
-and 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
+type modality = Past | Future;;
+
+type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
   Neg of 'a formula | Or of 'a formula * 'a formula | Ands of 'a formula list |
   Exists of 'a formula |
   Agg of nat * (('a * enat) set -> 'a) * nat * ('a list -> 'a) * 'a formula |
   Prev of i * 'a formula | Next of i * 'a formula |
   Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula |
-  MatchF of i * 'a regex | MatchP of i * 'a regex;;
-
-type safety = Safe | Unsafe;;
+  MatchF of i * 'a formula regex | MatchP of i * 'a formula regex;;
 
 type ('a, 'b) mapping = Assoc_List_Mapping of ('a, 'b) alist |
   RBT_Mapping of ('a, 'b) mapping_rbt | Mapping of ('a -> 'b option);;
-
-type modality = Past | Future;;
 
 type 'a mformula = MRel of (('a option) list) set |
   MPred of char list * 'a trm list |
@@ -2805,6 +2781,8 @@ let rec map_of _A
     (l, v) :: ps, k -> (if eq _A l k then Some v else map_of _A ps k)
     | [], k -> None;;
 
+let wild : 'a regex = Skip one_nata;;
+
 let rec filter (_A1, _A2) p a = inf_seta (_A1, _A2) a (Collect_set p);;
 
 let rec comp_fun_idem_apply (Abs_comp_fun_idem x) = x;;
@@ -2928,6 +2906,17 @@ let rec fvi_trm
     | b, Const uu ->
         set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata);;
 
+let rec fv_regex (_B1, _B2, _B3)
+  fv x1 = match fv, x1 with fv, Skip n -> bot_set (_B1, _B2, _B3)
+    | fv, Test phi -> fv phi
+    | fv, Plus (r, s) ->
+        sup_seta (_B1, _B2) (fv_regex (_B1, _B2, _B3) fv r)
+          (fv_regex (_B1, _B2, _B3) fv s)
+    | fv, Times (r, s) ->
+        sup_seta (_B1, _B2) (fv_regex (_B1, _B2, _B3) fv r)
+          (fv_regex (_B1, _B2, _B3) fv s)
+    | fv, Star r -> fv_regex (_B1, _B2, _B3) fv r;;
+
 let rec set_aux (_A1, _A2)
   = function Set_Monada -> (fun a -> Set_Monad a)
     | Set_Choose ->
@@ -3010,19 +2999,10 @@ let rec fvi (_A1, _A2)
     | b, Until (phi, i, psi) ->
         sup_seta (ceq_nat, ccompare_nat) (fvi (_A1, _A2) b phi)
           (fvi (_A1, _A2) b psi)
-    | b, MatchF (i, r) -> fvi_regex (_A1, _A2) b r
-    | b, MatchP (i, r) -> fvi_regex (_A1, _A2) b r
-and fvi_regex (_A1, _A2)
-  b x1 = match b, x1 with
-    b, Wild -> set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)
-    | b, Test phi -> fvi (_A1, _A2) b phi
-    | b, Plus (r, s) ->
-        sup_seta (ceq_nat, ccompare_nat) (fvi_regex (_A1, _A2) b r)
-          (fvi_regex (_A1, _A2) b s)
-    | b, Times (r, s) ->
-        sup_seta (ceq_nat, ccompare_nat) (fvi_regex (_A1, _A2) b r)
-          (fvi_regex (_A1, _A2) b s)
-    | b, Star r -> fvi_regex (_A1, _A2) b r;;
+    | b, MatchF (i, r) ->
+        fv_regex (ceq_nat, ccompare_nat, set_impl_nat) (fvi (_A1, _A2) b) r
+    | b, MatchP (i, r) ->
+        fv_regex (ceq_nat, ccompare_nat, set_impl_nat) (fvi (_A1, _A2) b) r;;
 
 let rec semilattice_set_apply (Abs_semilattice_set x) = x;;
 
@@ -3100,11 +3080,13 @@ let rec mTimesR
 
 let rec lpd
   = function
-    MWild ->
-      insert (ceq_mregex, ccompare_mregex) MEps
-        (set_empty (ceq_mregex, ccompare_mregex) (of_phantom set_impl_mregexa))
-    | MEps ->
-        set_empty (ceq_mregex, ccompare_mregex) (of_phantom set_impl_mregexa)
+    MSkip n ->
+      (if equal_nata n zero_nat
+        then set_empty (ceq_mregex, ccompare_mregex)
+               (of_phantom set_impl_mregexa)
+        else insert (ceq_mregex, ccompare_mregex) (MSkip (minus_nat n one_nata))
+               (set_empty (ceq_mregex, ccompare_mregex)
+                 (of_phantom set_impl_mregexa)))
     | MTestPos phi ->
         set_empty (ceq_mregex, ccompare_mregex) (of_phantom set_impl_mregexa)
     | MTestNeg phi ->
@@ -3121,11 +3103,13 @@ let rec mTimesL
 
 let rec rpd
   = function
-    MWild ->
-      insert (ceq_mregex, ccompare_mregex) MEps
-        (set_empty (ceq_mregex, ccompare_mregex) (of_phantom set_impl_mregexa))
-    | MEps ->
-        set_empty (ceq_mregex, ccompare_mregex) (of_phantom set_impl_mregexa)
+    MSkip n ->
+      (if equal_nata n zero_nat
+        then set_empty (ceq_mregex, ccompare_mregex)
+               (of_phantom set_impl_mregexa)
+        else insert (ceq_mregex, ccompare_mregex) (MSkip (minus_nat n one_nata))
+               (set_empty (ceq_mregex, ccompare_mregex)
+                 (of_phantom set_impl_mregexa)))
     | MTestPos phi ->
         set_empty (ceq_mregex, ccompare_mregex) (of_phantom set_impl_mregexa)
     | MTestNeg phi ->
@@ -3202,11 +3186,11 @@ let rec empty_table (_A1, _A2, _A3) = bot_set (_A1, _A2, _A3);;
 
 let rec unsafe_epsilon (_A1, _A2, _A3)
   guard phi_s x2 = match guard, phi_s, x2 with
-    guard, phi_s, MWild ->
-      empty_table
-        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
-          set_impl_list)
-    | guard, phi_s, MEps -> guard
+    guard, phi_s, MSkip n ->
+      (if equal_nata n zero_nat then guard
+        else empty_table
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list))
     | guard, phi_s, MTestPos i -> join (_A1, _A2, _A3) guard true (nth phi_s i)
     | guard, phi_s, MTestNeg i -> join (_A1, _A2, _A3) guard false (nth phi_s i)
     | guard, phi_s, MPlus (r, s) ->
@@ -3233,11 +3217,11 @@ let rec unit_table (_A1, _A2)
 
 let rec safe_r_epsilon (_A1, _A2, _A3)
   n phi_s x2 = match n, phi_s, x2 with
-    n, phi_s, MWild ->
-      empty_table
-        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
-          set_impl_list)
-    | n, phi_s, MEps -> unit_table (_A1, _A2) n
+    n, phi_s, MSkip m ->
+      (if equal_nata m zero_nat then unit_table (_A1, _A2) n
+        else empty_table
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list))
     | n, phi_s, MTestPos i -> nth phi_s i
     | n, phi_s, MPlus (r, s) ->
         sup_seta
@@ -3261,15 +3245,15 @@ let rec lookupb (_A1, _A2) (_B1, _B2, _B3)
 
 let rec r_delta (_A1, _A2, _A3)
   kappa x phi_s xa3 = match kappa, x, phi_s, xa3 with
-    kappa, x, phi_s, MWild ->
-      lookupb (ccompare_mregex, equal_mregex)
-        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
-          set_impl_list)
-        x (kappa MEps)
-    | kappa, x, phi_s, MEps ->
-        empty_table
-          ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
-            set_impl_list)
+    kappa, x, phi_s, MSkip n ->
+      (if equal_nata n zero_nat
+        then empty_table
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list)
+        else lookupb (ccompare_mregex, equal_mregex)
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list)
+               x (kappa (MSkip (minus_nat n one_nata))))
     | kappa, x, phi_s, MTestPos i ->
         empty_table
           ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
@@ -4345,7 +4329,7 @@ let rec meval (_A1, _A2, _A3, _A4)
              else zs),
             MPrev (i, phia, false, bufa, ntsa)))
     | n, t, db, MAgg (g0, y, omega, b, f, phi) ->
-        (let (xs, phia) = meval (_A1, _A2, _A3, _A4) (plus_nat n b) t db phi in
+        (let (xs, phia) = meval (_A1, _A2, _A3, _A4) (plus_nat b n) t db phi in
           (map (eval_agg (_A1, _A2, _A3, _A4) n g0 y omega b f) xs,
             MAgg (g0, y, omega, b, f, phia)))
     | n, t, db, MExists phi ->
@@ -4432,15 +4416,13 @@ let rec meval (_A1, _A2, _A3, _A4)
           MPred (e, ts))
     | n, t, db, MRel rel -> ([rel], MRel rel);;
 
-let rec is_Const = function Var x1 -> false
-                   | Const x2 -> true;;
-
 let rec equal_safety x0 x1 = match x0, x1 with Safe, Unsafe -> false
                        | Unsafe, Safe -> false
                        | Unsafe, Unsafe -> true
                        | Safe, Safe -> true;;
 
-let rec eq_set (_A1, _A2, _A3, _A4) = set_eq (_A2, _A3, _A4);;
+let rec is_Const = function Var x1 -> false
+                   | Const x2 -> true;;
 
 let rec remove_neg = function Neg phi -> phi
                      | Pred (v, va) -> Pred (v, va)
@@ -4455,6 +4437,33 @@ let rec remove_neg = function Neg phi -> phi
                      | Until (v, va, vb) -> Until (v, va, vb)
                      | MatchF (v, va) -> MatchF (v, va)
                      | MatchP (v, va) -> MatchP (v, va);;
+
+let rec eq_set (_A1, _A2, _A3, _A4) = set_eq (_A2, _A3, _A4);;
+
+let rec safe_regex (_B1, _B2, _B3, _B4)
+  fv safe m uu x4 = match fv, safe, m, uu, x4 with
+    fv, safe, m, uu, Skip n -> true
+    | fv, safe, m, g, Test phi -> safe g phi
+    | fv, safe, m, g, Plus (r, s) ->
+        (equal_safety g Unsafe ||
+          set_eq (_B1, _B2, _B3) (fv_regex (_B2, _B3, _B4) fv r)
+            (fv_regex (_B2, _B3, _B4) fv s)) &&
+          (safe_regex (_B1, _B2, _B3, _B4) fv safe m g r &&
+            safe_regex (_B1, _B2, _B3, _B4) fv safe m g s)
+    | fv, safe, Future, g, Times (r, s) ->
+        (equal_safety g Unsafe ||
+          less_eq_set (_B1, _B2, _B3) (fv_regex (_B2, _B3, _B4) fv r)
+            (fv_regex (_B2, _B3, _B4) fv s)) &&
+          (safe_regex (_B1, _B2, _B3, _B4) fv safe Future g s &&
+            safe_regex (_B1, _B2, _B3, _B4) fv safe Future Unsafe r)
+    | fv, safe, Past, g, Times (r, s) ->
+        (equal_safety g Unsafe ||
+          less_eq_set (_B1, _B2, _B3) (fv_regex (_B2, _B3, _B4) fv s)
+            (fv_regex (_B2, _B3, _B4) fv r)) &&
+          (safe_regex (_B1, _B2, _B3, _B4) fv safe Past g r &&
+            safe_regex (_B1, _B2, _B3, _B4) fv safe Past Unsafe s)
+    | fv, safe, m, g, Star r ->
+        equal_safety g Unsafe && safe_regex (_B1, _B2, _B3, _B4) fv safe m g r;;
 
 let rec partition
   p x1 = match p, x1 with p, [] -> ([], [])
@@ -4669,55 +4678,53 @@ let rec safe_formula (_A1, _A2)
                | Until (_, _, _) -> false | MatchF (_, _) -> false
                | MatchP (_, _) -> false)) &&
             safe_formula (_A1, _A2) psi)
-    | MatchP (i, r) -> safe_regex (_A1, _A2) Past Safe r
-    | MatchF (i, r) -> safe_regex (_A1, _A2) Future Safe r
-and safe_regex (_A1, _A2)
-  m uu x2 = match m, uu, x2 with m, uu, Wild -> true
-    | m, g, Test phi ->
-        safe_formula (_A1, _A2) phi ||
-          equal_safety g Unsafe &&
-            (match phi with Pred (_, _) -> false | Eq (_, _) -> false
-              | Neg a -> safe_formula (_A1, _A2) a | Or (_, _) -> false
-              | Ands _ -> false | Exists _ -> false
-              | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-              | Next (_, _) -> false | Since (_, _, _) -> false
-              | Until (_, _, _) -> false | MatchF (_, _) -> false
-              | MatchP (_, _) -> false)
-    | m, g, Plus (r, s) ->
-        (equal_safety g Unsafe ||
-          eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_regex (_A1, _A2) zero_nat r)
-            (fvi_regex (_A1, _A2) zero_nat s)) &&
-          (safe_regex (_A1, _A2) m g r && safe_regex (_A1, _A2) m g s)
-    | Future, g, Times (r, s) ->
-        (equal_safety g Unsafe ||
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_regex (_A1, _A2) zero_nat r)
-            (fvi_regex (_A1, _A2) zero_nat s)) &&
-          (safe_regex (_A1, _A2) Future g s &&
-            safe_regex (_A1, _A2) Future Unsafe r)
-    | Past, g, Times (r, s) ->
-        (equal_safety g Unsafe ||
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_regex (_A1, _A2) zero_nat s)
-            (fvi_regex (_A1, _A2) zero_nat r)) &&
-          (safe_regex (_A1, _A2) Past g r &&
-            safe_regex (_A1, _A2) Past Unsafe s)
-    | m, g, Star r -> equal_safety g Unsafe && safe_regex (_A1, _A2) m g r;;
+    | MatchP (i, r) ->
+        safe_regex (cenum_nat, ceq_nat, ccompare_nat, set_impl_nat)
+          (fvi (_A1, _A2) zero_nat)
+          (fun g phi ->
+            safe_formula (_A1, _A2) phi ||
+              equal_safety g Unsafe &&
+                (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+                  | Neg a -> safe_formula (_A1, _A2) a | Or (_, _) -> false
+                  | Ands _ -> false | Exists _ -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Next (_, _) -> false | Since (_, _, _) -> false
+                  | Until (_, _, _) -> false | MatchF (_, _) -> false
+                  | MatchP (_, _) -> false))
+          Past Safe r
+    | MatchF (i, r) ->
+        safe_regex (cenum_nat, ceq_nat, ccompare_nat, set_impl_nat)
+          (fvi (_A1, _A2) zero_nat)
+          (fun g phi ->
+            safe_formula (_A1, _A2) phi ||
+              equal_safety g Unsafe &&
+                (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+                  | Neg a -> safe_formula (_A1, _A2) a | Or (_, _) -> false
+                  | Ands _ -> false | Exists _ -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Next (_, _) -> false | Since (_, _, _) -> false
+                  | Until (_, _, _) -> false | MatchF (_, _) -> false
+                  | MatchP (_, _) -> false))
+          Future Safe r;;
 
 let rec to_mregex_exec (_A1, _A2)
-  x0 xs = match x0, xs with Wild, xs -> (MWild, xs)
+  x0 xs = match x0, xs with Skip n, xs -> (MSkip n, xs)
     | Test phi, xs ->
         (if safe_formula (_A1, _A2) phi
           then (MTestPos (size_list xs), xs @ [phi])
-          else (match phi with Pred (_, _) -> (MEps, xs)
-                 | Eq (_, _) -> (MEps, xs)
+          else (match phi with Pred (_, _) -> (MSkip zero_nat, xs)
+                 | Eq (_, _) -> (MSkip zero_nat, xs)
                  | Neg phia -> (MTestNeg (size_list xs), xs @ [phia])
-                 | Or (_, _) -> (MEps, xs) | Ands _ -> (MEps, xs)
-                 | Exists _ -> (MEps, xs) | Agg (_, _, _, _, _) -> (MEps, xs)
-                 | Prev (_, _) -> (MEps, xs) | Next (_, _) -> (MEps, xs)
-                 | Since (_, _, _) -> (MEps, xs) | Until (_, _, _) -> (MEps, xs)
-                 | MatchF (_, _) -> (MEps, xs) | MatchP (_, _) -> (MEps, xs)))
+                 | Or (_, _) -> (MSkip zero_nat, xs)
+                 | Ands _ -> (MSkip zero_nat, xs)
+                 | Exists _ -> (MSkip zero_nat, xs)
+                 | Agg (_, _, _, _, _) -> (MSkip zero_nat, xs)
+                 | Prev (_, _) -> (MSkip zero_nat, xs)
+                 | Next (_, _) -> (MSkip zero_nat, xs)
+                 | Since (_, _, _) -> (MSkip zero_nat, xs)
+                 | Until (_, _, _) -> (MSkip zero_nat, xs)
+                 | MatchF (_, _) -> (MSkip zero_nat, xs)
+                 | MatchP (_, _) -> (MSkip zero_nat, xs)))
     | Plus (r, s), xs ->
         (let (mr, ys) = to_mregex_exec (_A1, _A2) r xs in
          let a = to_mregex_exec (_A1, _A2) s ys in
@@ -4877,7 +4884,7 @@ let rec minit0 (_A1, _A2, _A3)
         MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
                 (fvi (_A2, _A3) zero_nat phi)
                 (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nat b)),
-               y, omega, b, f, minit0 (_A1, _A2, _A3) (plus_nat n b) phi)
+               y, omega, b, f, minit0 (_A1, _A2, _A3) (plus_nat b n) phi)
     | n, Prev (i, phi) -> MPrev (i, minit0 (_A1, _A2, _A3) n phi, true, [], [])
     | n, Next (i, phi) -> MNext (i, minit0 (_A1, _A2, _A3) n phi, true, [])
     | n, Since (phi, i, psi) ->
@@ -5183,45 +5190,35 @@ let rec mmonitorable_exec (_A1, _A2)
                  | Until (_, _, _) -> false | MatchF (_, _) -> false
                  | MatchP (_, _) -> false)) &&
               mmonitorable_exec (_A1, _A2) psi))
-    | MatchP (i, r) -> mmonitorable_regex_exec (_A1, _A2) Past Safe r
+    | MatchP (i, r) ->
+        safe_regex (cenum_nat, ceq_nat, ccompare_nat, set_impl_nat)
+          (fvi (_A1, _A2) zero_nat)
+          (fun g phi ->
+            mmonitorable_exec (_A1, _A2) phi ||
+              equal_safety g Unsafe &&
+                (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+                  | Neg a -> mmonitorable_exec (_A1, _A2) a | Or (_, _) -> false
+                  | Ands _ -> false | Exists _ -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Next (_, _) -> false | Since (_, _, _) -> false
+                  | Until (_, _, _) -> false | MatchF (_, _) -> false
+                  | MatchP (_, _) -> false))
+          Past Safe r
     | MatchF (i, r) ->
-        mmonitorable_regex_exec (_A1, _A2) Future Safe r &&
-          not (equal_enat (right i) Infinity_enat)
-and mmonitorable_regex_exec (_A1, _A2)
-  b g x2 = match b, g, x2 with b, g, Wild -> true
-    | b, g, Test phi ->
-        mmonitorable_exec (_A1, _A2) phi ||
-          equal_safety g Unsafe &&
-            (match phi with Pred (_, _) -> false | Eq (_, _) -> false
-              | Neg a -> mmonitorable_exec (_A1, _A2) a | Or (_, _) -> false
-              | Ands _ -> false | Exists _ -> false
-              | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-              | Next (_, _) -> false | Since (_, _, _) -> false
-              | Until (_, _, _) -> false | MatchF (_, _) -> false
-              | MatchP (_, _) -> false)
-    | b, g, Plus (r, s) ->
-        (equal_safety g Unsafe ||
-          eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_regex (_A1, _A2) zero_nat r)
-            (fvi_regex (_A1, _A2) zero_nat s)) &&
-          (mmonitorable_regex_exec (_A1, _A2) b g r &&
-            mmonitorable_regex_exec (_A1, _A2) b g s)
-    | Future, g, Times (r, s) ->
-        (equal_safety g Unsafe ||
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_regex (_A1, _A2) zero_nat r)
-            (fvi_regex (_A1, _A2) zero_nat s)) &&
-          (mmonitorable_regex_exec (_A1, _A2) Future Unsafe r &&
-            mmonitorable_regex_exec (_A1, _A2) Future g s)
-    | Past, g, Times (r, s) ->
-        (equal_safety g Unsafe ||
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_regex (_A1, _A2) zero_nat s)
-            (fvi_regex (_A1, _A2) zero_nat r)) &&
-          (mmonitorable_regex_exec (_A1, _A2) Past g r &&
-            mmonitorable_regex_exec (_A1, _A2) Past Unsafe s)
-    | b, g, Star r ->
-        equal_safety g Unsafe && mmonitorable_regex_exec (_A1, _A2) b g r;;
+        safe_regex (cenum_nat, ceq_nat, ccompare_nat, set_impl_nat)
+          (fvi (_A1, _A2) zero_nat)
+          (fun g phi ->
+            mmonitorable_exec (_A1, _A2) phi ||
+              equal_safety g Unsafe &&
+                (match phi with Pred (_, _) -> false | Eq (_, _) -> false
+                  | Neg a -> mmonitorable_exec (_A1, _A2) a | Or (_, _) -> false
+                  | Ands _ -> false | Exists _ -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Next (_, _) -> false | Since (_, _, _) -> false
+                  | Until (_, _, _) -> false | MatchF (_, _) -> false
+                  | MatchP (_, _) -> false))
+          Future Safe r &&
+          not (equal_enat (right i) Infinity_enat);;
 
 let rec minit_safe (_A1, _A2, _A3)
   phi = (if mmonitorable_exec (_A2, _A3) phi then minit (_A1, _A2, _A3) phi
@@ -5263,6 +5260,13 @@ let rec get_and_list (_A1, _A2)
     | Until (v, va, vb) -> [Until (v, va, vb)]
     | MatchF (v, va) -> [MatchF (v, va)]
     | MatchP (v, va) -> [MatchP (v, va)];;
+
+let rec map_regex
+  f x1 = match f, x1 with f, Skip x1 -> Skip x1
+    | f, Test x2 -> Test (f x2)
+    | f, Plus (x31, x32) -> Plus (map_regex f x31, map_regex f x32)
+    | f, Times (x41, x42) -> Times (map_regex f x41, map_regex f x42)
+    | f, Star x5 -> Star (map_regex f x5);;
 
 let rec is_Neg = function Pred (x11, x12) -> false
                  | Eq (x21, x22) -> false
@@ -5363,25 +5367,27 @@ let rec convert_multiway (_A1, _A2)
           else (let Neg phia = phi in
                  Until (Neg (convert_multiway (_A1, _A2) phia), r,
                          convert_multiway (_A1, _A2) psi)))
-    | MatchP (i, r) -> MatchP (i, convert_multiway_regex (_A1, _A2) r)
-    | MatchF (i, r) -> MatchF (i, convert_multiway_regex (_A1, _A2) r)
+    | MatchP (i, r) ->
+        MatchP
+          (i, map_regex
+                (fun phi ->
+                  (if safe_formula (_A1, _A2) phi
+                    then convert_multiway (_A1, _A2) phi
+                    else (let Neg phia = phi in
+                           Neg (convert_multiway (_A1, _A2) phia))))
+                r)
+    | MatchF (i, r) ->
+        MatchF
+          (i, map_regex
+                (fun phi ->
+                  (if safe_formula (_A1, _A2) phi
+                    then convert_multiway (_A1, _A2) phi
+                    else (let Neg phia = phi in
+                           Neg (convert_multiway (_A1, _A2) phia))))
+                r)
     | Pred (v, va) -> Pred (v, va)
     | Eq (v, va) -> Eq (v, va)
-    | Ands v -> Ands v
-and convert_multiway_regex (_A1, _A2)
-  = function Wild -> Wild
-    | Test phi ->
-        (if safe_formula (_A1, _A2) phi
-          then Test (convert_multiway (_A1, _A2) phi)
-          else (let Neg phia = phi in
-                 Test (Neg (convert_multiway (_A1, _A2) phia))))
-    | Plus (r, s) ->
-        Plus (convert_multiway_regex (_A1, _A2) r,
-               convert_multiway_regex (_A1, _A2) s)
-    | Times (r, s) ->
-        Times (convert_multiway_regex (_A1, _A2) r,
-                convert_multiway_regex (_A1, _A2) s)
-    | Star r -> Star (convert_multiway_regex (_A1, _A2) r);;
+    | Ands v -> Ands v;;
 
 let rec rbt_verdict _A
   = keysa (ccompare_prod ccompare_nat (ccompare_list (ccompare_option _A)));;

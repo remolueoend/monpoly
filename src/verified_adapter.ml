@@ -130,8 +130,8 @@ let convert_agg_op = function
 let convert_formula f =
   let fvl = MFOTL.free_vars f in
   let truth = Equal ((Cst (Int 1)), (Cst (Int 1)))  in
-  let rec createExists n f = match n with 
-  | 0 -> f 
+  let rec createExists n f = match n with
+  | 0 -> f
   | n -> createExists (n-1) (Exists f)
   in
   let rec convert_formula_vars bvl = function
@@ -171,13 +171,13 @@ let convert_formula f =
   | Less (t1,t2) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
                            raise (UnsupportedFragment msg)
   | LessEq (t1,t2) as fma -> let msg = "Unsupported formula " ^ (MFOTL.string_of_formula "" fma) in
-                           raise (UnsupportedFragment msg) 
+                           raise (UnsupportedFragment msg)
   and convert_re_vars bvl = function
-  | Wild -> Wild
+  | Wild -> wild
   | Test f -> Test (convert_formula_vars bvl f)
   | Concat (r1,r2) -> Times (convert_re_vars bvl r1, convert_re_vars bvl r2)
   | Plus (r1,r2) -> Plus (convert_re_vars bvl r1, convert_re_vars bvl r2)
-  | Star r -> Star (convert_re_vars bvl r) 
+  | Star r -> Star (convert_re_vars bvl r)
   in convert_formula_vars [] f
 
 
