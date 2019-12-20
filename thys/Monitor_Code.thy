@@ -139,8 +139,8 @@ export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
   String.explode String.implode interval mk_db RBT_set rbt_verdict
-  (*term and formula constructors*)
-  Formula.Var Formula.Pred
+  (*term, formula, and constructors*)
+  Formula.Var Formula.Pred Regex.Skip Regex.Wild
   (*event data and aggregations*)
   EInt sum_agg count_agg average_agg min_agg max_agg median_agg
   (*main functions*)

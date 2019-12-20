@@ -140,7 +140,7 @@ let main () =
         (* read signature file *)
         let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
-        
+
         let is_mon, pf, vartypes = check_formula !verified sign f in
         if !sigout then
           Predicate.print_vartypes_list vartypes
@@ -148,7 +148,7 @@ let main () =
           begin
             if not !nofilterrelopt then
               Filter_rel.enable pf;
-            if not !nofilteremptytpopt then
+            if not !nofilteremptytpopt && not !verified then
               Filter_empty_tp.enable pf;
             if !testfilteropt then
               Algorithm.test_filter !logfile pf

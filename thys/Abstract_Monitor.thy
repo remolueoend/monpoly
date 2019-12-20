@@ -144,7 +144,7 @@ qed
 
 text \<open>Past-only Formulas.\<close>
 
-fun past_only :: "'a Formula.formula \<Rightarrow> bool" and past_only_regex :: "'a Formula.regex \<Rightarrow> bool" where
+fun past_only :: "'a Formula.formula \<Rightarrow> bool" where
   "past_only (Formula.Pred _ _) = True"
 | "past_only (Formula.Eq _ _) = True"
 | "past_only (Formula.Neg \<psi>) = past_only \<psi>"
@@ -156,19 +156,13 @@ fun past_only :: "'a Formula.formula \<Rightarrow> bool" and past_only_regex :: 
 | "past_only (Formula.Next _ _) = False"
 | "past_only (Formula.Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Formula.Until \<alpha> _ \<beta>) = False"
-| "past_only (Formula.MatchP _ r) = past_only_regex r"
+| "past_only (Formula.MatchP _ r) = Regex.pred_regex past_only r"
 | "past_only (Formula.MatchF _ _) = False"
-| "past_only_regex Formula.Wild = True"
-| "past_only_regex (Formula.Test \<phi>) = past_only \<phi>"
-| "past_only_regex (Formula.Plus r s) = (past_only_regex r \<and> past_only_regex s)"
-| "past_only_regex (Formula.Times r s) = (past_only_regex r \<and> past_only_regex s)"
-| "past_only_regex (Formula.Star r) = past_only_regex r"
 
 lemma past_only_sat:
   assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
   shows "i < plen \<pi> \<Longrightarrow> past_only \<phi> \<Longrightarrow> Formula.sat \<sigma> v i \<phi> = Formula.sat \<sigma>' v i \<phi>"
-    and "j < plen \<pi> \<Longrightarrow> past_only_regex r \<Longrightarrow> Formula.match \<sigma> v r i j = Formula.match \<sigma>' v r i j"
-proof (induction \<phi> and r arbitrary: v i and v i j)
+proof (induction \<phi> arbitrary: v i)
   case (Pred e ts)
   with \<Gamma>_prefix_conv[OF assms] show ?case by simp
 next
@@ -182,27 +176,9 @@ next
   with \<tau>_prefix_conv[OF assms] show ?case by auto
 next
   case (MatchP I r)
-  with \<tau>_prefix_conv[OF assms] show ?case by auto
-next
-  case (Times r s)
-  from Times.prems
-  show ?case
-    by (auto simp: relcompp_apply intro: le_less_trans match_le
-      dest: Times.IH[THEN iffD1, rotated -1]  Times.IH[THEN iffD2, rotated -1])
-next
-  case (Star r)
-  show ?case unfolding match.simps
-  proof (rule iffI)
-    assume "(Formula.match \<sigma> v r)\<^sup>*\<^sup>* i j"
-    then show "(Formula.match \<sigma>' v r)\<^sup>*\<^sup>* i j" using Star.prems
-      by (induct rule: rtranclp.induct) (auto dest!: Star.IH[THEN iffD1, rotated -1]
-        intro: rtranclp.intros(2)[rotated] le_less_trans match_le)
-  next
-    assume "(Formula.match \<sigma>' v r)\<^sup>*\<^sup>* i j"
-    then show "(Formula.match \<sigma> v r)\<^sup>*\<^sup>* i j" using Star.prems
-      by (induct rule: rtranclp.induct) (auto dest!: Star.IH[THEN iffD2, rotated -1]
-        intro: rtranclp.intros(2)[rotated] le_less_trans match_le)
-  qed
+  then have "Regex.match (Formula.sat \<sigma> v) r a b = Regex.match (Formula.sat \<sigma>' v) r a b" if "b < plen \<pi>" for a b
+    using that by (intro Regex.match_cong_strong) (auto simp: regex.pred_set)
+  with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
 qed auto
 
 interpretation past_only_monitor: monitor_timed_progress past_only "\<lambda>\<sigma> \<phi> j. if past_only \<phi> then j else 0"
