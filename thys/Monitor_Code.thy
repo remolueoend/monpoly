@@ -80,7 +80,7 @@ global_interpretation default: msaux
     | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
     (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
   by unfold_locales (auto simp: init_window_def split: list.splits)
-(*
+
 (*
 definition update_since :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> ts \<Rightarrow>
   'a msaux \<Rightarrow> 'a table \<times> 'a msaux" where
@@ -199,7 +199,6 @@ global_interpretation swa: msaux
     find_theorems "fold (+)"
     sorry
   done
-*)
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
