@@ -101,15 +101,17 @@ module Monitor : sig
   val mstep :
     'a ceq * 'a ccompare * 'a equal * 'a set_impl ->
       (char list * 'a list) set * nat ->
-        ((nat * (nat * (('a option) list) set) list), 'a, unit) mstate_ext ->
+        ((nat * (i * (nat * (('a option) list) set) list)), 'a, unit)
+          mstate_ext ->
           (nat * ('a option) list) set *
-            ((nat * (nat * (('a option) list) set) list), 'a, unit) mstate_ext
+            ((nat * (i * (nat * (('a option) list) set) list)), 'a, unit)
+              mstate_ext
   val explode : string -> char list
   val mmonitorable_exec : 'a ccompare * 'a equal -> 'a formula -> bool
   val minit_safe :
     'a ceq * 'a ccompare * 'a equal ->
       'a formula ->
-        ((nat * (nat * (('a option) list) set) list), 'a, unit) mstate_ext
+        ((nat * (i * (nat * (('a option) list) set) list)), 'a, unit) mstate_ext
   val convert_multiway : 'a ccompare * 'a equal -> 'a formula -> 'a formula
   val rbt_verdict :
     'a ccompare ->
@@ -3873,46 +3875,40 @@ let rec mrtabulate (_A1, _A2)
 let rec update_since (_A1, _A2, _A3)
   i pos rel1 rel2 nt aux =
     (let aux0 =
-       (let (m, xs) =
-          (let (m, xs) = aux in
-            (m, filtera
-                  (fun (t, _) -> less_eq_enat (Enat (minus_nat nt t)) (right i))
-                  xs))
+       (let (t, (ia, xs)) =
+          (let (t, (ia, xs)) = aux in
+            (t, (ia, filtera
+                       (fun (ta, _) ->
+                         less_eq_enat (Enat (minus_nat nt ta)) (right ia))
+                       xs)))
           in
-         (m, map (fun (t, x) -> (t, join (_A1, _A2, _A3) x pos rel1)) xs))
+         (t, (ia, map (fun (ta, x) -> (ta, join (_A1, _A2, _A3) x pos rel1))
+                    xs)))
        in
      let auxa =
-       (if equal_optiona equal_nat
-             (match aux0 with (_, []) -> None | (_, (t, _) :: _) -> Some t)
-             (Some nt)
-         then (let (m, xs) = aux0 in
-                (m, (let (t, x) :: ts = xs in
-                      (t, sup_seta
-                            ((ceq_list (ceq_option _A1)),
-                              (ccompare_list (ccompare_option _A2)))
-                            x rel2) ::
-                        ts)))
-         else (let (t, x) = (nt, rel2) in (fun (m, xs) -> (m, (t, x) :: xs)))
-                aux0)
+       (let (nta, x) = (nt, rel2) in
+         (fun (_, (ia, xs)) ->
+           (nta, (ia, (match xs with [] -> [(nta, x)]
+                        | (t, y) :: ts ->
+                          (if equal_nata t nta
+                            then (nta, sup_seta
+ ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2))) y x) ::
+                                   ts
+                            else (nta, x) :: xs))))))
+         aux0
        in
-      ((let (m, xs) = auxa in
-         (match xs
-           with [] ->
-             set_empty
-               ((ceq_list (ceq_option _A1)),
-                 (ccompare_list (ccompare_option _A2)))
-               (of_phantom set_impl_lista)
-           | (nta, _) :: _ ->
-             foldr (sup_seta
-                     ((ceq_list (ceq_option _A1)),
-                       (ccompare_list (ccompare_option _A2))))
-               (maps (fun (t, rel) ->
-                       (if less_eq_nat m (minus_nat nta t) then [rel] else []))
-                 xs)
-               (set_empty
+      ((let (nta, (ia, xs)) = auxa in
+         foldr (sup_seta
                  ((ceq_list (ceq_option _A1)),
-                   (ccompare_list (ccompare_option _A2)))
-                 (of_phantom set_impl_lista)))),
+                   (ccompare_list (ccompare_option _A2))))
+           (maps (fun (t, rel) ->
+                   (if less_eq_nat (left ia) (minus_nat nta t) then [rel]
+                     else []))
+             xs)
+           (set_empty
+             ((ceq_list (ceq_option _A1)),
+               (ccompare_list (ccompare_option _A2)))
+             (of_phantom set_impl_lista))),
         auxa));;
 
 let rec safe_r_epsilon (_A1, _A2, _A3)
@@ -4914,11 +4910,13 @@ let rec minit0 (_A1, _A2, _A3)
         (if safe_formula (_A2, _A3) phi
           then MSince
                  (true, minit0 (_A1, _A2, _A3) n phi, i,
-                   minit0 (_A1, _A2, _A3) n psi, ([], []), [], (left i, []))
+                   minit0 (_A1, _A2, _A3) n psi, ([], []), [],
+                   (zero_nat, (i, [])))
           else (let Neg phia = phi in
                  MSince
                    (false, minit0 (_A1, _A2, _A3) n phia, i,
-                     minit0 (_A1, _A2, _A3) n psi, ([], []), [], (left i, []))))
+                     minit0 (_A1, _A2, _A3) n psi, ([], []), [],
+                     (zero_nat, (i, [])))))
     | n, Until (phi, i, psi) ->
         (if safe_formula (_A2, _A3) phi
           then MUntil
