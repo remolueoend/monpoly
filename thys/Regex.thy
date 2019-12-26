@@ -40,7 +40,7 @@ lemma fv_regex_commute:
   by (induct r) auto
 
 lemma fv_regex_alt: "fv_regex fv r = (\<Union>z \<in> atms r. fv z)"
-  by (induct r) auto  
+  by (induct r) auto
 
 qualified definition nfv_regex where
   "nfv_regex fv r = Max (insert 0 (Suc ` fv_regex fv r))"
@@ -199,7 +199,7 @@ proof (induction r arbitrary: i j)
   also have "\<dots> \<longleftrightarrow> match test r i i \<and> (\<Squnion>t \<in> lpd test i s. match test t) (i + 1) j \<or>
     (\<exists>k. (\<Squnion>t \<in> lpd test i r. match test t) (i + 1) k \<and> match test s k j)"
     using Times.prems by (intro disj_cong[OF refl] iff_exI) (auto dest: match_le)
-  also have "\<dots> \<longleftrightarrow> SUPREMUM (lpd test i (Times r s)) (match test) (i + 1) j"
+  also have "\<dots> \<longleftrightarrow> (\<Squnion> (match test ` lpd test i (Times r s))) (i + 1) j"
     by (force simp: TimesL_def TimesR_def eps_match)
   finally show ?case .
 next
@@ -230,7 +230,7 @@ proof (induction r arbitrary: i j)
   also have "\<dots> \<longleftrightarrow> (\<Squnion>t \<in> rpd test j r. match test t) i (j - 1) \<and> match test s j j  \<or>
     (\<exists>k. match test r i k \<and> (\<Squnion>t \<in> rpd test j s. match test t) k (j - 1))"
     using Times.prems by (intro disj_cong[OF refl] iff_exI) (auto dest: match_le)
-  also have "\<dots> \<longleftrightarrow> SUPREMUM (rpd test j (Times r s)) (match test) i (j - 1)"
+  also have "\<dots> \<longleftrightarrow> (\<Squnion> (match test ` rpd test j (Times r s))) i (j - 1)"
     by (force simp: TimesL_def TimesR_def eps_match)
   finally show ?case .
 next
@@ -253,11 +253,11 @@ lemma lpd_fv_regex: "s \<in> lpd test i r \<Longrightarrow> fv_regex fv s \<subs
 lemma rpd_fv_regex: "s \<in> rpd test i r \<Longrightarrow> fv_regex fv s \<subseteq> fv_regex fv r"
   by (induct r arbitrary: s) (auto simp: TimesR_def TimesL_def split: if_splits nat.splits)+
 
-lemma match_fv_cong: 
+lemma match_fv_cong:
   "(\<And>i x. x \<in> atms r \<Longrightarrow> test i x = test' i x) \<Longrightarrow> match test r = match test' r"
   by (induct r) auto
 
-lemma eps_fv_cong: 
+lemma eps_fv_cong:
   "(\<And>i x. x \<in> atms r \<Longrightarrow> test i x = test' i x) \<Longrightarrow> eps test i r = eps test' i r"
   by (induct r) auto
 
@@ -341,23 +341,23 @@ next
     by (force simp: TimesL_def elim: Times(1,2) cosafe_rpd dest: rpd_fv_regex split: if_splits)
 qed (auto split: nat.splits)
 
-lemma safe_regex_safe: "(\<And>g r. safe g r \<Longrightarrow> safe Unsafe r) \<Longrightarrow> 
+lemma safe_regex_safe: "(\<And>g r. safe g r \<Longrightarrow> safe Unsafe r) \<Longrightarrow>
   safe_regex m g r \<Longrightarrow> x \<in> atms r \<Longrightarrow> safe Unsafe x"
   by (induct m g r rule: safe_regex.induct) auto
 
-lemma safe_regex_map_regex: 
+lemma safe_regex_map_regex:
   "(\<And>g x. x \<in> atms r \<Longrightarrow> safe g x \<Longrightarrow>  safe g (f x)) \<Longrightarrow> (\<And>x. x \<in> atms r \<Longrightarrow> fv (f x) = fv x) \<Longrightarrow>
    safe_regex m g r \<Longrightarrow> safe_regex m g (map_regex f r)"
   by (induct m g r rule: safe_regex.induct) (auto simp: fv_regex_alt regex.set_map)
 
 end
 
-lemma safe_regex_cong[fundef_cong]: 
+lemma safe_regex_cong[fundef_cong]:
   "(\<And>g x. x \<in> atms r \<Longrightarrow> safe g x = safe' g x) \<Longrightarrow>
   Regex.safe_regex fv safe m g r = Regex.safe_regex fv safe' m g r"
   by (induct m g r rule: safe_regex.induct) auto
 
-lemma safe_regex_mono: 
+lemma safe_regex_mono:
   "(\<And>g x. x \<in> atms r \<Longrightarrow> safe g x \<Longrightarrow> safe' g x) \<Longrightarrow>
   Regex.safe_regex fv safe m g r \<Longrightarrow> Regex.safe_regex fv safe' m g r"
   by (induct m g r rule: safe_regex.induct) auto
