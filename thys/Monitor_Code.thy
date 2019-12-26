@@ -1,10 +1,10 @@
 (*<*)
 theory Monitor_Code
   imports Monitor
-  "HOL-Library.Code_Target_Nat"
-  "HOL.String"
-  Containers.Containers
-  SWA
+    SWA
+    Event_Data
+    "HOL-Library.Code_Target_Nat"
+    Containers.Containers
 begin
 (*>*)
 
@@ -13,25 +13,11 @@ begin
 lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Cardinality.card'" by simp
 declare [[code drop: card]] Set_Impl.card_code[code]
 
-instantiation enat :: ceq begin
-definition ceq_enat where "ceq_enat = Some ((=) :: enat \<Rightarrow> _)"
-
-instance by intro_classes (simp add: ceq_enat_def)
-end
-
-instantiation enat :: ccompare begin
-definition ccompare_enat :: "enat comparator option" where
-  "ccompare_enat = Some (\<lambda>x y. if x = y then Eq else if x < y then Lt else Gt)"
-
-instance by intro_classes
-    (auto simp: ccompare_enat_def split: if_splits intro!: comparator.intro)
-end
-
 instantiation enat :: set_impl begin
 definition set_impl_enat :: "(enat, set_impl) phantom" where
   "set_impl_enat = phantom set_RBT"
 
-instance by intro_classes
+instance ..
 end
 
 derive ccompare Formula.trm
@@ -42,6 +28,7 @@ derive ccompare Monitor.mregex
 derive (rbt) set_impl Monitor.mregex
 derive (rbt) mapping_impl Monitor.mregex
 derive (no) cenum Monitor.mregex
+derive (rbt) set_impl event_data
 
 type_synonym 'a msaux = "nat \<times> \<I> \<times> (ts \<times> 'a table) list"
 
@@ -236,14 +223,11 @@ lemma meval_MPred'': "meval n t db (MPred e ts) = ([
 
 lemmas meval_code[code] = default.meval.simps(1) meval_MPred'' default.meval.simps(3-13)
 
-definition mk_db :: "(char list \<times> 'a list) list \<Rightarrow> (char list \<times> 'a list) set" where
+definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> (string \<times> event_data list) set" where
   "mk_db = set"
 
-definition rbt_verdict :: "_ \<Rightarrow> (nat \<times> 'a :: ccompare option list) list" where
+definition rbt_verdict :: "_ \<Rightarrow> (nat \<times> event_data option list) list" where
   "rbt_verdict = RBT_Set2.keys"
-
-definition rbt_multiset :: "_ \<Rightarrow> ('a :: ccompare \<times> enat) list" where
-  "rbt_multiset = RBT_Set2.keys"
 
 lemma saturate_commute:
   assumes "\<And>s. r \<in> g s" "\<And>s. g (insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
@@ -304,19 +288,37 @@ lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
   unfolding mrtabulate.abs_eq RBT_Mapping_def
   by (auto split: option.splits)
 
-export_code convert_multiway minit_safe mstep
+lemma lexordp_eq_code[code]: "lexordp_eq xs ys \<longleftrightarrow> (case xs of [] \<Rightarrow> True
+  | x # xs \<Rightarrow> (case ys of [] \<Rightarrow> False
+    | y # ys \<Rightarrow> if x < y then True else if x > y then False else lexordp_eq xs ys))"
+  by (subst lexordp_eq.simps) (auto split: list.split)
+
+definition mmonitorable_exec_e :: "event_data Formula.formula \<Rightarrow> bool" where
+  [code_unfold]: "mmonitorable_exec_e = mmonitorable_exec"
+
+definition convert_multiway_e :: "event_data Formula.formula \<Rightarrow> event_data Formula.formula" where
+  [code_unfold]: "convert_multiway_e = convert_multiway"
+
+definition minit_safe_e :: "event_data Formula.formula \<Rightarrow> (event_data msaux, event_data) mstate" where
+  [code_unfold]: "minit_safe_e = minit_safe"
+
+definition mstep_e :: "event_data Formula.database \<times> ts \<Rightarrow> (event_data msaux, event_data) mstate \<Rightarrow>
+  (nat \<times> event_data tuple) set \<times> (event_data msaux, event_data) mstate" where
+  [code_unfold]: "mstep_e = mstep"
+
+export_code convert_multiway_e minit_safe_e mstep_e mmonitorable_exec_e
   checking OCaml?
 
 export_code
-  (*type classes*)
-  HOL.equal Collection_Eq.ceq Collection_Order.ccompare set_impl
   (*basic types*)
-  nat_of_integer integer_of_nat enat literal.explode interval mk_db RBT_set rbt_verdict rbt_multiset
-  Eq phantom set_RBT
-  (*term, formula, and regex constructors*)
+  nat_of_integer integer_of_nat int_of_integer integer_of_int enat
+  String.explode String.implode interval mk_db RBT_set rbt_verdict
+  (*term, formula, and constructors*)
   Formula.Var Formula.Pred Regex.Skip Regex.Wild
+  (*event data and aggregations*)
+  EInt sum_agg count_agg average_agg min_agg max_agg median_agg
   (*main functions*)
-  convert_multiway minit_safe mstep mmonitorable_exec
+  convert_multiway_e minit_safe_e mstep_e mmonitorable_exec_e
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)
