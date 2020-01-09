@@ -39,7 +39,7 @@ let monitor logfile f =
   let closed = (free_vars f = []) in
   let cf = convert_formula f in
   let cf = if !no_mw then cf else Verified.Monitor.convert_multiway_e cf in
-  let init_state = Verified.Monitor.minit_safe_e cf in
+  let init_state = Verified.Monitor.minit_safe cf in
   let lexbuf = Log.log_open logfile in
   let init_i = 0 in
   let init_ts = MFOTL.ts_invalid in
@@ -58,7 +58,7 @@ let monitor logfile f =
     if d.ts >= ts then
       (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
       let tpts = add d.tp d.ts tpts in
-      let (vs, new_state) = Verified.Monitor.mstep_e (convert_db d) state in
+      let (vs, new_state) = Verified.Monitor.mstep (convert_db d) state in
       let vs = convert_violations vs in
       List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
       let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
