@@ -687,24 +687,24 @@ definition init_window :: "\<I> \<Rightarrow> window" where
   "init_window I = \<lparr>ivl = I, earliest = 0, latest = 0, current = 0\<rparr>"
 
 locale msaux =
-  fixes valid_msaux :: "window \<Rightarrow> 'msaux \<Rightarrow> 'a msaux \<Rightarrow> bool"
-  and init_msaux :: "\<I> \<Rightarrow> 'msaux"
+  fixes valid_msaux :: "window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux \<Rightarrow> 'a msaux \<Rightarrow> bool"
+  and init_msaux :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux"
   and filter_msaux :: "ts \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and join_msaux :: "bool \<Rightarrow> 'a table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and add_new_msaux :: "nat \<times> 'a table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and result_msaux :: "'msaux \<Rightarrow> 'a table"
-  assumes valid_init: "valid_msaux (init_window I) (init_msaux I) []"
-  assumes valid_filter: "valid_msaux w aux auxlist \<Longrightarrow> nt \<ge> current w \<Longrightarrow>
+  assumes valid_init: "L \<subseteq> R \<Longrightarrow> valid_msaux (init_window I) n L R (init_msaux I n L R) []"
+  assumes valid_filter: "valid_msaux w n L R aux auxlist \<Longrightarrow> nt \<ge> current w \<Longrightarrow>
     w' = w\<lparr>earliest := if nt \<ge> right (ivl w) then the_enat (nt - right (ivl w)) else earliest w\<rparr> \<Longrightarrow>
-    valid_msaux w' (filter_msaux nt aux) (filter (\<lambda>(t, rel). enat (nt - t) \<le> right (ivl w)) auxlist)"
-  assumes valid_join: "valid_msaux w aux auxlist \<Longrightarrow> valid_msaux w (join_msaux pos rel1 aux) (map (\<lambda>(t, rel). (t, join rel pos rel1)) auxlist)"
-  assumes valid_add_new: "valid_msaux w aux auxlist \<Longrightarrow>
+    valid_msaux w' n L R (filter_msaux nt aux) (filter (\<lambda>(t, rel). enat (nt - t) \<le> right (ivl w)) auxlist)"
+  assumes valid_join: "valid_msaux w n L R aux auxlist \<Longrightarrow> table n L rel1 \<Longrightarrow> valid_msaux w n L R (join_msaux pos rel1 aux) (map (\<lambda>(t, rel). (t, join rel pos rel1)) auxlist)"
+  assumes valid_add_new: "valid_msaux w n L R aux auxlist \<Longrightarrow> nt \<ge> current w \<Longrightarrow> table n R x \<Longrightarrow>
     w' = w\<lparr>latest := if nt \<ge> left (ivl w) then nt - left (ivl w) else latest w, current := nt\<rparr> \<Longrightarrow>
-    valid_msaux w' (add_new_msaux (nt, x) aux)
+    valid_msaux w' n L R (add_new_msaux (nt, x) aux)
     (case auxlist of
       [] => [(nt, x)]
     | ((t, y) # ts) \<Rightarrow> if t = nt then (t, y \<union> x) # ts else (nt, x) # auxlist)"
-  and valid_result: "valid_msaux w aux auxlist \<Longrightarrow> result_msaux aux =
+  and valid_result: "valid_msaux w n L R aux auxlist \<Longrightarrow> result_msaux aux =
     foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, left (ivl w) \<le> current w - t] {}"
 
 function (in msaux) (sequential) minit0 :: "nat \<Rightarrow> 'a Formula.formula \<Rightarrow> ('msaux, 'a) mformula" where
@@ -728,9 +728,9 @@ function (in msaux) (sequential) minit0 :: "nat \<Rightarrow> 'a Formula.formula
 | "minit0 n (Formula.Prev I \<phi>) = MPrev I (minit0 n \<phi>) True [] []"
 | "minit0 n (Formula.Next I \<phi>) = MNext I (minit0 n \<phi>) True []"
 | "minit0 n (Formula.Since \<phi> I \<psi>) = (if safe_formula \<phi>
-    then MSince True (minit0 n \<phi>) I (minit0 n \<psi>) ([], []) [] (init_msaux I)
+    then MSince True (minit0 n \<phi>) I (minit0 n \<psi>) ([], []) [] (init_msaux I n (Formula.fv \<phi>) (Formula.fv \<psi>))
     else (case \<phi> of
-      Formula.Neg \<phi> \<Rightarrow> MSince False (minit0 n \<phi>) I (minit0 n \<psi>) ([], []) [] (init_msaux I)
+      Formula.Neg \<phi> \<Rightarrow> MSince False (minit0 n \<phi>) I (minit0 n \<psi>) ([], []) [] (init_msaux I n (Formula.fv \<phi>) (Formula.fv \<psi>))
     | _ \<Rightarrow> undefined))"
 | "minit0 n (Formula.Until \<phi> I \<psi>) = (if safe_formula \<phi>
     then MUntil True (minit0 n \<phi>) I (minit0 n \<psi>) ([], []) [] []
@@ -1581,7 +1581,7 @@ abbreviation "Sincep pos \<phi> I \<psi> \<equiv> Formula.Since (if pos then \<p
 
 definition (in msaux) wf_since_aux :: "'a Formula.trace \<Rightarrow> nat \<Rightarrow> 'a list set \<Rightarrow> bool \<Rightarrow>
     'a Formula.formula \<Rightarrow> \<I> \<Rightarrow> 'a Formula.formula \<Rightarrow> 'msaux \<Rightarrow> nat \<Rightarrow> bool" where
-  "wf_since_aux \<sigma> n R pos \<phi> I \<psi> aux ne \<longleftrightarrow> (\<exists>auxlist w. valid_msaux w aux auxlist \<and>
+  "wf_since_aux \<sigma> n R pos \<phi> I \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> (\<exists>auxlist w. valid_msaux w n (Formula.fv \<phi>) (Formula.fv \<psi>) aux auxlist \<and>
     ivl w = I \<and>
     current w = (if ne = 0 then 0 else \<tau> \<sigma> (ne-1)) \<and>
     earliest w = the_enat (enat (current w) - right I) \<and>
@@ -1607,7 +1607,7 @@ lemma qtable_mem_restr_UNIV: "qtable n A (mem_restr UNIV) Q X = wf_table n A Q X
   unfolding qtable_def by auto
 
 lemma (in msaux) wf_since_aux_UNIV_alt:
-  "wf_since_aux \<sigma> n UNIV pos \<phi> I \<psi> aux ne \<longleftrightarrow> (\<exists>auxlist w. valid_msaux w aux auxlist \<and>
+  "wf_since_aux \<sigma> n UNIV pos \<phi> I \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> (\<exists>auxlist w. valid_msaux w n (Formula.fv \<phi>) (Formula.fv \<psi>) aux auxlist \<and>
     ivl w = I \<and>
     current w = (if ne = 0 then 0 else \<tau> \<sigma> (ne-1)) \<and>
     earliest w = the_enat (enat (current w) - right I) \<and>
@@ -1776,7 +1776,7 @@ lemma wf_ts_0: "wf_ts \<sigma> 0 \<phi> \<psi> []"
 lemma wf_ts_regex_0: "wf_ts_regex \<sigma> 0 r []"
   unfolding wf_ts_regex_def by simp
 
-lemma (in msaux) wf_since_aux_Nil: "wf_since_aux \<sigma> n R pos \<phi>' I \<psi>' (init_msaux I) 0"
+lemma (in msaux) wf_since_aux_Nil: "Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' \<Longrightarrow> wf_since_aux \<sigma> n R pos \<phi>' I \<psi>' (init_msaux I n (Formula.fv \<phi>') (Formula.fv \<psi>')) 0"
   unfolding wf_since_aux_def by (auto simp: init_window_def intro!: exI[of _ "[]"] exI[of _ "init_window I"] valid_init)
 
 lemma wf_until_aux_Nil: "wf_until_aux \<sigma> n R pos \<phi>' I \<psi>' [] 0"
@@ -2455,7 +2455,7 @@ lemma (in msaux) update_since:
 proof -
   let ?wf_tuple = "\<lambda>v. wf_tuple n (Formula.fv \<psi>) v"
   note sat.simps[simp del]
-  from pre[unfolded wf_since_aux_def] obtain w auxlist where aux: "valid_msaux w aux auxlist"
+  from pre[unfolded wf_since_aux_def] obtain w auxlist where aux: "valid_msaux w n (Formula.fv \<phi>) (Formula.fv \<psi>) aux auxlist"
     "sorted_wrt (\<lambda>x y. fst y < fst x) auxlist"
     "\<And>t X. (t, X) \<in> set auxlist \<Longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne - 1) \<and> \<tau> \<sigma> (ne - 1) - t \<le> right I \<and>
       (\<exists>i. \<tau> \<sigma> i = t) \<and>
@@ -2469,12 +2469,15 @@ proof -
     "earliest w = the_enat (enat (current w) - right I)"
     "latest w = current w - left I"
     by blast
+  from pre[unfolded wf_since_aux_def] have fv_sub: "Formula.fv \<phi> \<subseteq> Formula.fv \<psi>" by simp
 
   define aux0 where "aux0 = join_msaux pos rel1 (filter_msaux (\<tau> \<sigma> ne) aux)"
   define w0 where "w0 = w\<lparr>earliest := if \<tau> \<sigma> ne \<ge> right (ivl w) then the_enat (\<tau> \<sigma> ne - right (ivl w)) else earliest w\<rparr>"
   define auxlist0 where "auxlist0 = [(t, join rel pos rel1). (t, rel) \<leftarrow> auxlist, \<tau> \<sigma> ne - t \<le> right I]"
-  from w have valid0: "valid_msaux w0 aux0 auxlist0" unfolding aux0_def auxlist0_def w0_def
-    using valid_join[OF valid_filter[OF aux(1)], OF _ refl, of "\<tau> \<sigma> ne" pos rel1]
+  have tabL: "table n (Formula.fv \<phi>) rel1"
+    using qtable1[unfolded qtable_def] by simp
+  from w have valid0: "valid_msaux w0 n (Formula.fv \<phi>) (Formula.fv \<psi>) aux0 auxlist0" unfolding aux0_def auxlist0_def w0_def
+    using valid_join[OF valid_filter[OF aux(1)], OF _ refl tabL, of "\<tau> \<sigma> ne" pos]
     by (auto simp: map_filter_alt split_beta cong: map_cong)
   from aux(2) have sorted_auxlist0: "sorted_wrt (\<lambda>x y. fst x > fst y) auxlist0"
     unfolding auxlist0_def
@@ -2512,9 +2515,11 @@ proof -
     auxlist'_eq: "auxlist' = (case auxlist0 of
       [] \<Rightarrow> [(\<tau> \<sigma> ne, rel2)]
     | x # auxlist' \<Rightarrow> (if fst x = \<tau> \<sigma> ne then (fst x, snd x \<union> rel2) # auxlist' else (\<tau> \<sigma> ne, rel2) # x # auxlist'))"
-  have valid': "valid_msaux w' aux' auxlist'"
-    unfolding aux'_eq auxlist'_eq w'_def using valid_add_new[OF valid0 refl, of "\<tau> \<sigma> ne" rel2]
-    by (auto simp: not_le split: list.splits option.splits if_splits)
+  have tabR: "table n (Formula.fv \<psi>) rel2"
+    using qtable2[unfolded qtable_def] by simp
+  have valid': "valid_msaux w' n (Formula.fv \<phi>) (Formula.fv \<psi>) aux' auxlist'"
+    unfolding aux'_eq auxlist'_eq w'_def using valid_add_new[OF valid0 _ tabR refl, of "\<tau> \<sigma> ne"]
+    using w(2) unfolding w0_def by (auto simp: not_le split: list.splits option.splits if_splits)
   have sorted_auxlist': "sorted_wrt (\<lambda>x y. fst x > fst y) auxlist'"
     unfolding auxlist'_eq
     using sorted_auxlist0 in_auxlist0_le_\<tau> by (cases auxlist0) fastforce+
@@ -2604,7 +2609,7 @@ proof -
        elim!: order.strict_trans1[THEN less_imp_le, rotated])+
   then show "wf_since_aux \<sigma> n R pos \<phi> I \<psi> aux' (Suc ne)"
     unfolding wf_since_aux_def
-    by (auto dest: in_auxlist'_1 intro: sorted_auxlist' in_auxlist'_2
+    by (auto simp add: fv_sub dest: in_auxlist'_1 intro: sorted_auxlist' in_auxlist'_2
       intro!: exI[of _ auxlist'] valid' exI[of _ w'])
 
   have "rel = result_msaux aux'"
