@@ -45,25 +45,25 @@ value "\<lparr>
      (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
        ([], []) [] [])
      ([], []),
-  mstate_n = 1\<rparr> :: char list mstate"
+  mstate_n = 1\<rparr> :: (char list msaux, char list) mstate"
 
 value "mstate_m (snd m1)"
 value "MAnd (MPred ''A'' [Formula.Var 0]) False
   (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
     ([], []) [] [(1, {[None]}, {})])
-  ([{[Some ''d''], [Some ''e'']}], []) :: char list mformula"
+  ([{[Some ''d''], [Some ''e'']}], []) :: (char list msaux, char list) mformula"
 
 value "mstate_m (snd m2)"
 value "MAnd (MPred ''A'' [Formula.Var 0]) False
   (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
    ([], []) [] [(1, {[None]}, {[Some ''d'']}), (2, {[None]}, {})])
-  ([{[Some ''d''], [Some ''e'']}, {}], []) :: char list mformula"
+  ([{[Some ''d''], [Some ''e'']}, {}], []) :: (char list msaux, char list) mformula"
 
 value "mstate_m (snd m3)"
 value "MAnd (MPred ''A'' [Formula.Var 0]) False
   (MUntil True (MRel {[None]}) (interval 1 2) (MExists (MPred ''B'' [Formula.Var 1, Formula.Var 0]))
     ([], []) [] [(5, {[None]}, {})])
-  ([{}], []) :: char list mformula"
+  ([{}], []) :: (char list msaux, char list) mformula"
 
 (*<*)
 end
