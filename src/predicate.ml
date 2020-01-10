@@ -257,8 +257,8 @@ let rec string_of_term term =
     let b', str = match term with
       | Var v -> true, v
       | Cst c -> true, string_of_cst true c
-      | F2i t ->  false, "f2i" ^ (t2s' t)
-      | I2f t ->  false, "i2f" ^ (t2s' t)
+      | F2i t ->  false, "f2i(" ^ (t2s true t) ^ ")"
+      | I2f t ->  false, "i2f(" ^ (t2s true t) ^ ")"
       | UMinus t ->  false, "-" ^ (t2s' t)
       | Plus (t1, t2) -> false, (t2s' t1) ^ " + " ^ (t2s' t2)
       | Minus (t1, t2) -> false, (t2s' t1) ^ " - " ^ (t2s' t2)
