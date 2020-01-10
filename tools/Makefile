@@ -1,20 +1,20 @@
-OCAMLOPT = ocamlopt
-OCAMLC = ocamlc
+OCAMLOPT = ocamlfind ocamlopt
+OCAMLC = ocamlfind ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
 export OCAMLRUNPARAM=b
 
-FLAGS = -I ../src
+FLAGS = -package qcheck -package zarith -linkpkg -I ../src
 
 ifeq "$(OCAML)" "$(OCAMLC)"
   O = cmo
   A = cma
-  LIBS = -custom unix.$(A) str.$(A)
+  LIBS = -custom unix.$(A) str.$(A) nums.$(A)
 else
   O = cmx
   A = cmxa
-  LIBS = unix.$(A) str.$(A) 
+  LIBS = str.$(A) nums.$(A)
   OCAMLDEPFLAGS = -native
 endif
 

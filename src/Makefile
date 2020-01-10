@@ -3,6 +3,7 @@ OCAMLC = ocamlfind ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
+FLAGSLIB = -noassert -unsafe-string # -w A
 FLAGS = -noassert -unsafe-string -package qcheck -package zarith -linkpkg # -w A
 JSFLAGS = -package str -package unix -package js_of_ocaml -package lwt -package js_of_ocaml.syntax -syntax camlp4o
 # FLAGS = -ccopt -static
@@ -55,10 +56,10 @@ monpoly: .depend $(OBJ) version.ml main.ml
 	$(OCAMLEXE) $(OBJ) version.ml main.ml -o $@
 
 monpoly.cma: .depend $(OBJC)
-	$(OCAMLC) $(FLAGS) -a $(OBJC) -o $@
+	$(OCAMLC) $(FLAGSLIB) -a $(OBJC) -o $@
 
 monpoly.cmxa: .depend $(OBJX)
-	$(OCAMLOPT) $(FLAGS) -a $(OBJX) -o $@
+	$(OCAMLOPT) $(FLAGSLIB) -a $(OBJX) -o $@
 
 monpoly.byte: .depend $(OBJC) version.ml main_js.ml
 	$(OCAMLC) $(FLAGS) $(JSFLAGS) -linkpkg $(OBJC) version.ml main_js.ml -o $@
