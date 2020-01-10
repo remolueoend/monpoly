@@ -1080,7 +1080,7 @@ let rec eval f neval crt discard =
         end
       else
         None
- 
+
 
 
 
@@ -2032,7 +2032,7 @@ let rec add_ext f =
 
   | _ -> failwith "[add_ext] internal error"
 
-(* 
+(*
   STATE MANAGEMENT CALLS
   - (Un-)Marshalling, Splitting, Merging
  *)
@@ -2056,8 +2056,8 @@ let dump_to_file dumpfile value =
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
   Reads state from specified dumpfile and converts neval array to dllist
-*)  
-let read_m_from_file file =   
+*)
+let read_m_from_file file =
   let ch = open_in_bin file in
   let value = (Marshal.from_channel ch : state) in
   close_in ch;
@@ -2071,7 +2071,7 @@ let marshal dumpfile ff closed neval =
   let a, mf = Marshalling.ext_to_m ff neval in
   let value : state = (!Log.last_ts,closed,mf,a,!Log.tp,!Log.last) in
   (*Printf.printf "Log TP to restore: %d \n" !Log.tp;*)
-  dump_to_file dumpfile value  
+  dump_to_file dumpfile value
 
 (*
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
@@ -2083,23 +2083,23 @@ let unmarshal resumefile =
   (last_ts,ff,closed,neval,tp,last)
 
 
-let create_empty_db = 
+let create_empty_db =
   Db.make_db []
 
-let add_empty_db ff neval = 
+let add_empty_db ff neval =
   crt_tp := !Log.tp -1;
   lastts := !Log.last_ts;
   NEval.add_last (!crt_tp, !lastts) neval;
-  add_index ff !crt_tp !lastts create_empty_db  
+  add_index ff !crt_tp !lastts create_empty_db
 
-let catch_up_on_filtered_tp ff neval = 
+let catch_up_on_filtered_tp ff neval =
   let rec eval_loop () =
     if not (NEval.is_empty neval) then
       let first = NEval.get_first_cell neval in
       match eval ff neval first false with
       | Some rel ->
         ignore(NEval.pop_first neval);
-        if (Relation.is_empty rel) then 
+        if (Relation.is_empty rel) then
           eval_loop ()
         else ()
       | None -> ()
@@ -2140,7 +2140,7 @@ let split_save filename ff closed neval  =
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
    with names of index prepended with dumpfile variable.
-*)  
+*)
 let split_and_save  sconsts dumpfile i ff closed neval  =
   catch_up_on_filtered_tp ff neval;
   let a, mf = Marshalling.ext_to_m ff neval in
@@ -2152,7 +2152,7 @@ let split_and_save  sconsts dumpfile i ff closed neval  =
   Printf.printf "%s\n%!" saved_state_msg
 
 (* Convert comma separated filenames to list of strings *)
-let files_to_list f = 
+let files_to_list f =
   String.split_on_char ',' f
 
 (*
@@ -2175,7 +2175,7 @@ let merge_formulas files =
     Printf.printf "2 length_ %d \n" (NEval.length neval2);
     *)
     let comb_nv = Splitting.combine_neval neval1 neval2 in
-  
+
     let comb_ff = Splitting.comb_m ff1 ff2 in
     (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
@@ -2189,7 +2189,7 @@ let checkExitParam p = match p with
     true
   | _ -> false
 
-(* Checks if the parameters for the split command are set *)  
+(* Checks if the parameters for the split command are set *)
 let checkSplitParam p = match p with
   | SplitParameters sp ->
     dumpfile := "partition-";
@@ -2207,7 +2207,7 @@ let checkSplitParam p = match p with
 *)
 
 let set_slicer_parameters c p =
-  match p with 
+  match p with
   | SplitSave sp ->
     let heavy, shares, seeds = sp in
     slicer_heavy_unproc := heavy;
@@ -2225,7 +2225,7 @@ let rec check_log lexbuf ff closed neval i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
 
-    (* Helper functions for handling different monpoly commands *)  
+    (* Helper functions for handling different monpoly commands *)
     let save_state c params = match params with
       | Some (Argument filename) ->
                     catch_up_on_filtered_tp ff neval;
@@ -2240,11 +2240,11 @@ let rec check_log lexbuf ff closed neval i =
                     marshal !dumpfile ff closed neval;
                     Printf.printf "%s\n%!" saved_state_msg
         end
-        else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i  
+        else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i
       | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
     let split_save   c params = match params with
-      | Some p -> if (checkExitParam p = true) then 
+      | Some p -> if (checkExitParam p = true) then
                     split_save !dumpfile ff closed neval
                   else
                     Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
@@ -2286,8 +2286,8 @@ let rec check_log lexbuf ff closed neval i =
                 save_state c parameters;
                 loop ffl i
             | "set_slicer" ->
-                set_slicer c parameters; 
-                loop ffl i    
+                set_slicer c parameters;
+                loop ffl i
             | "split_save" -> split_save c parameters;
                 loop ffl i
             | "save_and_exit" ->  save_and_exit c parameters;
@@ -2371,7 +2371,7 @@ let test_filter logfile f =
       | _ ->
         Printf.printf "%s, processed %d time points\n" "Unrecognized type" (i - 1)
   in
-  loop f 0 
+  loop f 0
 
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
@@ -2387,10 +2387,10 @@ let resume logfile =
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" restored_state_msg;
   check_log lexbuf ff closed neval 0
-  
+
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
-let combine logfile = 
+let combine logfile =
   let files = files_to_list !combine_files in
   let (last_ts,mf,closed,neval,tp,last) = merge_formulas files in
   let ff = Marshalling.m_to_ext mf neval in
@@ -2406,7 +2406,7 @@ let combine logfile =
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" combined_state_msg;
   check_log lexbuf ff closed neval 0
-  
+
 
 (* Testing slicer *)
 let test_tuple_split slicer size tuple dest =
@@ -2431,7 +2431,7 @@ let test_slicer ff evaluation  =
       let tuple = convert_slicing_tuple slicer elem.vars elem.tuple in
       let () = test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple elem.output in
       test_entries i
-    else 
+    else
       print_endline "All entries tested"
   in
     test_entries 0
@@ -2446,7 +2446,7 @@ let rec test_log lexbuf ff evaluation =
     | MonpolyCommand {c; parameters} ->
         let process_command = function
             | "set_slicer" ->
-                set_slicer c parameters; 
+                set_slicer c parameters;
                 loop ffl
             | "test_slicer" -> test_slicer ff evaluation;
                 loop ffl
@@ -2463,7 +2463,7 @@ let rec test_log lexbuf ff evaluation =
   loop ff
 
 
-let run_test testfile formula = 
+let run_test testfile formula =
   let lexbuf = Log.log_open testfile in
   Printf.printf "Testing slicing configurations\n";
   test_log lexbuf (add_ext formula) (NEval.empty())
