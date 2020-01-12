@@ -216,6 +216,8 @@ fun valid_mmsaux :: "Monitor.window \<Rightarrow> nat \<Rightarrow> nat set \<Ri
     L \<subseteq> R \<and> length maskL = n \<and> length maskR = n \<and>
     (\<forall>i < n. i \<in> L \<longleftrightarrow> maskL ! i) \<and> (\<forall>i < n. i \<in> R \<longleftrightarrow> maskR ! i) \<and>
     (\<forall>(t, X) \<in> set ys. table n R X) \<and>
+    table n R (Mapping.keys tuple_in) \<and> table n R (Mapping.keys tuple_since) \<and>
+    (\<forall>as \<in> \<Union>(snd ` (set (linearize data_prev))). wf_tuple n R as) \<and>
     nt = current w \<and> I = ivl w \<and>
     ts_tuple_rel (set ys) =
     {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
@@ -262,7 +264,7 @@ fun init_mmsaux :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> n
 
 lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_window I) n L R (init_mmsaux I n L R) []"
   by (auto simp add: init_window_def empty_queue_rep ts_tuple_rel_def init_mask_def
-      Mapping.lookup_empty safe_max_def)
+      Mapping.lookup_empty safe_max_def table_def)
 
 abbreviation "filter_cond X' ts t' \<equiv> (\<lambda>as _. \<not> (as \<in> X' \<and> Mapping.lookup ts as = Some t'))"
 
@@ -380,6 +382,9 @@ proof -
   have tuple_in_None_None: "\<And>as. Mapping.lookup tuple_in as = None \<Longrightarrow>
     Mapping.lookup tuple_in' as = None"
     using fold_Mapping_filter_None unfolding tuple_in'_def by fastforce
+  have tuple_in'_keys: "\<And>as. as \<in> Mapping.keys tuple_in' \<Longrightarrow> as \<in> Mapping.keys tuple_in"
+    using tuple_in_Some_None tuple_in_Some_Some tuple_in_None_None
+    by (fastforce intro: Mapping_keys_intro dest: Mapping_keys_dest)
   have F1: "sorted (map fst (linearize data_in))" "\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt"
     using valid_before nt_mono by auto
   have F2: "sorted (map fst (linearize data_prev))" "\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt"
@@ -468,6 +473,8 @@ proof -
       qed
     qed
   qed
+  have table_in: "table n R (Mapping.keys tuple_in')"
+    using tuple_in'_keys valid_before by (auto simp add: table_def)
   have "ts_tuple_rel (set auxlist) =
     {as \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
     valid_tuple tuple_since as}"
@@ -479,6 +486,7 @@ proof -
   then show ?thesis
     using data_prev'_def data_in'_def tuple_in'_def discard_def valid_before nt_mono new_window
       sorted_lin_data_prev' sorted_lin_data_in' lin_data_prev' lin_data_in' lookup_tuple_in'
+      table_in
     by (auto simp only: valid_mmsaux.simps filter_mmsaux.simps Let_def split: prod.splits) auto
       (* takes long *)
 qed
@@ -496,6 +504,13 @@ fun proj_tuple :: "bool list \<Rightarrow> 'a tuple \<Rightarrow> 'a tuple" wher
 | "proj_tuple (b # bs) [] = []"
 | "proj_tuple [] (a # as) = []"
 
+lemma proj_tuple_replicate: "(\<And>i. i \<in> set bs \<Longrightarrow> \<not>i) \<Longrightarrow> length bs = length as \<Longrightarrow>
+  proj_tuple bs as = replicate (length bs) None"
+  apply (induction bs as rule: proj_tuple.induct)
+      apply auto[2]
+    apply force
+  by auto
+
 lemma proj_tuple_alt: "proj_tuple bs as = map2 (\<lambda>b a. if b then a else None) bs as"
   by (induction bs as rule: proj_tuple.induct) auto
 
@@ -507,8 +522,28 @@ lemma proj_tuple_restrict:
   proj_tuple bs as = restrict X as"
   by (auto simp add: restrict_def proj_tuple_alt map_nth'[of _ "zip bs as"])
 
+lemma wf_tuple_proj_idle:
+  assumes wf: "wf_tuple n X as"
+  and mask: "(\<And>i. i < n \<Longrightarrow> i \<in> X \<longleftrightarrow> bs ! i)" "length bs = n"
+  shows "proj_tuple bs as = as"
+  using proj_tuple_restrict[OF mask, of as] restrict_idle[OF wf] wf
+  by (auto simp add: wf_tuple_def)
+
+lemma wf_tuple_change_base:
+  assumes wf: "wf_tuple n X as"
+  and mask: "(\<And>i. i < n \<Longrightarrow> i \<in> X \<longleftrightarrow> bs ! i)" "length bs = n"
+  and mask': "(\<And>i. i < n \<Longrightarrow> i \<in> Y \<longleftrightarrow> bs ! i)" "length bs = n"
+  shows "wf_tuple n Y as"
+  using wf mask mask' by (auto simp add: wf_tuple_def)
+
 definition proj_tuple_in_join :: "bool \<Rightarrow> bool list \<Rightarrow> 'a tuple \<Rightarrow> 'a table \<Rightarrow> bool" where
   "proj_tuple_in_join pos bs as t = (if pos then proj_tuple bs as \<in> t else proj_tuple bs as \<notin> t)"
+
+lemma proj_tuple_in_join_idle:
+  assumes wf: "wf_tuple n X as"
+  and mask: "(\<And>i. i < n \<Longrightarrow> i \<in> X \<longleftrightarrow> bs ! i)" "length bs = n"
+  shows "proj_tuple_in_join pos bs as t \<longleftrightarrow> (if pos then as \<in> t else as \<notin> t)"
+  using wf_tuple_proj_idle[OF assms] by (auto simp add: proj_tuple_in_join_def)
 
 lemma join_sub:
   assumes "L \<subseteq> R" "table n L t1" "table n R t2"
@@ -521,9 +556,93 @@ lemma join_sub:
 
 fun join_mmsaux :: "bool \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
   "join_mmsaux pos X (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+    (if maskL = maskR then
+      (let tuple_in = Mapping.filter (\<lambda>as _. if pos then as \<in> X else as \<notin> X) tuple_in;
+      tuple_since = Mapping.filter (\<lambda>as _. if pos then as \<in> X else as \<notin> X) tuple_since in
+      (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
+    else if (\<forall>i \<in> set maskL. \<not>i) then
+      (let nones = replicate (length maskL) None;
+      take_all = (pos \<longleftrightarrow> nones \<in> X);
+      tuple_in = (if take_all then tuple_in else Mapping.empty);
+      tuple_since = (if take_all then tuple_since else Mapping.empty) in
+      (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
+    else
+      (let tuple_in = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in;
+      tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since in
+      (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)))"
+
+fun join_mmsaux_abs :: "bool \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
+  "join_mmsaux_abs pos X (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
     (let tuple_in = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in;
     tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since in
     (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))"
+
+lemma Mapping_filter_cong:
+  assumes cong: "(\<And>k v. k \<in> Mapping.keys m \<Longrightarrow> f k v = f' k v)"
+  shows "Mapping.filter f m = Mapping.filter f' m"
+proof -
+  have "\<And>k. Mapping.lookup (Mapping.filter f m) k = Mapping.lookup (Mapping.filter f' m) k"
+    using cong
+    by (fastforce simp add: Mapping.lookup_filter intro: Mapping_keys_intro split: option.splits)
+  then show ?thesis
+    by (simp add: mapping_eqI)
+qed
+
+lemma join_mmsaux_abs_eq:
+  assumes valid_before: "valid_mmsaux w n L R
+    (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+  and table_left: "table n L X"
+  shows "join_mmsaux pos X (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+    join_mmsaux_abs pos X (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)"
+proof (cases "maskL = maskR")
+  case True
+  have "\<And>as. as \<in> Mapping.keys tuple_in \<Longrightarrow> wf_tuple n L as"
+    using wf_tuple_change_base[of n R _ maskL L] valid_before True
+    by (fastforce simp add: table_def)
+  then have cong_in: "\<And>as n. as \<in> Mapping.keys tuple_in \<Longrightarrow>
+    (if pos then as \<in> X else as \<notin> X) \<longleftrightarrow> proj_tuple_in_join pos maskL as X"
+    using proj_tuple_in_join_idle[of n L _ maskL pos X, symmetric] valid_before
+    by (auto simp only: valid_mmsaux.simps)
+  have "\<And>as. as \<in> Mapping.keys tuple_since \<Longrightarrow> wf_tuple n L as"
+    using wf_tuple_change_base[of n R _ maskL L] valid_before True
+    by (fastforce simp add: table_def)
+  then have cong_since: "\<And>as n. as \<in> Mapping.keys tuple_since \<Longrightarrow>
+    (if pos then as \<in> X else as \<notin> X) \<longleftrightarrow> proj_tuple_in_join pos maskL as X"
+    using proj_tuple_in_join_idle[of n L _ maskL pos X, symmetric] valid_before
+      by (auto simp only: valid_mmsaux.simps)
+  show ?thesis
+    using True Mapping_filter_cong[OF cong_in, of tuple_in "\<lambda>k _. k"]
+      Mapping_filter_cong[OF cong_since, of tuple_since "\<lambda>k _. k"]
+    by auto
+next
+  case False
+  then show ?thesis
+  proof (cases "\<forall>i \<in> set maskL. \<not>i")
+    case True
+    have length_maskL: "length maskL = n"
+      using valid_before by auto
+    have proj_rep: "\<And>as. wf_tuple n R as \<Longrightarrow> proj_tuple maskL as = replicate (length maskL) None"
+      using True proj_tuple_replicate[of maskL] by (force simp add: length_maskL wf_tuple_def)
+    have keys_wf_in: "\<And>as. as \<in> Mapping.keys tuple_in \<Longrightarrow> wf_tuple n R as"
+      using valid_before by (auto simp add: table_def)
+    have keys_wf_since: "\<And>as. as \<in> Mapping.keys tuple_since \<Longrightarrow> wf_tuple n R as"
+      using valid_before by (auto simp add: table_def)
+    have "\<And>as. Mapping.lookup (Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X)
+      tuple_in) as = Mapping.lookup (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X)
+      then tuple_in else Mapping.empty) as"
+      using proj_rep[OF keys_wf_in]
+      by (auto simp add: Mapping.lookup_filter Mapping.lookup_empty proj_tuple_in_join_def
+          Mapping_keys_intro split: option.splits)
+    moreover have "\<And>as. Mapping.lookup (Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X)
+      tuple_since) as = Mapping.lookup (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X)
+      then tuple_since else Mapping.empty) as"
+      using proj_rep[OF keys_wf_since]
+      by (auto simp add: Mapping.lookup_filter Mapping.lookup_empty proj_tuple_in_join_def
+          Mapping_keys_intro split: option.splits)
+    ultimately show ?thesis
+      using False True by (auto simp add: mapping_eqI Let_def)
+  qed auto
+qed
 
 lemma valid_join_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
@@ -540,6 +659,15 @@ proof -
   have tuple_in_None_None: "\<And>as. Mapping.lookup tuple_in as = None \<Longrightarrow>
     Mapping.lookup tuple_in' as = None"
     unfolding tuple_in'_def using Mapping_lookup_filter_not_None by fastforce
+  have tuple_in'_keys: "\<And>as. as \<in> Mapping.keys tuple_in' \<Longrightarrow> as \<in> Mapping.keys tuple_in"
+    using tuple_in_None_None
+    by (fastforce intro: Mapping_keys_intro dest: Mapping_keys_dest)
+  have tuple_since_None_None: "\<And>as. Mapping.lookup tuple_since as = None \<Longrightarrow>
+    Mapping.lookup tuple_since' as = None"
+    unfolding tuple_since'_def using Mapping_lookup_filter_not_None by fastforce
+  have tuple_since'_keys: "\<And>as. as \<in> Mapping.keys tuple_since' \<Longrightarrow> as \<in> Mapping.keys tuple_since"
+    using tuple_since_None_None
+    by (fastforce intro: Mapping_keys_intro dest: Mapping_keys_dest)
   have ts_tuple_rel': "ts_tuple_rel (set (map (\<lambda>(t, rel). (t, join rel pos X)) auxlist)) =
     {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
     valid_tuple tuple_since' tas}"
@@ -654,9 +782,15 @@ proof -
     show "table (length maskL) R (join ys pos X)"
       using join_table[OF table_ys table_left, of pos R] valid_before by auto
   qed
+  have table_in': "table n R (Mapping.keys tuple_in')"
+    using tuple_in'_keys valid_before by (auto simp add: table_def)
+  have table_since': "table n R (Mapping.keys tuple_since')"
+    using tuple_since'_keys valid_before by (auto simp add: table_def)
   show ?thesis
+    unfolding join_mmsaux_abs_eq[OF valid_before table_left]
     using valid_before ts_tuple_rel' lookup_tuple_in' tuple_in'_def tuple_since'_def table_join'
-      Mapping_filter_keys[of tuple_since "\<lambda>as. case as of Some t \<Rightarrow> t \<le> nt"] by auto
+      Mapping_filter_keys[of tuple_since "\<lambda>as. case as of Some t \<Rightarrow> t \<le> nt"]
+      table_in' table_since' by auto
 qed
 
 lemma valid_join_mmsaux: "valid_mmsaux w n L R aux auxlist \<Longrightarrow> table n L X \<Longrightarrow>
@@ -672,9 +806,8 @@ lemma Mapping_lookup_upd_set: "Mapping.lookup (upd_set m f X) a =
   (if a \<in> X then Some (f a) else Mapping.lookup m a)"
   by (simp add: Mapping.lookup.rep_eq upd_set.rep_eq)
 
-lemma Mapping_upd_set_keys: "Mapping.keys m \<subseteq> Mapping.keys (upd_set m f X)"
-  by (metis (mono_tags, lifting) Mapping_lookup_upd_set domIff keys_dom_lookup
-      option.simps(3) subsetI)
+lemma Mapping_upd_set_keys: "Mapping.keys (upd_set m f X) = Mapping.keys m \<union> X"
+  by (auto simp add: Mapping_lookup_upd_set dest!: Mapping_keys_dest intro: Mapping_keys_intro)
 
 lemma fold_append_queue_rep: "linearize (fold (\<lambda>x q. append_queue x q) xs q) = linearize q @ xs"
   by (induction xs arbitrary: q) (auto simp add: append_queue_rep)
@@ -746,6 +879,10 @@ fun add_new_ts_mmsaux :: "ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" wh
       {as \<in> X. valid_tuple tuple_since (t, as)}) move tuple_in in
     (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))"
 
+lemma Mapping_keys_fold_upd_set: "k \<in> Mapping.keys (fold (\<lambda>(t, X) m. upd_set m (\<lambda>_. t) (Z t X))
+  xs m) \<Longrightarrow> k \<in> Mapping.keys m \<or> (\<exists>(t, X) \<in> set xs. k \<in> Z t X)"
+  by (induction xs arbitrary: m) (fastforce simp add: Mapping_upd_set_keys)+
+
 lemma valid_add_new_ts_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
     (ot, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
@@ -761,6 +898,10 @@ proof -
     move data_in"
   define tuple_in' where "tuple_in' \<equiv> fold (\<lambda>(t, X) tuple_in. upd_set tuple_in (\<lambda>_. t)
       {as \<in> X. valid_tuple tuple_since (t, as)}) move tuple_in"
+  have tuple_in'_keys: "\<And>as. as \<in> Mapping.keys tuple_in' \<Longrightarrow> as \<in> Mapping.keys tuple_in \<or>
+    (\<exists>(t, X)\<in>set move. as \<in> {as \<in> X. valid_tuple tuple_since (t, as)})"
+    using Mapping_keys_fold_upd_set[of _ "\<lambda>t X. {as \<in> X. valid_tuple tuple_since (t, as)}"]
+    by (auto simp add: tuple_in'_def)
   have F1: "sorted (map fst (linearize data_in))" "\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt"
     "\<forall>t \<in> fst ` set (linearize data_in). t \<le> ot \<and> ot - t \<ge> left I"
     using valid_before nt_mono by auto
@@ -849,6 +990,30 @@ proof -
         by (auto simp add: safe_max_def lin_data_in' ts_tuple_rel_def)
     qed
   qed
+  have table_in': "table n R (Mapping.keys tuple_in')"
+  proof -
+    {
+      fix as
+      assume assm: "as \<in> Mapping.keys tuple_in'"
+      have "wf_tuple n R as"
+        using tuple_in'_keys[OF assm]
+      proof (rule disjE)
+        assume "as \<in> Mapping.keys tuple_in"
+        then show "wf_tuple n R as"
+          using valid_before by (auto simp add: table_def)
+      next
+        assume "\<exists>(t, X)\<in>set move. as \<in> {as \<in> X. valid_tuple tuple_since (t, as)}"
+        then obtain t X where tX_def: "(t, X) \<in> set move" "as \<in> X"
+          by auto
+        then have "as \<in> \<Union>(snd ` set (linearize data_prev))"
+          unfolding move_def using set_takeWhileD by force
+        then show "wf_tuple n R as"
+          using valid_before by auto
+      qed
+    }
+    then show ?thesis
+      by (auto simp add: table_def)
+  qed
   have data_prev'_move: "(data_prev', move) =
     takedropWhile_queue (\<lambda>(t, X). nt - t \<ge> left I) data_prev"
     using takedropWhile_queue_fst takedropWhile_queue_snd data_prev'_def move_def
@@ -856,7 +1021,7 @@ proof -
   moreover have "valid_mmsaux w' n L R (nt, gc, I, maskL, maskR, data_prev', data_in',
     tuple_in', tuple_since) auxlist"
     using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono valid_before ts_tuple_rel' lookup' new_window
+      nt_mono valid_before ts_tuple_rel' lookup' new_window table_in'
     by (auto simp only: valid_mmsaux.simps split: option.splits) auto
       (* takes long *)
   ultimately show ?thesis
@@ -894,10 +1059,16 @@ proof -
   define auxlist' where "auxlist' \<equiv> (case auxlist of
     [] => [(nt, X)]
     | ((t, y) # ts) \<Rightarrow> if t = nt then (t, y \<union> X) # ts else (nt, X) # auxlist)"
+  have table_in': "table n R (Mapping.keys tuple_in')"
+    using table_X valid_before by (auto simp add: table_def tuple_in'_def Mapping_upd_set_keys)
+  have table_since': "table n R (Mapping.keys tuple_since')"
+    using table_X valid_before by (auto simp add: table_def tuple_since'_def Mapping_upd_set_keys)
   have tuple_since'_keys: "Mapping.keys tuple_since \<subseteq> Mapping.keys tuple_since'"
     using Mapping_upd_set_keys by (fastforce simp add: tuple_since'_def)
   have lin_data_prev': "linearize data_prev' = linearize data_prev @ [(nt, X)]"
     unfolding data_prev'_def append_queue_rep ..
+  have wf_data_prev': "\<And>as. as \<in> \<Union>(snd ` (set (linearize data_prev'))) \<Longrightarrow> wf_tuple n R as"
+    unfolding lin_data_prev' using table_X valid_before by (auto simp add: table_def)
   have lin_data_in': "linearize data_in' = linearize data_in @ [(nt, X)]"
     unfolding data_in'_def append_queue_rep ..
   have table_auxlist': "\<forall>(t, X) \<in> set auxlist'. table n R X"
@@ -1052,7 +1223,8 @@ proof -
     qed
     ultimately show ?thesis
       using assms table_auxlist' sorted_append[of "map fst (linearize data_in)"]
-        lookup_tuple_since' ts_tuple_rel_auxlist' unfolding add_def auxlist'_def[symmetric]
+        lookup_tuple_since' ts_tuple_rel_auxlist' table_in' table_since'
+      unfolding add_def auxlist'_def[symmetric]
       by (auto simp only: valid_mmsaux.simps lin_data_in') auto
   next
     case False
@@ -1091,8 +1263,11 @@ proof -
          intro: Mapping_keys_intro split: option.splits)
     ultimately show ?thesis
       using assms table_auxlist' sorted_append[of "map fst (linearize data_prev)"]
-        False lookup_tuple_since' ts_tuple_rel_auxlist' unfolding add_def auxlist'_def[symmetric]
-      by (auto simp only: valid_mmsaux.simps lin_data_prev') auto
+        False lookup_tuple_since' ts_tuple_rel_auxlist' table_in' table_since' wf_data_prev'
+        valid_before
+      unfolding add_def auxlist'_def[symmetric]
+      by (auto simp only: valid_mmsaux.simps lin_data_prev') fastforce+
+        (* takes long *)
   qed
 qed
 
@@ -1128,6 +1303,14 @@ proof -
   define all_tuples where "all_tuples \<equiv> \<Union>(snd ` (set (linearize data_prev) \<union>
     set (linearize data_in)))"
   define tuple_since' where "tuple_since' \<equiv> Mapping.filter (\<lambda>as _. as \<in> all_tuples) tuple_since"
+  have tuple_since_None_None: "\<And>as. Mapping.lookup tuple_since as = None \<Longrightarrow>
+    Mapping.lookup tuple_since' as = None"
+    unfolding tuple_since'_def using Mapping_lookup_filter_not_None by fastforce
+  have tuple_since'_keys: "\<And>as. as \<in> Mapping.keys tuple_since' \<Longrightarrow> as \<in> Mapping.keys tuple_since"
+    using tuple_since_None_None
+    by (fastforce intro: Mapping_keys_intro dest: Mapping_keys_dest)
+  then have table_since': "table n R (Mapping.keys tuple_since')"
+    using valid_before by (auto simp add: table_def)
   have data_cong: "\<And>tas. tas \<in> ts_tuple_rel (set (linearize data_prev) \<union>
     set (linearize data_in)) \<Longrightarrow> valid_tuple tuple_since' tas = valid_tuple tuple_since tas"
   proof -
@@ -1159,7 +1342,7 @@ proof -
     by (auto simp add: tuple_since'_def Mapping.lookup_filter split: option.splits
         intro!: Mapping_keys_intro dest: Mapping_keys_dest)
   ultimately show ?thesis
-    using all_tuples_def tuple_since'_def valid_before by auto
+    using all_tuples_def tuple_since'_def valid_before table_since' by auto
 qed
 
 lemma valid_gc_mmsaux: "valid_mmsaux w n L R aux ys \<Longrightarrow> valid_mmsaux w n L R (gc_mmsaux aux) ys"

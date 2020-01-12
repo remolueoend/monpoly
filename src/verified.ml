@@ -2412,6 +2412,13 @@ let rec cproper_interval_set (_A1, _A2, _A3, _A4) =
      cproper_interval = cproper_interval_seta (_A1, _A2, _A3, _A4)}
     : 'a set cproper_interval);;
 
+let rec equal_boola p pa = match p, pa with p, true -> p
+                      | p, false -> not p
+                      | true, p -> p
+                      | false, p -> not p;;
+
+let equal_bool = ({equal = equal_boola} : bool equal);;
+
 let rec equal_lista _A
   x0 x1 = match x0, x1 with [], x21 :: x22 -> false
     | x21 :: x22, [] -> false
@@ -2505,22 +2512,18 @@ let rec ccompare_trma _A
 
 let rec ccompare_trm _A = ({ccompare = ccompare_trma _A} : 'a trm ccompare);;
 
-let rec equal_bool p pa = match p, pa with p, true -> p
-                     | p, false -> not p
-                     | true, p -> p
-                     | false, p -> not p;;
-
 type char = Chara of bool * bool * bool * bool * bool * bool * bool * bool;;
 
 let rec equal_chara
   (Chara (x1, x2, x3, x4, x5, x6, x7, x8))
     (Chara (y1, y2, y3, y4, y5, y6, y7, y8)) =
-    equal_bool x1 y1 &&
-      (equal_bool x2 y2 &&
-        (equal_bool x3 y3 &&
-          (equal_bool x4 y4 &&
-            (equal_bool x5 y5 &&
-              (equal_bool x6 y6 && (equal_bool x7 y7 && equal_bool x8 y8))))));;
+    equal_boola x1 y1 &&
+      (equal_boola x2 y2 &&
+        (equal_boola x3 y3 &&
+          (equal_boola x4 y4 &&
+            (equal_boola x5 y5 &&
+              (equal_boola x6 y6 &&
+                (equal_boola x7 y7 && equal_boola x8 y8))))));;
 
 let equal_char = ({equal = equal_chara} : char equal);;
 
@@ -4731,6 +4734,9 @@ let rec filter_mmsaux (_A1, _A2, _A3)
                          (data_preva,
                            (data_ina, (tuple_ina, tuple_since)))))))));;
 
+let mapping_impl_list : (('a list), mapping_impl) phantom
+  = Phantom Mapping_Choose;;
+
 let rec proj_tuple x0 x1 = match x0, x1 with [], [] -> []
                      | true :: bs, a :: asa -> a :: proj_tuple bs asa
                      | false :: bs, a :: asa -> None :: proj_tuple bs asa
@@ -4749,23 +4755,93 @@ let rec proj_tuple_in_join (_A1, _A2)
                    (ccompare_list (ccompare_option _A2)))
                  (proj_tuple bs asa) t));;
 
+let rec mapping_empty_choose _A
+  = (match ccompare _A with None -> Assoc_List_Mapping empty
+      | Some _ -> RBT_Mapping (emptyb _A));;
+
+let rec mapping_empty _A = function Mapping_RBT -> RBT_Mapping (emptyb _A)
+                           | Mapping_Assoc_List -> Assoc_List_Mapping empty
+                           | Mapping_Mapping -> Mapping (fun _ -> None)
+                           | Mapping_Choose -> mapping_empty_choose _A;;
+
 let rec join_mmsaux (_A1, _A2)
   pos x (t, (gc, (i, (maskL,
                        (maskR,
                          (data_prev, (data_in, (tuple_in, tuple_since))))))))
-    = (let tuple_ina =
-         filterb (ccompare_list (ccompare_option _A2))
-           (fun asa _ -> proj_tuple_in_join (_A1, _A2) pos maskL asa x) tuple_in
-         in
-       let tuple_sincea =
-         filterb (ccompare_list (ccompare_option _A2))
-           (fun asa _ -> proj_tuple_in_join (_A1, _A2) pos maskL asa x)
-           tuple_since
-         in
-        (t, (gc, (i, (maskL,
-                       (maskR,
-                         (data_prev,
-                           (data_in, (tuple_ina, tuple_sincea)))))))));;
+    = (if equal_lista equal_bool maskL maskR
+        then (let tuple_ina =
+                filterb (ccompare_list (ccompare_option _A2))
+                  (fun asa _ ->
+                    (if pos
+                      then member
+                             ((ceq_list (ceq_option _A1)),
+                               (ccompare_list (ccompare_option _A2)))
+                             asa x
+                      else not (member
+                                 ((ceq_list (ceq_option _A1)),
+                                   (ccompare_list (ccompare_option _A2)))
+                                 asa x)))
+                  tuple_in
+                in
+              let tuple_sincea =
+                filterb (ccompare_list (ccompare_option _A2))
+                  (fun asa _ ->
+                    (if pos
+                      then member
+                             ((ceq_list (ceq_option _A1)),
+                               (ccompare_list (ccompare_option _A2)))
+                             asa x
+                      else not (member
+                                 ((ceq_list (ceq_option _A1)),
+                                   (ccompare_list (ccompare_option _A2)))
+                                 asa x)))
+                  tuple_since
+                in
+               (t, (gc, (i, (maskL,
+                              (maskR,
+                                (data_prev,
+                                  (data_in, (tuple_ina, tuple_sincea)))))))))
+        else (if list_all not maskL
+               then (let nones = replicate (size_list maskL) None in
+                     let take_all =
+                       equal_boola pos
+                         (member
+                           ((ceq_list (ceq_option _A1)),
+                             (ccompare_list (ccompare_option _A2)))
+                           nones x)
+                       in
+                     let tuple_ina =
+                       (if take_all then tuple_in
+                         else mapping_empty
+                                (ccompare_list (ccompare_option _A2))
+                                (of_phantom mapping_impl_list))
+                       in
+                     let tuple_sincea =
+                       (if take_all then tuple_since
+                         else mapping_empty
+                                (ccompare_list (ccompare_option _A2))
+                                (of_phantom mapping_impl_list))
+                       in
+                      (t, (gc, (i, (maskL,
+                                     (maskR,
+                                       (data_prev,
+ (data_in, (tuple_ina, tuple_sincea)))))))))
+               else (let tuple_ina =
+                       filterb (ccompare_list (ccompare_option _A2))
+                         (fun asa _ ->
+                           proj_tuple_in_join (_A1, _A2) pos maskL asa x)
+                         tuple_in
+                       in
+                     let tuple_sincea =
+                       filterb (ccompare_list (ccompare_option _A2))
+                         (fun asa _ ->
+                           proj_tuple_in_join (_A1, _A2) pos maskL asa x)
+                         tuple_since
+                       in
+                      (t, (gc, (i, (maskL,
+                                     (maskR,
+                                       (data_prev,
+ (data_in, (tuple_ina, tuple_sincea)))))))))));;
 
 let rec update_since
   i pos rel1 rel2 nt aux =
@@ -5683,18 +5759,6 @@ let rec meval
               db)],
           MPred (e, ts))
     | n, t, db, MRel rel -> ([rel], MRel rel);;
-
-let mapping_impl_list : (('a list), mapping_impl) phantom
-  = Phantom Mapping_Choose;;
-
-let rec mapping_empty_choose _A
-  = (match ccompare _A with None -> Assoc_List_Mapping empty
-      | Some _ -> RBT_Mapping (emptyb _A));;
-
-let rec mapping_empty _A = function Mapping_RBT -> RBT_Mapping (emptyb _A)
-                           | Mapping_Assoc_List -> Assoc_List_Mapping empty
-                           | Mapping_Mapping -> Mapping (fun _ -> None)
-                           | Mapping_Choose -> mapping_empty_choose _A;;
 
 let empty_queue : 'a list * 'a list = ([], []);;
 

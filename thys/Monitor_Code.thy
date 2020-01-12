@@ -389,6 +389,8 @@ lemma filter_Mapping [code]:
                      | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
   by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
 
+(* TODO: prove code equation for Mapping.filter (\<lambda>as _. if pos then as \<in> X else as \<notin> X) *)
+
 definition mmonitorable_exec_e :: "event_data Formula.formula \<Rightarrow> bool" where
   [code_unfold]: "mmonitorable_exec_e = Monitor.mmonitorable_exec"
 
