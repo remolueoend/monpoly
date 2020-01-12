@@ -114,9 +114,12 @@ lemma takedropWhile_queue_snd: "snd (takedropWhile_queue f q) = takeWhile f (lin
      (auto simp add: case_prod_unfold tl_queue_rep takeWhile_hd_tl
       split: option.splits dest: safe_hd_rep)
 
-type_synonym 'a mmsaux = "ts \<times> \<I> \<times> bool list \<times> bool list \<times>
+type_synonym 'a mmsaux = "ts \<times> ts \<times> \<I> \<times> bool list \<times> bool list \<times>
   (ts \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times>
   (('a tuple, ts) mapping) \<times> (('a tuple, ts) mapping)"
+
+fun time_mmsaux :: "'a mmsaux \<Rightarrow> ts" where
+  "time_mmsaux aux = (case aux of (nt, _) \<Rightarrow> nt)"
 
 definition ts_tuple_rel :: "(ts \<times> 'a table) set \<Rightarrow> (ts \<times> 'a tuple) set" where
   "ts_tuple_rel ys = {(t, as). \<exists>X. as \<in> X \<and> (t, X) \<in> ys}"
@@ -209,7 +212,7 @@ lemma safe_max_Some_dest_le: "finite X \<Longrightarrow> safe_max X = Some x \<L
 
 fun valid_mmsaux :: "Monitor.window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'a mmsaux \<Rightarrow> 'a Monitor.msaux \<Rightarrow>
   bool" where
-  "valid_mmsaux w n L R (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) ys \<longleftrightarrow>
+  "valid_mmsaux w n L R (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) ys \<longleftrightarrow>
     L \<subseteq> R \<and> length maskL = n \<and> length maskR = n \<and>
     (\<forall>i < n. i \<in> L \<longleftrightarrow> maskL ! i) \<and> (\<forall>i < n. i \<in> R \<longleftrightarrow> maskR ! i) \<and>
     (\<forall>(t, X) \<in> set ys. table n R X) \<and>
@@ -244,7 +247,7 @@ lemma Mapping_keys_intro: "Mapping.lookup f x \<noteq> None \<Longrightarrow> x 
   by (simp add: domIff keys_dom_lookup)
 
 lemma valid_mmsaux_tuple_in_keys: "valid_mmsaux w n L R
-  (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) ys \<Longrightarrow>
+  (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) ys \<Longrightarrow>
   Mapping.keys tuple_in = snd ` {tas \<in> ts_tuple_rel (set (linearize data_in)).
   valid_tuple tuple_since tas}"
   by (auto intro!: Mapping_keys_intro safe_max_Some_intro
@@ -254,7 +257,7 @@ definition init_mask :: "nat \<Rightarrow> nat set \<Rightarrow> bool list" wher
   "init_mask n X = map (\<lambda>i. i \<in> X) [0..<n]"
 
 fun init_mmsaux :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'a mmsaux" where
-  "init_mmsaux I n L R = (0, I, init_mask n L, init_mask n R,
+  "init_mmsaux I n L R = (0, 0, I, init_mask n L, init_mask n R,
   empty_queue, empty_queue, Mapping.empty, Mapping.empty)"
 
 lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_window I) n L R (init_mmsaux I n L R) []"
@@ -343,21 +346,21 @@ proof (induction ds arbitrary: ts)
 qed simp
 
 fun filter_mmsaux :: "ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "filter_mmsaux nt (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+  "filter_mmsaux nt (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
     (let data_prev' = dropWhile_queue (\<lambda>(t, X). enat (nt - t) > right I) data_prev;
     (data_in, discard) = takedropWhile_queue (\<lambda>(t, X). enat (nt - t) > right I) data_in;
     tuple_in = fold (\<lambda>(t, X) tuple_in. Mapping.filter
       (filter_cond X tuple_in t) tuple_in) discard tuple_in in
-    (t, I, maskL, maskR, data_prev', data_in, tuple_in, tuple_since))"
+    (t, gc, I, maskL, maskR, data_prev', data_in, tuple_in, tuple_since))"
 
 lemma valid_filter_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
-    (ot, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+    (ot, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
   and nt_mono: "nt \<ge> current w"
   and new_window: "w' = w\<lparr>earliest := if nt \<ge> right (ivl w)
     then the_enat (nt - right (ivl w)) else earliest w\<rparr>"
   shows "valid_mmsaux w' n L R (filter_mmsaux nt
-    (ot, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
+    (ot, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
     (filter (\<lambda>(t, rel). enat (nt - t) \<le> right (ivl w)) auxlist)"
 proof -
   define data_in' where "data_in' \<equiv>
@@ -517,17 +520,17 @@ lemma join_sub:
   by (auto simp add: table_def proj_tuple_in_join_def sup.absorb1) fastforce+
 
 fun join_mmsaux :: "bool \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "join_mmsaux pos X (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+  "join_mmsaux pos X (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
     (let tuple_in = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in;
     tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since in
-    (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))"
+    (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))"
 
 lemma valid_join_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
-    (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+    (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
   and table_left: "table n L X"
   shows "valid_mmsaux w n L R
-    (join_mmsaux pos X (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
+    (join_mmsaux pos X (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
     (map (\<lambda>(t, rel). (t, join rel pos X)) auxlist)"
 proof -
   define tuple_in' where "tuple_in' \<equiv>
@@ -736,21 +739,21 @@ proof (induction xs arbitrary: m)
 qed simp
 
 fun add_new_ts_mmsaux :: "ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_ts_mmsaux nt (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+  "add_new_ts_mmsaux nt (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
     (let (data_prev, move) = takedropWhile_queue (\<lambda>(t, X). nt - t \<ge> left I) data_prev;
     data_in = fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in) move data_in;
     tuple_in = fold (\<lambda>(t, X) tuple_in. upd_set tuple_in (\<lambda>_. t)
       {as \<in> X. valid_tuple tuple_since (t, as)}) move tuple_in in
-    (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))"
+    (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))"
 
 lemma valid_add_new_ts_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
-    (ot, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+    (ot, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
   and nt_mono: "nt \<ge> current w"
   and new_window: "w' = w\<lparr>latest := if nt \<ge> left (ivl w)
     then nt - left (ivl w) else latest w, current := nt\<rparr>"
   shows "valid_mmsaux w' n L R (add_new_ts_mmsaux nt
-    (ot, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)) auxlist"
+    (ot, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)) auxlist"
 proof -
   define data_prev' where "data_prev' \<equiv> dropWhile_queue (\<lambda>(t, X). nt - t \<ge> left I) data_prev"
   define move where "move \<equiv> takeWhile (\<lambda>(t, X). nt - t \<ge> left I) (linearize data_prev)"
@@ -850,7 +853,7 @@ proof -
     takedropWhile_queue (\<lambda>(t, X). nt - t \<ge> left I) data_prev"
     using takedropWhile_queue_fst takedropWhile_queue_snd data_prev'_def move_def
     by (metis surjective_pairing)
-  moreover have "valid_mmsaux w' n L R (nt, I, maskL, maskR, data_prev', data_in',
+  moreover have "valid_mmsaux w' n L R (nt, gc, I, maskL, maskR, data_prev', data_in',
     tuple_in', tuple_since) auxlist"
     using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
       nt_mono valid_before ts_tuple_rel' lookup' new_window
@@ -867,18 +870,18 @@ lemma valid_add_new_ts_mmsaux: "valid_mmsaux w n L R aux auxlist \<Longrightarro
   using valid_add_new_ts_mmsaux_unfolded by (cases aux) fast
 
 fun add_new_table_mmsaux :: "'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_table_mmsaux X (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+  "add_new_table_mmsaux X (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
     (let tuple_since = upd_set tuple_since (\<lambda>_. t) (X - Mapping.keys tuple_since) in
-    (if 0 \<ge> left I then (t, I, maskL, maskR, data_prev, append_queue (t, X) data_in,
+    (if 0 \<ge> left I then (t, gc, I, maskL, maskR, data_prev, append_queue (t, X) data_in,
       upd_set tuple_in (\<lambda>_. t) X, tuple_since)
-    else (t, I, maskL, maskR, append_queue (t, X) data_prev, data_in, tuple_in, tuple_since)))"
+    else (t, gc, I, maskL, maskR, append_queue (t, X) data_prev, data_in, tuple_in, tuple_since)))"
 
 lemma valid_add_new_table_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
-    (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+    (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
   and table_X: "table n R X"
   shows "valid_mmsaux w n L R (add_new_table_mmsaux X
-    (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
+    (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
     (case auxlist of
       [] => [(nt, X)]
     | ((t, y) # ts) \<Rightarrow> if t = nt then (t, y \<union> X) # ts else (nt, X) # auxlist)"
@@ -988,8 +991,8 @@ proof -
   show ?thesis
   proof (cases "0 \<ge> left I")
     case True
-    then have add_def: "add_new_table_mmsaux X (nt, I, maskL, maskR, data_prev, data_in,
-      tuple_in, tuple_since) = (nt, I, maskL, maskR, data_prev, data_in',
+    then have add_def: "add_new_table_mmsaux X (nt, gc, I, maskL, maskR, data_prev, data_in,
+      tuple_in, tuple_since) = (nt, gc, I, maskL, maskR, data_prev, data_in',
       tuple_in', tuple_since')"
       using data_in'_def tuple_in'_def tuple_since'_def by auto
     have left_I: "left I = 0"
@@ -1053,8 +1056,8 @@ proof -
       by (auto simp only: valid_mmsaux.simps lin_data_in') auto
   next
     case False
-    then have add_def: "add_new_table_mmsaux X (nt, I, maskL, maskR, data_prev, data_in,
-      tuple_in, tuple_since) = (nt, I, maskL, maskR, data_prev', data_in,
+    then have add_def: "add_new_table_mmsaux X (nt, gc, I, maskL, maskR, data_prev, data_in,
+      tuple_in, tuple_since) = (nt, gc, I, maskL, maskR, data_prev', data_in,
       tuple_in, tuple_since')"
       using data_prev'_def tuple_since'_def by auto
     have left_I: "left I > 0"
@@ -1093,28 +1096,102 @@ proof -
   qed
 qed
 
+lemma valid_add_new_table_mmsaux:
+  assumes valid_before: "valid_mmsaux w n L R aux auxlist"
+  and table_X: "table n R X"
+  and time: "time_mmsaux aux = nt"
+  shows "valid_mmsaux w n L R (add_new_table_mmsaux X aux)
+    (case auxlist of
+      [] => [(nt, X)]
+    | ((t, y) # ts) \<Rightarrow> if t = nt then (t, y \<union> X) # ts else (nt, X) # auxlist)"
+proof -
+  obtain gc I maskL maskR data_prev data_in tuple_in tuple_since where aux_def:
+    "aux = (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)"
+    using time by (cases aux) auto
+  show ?thesis
+    using valid_add_new_table_mmsaux_unfolded[OF valid_before[unfolded aux_def] table_X]
+    unfolding aux_def .
+qed
+
+fun gc_mmsaux :: "'a mmsaux \<Rightarrow> 'a mmsaux" where
+  "gc_mmsaux (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+    (let all_tuples = \<Union>(snd ` (set (linearize data_prev) \<union> set (linearize data_in)));
+    tuple_since' = Mapping.filter (\<lambda>as _. as \<in> all_tuples) tuple_since in
+    (nt, nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since'))"
+
+lemma valid_gc_mmsaux_unfolded:
+  assumes valid_before: "valid_mmsaux w n L R (nt, gc, I, maskL, maskR, data_prev, data_in,
+    tuple_in, tuple_since) ys"
+  shows "valid_mmsaux w n L R (gc_mmsaux (nt, gc, I, maskL, maskR, data_prev, data_in,
+    tuple_in, tuple_since)) ys"
+proof -
+  define all_tuples where "all_tuples \<equiv> \<Union>(snd ` (set (linearize data_prev) \<union>
+    set (linearize data_in)))"
+  define tuple_since' where "tuple_since' \<equiv> Mapping.filter (\<lambda>as _. as \<in> all_tuples) tuple_since"
+  have data_cong: "\<And>tas. tas \<in> ts_tuple_rel (set (linearize data_prev) \<union>
+    set (linearize data_in)) \<Longrightarrow> valid_tuple tuple_since' tas = valid_tuple tuple_since tas"
+  proof -
+    fix tas
+    assume assm: "tas \<in> ts_tuple_rel (set (linearize data_prev) \<union>
+    set (linearize data_in))"
+    define t where "t \<equiv> fst tas"
+    define as where "as \<equiv> snd tas"
+    have "as \<in> all_tuples"
+      using assm by (force simp add: as_def all_tuples_def ts_tuple_rel_def)
+    then have "Mapping.lookup tuple_since' as = Mapping.lookup tuple_since as"
+      by (auto simp add: tuple_since'_def Mapping.lookup_filter split: option.splits)
+    then show "valid_tuple tuple_since' tas = valid_tuple tuple_since tas"
+      by (auto simp add: valid_tuple_def as_def split: option.splits) metis
+  qed
+  then have data_in_cong: "\<And>tas. tas \<in> ts_tuple_rel (set (linearize data_in)) \<Longrightarrow>
+    valid_tuple tuple_since' tas = valid_tuple tuple_since tas"
+    by (auto simp add: ts_tuple_rel_Un)
+  have "ts_tuple_rel (set ys) =
+    {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
+    valid_tuple tuple_since' tas}"
+    using data_cong valid_before by auto
+  moreover have "(\<forall>as. Mapping.lookup tuple_in as = safe_max (fst `
+    {tas \<in> ts_tuple_rel (set (linearize data_in)). valid_tuple tuple_since' tas \<and> as = snd tas}))"
+    using valid_before by auto (meson data_in_cong)
+  moreover have "(\<forall>as \<in> Mapping.keys tuple_since'. case Mapping.lookup tuple_since' as of
+    Some t \<Rightarrow> t \<le> nt)"
+    using Mapping.keys_filter valid_before
+    by (auto simp add: tuple_since'_def Mapping.lookup_filter split: option.splits
+        intro!: Mapping_keys_intro dest: Mapping_keys_dest)
+  ultimately show ?thesis
+    using all_tuples_def tuple_since'_def valid_before by auto
+qed
+
+lemma valid_gc_mmsaux: "valid_mmsaux w n L R aux ys \<Longrightarrow> valid_mmsaux w n L R (gc_mmsaux aux) ys"
+  using valid_gc_mmsaux_unfolded by (cases aux) fast
+
 fun add_new_mmsaux :: "nat \<times> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_mmsaux (nt, X) (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
-    add_new_table_mmsaux X (add_new_ts_mmsaux nt (t, I, maskL, maskR, data_prev, data_in,
-    tuple_in, tuple_since))"
+  "add_new_mmsaux (nt, X) (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+    (if enat (nt - gc) > right I then
+      add_new_table_mmsaux X (add_new_ts_mmsaux nt (gc_mmsaux (t, gc, I, maskL, maskR,
+      data_prev, data_in, tuple_in, tuple_since)))
+    else
+      add_new_table_mmsaux X (add_new_ts_mmsaux nt (t, gc, I, maskL, maskR, data_prev, data_in,
+      tuple_in, tuple_since)))"
 
 lemma valid_add_new_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux w n L R
-    (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+    (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
   and nt_mono: "nt \<ge> current w"
   and new_window: "w' = w\<lparr>latest := if nt \<ge> left (ivl w) then nt - left (ivl w)
     else latest w, current := nt\<rparr>"
   and table_X: "table n R X"
   shows "valid_mmsaux w' n L R (add_new_mmsaux (nt, X)
-    (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
+    (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since))
     (case auxlist of
       [] => [(nt, X)]
     | ((t, y) # ts) \<Rightarrow> if t = nt then (t, y \<union> X) # ts else (nt, X) # auxlist)"
-  using valid_add_new_table_mmsaux_unfolded[OF _ table_X]
-    valid_add_new_ts_mmsaux[OF valid_before nt_mono new_window]
-  by (cases "add_new_ts_mmsaux nt (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since)")
-     (auto simp only: add_new_ts_mmsaux.simps add_new_table_mmsaux.simps add_new_mmsaux.simps
-      Let_def split: prod.splits)
+  using valid_add_new_table_mmsaux[OF valid_add_new_ts_mmsaux[OF valid_before nt_mono new_window]
+    table_X]
+    valid_add_new_table_mmsaux[OF valid_add_new_ts_mmsaux[OF valid_gc_mmsaux nt_mono new_window,
+    OF valid_before] table_X]
+  by (auto simp only: valid_mmsaux.simps time_mmsaux.simps add_new_mmsaux.simps
+      add_new_ts_mmsaux.simps gc_mmsaux.simps Let_def split: if_splits prod.splits)
 
 lemma valid_add_new_mmsaux: "valid_mmsaux w n L R aux auxlist \<Longrightarrow> nt \<ge> current w \<Longrightarrow>
   table n R X \<Longrightarrow> w' = w\<lparr>latest := if nt \<ge> left (ivl w) then nt - left (ivl w)
@@ -1145,13 +1222,13 @@ lemma image_snd: "(a, b) \<in> X \<Longrightarrow> b \<in> snd ` X"
   by force
 
 fun result_mmsaux :: "'a mmsaux \<Rightarrow> 'a table" where
-  "result_mmsaux (nt, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+  "result_mmsaux (nt, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
   Mapping.keys tuple_in"
 
 lemma valid_result_mmsaux_unfolded:
   assumes "valid_mmsaux w n L R
-    (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
-  shows "result_mmsaux (t, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
+    (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) auxlist"
+  shows "result_mmsaux (t, gc, I, maskL, maskR, data_prev, data_in, tuple_in, tuple_since) =
   foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, left (ivl w) \<le> current w - t] {}"
   using valid_mmsaux_tuple_in_keys[OF assms] assms
   apply (auto simp add: image_Un ts_tuple_rel_Un foldr_ts_tuple_rel image_snd)
