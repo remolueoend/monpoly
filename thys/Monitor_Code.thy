@@ -389,7 +389,58 @@ lemma filter_Mapping [code]:
                      | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
   by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
 
-(* TODO: prove code equation for Mapping.filter (\<lambda>as _. if pos then as \<in> X else as \<notin> X) *)
+abbreviation "join_filter_cond pos X \<equiv> (\<lambda>as _. if pos then as \<in> X else as \<notin> X)"
+
+definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
+
+declare [[code drop: join_mmsaux]]
+declare join_mmsaux.simps[folded filter_join_def, code]
+
+lemma filter_join_False_empty: "filter_join False {} m = m"
+  unfolding filter_join_def
+  apply transfer
+  apply (rule ext)
+  by (auto split: option.splits)
+
+lemma Mapping_lookup_delete: "Mapping.lookup (Mapping.delete a m) x =
+  (if a = x then None else Mapping.lookup m x)"
+  by (simp add: Mapping.delete.rep_eq Mapping.lookup.rep_eq)
+
+lemma filter_join_False_insert: "filter_join False (insert a A) m =
+  filter_join False A (Mapping.delete a m)"
+proof -
+  {
+    fix x
+    have "Mapping.lookup (filter_join False (insert a A) m) x =
+      Mapping.lookup (filter_join False A (Mapping.delete a m)) x"
+      by (auto simp add: filter_join_def Mapping.lookup_filter Mapping_lookup_delete
+          split: option.splits)
+  }
+  then show ?thesis
+    by (simp add: mapping_eqI)
+qed
+
+lemma filter_join_False:
+  assumes fin: "finite A"
+  shows "filter_join False A m = Finite_Set.fold Mapping.delete m A"
+proof -
+  interpret comp_fun_idem "Mapping.delete"
+    by (unfold_locales; transfer) (fastforce simp add: comp_def)+
+  from fin show ?thesis
+    by (induction A arbitrary: m rule: finite.induct)
+       (auto simp add: filter_join_False_empty filter_join_False_insert fold_fun_left_comm)
+qed
+
+lift_definition filter_not_in_cfi :: "('a, ('a, 'b) mapping) comp_fun_idem" is "Mapping.delete"
+  by (unfold_locales; transfer) (fastforce simp add: comp_def)+
+
+lemma filter_join_code[code]:
+  "filter_join pos A m =
+    (if \<not>pos \<and> finite A \<and> card A < Mapping.size m then set_fold_cfi filter_not_in_cfi m A
+    else Mapping.filter (join_filter_cond pos A) m)"
+  unfolding filter_join_def
+  apply (transfer fixing: m)
+  using filter_join_False by (auto simp add: filter_join_def)
 
 definition mmonitorable_exec_e :: "event_data Formula.formula \<Rightarrow> bool" where
   [code_unfold]: "mmonitorable_exec_e = Monitor.mmonitorable_exec"
