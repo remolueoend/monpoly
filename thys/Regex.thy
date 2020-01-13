@@ -59,13 +59,6 @@ lemma nfv_regex_simps[simp]:
   unfolding nfv_regex_def
   by (auto simp add: image_Un Max_Un insert_Un simp del: Un_insert_right Un_insert_left)
 
-primrec max_regex where
-  "max_regex f (Skip n) = enat n"
-| "max_regex f (Test \<phi>) = f \<phi>"
-| "max_regex f (Plus r s) = max (max_regex f r) (max_regex f s)"
-| "max_regex f (Times r s) = max (max_regex f r) (max_regex f s)"
-| "max_regex f (Star r) = max_regex f r"
-
 primrec min_regex_default :: "('a \<Rightarrow> 'b :: linorder \<Rightarrow> 'b) \<Rightarrow> 'a regex \<Rightarrow> 'b \<Rightarrow> 'b" where
   "min_regex_default f (Skip n) j = j"
 | "min_regex_default f (Test \<phi>) j = f \<phi> j"
@@ -77,18 +70,8 @@ lemma min_regex_default_alt: "(\<And>x. x \<in> atms r \<Longrightarrow> f x j \
   min_regex_default f r j = Min (insert j ((\<lambda>z. f z j) ` atms r))"
   by (induct r) (auto simp: min_def simp: image_Un insert_Un Min_Un simp del: Un_insert_right Un_insert_left)
 
-lemma max_regex_finite_eq: "(\<exists>n. max_regex f r = enat n) \<longleftrightarrow> (\<forall>x \<in> atms r. \<exists>m. f x = enat m)"
-  by (induct r) (force simp: max_def split: if_splits)+
-
-lemma max_regex_map_regex[simp]: "max_regex f (map_regex g r) = max_regex (f o g) r"
-  by (induct r) auto
-
 lemma min_regex_default_map_regex[simp]: "min_regex_default f (map_regex g r) j = min_regex_default (f o g) r j"
   by (induct r) auto
-
-lemma max_regex_cong[fundef_cong]:
-  "r = r' \<Longrightarrow> (\<And>z. z \<in> atms r \<Longrightarrow> f z = f' z) \<Longrightarrow> max_regex f r = max_regex f' r'"
-  by (induct r arbitrary: r') auto
 
 lemma min_regex_default_cong[fundef_cong]:
   "r = r' \<Longrightarrow> (\<And>z. z \<in> atms r \<Longrightarrow> f z j = f' z j') \<Longrightarrow> j = j' \<Longrightarrow> min_regex_default f r j = min_regex_default f' r' j'"
