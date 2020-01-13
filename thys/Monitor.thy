@@ -28,7 +28,7 @@ fun mmonitorable_exec :: "'a Formula.formula \<Rightarrow> bool" where
     \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (Formula.fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y + b \<notin> Formula.fv \<phi> \<and> {..<b} \<subseteq> Formula.fv \<phi>)"
+| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y + b \<notin> Formula.fv \<phi> \<and> {0..<b} \<subseteq> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi> \<and> right I \<noteq> \<infinity>)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
@@ -724,7 +724,7 @@ function (in msaux) (sequential) minit0 :: "nat \<Rightarrow> 'a Formula.formula
     let vneg = map fv neg in
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) []))"
 | "minit0 n (Formula.Exists \<phi>) = MExists (minit0 (Suc n) \<phi>)"
-| "minit0 n (Formula.Agg y \<omega> b f \<phi>) = MAgg (fv \<phi> \<subseteq> {..<b}) y \<omega> b f (minit0 (b + n) \<phi>)"
+| "minit0 n (Formula.Agg y \<omega> b f \<phi>) = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f (minit0 (b + n) \<phi>)"
 | "minit0 n (Formula.Prev I \<phi>) = MPrev I (minit0 n \<phi>) True [] []"
 | "minit0 n (Formula.Next I \<phi>) = MNext I (minit0 n \<phi>) True []"
 | "minit0 n (Formula.Since \<phi> I \<psi>) = (if safe_formula \<phi>
@@ -1699,8 +1699,8 @@ inductive (in msaux) wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Righta
 | Agg: "wf_mformula \<sigma> j (b + n) (lift_envs' b R) \<phi> \<phi>' \<Longrightarrow>
     y < n \<Longrightarrow>
     y + b \<notin> Formula.fv \<phi>' \<Longrightarrow>
-    {..<b} \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
-    g0 = (Formula.fv \<phi>' \<subseteq> {..<b}) \<Longrightarrow>
+    {0..<b} \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
+    g0 = (Formula.fv \<phi>' \<subseteq> {0..<b}) \<Longrightarrow>
     wf_mformula \<sigma> j n R (MAgg g0 y \<omega> b f \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
 | Prev: "wf_mformula \<sigma> j n R \<phi> \<phi>' \<Longrightarrow>
     first \<longleftrightarrow> j = 0 \<Longrightarrow>
@@ -2042,7 +2042,7 @@ lemma wf_tuple_append: "wf_tuple a {x \<in> A. x < a} xs \<Longrightarrow>
   wf_tuple (a + b) A (xs @ ys)"
   unfolding wf_tuple_def by (auto simp: nth_append eq_diff_iff)
 
-lemma wf_tuple_map_Some: "length xs = n \<Longrightarrow> {..<n} \<subseteq> A \<Longrightarrow> wf_tuple n A (map Some xs)"
+lemma wf_tuple_map_Some: "length xs = n \<Longrightarrow> {0..<n} \<subseteq> A \<Longrightarrow> wf_tuple n A (map Some xs)"
   unfolding wf_tuple_def by auto
 
 lemma wf_tuple_drop: "wf_tuple (b + n) A xs \<Longrightarrow> {x - b | x. x \<in> A \<and> x \<ge> b} = B \<Longrightarrow>
@@ -2057,8 +2057,8 @@ lemma qtable_eval_agg:
       (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel"
     and n: "\<forall>x\<in>Formula.fv (Formula.Agg y \<omega> b f \<phi>). x < n"
     and fresh: "y + b \<notin> Formula.fv \<phi>"
-    and b_fv: "{..<b} \<subseteq> Formula.fv \<phi>"
-    and g0: "g0 = (Formula.fv \<phi> \<subseteq> {..<b})"
+    and b_fv: "{0..<b} \<subseteq> Formula.fv \<phi>"
+    and g0: "g0 = (Formula.fv \<phi> \<subseteq> {0..<b})"
   shows "qtable n (Formula.fv (Formula.Agg y \<omega> b f \<phi>)) (mem_restr R)
       (\<lambda>v. Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)) (eval_agg n g0 y \<omega> b f rel)"
       (is "qtable _ ?fv _ ?Q ?rel'")
@@ -2108,7 +2108,7 @@ proof -
     qed
   next
     case False
-    have union_fv: "{..<b} \<union> (\<lambda>x. x + b) ` Formula.fvi b \<phi> = fv \<phi>"
+    have union_fv: "{0..<b} \<union> (\<lambda>x. x + b) ` Formula.fvi b \<phi> = fv \<phi>"
       using b_fv
       by (auto simp: fvi_iff_fv(1)[where b=b] intro!: image_eqI[where b=x and x="x - b" for x])
     have b_n: "\<forall>x\<in>fv \<phi>. x < b + n"
@@ -2325,7 +2325,7 @@ proof -
           using \<open>wf_tuple n ?fv v\<close> n apply (auto simp: wf_tuple_def)[]
           apply simp
           done
-        apply (cases "fv \<phi> \<subseteq> {..<b}")
+        apply (cases "fv \<phi> \<subseteq> {0..<b}")
         apply (frule False[unfolded g0 de_Morgan_conj disj_not1, rule_format])
          apply (clarsimp simp: empty_table_def ex_in_conv[symmetric])
         subgoal for a
@@ -2340,10 +2340,10 @@ proof -
           using inner apply (clarsimp simp: qtable_def table_def[unfolded wf_tuple_def])
           apply (drule (1) bspec[where x=a])
           using \<open>wf_tuple n ?fv v\<close>[unfolded wf_tuple_def] apply simp
-           apply (metis add.commute b_fv fvi_iff_fv(1) lessThan_iff nat_add_left_cancel_less not_add_less1 nth_list_update nth_list_update_neq subset_antisym)
+           apply (metis add.commute b_fv fvi_iff_fv(1) atLeastLessThan_iff nat_add_left_cancel_less not_add_less1 nth_list_update nth_list_update_neq subset_antisym)
           apply (subst map_cong[where g=id, OF refl, simplified])
           using inner apply (clarsimp simp: qtable_def table_def[unfolded wf_tuple_def] in_set_conv_nth)
-           apply (metis option.collapse b_fv lessThan_iff subset_antisym trans_less_add1)
+          apply (metis atLeastLessThan_iff b_fv b_n option.distinct(1) option.expand option.sel subset_antisym zero_le)
           apply simp
           done
         apply (drule not_mono)

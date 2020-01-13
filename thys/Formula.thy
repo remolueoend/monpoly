@@ -245,7 +245,7 @@ qualified fun sat :: "'a trace \<Rightarrow> 'a env \<Rightarrow> nat \<Rightarr
 | "sat \<sigma> v i (Exists \<phi>) = (\<exists>z. sat \<sigma> (z # v) i \<phi>)"
 | "sat \<sigma> v i (Agg y \<omega> b f \<phi>) =
     (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> (zs @ v) i \<phi> \<and> f (fv_env \<phi> (zs @ v)) = x} \<and> Zs \<noteq> {}}
-    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {..<b}) \<and> v ! y = \<omega> M)"
+    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = \<omega> M)"
 | "sat \<sigma> v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<phi>)"
 | "sat \<sigma> v i (Next I \<phi>) = (mem (\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i) I \<and> sat \<sigma> v (Suc i) \<phi>)"
 | "sat \<sigma> v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>))"
@@ -509,7 +509,7 @@ fun safe_formula :: "'a formula \<Rightarrow> bool" where
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
     list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "safe_formula (Exists \<phi>) = (safe_formula \<phi>)"
-| "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {..<b} \<subseteq> fv \<phi>)"
+| "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Since \<phi> I \<psi>) = (fv \<phi> \<subseteq> fv \<psi> \<and>
@@ -571,7 +571,7 @@ lemma safe_formula_induct[consumes 1]:
               fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
     and "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
     and "\<And>\<phi>. P \<phi> \<Longrightarrow> P (Exists \<phi>)"
-    and "\<And>y \<omega> b f \<phi>. y + b \<notin> fv \<phi> \<Longrightarrow> {..<b} \<subseteq> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
+    and "\<And>y \<omega> b f \<phi>. y + b \<notin> fv \<phi> \<Longrightarrow> {0..<b} \<subseteq> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
     and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Next I \<phi>)"
     and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
