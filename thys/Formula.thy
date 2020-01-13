@@ -174,57 +174,22 @@ lemma fvi_less_nfv_regex: "\<forall>i\<in>fv_regex \<phi>. i < nfv_regex \<phi>"
 
 subsubsection \<open>Future Reach\<close>
 
-qualified fun future_reach :: "'a formula \<Rightarrow> enat" where
-  "future_reach (Pred _ _) = 0"
-| "future_reach (Eq _ _) = 0"
-| "future_reach (Neg \<phi>) = future_reach \<phi>"
-| "future_reach (Or \<phi> \<psi>) = max (future_reach \<phi>) (future_reach \<psi>)"
-| "future_reach (Ands l) = foldl max 0 (map future_reach l)"
-| "future_reach (Exists \<phi>) = future_reach \<phi>"
-| "future_reach (Agg y \<omega> b f \<phi>) = future_reach \<phi>"
-| "future_reach (Prev I \<phi>) = future_reach \<phi> - left I"
-| "future_reach (Next I \<phi>) = future_reach \<phi> + right I + 1"
-| "future_reach (Since \<phi> I \<psi>) = max (future_reach \<phi>) (future_reach \<psi> - left I)"
-| "future_reach (Until \<phi> I \<psi>) = max (future_reach \<phi>) (future_reach \<psi>) + right I + 1"
-| "future_reach (MatchP I r) = Regex.max_regex future_reach r - left I"
-| "future_reach (MatchF I r) = Regex.max_regex future_reach r + right I + 1"
+qualified fun future_bounded :: "'a formula \<Rightarrow> bool" where
+  "future_bounded (Pred _ _) = True"
+| "future_bounded (Eq _ _) = True"
+| "future_bounded (Neg \<phi>) = future_bounded \<phi>"
+| "future_bounded (Or \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
+| "future_bounded (Ands l) = list_all future_bounded l"
+| "future_bounded (Exists \<phi>) = future_bounded \<phi>"
+| "future_bounded (Agg y \<omega> b f \<phi>) = future_bounded \<phi>"
+| "future_bounded (Prev I \<phi>) = future_bounded \<phi>"
+| "future_bounded (Next I \<phi>) = future_bounded \<phi>"
+| "future_bounded (Since \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
+| "future_bounded (Until \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi> \<and> right I \<noteq> \<infinity>)"
+| "future_bounded (MatchP I r) = Regex.pred_regex future_bounded r"
+| "future_bounded (MatchF I r) = (Regex.pred_regex future_bounded r \<and> right I \<noteq> \<infinity>)"
 
-lemma foldl_Max:
-  assumes "l \<noteq> []"
-  shows "foldl max n l = max n (Max (set l))"
-  using assms
-proof (induction l arbitrary: n)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons a l)
-  show ?case
-  proof (cases "l = []")
-    case False
-    then have "foldl max (max n a) l = max (max n a) (Max (set l))"
-      using Cons.IH by simp
-    also have "... = max n (max a (Max (set l)))" by (simp add: max.assoc)
-    moreover have "max a (Max (set l)) = Max (set [a] \<union> set l)"
-      using \<open>l \<noteq> []\<close> by simp
-    ultimately show ?thesis by simp
-  qed simp
-qed
 
-lemma foldl_max_infinity:
-  "foldl max \<infinity> (l::enat list) = \<infinity>"
-  by (induction l) auto
-
-lemma foldl_max_infinity_iff: "r \<noteq> \<infinity> \<Longrightarrow> foldl max r (l::enat list) = \<infinity> \<longleftrightarrow> \<infinity> \<in> set l"
-proof (induct l arbitrary: r)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons a l)
-  then show ?case by (cases a) (auto simp: foldl_max_infinity)
-qed
-
-lemma future_reach_Ands_bounded: "future_reach (Ands l) \<noteq> \<infinity> \<longleftrightarrow> (\<forall>\<phi>\<in>set l. future_reach \<phi> \<noteq> \<infinity>)"
-  by (force simp: foldl_max_infinity_iff)
 
 subsubsection \<open>Semantics\<close>
 
@@ -460,7 +425,7 @@ lemma fvi_And: "fvi b (And \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 lemma nfv_And[simp]: "nfv (And \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   unfolding nfv_def by (simp add: fvi_And image_Un Max_Un[symmetric])
 
-lemma future_reach_And: "future_reach (And \<phi> \<psi>) = max (future_reach \<phi>) (future_reach \<psi>)"
+lemma future_bounded_And: "future_bounded (And \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
   unfolding And_def by simp
 
 lemma sat_And: "sat \<sigma> v i (And \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> sat \<sigma> v i \<psi>)"
@@ -474,7 +439,7 @@ lemma fvi_And_Not: "fvi b (And_Not \<phi> \<psi>) = fvi b \<phi> \<union> fvi b 
 lemma nfv_And_Not[simp]: "nfv (And_Not \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   unfolding nfv_def by (simp add: fvi_And_Not image_Un Max_Un[symmetric])
 
-lemma future_reach_And_Not: "future_reach (And_Not \<phi> \<psi>) = max (future_reach \<phi>) (future_reach \<psi>)"
+lemma future_bounded_And_Not: "future_bounded (And_Not \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
   unfolding And_Not_def by simp
 
 lemma sat_And_Not: "sat \<sigma> v i (And_Not \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> \<not> sat \<sigma> v i \<psi>)"
@@ -967,7 +932,7 @@ next
       (auto dest!: safe_regex_safe_formula)
 next
   case (16 I r)
-  then show ?case 
+  then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
@@ -983,20 +948,13 @@ lemma get_and_nonempty:
   shows "get_and_list \<phi> \<noteq> []"
   using assms by (induction \<phi>) (auto intro: Suc_leI)
 
-lemma future_reach_get_or:
-  "safe_formula \<phi> \<Longrightarrow> Max (future_reach ` (set (get_or_list \<phi>))) = future_reach \<phi>"
-proof (induction \<phi>)
-  case (Or \<phi> \<psi>)
-  then show ?case by (simp add: image_Un Max_Un get_or_nonempty)
-qed auto
+lemma future_bounded_get_or:
+  "list_all future_bounded (get_or_list \<phi>) = future_bounded \<phi>"
+  by (induction \<phi>) auto
 
-lemma future_reach_get_and:
-  "safe_formula \<phi> \<Longrightarrow> Max (future_reach ` (set (get_and_list \<phi>))) = future_reach \<phi>"
-proof (induction \<phi>)
-  case (Ands l)
-  then have "l \<noteq> []" by auto
-  with Ands show ?case by (simp add: foldl_Max)
-qed auto
+lemma future_bounded_get_and:
+  "list_all future_bounded (get_and_list \<phi>) = future_bounded \<phi>"
+  by (induction \<phi>) (auto simp: list.pred_map o_def future_bounded_get_or)
 
 lemma
   fixes \<phi> :: "'a formula"
@@ -1187,7 +1145,7 @@ qed (auto simp: fv_convert_multiway)
 
 lemma
   fixes \<phi> :: "'a formula"
-  shows future_reach_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_reach (convert_multiway \<phi>) = future_reach \<phi>"
+  shows future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
 proof (induction \<phi> rule: safe_formula.induct)
   case (5 \<phi> \<psi>)
   then have "safe_formula \<phi>" by simp
@@ -1196,7 +1154,8 @@ proof (induction \<phi> rule: safe_formula.induct)
     with 5 show ?thesis by simp
   next
     case not_closed: False
-    show ?thesis proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
+    show ?thesis
+    proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
       case True
       then obtain \<psi>' where "\<psi> = Neg \<psi>'" by (auto simp: is_Neg_def)
       with True have "safe_formula \<psi>'" by simp
@@ -1206,27 +1165,17 @@ proof (induction \<phi> rule: safe_formula.induct)
       let ?c\<psi> = "convert_multiway \<psi>'"
       have b_def: "?b = Ands (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
         using not_closed True by (simp add: And_def \<open>\<psi> = Neg \<psi>'\<close>)
-      moreover have "future_reach ?c\<phi> = future_reach \<phi>" using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
-      moreover have "future_reach ?c\<psi> = future_reach \<psi>'" using "5.IH"(3)[OF \<open>\<psi> = Neg \<psi>'\<close> \<open>safe_formula \<psi>'\<close>] .
-      ultimately have "future_reach ?a = max (future_reach ?c\<phi>) (future_reach ?c\<psi>)"
-        by (simp add: future_reach_And)
-      moreover have "future_reach ?c\<phi> = Max (future_reach ` (set (get_and_list ?c\<phi>)))"
-        using \<open>safe_formula \<phi>\<close> by (simp add: future_reach_get_and safe_convert_multiway)
-      moreover have "future_reach ?c\<psi> = Max (future_reach ` (set (get_and_list ?c\<psi>)))"
-        using \<open>safe_formula \<psi>'\<close> by (simp add: future_reach_get_and safe_convert_multiway)
-      moreover have "future_reach ?b = Max (future_reach ` (set ((get_and_list ?c\<phi>) @ (get_and_list ?c\<psi>))))"
-        unfolding b_def using safe_convert_multiway[OF \<open>safe_formula \<phi>\<close>]
-        by (simp add: foldl_Max image_Un get_and_nonempty del: foldl_append)
-      moreover have "... = Max ((future_reach ` (set (get_and_list ?c\<phi>))) \<union> (future_reach ` (set (get_and_list ?c\<psi>))))"
-        by (simp add: image_Un)
-      moreover have "... = max (Max (future_reach ` (set (get_and_list ?c\<phi>)))) (Max (future_reach ` (set (get_and_list ?c\<psi>))))"
-      proof -
-        have "get_and_list ?c\<phi> \<noteq> []"
-          using get_and_nonempty safe_convert_multiway \<open>safe_formula \<phi>\<close> by blast
-        moreover have "get_and_list ?c\<psi> \<noteq> []"
-          using get_and_nonempty safe_convert_multiway \<open>safe_formula \<psi>'\<close> by blast
-        ultimately show ?thesis by (simp add: Max_Un)
-      qed
+      moreover have "future_bounded ?c\<phi> = future_bounded \<phi>" using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
+      moreover have "future_bounded ?c\<psi> = future_bounded \<psi>'" using "5.IH"(3)[OF \<open>\<psi> = Neg \<psi>'\<close> \<open>safe_formula \<psi>'\<close>] .
+      ultimately have "future_bounded ?a = (future_bounded ?c\<phi> \<and> future_bounded ?c\<psi>)"
+        by (simp add: future_bounded_And)
+      moreover have "future_bounded ?c\<phi> = list_all future_bounded (get_and_list ?c\<phi>)"
+        using \<open>safe_formula \<phi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
+      moreover have "future_bounded ?c\<psi> = list_all future_bounded (get_and_list ?c\<psi>)"
+        using \<open>safe_formula \<psi>'\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
+      moreover have "future_bounded ?b = list_all future_bounded (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
+        unfolding b_def
+        by simp
       ultimately show ?thesis unfolding And_def \<open>\<psi> = Neg \<psi>'\<close> by simp
 
     next
@@ -1239,27 +1188,17 @@ proof (induction \<phi> rule: safe_formula.induct)
       have b_def: "?b = Ands (get_and_list ?c\<phi> @ map Neg (get_or_list ?c\<psi>))"
         using not_closed False by (auto simp: And_Not_def)
 
-      moreover have "future_reach ?c\<phi> = future_reach \<phi>" using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
-      moreover have "future_reach ?c\<psi> = future_reach \<psi>" using "5.IH"(2)[OF \<open>safe_formula \<psi>\<close>] .
-      ultimately have "future_reach ?a = max (future_reach ?c\<phi>) (future_reach ?c\<psi>)"
-        by (simp add: future_reach_And_Not)
-      moreover have "future_reach ?c\<phi> = Max (future_reach ` (set (get_and_list ?c\<phi>)))"
-        using \<open>safe_formula \<phi>\<close> by (simp add: future_reach_get_and safe_convert_multiway)
-      moreover have "future_reach ?c\<psi> = Max (future_reach ` (set (get_or_list ?c\<psi>)))"
-        using \<open>safe_formula \<psi>\<close> by (simp add: future_reach_get_or safe_convert_multiway)
-      moreover have "future_reach ?b = Max (future_reach ` (set ((get_and_list ?c\<phi>) @ (map Neg (get_or_list ?c\<psi>)))))"
-        unfolding b_def using safe_convert_multiway[OF \<open>safe_formula \<phi>\<close>]
-        by (simp add: foldl_Max image_Un get_and_nonempty get_or_nonempty image_image del: foldl_append)
-      moreover have "... = Max ((future_reach ` (set (get_and_list ?c\<phi>))) \<union> (future_reach ` (set (map Neg (get_or_list ?c\<psi>)))))"
-        by (simp add: image_Un)
-      moreover have "... = max (Max (future_reach ` (set (get_and_list ?c\<phi>)))) (Max (future_reach ` (set (get_or_list ?c\<psi>))))"
-      proof -
-        have "get_and_list ?c\<phi> \<noteq> []"
-          using get_and_nonempty safe_convert_multiway \<open>safe_formula \<phi>\<close> by blast
-        moreover have "get_or_list ?c\<psi> \<noteq> []"
-          using get_or_nonempty safe_convert_multiway \<open>safe_formula \<psi>\<close> by blast
-        ultimately show ?thesis  by (simp add: Max_Un image_image)
-      qed
+      moreover have "future_bounded ?c\<phi> = future_bounded \<phi>" using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
+      moreover have "future_bounded ?c\<psi> = future_bounded \<psi>" using "5.IH"(2)[OF \<open>safe_formula \<psi>\<close>] .
+      ultimately have "future_bounded ?a = (future_bounded ?c\<phi> \<and> future_bounded ?c\<psi>)"
+        by (simp add: future_bounded_And_Not)
+      moreover have "future_bounded ?c\<phi> = list_all future_bounded (get_and_list ?c\<phi>)"
+        using \<open>safe_formula \<phi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
+      moreover have "future_bounded ?c\<psi> = list_all future_bounded (get_or_list ?c\<psi>)"
+        using \<open>safe_formula \<psi>\<close> by (simp add: future_bounded_get_or safe_convert_multiway)
+      moreover have "future_bounded ?b = list_all future_bounded (get_and_list ?c\<phi> @ get_or_list ?c\<psi>)"
+        unfolding b_def
+        by (simp add: list.pred_map o_def)
       ultimately show ?thesis unfolding And_Not_def by simp
     qed
   qed
@@ -1286,11 +1225,29 @@ next
 next
   case (15 I r)
   then show ?case
-    by (auto 0 3 intro!: max_regex_cong arg_cong2[where f="(-)"] dest: safe_regex_safe_formula)
+    apply (auto simp: regex.pred_set regex.set_map ball_Un)
+     apply (erule safe_regex_safe_formula[THEN disjE_Not2])
+       apply assumption
+      apply simp
+     apply force
+    apply (erule safe_regex_safe_formula[THEN disjE_Not2])
+      apply assumption
+     apply simp
+    apply force
+    done
 next
   case (16 I r)
   then show ?case
-    by (auto 0 3 intro!: max_regex_cong arg_cong2[where f="(+)"] dest: safe_regex_safe_formula)
+    apply (auto simp: regex.pred_set regex.set_map ball_Un)
+     apply (erule safe_regex_safe_formula[THEN disjE_Not2])
+       apply assumption
+      apply simp
+     apply force
+    apply (erule safe_regex_safe_formula[THEN disjE_Not2])
+      apply assumption
+     apply simp
+    apply force
+    done
 qed auto
 
 lemma

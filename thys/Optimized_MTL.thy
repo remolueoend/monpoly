@@ -4,6 +4,9 @@ theory Optimized_MTL
 begin
 (*>*)
 
+lemma less_enat_iff: "a < enat i \<longleftrightarrow> (\<exists>j. a = enat j \<and> j < i)"
+  by (cases a) auto
+
 type_synonym 'a queue = "'a list \<times> 'a list"
 
 definition linearize :: "'a queue \<Rightarrow> 'a list" where

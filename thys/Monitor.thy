@@ -12,8 +12,8 @@ section \<open>Concrete Monitor\<close>
 
 subsection \<open>Monitorable Formulas\<close>
 
-definition "mmonitorable \<phi> \<longleftrightarrow> safe_formula \<phi> \<and> Formula.future_reach \<phi> \<noteq> \<infinity>"
-definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Regex.max_regex Formula.future_reach r \<noteq> \<infinity>"
+definition "mmonitorable \<phi> \<longleftrightarrow> safe_formula \<phi> \<and> Formula.future_bounded \<phi>"
+definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Regex.pred_regex Formula.future_bounded r"
 
 fun mmonitorable_exec :: "'a Formula.formula \<Rightarrow> bool" where
   "mmonitorable_exec (Formula.Eq t1 t2) = (Formula.is_Const t1 \<or> Formula.is_Const t2)"
@@ -30,7 +30,7 @@ fun mmonitorable_exec :: "'a Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and> y + b \<notin> Formula.fv \<phi> \<and> {..<b} \<subseteq> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi> \<and> right I \<noteq> \<infinity>)"
+| "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Since \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> right I \<noteq> \<infinity> \<and>
@@ -38,39 +38,27 @@ fun mmonitorable_exec :: "'a Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Safe r"
 | "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Future Safe r \<and> right I \<noteq> \<infinity>)"
 
-lemma plus_eq_enat_iff: "a + b = enat i \<longleftrightarrow> (\<exists>j k. a = enat j \<and> b = enat k \<and> j + k = i)"
-  by (cases a; cases b) auto
-
-lemma minus_eq_enat_iff: "a - enat k = enat i \<longleftrightarrow> (\<exists>j. a = enat j \<and> j - k = i)"
-  by (cases a) auto
-
-lemma le_enat_iff: "a \<le> enat i \<longleftrightarrow> (\<exists>j. a = enat j \<and> j \<le> i)"
-  by (cases a) auto
-
-lemma less_enat_iff: "a < enat i \<longleftrightarrow> (\<exists>j. a = enat j \<and> j < i)"
-  by (cases a) auto
-
 lemma cases_Neg_iff:
    "(case \<phi> of formula.Neg \<psi> \<Rightarrow> P \<psi> | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<psi>. \<phi> = formula.Neg \<psi> \<and> P \<psi>)"
   by (cases \<phi>) auto
 
 lemma safe_formula_mmonitorable_exec:
   fixes \<phi> :: "'a Formula.formula"
-  shows "safe_formula \<phi> \<Longrightarrow> Formula.future_reach \<phi> \<noteq> \<infinity> \<Longrightarrow> mmonitorable_exec \<phi>"
+  shows "safe_formula \<phi> \<Longrightarrow> Formula.future_bounded \<phi> \<Longrightarrow> mmonitorable_exec \<phi>"
 proof (induct \<phi> rule: safe_formula.induct)
   case (5 \<phi> \<psi>)
   then show ?case
-    unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
     by (fastforce split: formula.splits)
 next
   case (7 \<phi> \<psi>)
   then show ?case
-    unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
     by (fastforce split: formula.splits)
 next
   case (8 l)
-  from "8.prems"(2) have bounded: "Formula.future_reach \<phi> \<noteq> \<infinity>" if "\<phi> \<in> set l" for \<phi>
-    using that future_reach_Ands_bounded by auto
+  from "8.prems"(2) have bounded: "Formula.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
+    using that by (auto simp: list.pred_set)
   obtain poss negs where posnegs: "(poss, negs) = partition safe_formula l" by simp
   obtain posm negm where posnegm: "(posm, negm) = partition mmonitorable_exec l" by simp
   have "set poss \<subseteq> set posm"
@@ -121,25 +109,22 @@ next
 next
   case (13 \<phi> I \<psi>)
   then show ?case
-    unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
     by (fastforce split: formula.splits)
 next
   case (14 \<phi> I \<psi>)
   then show ?case
-    unfolding safe_formula.simps future_reach.simps mmonitorable_exec.simps
-    by (fastforce simp: plus_eq_enat_iff split: formula.splits)
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
+    by (fastforce split: formula.splits)
 next
   case (15 I r)
   then show ?case
-    by (auto 0 3 elim!: safe_regex_mono[rotated] simp: minus_eq_enat_iff cases_Neg_iff
-      dest: max_regex_finite_eq[THEN iffD1, OF exI])
+    by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 next
   case (16 I r)
   then show ?case
-    by (auto 0 3 elim!: safe_regex_mono[rotated] simp: plus_eq_enat_iff cases_Neg_iff
-      dest: max_regex_finite_eq[THEN iffD1, OF exI])
-qed (auto simp add: plus_eq_enat_iff minus_eq_enat_iff max_def
-  le_enat_iff less_enat_iff not_le split: if_splits)
+    by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
+qed auto
 
 lemma mmonitorable_exec_mmonitorable:
   fixes \<phi> :: "'a Formula.formula"
@@ -170,27 +155,26 @@ next
   then have "\<Union> (fv ` set negs) \<subseteq> \<Union> (fv ` set poss)"
     using \<open>set posm \<subseteq> set poss\<close> \<open>set negs \<subseteq> set negm\<close> by fastforce
   ultimately have "safe_formula (Formula.Ands l)" using posnegs by simp
-  moreover have "Formula.future_reach (Formula.Ands l) \<noteq> \<infinity>"
+  moreover have "Formula.future_bounded (Formula.Ands l)"
   proof -
-    let ?f = "\<lambda>\<phi>. Formula.future_reach \<phi> \<noteq> \<infinity>"
-    have "list_all ?f posm"
+    have "list_all Formula.future_bounded posm"
       using pos_monitorable "7.hyps"(1) posnegm unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
-    moreover have fnegm: "list_all ?f (map remove_neg negm)"
+    moreover have fnegm: "list_all Formula.future_bounded (map remove_neg negm)"
       using neg_monitorable "7.hyps"(2) posnegm unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
-    then have "list_all ?f negm"
+    then have "list_all Formula.future_bounded negm"
     proof -
-      have "\<And>x. x \<in> set negm \<Longrightarrow> ?f x"
+      have "\<And>x. x \<in> set negm \<Longrightarrow> Formula.future_bounded x"
       proof -
         fix x assume "x \<in> set negm"
-        have "?f (remove_neg x)" using fnegm \<open>x \<in> set negm\<close> by (simp add: list_all_iff)
-        then show "?f x" by (cases x) auto
+        have "Formula.future_bounded (remove_neg x)" using fnegm \<open>x \<in> set negm\<close> by (simp add: list_all_iff)
+        then show "Formula.future_bounded x" by (cases x) auto
       qed
       then show ?thesis by (simp add: list_all_iff)
     qed
-    ultimately have "list_all ?f l" using posnegm by (auto simp: list_all_iff)
-    then show ?thesis using future_reach_Ands_bounded by (auto simp: list_all_iff)
+    ultimately have "list_all Formula.future_bounded l" using posnegm by (auto simp: list_all_iff)
+    then show ?thesis by (auto simp: list_all_iff)
   qed
   ultimately show ?case unfolding mmonitorable_def ..
 next
@@ -207,12 +191,12 @@ next
   case (15 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
-      simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff minus_eq_enat_iff max_regex_finite_eq)
+      simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff regex.pred_set)
 next
   case (16 I r)
   then show ?case
     by (auto 0 3 elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
-      simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff plus_eq_enat_iff one_enat_def max_regex_finite_eq)
+      simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff regex.pred_set)
 qed (auto simp add: mmonitorable_def mmonitorable_regex_def one_enat_def)
 
 lemma monitorable_formula_code[code]: "mmonitorable \<phi> = mmonitorable_exec \<phi>"
@@ -1093,7 +1077,7 @@ lemma progress_0[simp]: "progress \<sigma> \<phi> 0 = 0"
   using progress_le by auto
 
 lemma
-  progress_ge: "Formula.future_reach \<phi> \<noteq> \<infinity> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> \<phi> j"
+  progress_ge: "Formula.future_bounded \<phi> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> \<phi> j"
 proof (induction \<phi> arbitrary: i)
   case (Pred e ts)
   then show ?case by auto
@@ -1105,12 +1089,8 @@ next
   then show ?case by simp
 next
   case (Or \<phi>1 \<phi>2)
-  from Or.prems have "Formula.future_reach \<phi>1 \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>1") (auto)
-  moreover from Or.prems have "Formula.future_reach \<phi>2 \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>2") (auto)
-  ultimately obtain j1 j2 where "i \<le> progress \<sigma> \<phi>1 j1" and "i \<le> progress \<sigma> \<phi>2 j2"
-    using Or.IH[of i] by blast
+  then obtain j1 j2 where "i \<le> progress \<sigma> \<phi>1 j1" and "i \<le> progress \<sigma> \<phi>2 j2"
+    using Or.IH[of i] by force+
   then have "i \<le> progress \<sigma> (Formula.Or \<phi>1 \<phi>2) (max j1 j2)"
     by (cases "j1 \<le> j2") (auto elim!: order.trans[OF _ progress_mono])
   then show ?case by blast
@@ -1121,8 +1101,8 @@ next
     then show ?thesis by auto
   next
     case False
-    from Ands.prems have "\<forall>\<phi>\<in>set l. Formula.future_reach \<phi> \<noteq> \<infinity>"
-      using future_reach_Ands_bounded by blast
+    from Ands.prems have "\<forall>\<phi>\<in>set l. Formula.future_bounded \<phi>"
+      by (simp add: list.pred_set)
     with Ands.IH have "\<exists>jf. \<forall>\<phi>\<in>set l. i \<le> progress \<sigma> \<phi> (jf \<phi>)"
       by (auto simp: Ball_def intro: choice)
     then obtain jf where "\<forall>\<phi>\<in>set l. i \<le> progress \<sigma> \<phi> (jf \<phi>)" ..
@@ -1134,26 +1114,18 @@ next
   then show ?case by simp
 next
   case (Prev I \<phi>)
-  from Prev.prems have "Formula.future_reach \<phi> \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>") (auto)
   then obtain j where "i \<le> progress \<sigma> \<phi> j"
-    using Prev.IH[of i] by blast
+    using Prev.IH[of i] by auto
   then show ?case by (auto intro!: exI[of _ j] elim!: order.trans[OF _ progress_le])
 next
   case (Next I \<phi>)
-  from Next.prems have "Formula.future_reach \<phi> \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>") (auto)
   then obtain j where "Suc i \<le> progress \<sigma> \<phi> j"
-    using Next.IH[of "Suc i"] by blast
+    using Next.IH[of "Suc i"] by auto
   then show ?case by (auto intro!: exI[of _ j])
 next
   case (Since \<phi>1 I \<phi>2)
-  from Since.prems have "Formula.future_reach \<phi>1 \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>1") (auto)
-  moreover from Since.prems have "Formula.future_reach \<phi>2 \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>2") (auto)
-  ultimately obtain j1 j2 where "i \<le> progress \<sigma> \<phi>1 j1" and "i \<le> progress \<sigma> \<phi>2 j2"
-    using Since.IH[of i] by blast
+  then obtain j1 j2 where "i \<le> progress \<sigma> \<phi>1 j1" and "i \<le> progress \<sigma> \<phi>2 j2"
+    using Since.IH[of i] by force+
   then have "i \<le> progress \<sigma> (Formula.Since \<phi>1 I \<phi>2) (max j1 j2)"
     by (cases "j1 \<le> j2") (auto elim!: order.trans[OF _ progress_mono])
   then show ?case by blast
@@ -1164,12 +1136,8 @@ next
   obtain i' where "i < i'" and "\<tau> \<sigma> i + b + 1 \<le> \<tau> \<sigma> i'"
     using ex_le_\<tau>[where x="\<tau> \<sigma> i + b + 1"] by (auto simp add: less_eq_Suc_le)
   then have 1: "\<tau> \<sigma> i + b < \<tau> \<sigma> i'" by simp
-  from Until.prems have "Formula.future_reach \<phi>1 \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>1") (auto)
-  moreover from Until.prems have "Formula.future_reach \<phi>2 \<noteq> \<infinity>"
-    by (cases "Formula.future_reach \<phi>2") (auto)
-  ultimately obtain j1 j2 where "Suc i' \<le> progress \<sigma> \<phi>1 j1" and "Suc i' \<le> progress \<sigma> \<phi>2 j2"
-    using Until.IH[of "Suc i'"] by blast
+  from Until.prems obtain j1 j2 where "Suc i' \<le> progress \<sigma> \<phi>1 j1" and "Suc i' \<le> progress \<sigma> \<phi>2 j2"
+    using Until.IH[of "Suc i'"] by force+
   then have "i \<le> progress \<sigma> (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
     unfolding progress.simps
   proof (intro cInf_greatest, goal_cases nonempty greatest)
@@ -1189,8 +1157,8 @@ next
   case (MatchP I r)
   define pick where "pick = (\<lambda>\<phi>. SOME j. i \<le> progress \<sigma> \<phi> j)"
   from MatchP have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> i \<le> progress \<sigma> \<phi> (pick \<phi>)" for \<phi>
-    by (cases "max_regex Formula.future_reach r")
-      (auto dest!: max_regex_finite_eq[THEN iffD1, OF exI] simp: pick_def intro: someI_ex)
+    by (cases "Regex.pred_regex Formula.future_bounded r")
+      (auto simp: pick_def regex.pred_set intro: someI_ex)
   show ?case
     by (auto simp: min_regex_default_alt[of r "progress \<sigma>", OF progress_le] progress_mono
       intro!: exI[of _ "Max (insert i (pick ` regex.atms r))"] intro: order_trans[OF pick])
@@ -1198,20 +1166,20 @@ next
   case (MatchF I r)
   define pick where "pick = (\<lambda>i \<phi>. SOME j. i \<le> progress \<sigma> \<phi> j)"
   from MatchF have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> i \<le> progress \<sigma> \<phi> (pick i \<phi>)" for i \<phi>
-    by (cases "max_regex Formula.future_reach r")
-      (auto dest!: max_regex_finite_eq[THEN iffD1, OF exI] simp: pick_def intro: someI_ex)
+    by (cases "Regex.pred_regex Formula.future_bounded r")
+      (auto simp: pick_def regex.pred_set intro: someI_ex)
   from MatchF.prems obtain b where "right I = enat b"
-    by (auto simp: plus_eq_enat_iff)
+    by auto
   moreover
   obtain i' where "i < i'" and "\<tau> \<sigma> i + b + 1 \<le> \<tau> \<sigma> i'"
     using ex_le_\<tau>[where x="\<tau> \<sigma> i + b + 1"] by (auto simp add: less_eq_Suc_le)
   then have 1: "\<tau> \<sigma> i + b < \<tau> \<sigma> i'" by simp
   moreover
-  from MatchF.prems have "max_regex Formula.future_reach r \<noteq> \<infinity>"
-    by (cases "max_regex Formula.future_reach r") auto
+  from MatchF.prems have "Regex.pred_regex Formula.future_bounded r"
+    by auto
   obtain j where "Suc i' \<le> min_regex_default (progress \<sigma>) r j"
     unfolding min_regex_default_alt[of r "progress \<sigma>", OF progress_le]
-    by (atomize_elim) (auto simp: plus_eq_enat_iff progress_mono
+    by (atomize_elim) (auto simp: progress_mono
      intro: order_trans[OF pick[of _ "Suc i'"]]
      intro!: exI[of _ "Max (insert (Suc i') (pick (Suc i') ` regex.atms r))"])
   moreover have "i \<le> x" if "\<tau> \<sigma> i' \<le> b + \<tau> \<sigma> x" "b + \<tau> \<sigma> i < \<tau> \<sigma> i'" for x
@@ -1485,7 +1453,7 @@ next
 qed auto
 
 
-interpretation verimon: monitor_timed_progress "\<lambda>\<phi>. Formula.future_reach \<phi> \<noteq> \<infinity>" progress
+interpretation verimon: monitor_timed_progress Formula.future_bounded progress
   by (unfold_locales, (fact progress_mono progress_le progress_time_conv sat_prefix_conv |
         simp add: mmonitorable_def progress_ge)+)
 

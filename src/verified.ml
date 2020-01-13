@@ -6281,9 +6281,7 @@ let rec mmonitorable_exec (_A1, _A2)
               (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b))
               (fvi (_A1, _A2) zero_nata phi))
     | Prev (i, phi) -> mmonitorable_exec (_A1, _A2) phi
-    | Next (i, phi) ->
-        mmonitorable_exec (_A1, _A2) phi &&
-          not (equal_enat (right i) Infinity_enat)
+    | Next (i, phi) -> mmonitorable_exec (_A1, _A2) phi
     | Since (phi, i, psi) ->
         subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
           (fvi (_A1, _A2) zero_nata phi) (fvi (_A1, _A2) zero_nata psi) &&
