@@ -3660,6 +3660,20 @@ let rec keys (_A1, _A2, _A3, _A4)
     | Assoc_List_Mapping al -> keysc (_A2, _A3, _A4) al
     | Mapping m -> collect _A1 (fun k -> not (is_none (m k)));;
 
+let rec size_alist al = size_list (impl_of al);;
+
+let rec entriesa _A xa = entries (impl_ofa _A xa);;
+
+let rec size _A
+  = function
+    RBT_Mapping t ->
+      (match ccompare _A
+        with None ->
+          failwith "size RBT_Mapping: ccompare = None"
+            (fun _ -> size _A (RBT_Mapping t))
+        | Some _ -> size_list (entriesa _A t))
+    | Assoc_List_Mapping al -> size_alist al;;
+
 let rec lPDs_aux
   s = (let sa =
          sup_seta (ceq_mregex, ccompare_mregex) s
@@ -4764,38 +4778,38 @@ let rec mapping_empty _A = function Mapping_RBT -> RBT_Mapping (emptyb _A)
                            | Mapping_Mapping -> Mapping (fun _ -> None)
                            | Mapping_Choose -> mapping_empty_choose _A;;
 
-let rec join_mmsaux (_A1, _A2)
+let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (delete (_A1, _A2));;
+
+let rec filter_join (_A1, _A2, _A3, _A4)
+  pos a m =
+    (if not pos &&
+          (finite (_A1.finite_UNIV_card_UNIV, _A2, _A3) a &&
+            less_nat (card (_A1, _A2, _A3) a) (size _A3 m))
+      then set_fold_cfi (_A2, _A3) (filter_not_in_cfi (_A3, _A4)) m a
+      else filterb _A3
+             (fun asa _ ->
+               (if pos then member (_A2, _A3) asa a
+                 else not (member (_A2, _A3) asa a)))
+             m);;
+
+let rec join_mmsaux (_A1, _A2, _A3)
   pos x (t, (gc, (i, (maskL,
                        (maskR,
                          (data_prev, (data_in, (tuple_in, tuple_since))))))))
     = (if equal_lista equal_bool maskL maskR
         then (let tuple_ina =
-                filterb (ccompare_list (ccompare_option _A2))
-                  (fun asa _ ->
-                    (if pos
-                      then member
-                             ((ceq_list (ceq_option _A1)),
-                               (ccompare_list (ccompare_option _A2)))
-                             asa x
-                      else not (member
-                                 ((ceq_list (ceq_option _A1)),
-                                   (ccompare_list (ccompare_option _A2)))
-                                 asa x)))
-                  tuple_in
+                filter_join
+                  (card_UNIV_list, (ceq_list (ceq_option _A1)),
+                    (ccompare_list (ccompare_option _A2)),
+                    (equal_list (equal_option _A3)))
+                  pos x tuple_in
                 in
               let tuple_sincea =
-                filterb (ccompare_list (ccompare_option _A2))
-                  (fun asa _ ->
-                    (if pos
-                      then member
-                             ((ceq_list (ceq_option _A1)),
-                               (ccompare_list (ccompare_option _A2)))
-                             asa x
-                      else not (member
-                                 ((ceq_list (ceq_option _A1)),
-                                   (ccompare_list (ccompare_option _A2)))
-                                 asa x)))
-                  tuple_since
+                filter_join
+                  (card_UNIV_list, (ceq_list (ceq_option _A1)),
+                    (ccompare_list (ccompare_option _A2)),
+                    (equal_list (equal_option _A3)))
+                  pos x tuple_since
                 in
                (t, (gc, (i, (maskL,
                               (maskR,
@@ -4846,7 +4860,8 @@ let rec join_mmsaux (_A1, _A2)
 let rec update_since
   i pos rel1 rel2 nt aux =
     (let aux0 =
-       join_mmsaux (ceq_event_data, ccompare_event_data) pos rel1
+       join_mmsaux (ceq_event_data, ccompare_event_data, equal_event_data) pos
+         rel1
          (filter_mmsaux (ceq_event_data, ccompare_event_data, equal_event_data)
            nt aux)
        in
