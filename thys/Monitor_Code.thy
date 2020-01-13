@@ -389,8 +389,6 @@ lemma filter_Mapping [code]:
                      | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
   by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
 
-abbreviation "join_filter_cond pos X \<equiv> (\<lambda>as _. if pos then as \<in> X else as \<notin> X)"
-
 definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
 
 declare [[code drop: join_mmsaux]]
