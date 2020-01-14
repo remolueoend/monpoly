@@ -722,16 +722,22 @@ let rec eval f neval crt discard =
           end;
         let pcrt = NEval.get_prev neval crt in
         begin
+          let prev_tp, prev_ts = NEval.get_data pcrt in
+          assert(prev_tp = q - 1);
+          assert(prev_ts = inf.ptsq);
           let orel = eval f1 neval pcrt discard in
           if !added then
             ignore(NEval.pop_first neval);
           match orel with
           | Some rel1 ->
+            let res =
+              if MFOTL.in_interval (MFOTL.ts_minus tsq inf.ptsq) intv then
+                Some rel1
+              else
+                Some Relation.empty
+            in
             inf.ptsq <- tsq;
-            if MFOTL.in_interval (MFOTL.ts_minus tsq inf.ptsq) intv then
-              Some rel1
-            else
-              Some Relation.empty;
+            res
           | None -> None
         end
       end
