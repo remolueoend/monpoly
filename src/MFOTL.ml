@@ -281,7 +281,7 @@ let rec free_vars = function
   | Always (intv,f) 
   | PastAlways (intv,f) -> free_vars f
   | Since (intv,f1,f2) 
-  | Until (intv,f1,f2) -> Misc.union (free_vars f1) (free_vars f2)
+  | Until (intv,f1,f2) -> Misc.union (free_vars f2) (free_vars f1)
   | Frex (intv,r)
   | Prex (intv,r) -> free_re_vars r
 and free_re_vars = function 
@@ -855,5 +855,3 @@ let print_formula str f =
 let printnl_formula str f =
   print_formula str f;
   print_newline()
-
-

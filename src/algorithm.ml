@@ -1353,14 +1353,16 @@ let process_index ff closed neval i =
   let rec eval_loop () =
     if not (NEval.is_empty neval) then
       let first = NEval.get_first_cell neval in
-      match eval ff neval first false with
-      | Some rel ->
-        ignore(NEval.pop_first neval);
-        let (q,tsq) = NEval.get_data first in
-        show_results closed i q tsq rel;
-        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
-        else eval_loop ()
-      | None -> true
+      let (q,tsq) = NEval.get_data first in
+      if tsq < MFOTL.ts_max then
+        match eval ff neval first false with
+        | Some rel ->
+          ignore(NEval.pop_first neval);
+          show_results closed i q tsq rel;
+          if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
+          else eval_loop ()
+        | None -> true
+      else false
     else true
   in
   eval_loop ()
@@ -1941,8 +1943,7 @@ let rec add_ext f =
         fun relj rel1 -> Relation.minus posl relj rel1
       else
         let matches2 = Table.get_matches attr2 attr1 in
-        let matches1 = Table.get_matches attr1 attr2 in
-        fun relj rel1 -> Relation.natural_join matches2 matches1 relj rel1
+        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
     in
     let ff1 = add_ext ef1 in
     let ff2 = add_ext f2 in
@@ -2000,8 +2001,7 @@ let rec add_ext f =
     else
       let comp =
         let matches2 = Table.get_matches attr2 attr1 in
-        let matches1 = Table.get_matches attr1 attr2 in
-        fun relj rel1 -> Relation.natural_join matches2 matches1 relj rel1
+        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
       in
       let inf = {ulast = NEval.void;
                  ufirst = false;

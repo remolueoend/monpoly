@@ -188,8 +188,6 @@ let push_negation g =
   let rec push f = match f with
     | Neg (And (f1, f2)) -> Or ((push (Neg f1)), (push (Neg  f2)))
     | Neg (Or (f1, f2)) -> And ((push (Neg f1)), (push (Neg  f2)))
-    | Neg (Prev (intv, f)) -> (Prev (intv, push (Neg f)))
-    | Neg (Next (intv, f)) -> (Next (intv, push (Neg f)))
     | Neg (Eventually (intv, f)) ->
       (* (Always (intv, push (Neg f))) *)
       Neg (Eventually (intv, push f))
@@ -802,7 +800,6 @@ let rec is_future = function
   | ForAll (_, f)
   | Aggreg (_, _, _, _, f)
   | Prev (_, f)
-  | Next (_, f)
   | Once (_, f)
   | PastAlways (_, f)
     -> is_future f
@@ -816,6 +813,7 @@ let rec is_future = function
   | Since (_, f1, f2)
     -> (is_future f1) || (is_future f2)
 
+  | Next (_, _)
   | Eventually (_, _)
   | Always (_, _)
   | Until (_, _, _)
