@@ -56,13 +56,17 @@ let monitor logfile f =
     | MonpolyError s -> finish ()
     | MonpolyData d ->
     if d.ts >= ts then
-      (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
-      let tpts = add d.tp d.ts tpts in
-      let (vs, new_state) = Verified.Monitor.mstep (convert_db d) state in
-      let vs = convert_violations vs in
-      List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
-      let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
-      loop new_state tpts d.tp d.ts
+      begin
+        (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
+        if !Misc.verbose then
+          Printf.printf "At time point %d:\n%!" d.tp;
+        let tpts = add d.tp d.ts tpts in
+        let (vs, new_state) = Verified.Monitor.mstep (convert_db d) state in
+        let vs = convert_violations vs in
+        List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
+        let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
+        loop new_state tpts d.tp d.ts
+      end
     else
       if !Misc.stop_at_out_of_order_ts then
         let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
