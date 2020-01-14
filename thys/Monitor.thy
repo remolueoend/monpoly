@@ -1,6 +1,7 @@
 (*<*)
 theory Monitor
   imports Abstract_Monitor
+    Optimized_Join
     "HOL-Library.While_Combinator"
     "HOL-Library.Mapping"
     "Deriving.Derive"
@@ -616,7 +617,7 @@ type_synonym 'a ml\<delta>aux = "(ts \<times> 'a table list \<times> 'a table) l
 datatype ('msaux, 'a) mformula =
     MRel "'a table"
   | MPred Formula.name "'a Formula.trm list"
-  | MAnd "('msaux, 'a) mformula" bool "('msaux, 'a) mformula" "'a mbuf2"
+  | MAnd "nat set" "('msaux, 'a) mformula" bool "nat set" "('msaux, 'a) mformula" "'a mbuf2"
   | MAnds "nat set list" "nat set list" "('msaux, 'a) mformula list" "'a mbufn"
   | MOr "('msaux, 'a) mformula" "('msaux, 'a) mformula" "'a mbuf2"
   | MNeg "('msaux, 'a) mformula"
@@ -695,8 +696,8 @@ function (in msaux) (sequential) minit0 :: "nat \<Rightarrow> 'a Formula.formula
   "minit0 n (Formula.Neg \<phi>) = (case \<phi> of
     Formula.Eq t1 t2 \<Rightarrow> MRel (neq_rel n t1 t2)
   | Formula.Or (Formula.Neg \<phi>) \<psi> \<Rightarrow> (if safe_formula \<psi> \<and> Formula.fv \<psi> \<subseteq> Formula.fv \<phi>
-      then MAnd (minit0 n \<phi>) False (minit0 n \<psi>) ([], [])
-      else (case \<psi> of Formula.Neg \<psi> \<Rightarrow> MAnd (minit0 n \<phi>) True (minit0 n \<psi>) ([], []) | \<psi> \<Rightarrow> MNeg (minit0 n (Formula.Or (Formula.Neg \<phi>) \<psi>))))
+      then MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) ([], [])
+      else (case \<psi> of Formula.Neg \<psi> \<Rightarrow> MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) ([], []) | \<psi> \<Rightarrow> MNeg (minit0 n (Formula.Or (Formula.Neg \<phi>) \<psi>))))
   | \<phi> \<Rightarrow> MNeg (minit0 n \<phi>))"
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
 | "minit0 n (Formula.Pred e ts) = MPred e ts"
@@ -788,48 +789,6 @@ fun match :: "'a Formula.trm list \<Rightarrow> 'a list \<Rightarrow> (nat \<rig
         None \<Rightarrow> Some (f(x \<mapsto> y))
       | Some z \<Rightarrow> if y = z then Some f else None))"
 | "match _ _ = None"
-
-fun mmulti_join :: "(nat set list \<Rightarrow> nat set list \<Rightarrow> 'a table list \<Rightarrow> 'a table)" where
-  "mmulti_join A_pos A_neg L = (
-    let Q = set (zip A_pos L) in
-    let Q_neg = set (zip A_neg (drop (length A_pos) L)) in
-    New_max_getIJ_wrapperGenericJoin Q Q_neg)"
-
-lemma mmulti_join_correct:
-  assumes "A_pos \<noteq> []"
-      and "list_all2 (\<lambda>A X. table n A X \<and> wf_set n A) (A_pos @ A_neg) L"
-  shows "z \<in> mmulti_join A_pos A_neg L \<longleftrightarrow> wf_tuple n (\<Union>A\<in>set A_pos. A) z \<and>
-    list_all2 (\<lambda>A X. restrict A z \<in> X) A_pos (take (length A_pos) L) \<and>
-    list_all2 (\<lambda>A X. restrict A z \<notin> X) A_neg (drop (length A_pos) L)"
-proof -
-  define Q where "Q = set (zip A_pos L)"
-  have Q_alt: "Q = set (zip A_pos (take (length A_pos) L))"
-    unfolding Q_def by (fastforce simp: in_set_zip)
-  define Q_neg where "Q_neg = set (zip A_neg (drop (length A_pos) L))"
-  let ?r = "mmulti_join A_pos A_neg L"
-  have "?r = New_max_getIJ_wrapperGenericJoin Q Q_neg"
-    unfolding Q_def Q_neg_def by (simp del: New_max.wrapperGenericJoin.simps)
-  moreover have "card Q \<ge> 1"
-    unfolding Q_def using assms(1,2)
-    by (auto simp: Suc_le_eq card_gt_0_iff zip_eq_Nil_iff)
-  moreover have "\<forall>(A, X)\<in>(Q \<union> Q_neg). table n A X \<and> wf_set n A"
-    unfolding Q_alt Q_neg_def using assms(2) by (simp add: zip_append1 list_all2_iff)
-  ultimately have "z \<in> ?r \<longleftrightarrow> wf_tuple n (\<Union>(A, X)\<in>Q. A) z \<and>
-      (\<forall>(A, X)\<in>Q. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)"
-    using New_max.wrapper_correctness case_prod_beta' by blast
-  moreover have "(\<Union>A\<in>set A_pos. A) = (\<Union>(A, X)\<in>Q. A)" proof -
-    from assms(2) have "length A_pos \<le> length L" by (auto dest!: list_all2_lengthD)
-    then show ?thesis
-      unfolding Q_alt
-      by (auto elim: in_set_impl_in_set_zip1[rotated, where ys="take (length A_pos) L"] dest: set_zip_leftD)
-  qed
-  moreover have "\<And>z. (\<forall>(A, X)\<in>Q. restrict A z \<in> X) \<longleftrightarrow> list_all2 (\<lambda>A X. restrict A z \<in> X) A_pos (take (length A_pos) L)"
-    unfolding Q_alt using assms(2) by (auto simp add: list_all2_iff)
-  moreover have "\<And>z. (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X) \<longleftrightarrow> list_all2 (\<lambda>A X. restrict A z \<notin> X) A_neg (drop (length A_pos) L)"
-    unfolding Q_neg_def using assms(2) by (auto simp add: list_all2_iff)
-  ultimately show ?thesis
-    unfolding Q_def Q_neg_def using assms(2) by simp
-qed
 
 definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> (('a \<times> enat) set \<Rightarrow> 'a) \<Rightarrow> nat \<Rightarrow>
   ('a Formula.env \<Rightarrow> 'a) \<Rightarrow> 'a table \<Rightarrow> 'a table" where
@@ -948,14 +907,14 @@ primrec (in msaux) meval :: "nat \<Rightarrow> ts \<Rightarrow> 'a Formula.datab
   "meval n t db (MRel rel) = ([rel], MRel rel)"
 | "meval n t db (MPred e ts) = ([(\<lambda>f. Table.tabulate f 0 n) ` Option.these
     (match ts ` (\<Union>(e', x)\<in>db. if e = e' then {x} else {}))], MPred e ts)"
-| "meval n t db (MAnd \<phi> pos \<psi> buf) =
+| "meval n t db (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf) =
     (let (xs, \<phi>) = meval n t db \<phi>; (ys, \<psi>) = meval n t db \<psi>;
-      (zs, buf) = mbuf2_take (\<lambda>r1 r2. join r1 pos r2) (mbuf2_add xs ys buf)
-    in (zs, MAnd \<phi> pos \<psi> buf))"
+      (zs, buf) = mbuf2_take (\<lambda>r1 r2. bin_join n A_\<phi> r1 pos A_\<psi> r2) (mbuf2_add xs ys buf)
+    in (zs, MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf))"
 | "meval n t db (MAnds A_pos A_neg L buf) =
     (let R = map (meval n t db) L in
     let buf = mbufn_add (map fst R) buf in
-    let (zs, buf) = mbufn_take (\<lambda>xs zs. zs @ [mmulti_join A_pos A_neg xs]) [] buf in
+    let (zs, buf) = mbufn_take (\<lambda>xs zs. zs @ [mmulti_join n A_pos A_neg xs]) [] buf in
     (zs, MAnds A_pos A_neg (map snd R) buf))"
 | "meval n t db (MOr \<phi> \<psi> buf) =
     (let (xs, \<phi>) = meval n t db \<phi>; (ys, \<psi>) = meval n t db \<psi>;
@@ -1645,7 +1604,7 @@ inductive (in msaux) wf_mformula :: "'a Formula.trace \<Rightarrow> nat \<Righta
     if pos then \<chi> = Formula.And \<phi>' \<psi>' \<and> \<not> (safe_formula (Formula.Neg \<psi>') \<and> Formula.fv \<psi>' \<subseteq> Formula.fv \<phi>')
       else \<chi> = Formula.And_Not \<phi>' \<psi>' \<and> safe_formula \<psi>' \<and> Formula.fv \<psi>' \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
     wf_mbuf2' \<sigma> j n R \<phi>' \<psi>' buf \<Longrightarrow>
-    wf_mformula \<sigma> j n R (MAnd \<phi> pos \<psi> buf) \<chi>"
+    wf_mformula \<sigma> j n R (MAnd (fv \<phi>') \<phi> pos (fv \<psi>') \<psi> buf) \<chi>"
 | Ands: "list_all2 (\<lambda>\<phi> \<phi>'. wf_mformula \<sigma> j n R \<phi> \<phi>') l (l_pos @ map remove_neg l_neg) \<Longrightarrow>
     wf_mbufn (progress \<sigma> (Formula.Ands l') j) (map (\<lambda>\<psi>. progress \<sigma> \<psi> j) (l_pos @ map remove_neg l_neg)) (map (\<lambda>\<psi> i.
       qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<psi>)) (l_pos @ map remove_neg l_neg)) buf \<Longrightarrow>
@@ -1724,11 +1683,11 @@ definition (in msaux) wf_mstate :: "'a Formula.formula \<Rightarrow> 'a Formula.
 subsubsection \<open>Initialisation\<close>
 
 lemma (in msaux) minit0_And: "\<not> (safe_formula (Formula.Neg \<psi>) \<and> Formula.fv \<psi> \<subseteq> Formula.fv \<phi>) \<Longrightarrow>
-     minit0 n (Formula.And \<phi> \<psi>) = MAnd (minit0 n \<phi>) True (minit0 n \<psi>) ([], [])"
+     minit0 n (Formula.And \<phi> \<psi>) = MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) ([], [])"
   unfolding Formula.And_def by simp
 
 lemma (in msaux) minit0_And_Not: "safe_formula \<psi> \<and> Formula.fv \<psi> \<subseteq> Formula.fv \<phi> \<Longrightarrow>
-  minit0 n (Formula.And_Not \<phi> \<psi>) = (MAnd (minit0 n \<phi>) False (minit0 n \<psi>) ([], []))"
+  minit0 n (Formula.And_Not \<phi> \<psi>) = (MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) ([], []))"
   unfolding Formula.And_Not_def Formula.is_Neg_def by (simp split: formula.split)
 
 lemma wf_mbuf2'_0: "wf_mbuf2' \<sigma> 0 n R \<phi> \<psi> ([], [])"
@@ -3803,7 +3762,7 @@ lemma qtable_mmulti_join:
     and Qs: "\<And>x. wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow>
       list_all2 (\<lambda>A Qi. Qi (restrict A x)) A_pos Q_pos \<and>
       list_all2 (\<lambda>A Qi. \<not> Qi (restrict A x)) A_neg Q_neg"
-  shows "qtable n C P Q (mmulti_join A_pos A_neg L)"
+  shows "qtable n C P Q (mmulti_join n A_pos A_neg L)"
 proof (rule qtableI)
   from pos have 1: "list_all2 (\<lambda>A X. table n A X \<and> wf_set n A) A_pos L_pos"
     by (simp add: list_all3_conv_all_nth list_all2_conv_all_nth qtable_def)
@@ -3818,9 +3777,9 @@ proof (rule qtableI)
     by (auto dest!: list_all2_lengthD)
 
   note mmulti_join.simps[simp del]
-  show "table n C (mmulti_join A_pos A_neg L)"
+  show "table n C (mmulti_join n A_pos A_neg L)"
     unfolding C_eq L_eq table_def by (simp add: in_join_iff)
-  show "Q x" if "x \<in> mmulti_join A_pos A_neg L" "wf_tuple n C x" "P x" for x
+  show "Q x" if "x \<in> mmulti_join n A_pos A_neg L" "wf_tuple n C x" "P x" for x
     using that(2,3)
   proof (rule Qs[THEN iffD2, OF _ _ conjI])
     have pos': "list_all2 (\<lambda>A. (\<in>) (restrict A x)) A_pos L_pos"
@@ -3836,7 +3795,7 @@ proof (rule qtableI)
       by (auto simp: list_all3_conv_all_nth list_all2_conv_all_nth list_all_length qtable_def
           wf_tuple_restrict_simple[OF _ fv_subset'])
   qed
-  show "x \<in> mmulti_join A_pos A_neg L" if "wf_tuple n C x" "P x" "Q x" for x
+  show "x \<in> mmulti_join n A_pos A_neg L" if "wf_tuple n C x" "P x" "Q x" for x
     unfolding L_eq in_join_iff take_eq drop_eq
   proof (intro conjI)
     from that have pos': "list_all2 (\<lambda>A Qi. Qi (restrict A x)) A_pos Q_pos"
@@ -3874,6 +3833,15 @@ lemma qtable_unit_empty_table:
   "qtable n {} R P (unit_table n) \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
   by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty unit_table_def)
 
+lemma qtable_bin_join:
+  assumes "qtable n A P Q1 X" "qtable n B P Q2 Y" "\<not> b \<Longrightarrow> B \<subseteq> A" "C = A \<union> B"
+  "\<And>x. wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> P (restrict A x) \<and> P (restrict B x)"
+  "\<And>x. b \<Longrightarrow> wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> Q1 (restrict A x) \<and> Q2 (restrict B x)"
+  "\<And>x. \<not> b \<Longrightarrow> wf_tuple n C x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> Q1 (restrict A x) \<and> \<not> Q2 (restrict B x)"
+  shows "qtable n C P Q (bin_join n A X b B Y)"
+  using qtable_join[OF assms] bin_join_table[of n A X B Y b] assms(1,2)
+  by (auto simp add: qtable_def)
+
 lemma (in msaux) meval:
   assumes "wf_mformula \<sigma> j n R \<phi> \<phi>'"
   shows "case meval n (\<tau> \<sigma> j) (\<Gamma> \<sigma> j) \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (Suc j) n R \<phi>\<^sub>n \<phi>' \<and>
@@ -3892,12 +3860,12 @@ next
       (auto 0 4 simp: table_def in_these_eq match_wf_tuple match_eval_trm image_iff dest: ex_match
         split: if_splits intro!: wf_mformula.intros qtableI elim!: bexI[rotated])
 next
-  case (MAnd \<phi> pos \<psi> buf)
+  case (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)
   from MAnd.prems show ?case
     by (cases rule: wf_mformula.cases)
-      (auto simp: fvi_And sat_And fvi_And_Not sat_And_Not sat_the_restrict
-       dest!: MAnd.IH split: if_splits prod.splits intro!: wf_mformula.And qtable_join
-       dest: mbuf2_take_add' elim!: list.rel_mono_strong)
+       (auto simp: fvi_And sat_And fvi_And_Not sat_And_Not sat_the_restrict simp del: bin_join.simps
+        dest!: MAnd.IH split: if_splits prod.splits intro!: wf_mformula.And qtable_bin_join
+        dest: mbuf2_take_add' elim!: list.rel_mono_strong)
 next
   case (MAnds A_pos A_neg l buf)
   note mbufn_take.simps[simp del] mbufn_add.simps[simp del] mmulti_join.simps[simp del]
@@ -3920,7 +3888,7 @@ next
 
   have join_ok: "qtable n (\<Union> (fv ` set l')) (mem_restr R)
         (\<lambda>v. list_all (Formula.sat \<sigma> (map the v) k) l')
-        (mmulti_join A_pos A_neg L)"
+        (mmulti_join n A_pos A_neg L)"
     if args_ok: "list_all2 (\<lambda>x. qtable n (fv x) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) k x))
         (pos @ map remove_neg neg) L"
     for k L

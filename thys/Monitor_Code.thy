@@ -419,12 +419,12 @@ proof -
 qed
 
 lemma filter_join_False:
-  assumes fin: "finite A"
+  assumes "finite A"
   shows "filter_join False A m = Finite_Set.fold Mapping.delete m A"
 proof -
   interpret comp_fun_idem "Mapping.delete"
     by (unfold_locales; transfer) (fastforce simp add: comp_def)+
-  from fin show ?thesis
+  from assms show ?thesis
     by (induction A arbitrary: m rule: finite.induct)
        (auto simp add: filter_join_False_empty filter_join_False_insert fold_fun_left_comm)
 qed
@@ -439,6 +439,31 @@ lemma filter_join_code[code]:
   unfolding filter_join_def
   apply (transfer fixing: m)
   using filter_join_False by (auto simp add: filter_join_def)
+
+definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
+  "set_minus X Y = X - Y"
+
+lift_definition remove_cfi :: "('a, 'a set) comp_fun_idem"
+  is "\<lambda>b a. a - {b}"
+  by unfold_locales auto
+
+lemma set_minus_finite:
+  assumes fin: "finite Y"
+  shows "set_minus X Y = Finite_Set.fold (\<lambda>a X. X - {a}) X Y"
+proof -
+  interpret comp_fun_idem "\<lambda>a X. X - {a}"
+    by unfold_locales auto
+  from assms show ?thesis
+    by (induction Y arbitrary: X rule: finite.induct) (auto simp add: set_minus_def)
+qed
+
+lemma set_minus_code[code]: "set_minus X Y =
+  (if finite Y \<and> card Y < card X then set_fold_cfi remove_cfi X Y else X - Y)"
+  apply transfer
+  using set_minus_finite by (auto simp add: set_minus_def)
+
+declare [[code drop: bin_join]]
+declare bin_join.simps[folded set_minus_def, code]
 
 definition mmonitorable_exec_e :: "event_data Formula.formula \<Rightarrow> bool" where
   [code_unfold]: "mmonitorable_exec_e = Monitor.mmonitorable_exec"
