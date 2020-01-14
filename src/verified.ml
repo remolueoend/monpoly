@@ -5265,7 +5265,13 @@ ccompare_nat)
                                   then filter
  ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
  (fun asa -> proj_tuple_in_join (_A1, _A2) pos (join_mask n a) asa t) ta
-                                  else join (_A1, _A2, _A3) ta pos t)))));;
+                                  else (if subset
+     (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat) aa a &&
+     pos
+ then filter
+        ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+        (fun asa -> proj_tuple_in_join (_A1, _A2) pos (join_mask n aa) asa ta) t
+ else join (_A1, _A2, _A3) ta pos t))))));;
 
 let rec mmulti_join (_A1, _A2, _A3)
   n a_pos a_neg l =

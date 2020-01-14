@@ -65,6 +65,13 @@ lemma join_sub:
     wf_tuple_length restrict_idle
   by (auto simp add: table_def proj_tuple_in_join_def sup.absorb1) fastforce+
 
+lemma join_sub':
+  assumes "R \<subseteq> L" "table n L t1" "table n R t2"
+  shows "join t2 True t1 = {as \<in> t1. proj_tuple_in_join True (join_mask n R) as t2}"
+  using assms proj_tuple_join_mask_restrict[of _ n R] join_restrict[of t2 n R t1 L True]
+    wf_tuple_length restrict_idle
+  by (auto simp add: table_def proj_tuple_in_join_def sup.absorb1 Un_absorb1) fastforce+
+
 lemma join_eq:
   assumes tab: "table n R t1" "table n R t2"
   shows "join t2 pos t1 = (if pos then t2 \<inter> t1 else t2 - t1)"
@@ -90,6 +97,7 @@ fun bin_join :: "nat \<Rightarrow> nat set \<Rightarrow> 'a table \<Rightarrow> 
     else if A' = {} then (if (pos \<longleftrightarrow> replicate n None \<in> t') then t else {})
     else if A' = A then (if pos then t \<inter> t' else t - t')
     else if A' \<subseteq> A then {as \<in> t. proj_tuple_in_join pos (join_mask n A') as t'}
+    else if A \<subseteq> A' \<and> pos then {as \<in> t'. proj_tuple_in_join pos (join_mask n A) as t}
     else join t pos t')"
 
 lemma bin_join_table:
@@ -97,7 +105,8 @@ lemma bin_join_table:
   shows "bin_join n A t pos A' t' = join t pos t'"
   using assms join_empty_left[of pos t'] join_empty_right[of t pos]
     join_no_cols[OF _ assms(1), of t' pos] join_eq[of n A t' t pos] join_sub[OF _ assms(2,1)]
-  by auto
+    join_sub'[OF _ assms(2,1)]
+  by auto+
 
 (* Multi-way join *)
 
