@@ -738,6 +738,26 @@ let rec rewrite f =
 
 (*** Some syntactic checks *)
 
+let check_interval intv = 
+  let check_bound b = match b with 
+  | OBnd a 
+  | CBnd a -> a >= 0.
+  | _ -> true
+  in
+  let check_lb_ub lb ub = 
+    match lb, ub with 
+        | Inf, _ -> false
+        | CBnd a, CBnd b -> a<=b
+        | CBnd a, OBnd b 
+        | OBnd a, CBnd b 
+        | OBnd a, OBnd b -> a < b
+        | _ as l , Inf -> l <> Inf
+  in
+  let lb, ub = intv in
+  (check_bound lb) && (check_bound ub) && (check_lb_ub lb ub) 
+
+
+
 let check_bound intv =
   let _,b = intv in
   match b with
@@ -975,16 +995,22 @@ let rec check_syntax db_schema f =
         );
       check_vars name assign 0 args
 
-    | Neg f
-    | Prev (_,f)
-    | Next (_,f)
-    | Eventually (_,f)
-    | Once (_,f)
-    | Always (_,f)
-    | PastAlways (_,f) -> check assign f
+    | Neg f -> check assign f
+    | Prev (i,f)
+    | Next (i,f)
+    | Eventually (i,f)
+    | Once (i,f)
+    | Always (i,f)
+    | PastAlways (i,f) -> if (check_interval i)
+                          then check assign f
+                          else failwith ("[Rewriting.check_syntax] negative or empty interval " ^ (string_of_interval i) ^
+                          " in input formula")
     
-    | Frex (_,r) 
-    | Prex (_,r) -> check_re assign r
+    | Frex (i,r) 
+    | Prex (i,r) -> if (check_interval i)
+                    then check_re assign r
+                    else failwith ("[Rewriting.check_syntax] negative or empty interval " ^ (string_of_interval i) ^
+                    " in input formula")
 
     | Exists (vl,f)
     | ForAll (vl,f) ->
@@ -1019,11 +1045,15 @@ let rec check_syntax db_schema f =
     | And (f1,f2)
     | Or (f1,f2)
     | Implies (f1,f2)
-    | Equiv (f1,f2)
-    | Since (_,f1,f2)
-    | Until (_,f1,f2) ->
+    | Equiv (f1,f2) -> 
       let assign1 = check assign f1 in
       union assign1 (check assign1 f2)
+    | Since (i,f1,f2)
+    | Until (i,f1,f2) -> if (check_interval i)
+                         then let assign1 = check assign f1 in
+                              union assign1 (check assign1 f2)
+                         else failwith ("[Rewriting.check_syntax] negative or empty interval " ^ (string_of_interval i) ^
+                         " in input formula")
   and check_re assign = function
     | Wild -> []
     | Test f -> check assign f
