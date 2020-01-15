@@ -222,10 +222,10 @@ function monitor() {
     local fma=$(fma_path $formula)
 
     #MONPOLY
-    local monpolyCMD="monpoly -no_rw -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} > ${verdictpath}_monpoly"
+    local monpolyCMD="monpoly-legacy -nofilteremptytp -nofilterrel -no_rw -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} > ${verdictpath}_monpoly"
     
     #ORACLE-Monpoly
-    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
+    local oracleCMD="monpoly -no_rw -nofilteremptytp -nofilterrel -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
 
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
@@ -233,7 +233,7 @@ function monitor() {
     local dejavuCMD="${DEJAVU_RUN} ${fma} ${logpath}_dejavu ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
-    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}_oracle -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
+    local oracleCMD="monpoly -nofilteremptytp -nofilterrel -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}_oracle -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
 
     compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
 }
