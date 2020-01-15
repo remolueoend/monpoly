@@ -4068,129 +4068,104 @@ let rec safe_formula (_A1, _A2)
               | Until (_, _, _) -> false | MatchF (_, _) -> false
               | MatchP (_, _) -> false))
     | Neg (Pred (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Pred (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Pred (v, va))) &&
           safe_formula (_A1, _A2) (Pred (v, va))
     | Neg (Eq (Var vb, Const v)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Eq (Var vb, Const v)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Eq (Var vb, Const v))) &&
           safe_formula (_A1, _A2) (Eq (Var vb, Const v))
     | Neg (Eq (Const va, Var vb)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Eq (Const va, Var vb)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Eq (Const va, Var vb))) &&
           safe_formula (_A1, _A2) (Eq (Const va, Var vb))
     | Neg (Neg v) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Neg v))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Neg v)) &&
           safe_formula (_A1, _A2) (Neg v)
     | Neg (Or (Pred (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Pred (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Pred (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (Pred (vb, vc), va))
     | Neg (Or (Eq (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Eq (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Eq (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (Eq (vb, vc), va))
     | Neg (Or (Or (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Or (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Or (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (Or (vb, vc), va))
     | Neg (Or (Ands vb, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Ands vb, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Ands vb, va))) &&
           safe_formula (_A1, _A2) (Or (Ands vb, va))
     | Neg (Or (Exists vb, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Exists vb, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Exists vb, va))) &&
           safe_formula (_A1, _A2) (Or (Exists vb, va))
     | Neg (Or (Agg (vb, vc, vd, ve, vf), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Agg (vb, vc, vd, ve, vf), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Agg (vb, vc, vd, ve, vf), va))) &&
           safe_formula (_A1, _A2) (Or (Agg (vb, vc, vd, ve, vf), va))
     | Neg (Or (Prev (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Prev (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Prev (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (Prev (vb, vc), va))
     | Neg (Or (Next (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Next (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Next (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (Next (vb, vc), va))
     | Neg (Or (Since (vb, vc, vd), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Since (vb, vc, vd), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Since (vb, vc, vd), va))) &&
           safe_formula (_A1, _A2) (Or (Since (vb, vc, vd), va))
     | Neg (Or (Until (vb, vc, vd), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Until (vb, vc, vd), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Until (vb, vc, vd), va))) &&
           safe_formula (_A1, _A2) (Or (Until (vb, vc, vd), va))
     | Neg (Or (MatchF (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (MatchF (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (MatchF (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (MatchF (vb, vc), va))
     | Neg (Or (MatchP (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (MatchP (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (MatchP (vb, vc), va))) &&
           safe_formula (_A1, _A2) (Or (MatchP (vb, vc), va))
     | Neg (Ands v) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Ands v))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Ands v)) &&
           safe_formula (_A1, _A2) (Ands v)
     | Neg (Exists v) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Exists v))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Exists v)) &&
           safe_formula (_A1, _A2) (Exists v)
     | Neg (Agg (v, va, vb, vc, vd)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Agg (v, va, vb, vc, vd)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Agg (v, va, vb, vc, vd))) &&
           safe_formula (_A1, _A2) (Agg (v, va, vb, vc, vd))
     | Neg (Prev (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Prev (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Prev (v, va))) &&
           safe_formula (_A1, _A2) (Prev (v, va))
     | Neg (Next (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Next (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Next (v, va))) &&
           safe_formula (_A1, _A2) (Next (v, va))
     | Neg (Since (v, va, vb)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Since (v, va, vb)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Since (v, va, vb))) &&
           safe_formula (_A1, _A2) (Since (v, va, vb))
     | Neg (Until (v, va, vb)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Until (v, va, vb)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Until (v, va, vb))) &&
           safe_formula (_A1, _A2) (Until (v, va, vb))
     | Neg (MatchF (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (MatchF (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (MatchF (v, va))) &&
           safe_formula (_A1, _A2) (MatchF (v, va))
     | Neg (MatchP (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (MatchP (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (MatchP (v, va))) &&
           safe_formula (_A1, _A2) (MatchP (v, va))
     | Or (phi, psi) ->
         eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
@@ -5211,33 +5186,25 @@ let rec set_minus (_A1, _A2, _A3)
 
 let rec bin_join (_A1, _A2, _A3)
   n aa ta pos a t =
-    (if eq_set
-          (card_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
-            (ccompare_list (ccompare_option _A2)))
-          ta (set_empty
-               ((ceq_list (ceq_option _A1)),
-                 (ccompare_list (ccompare_option _A2)))
-               (of_phantom set_impl_lista))
+    (if is_empty
+          (card_UNIV_list, (ceq_list (ceq_option _A1)),
+            (cproper_interval_list (ccompare_option _A2)))
+          ta
       then set_empty
              ((ceq_list (ceq_option _A1)),
                (ccompare_list (ccompare_option _A2)))
              (of_phantom set_impl_lista)
-      else (if eq_set
-                 (card_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
-                   (ccompare_list (ccompare_option _A2)))
-                 t (set_empty
-                     ((ceq_list (ceq_option _A1)),
-                       (ccompare_list (ccompare_option _A2)))
-                     (of_phantom set_impl_lista))
+      else (if is_empty
+                 (card_UNIV_list, (ceq_list (ceq_option _A1)),
+                   (cproper_interval_list (ccompare_option _A2)))
+                 t
              then (if pos
                     then set_empty
                            ((ceq_list (ceq_option _A1)),
                              (ccompare_list (ccompare_option _A2)))
                            (of_phantom set_impl_lista)
                     else ta)
-             else (if eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat) a
-                        (set_empty (ceq_nat, ccompare_nat)
-                          (of_phantom set_impl_nata))
+             else (if is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat) a
                     then (if equal_boola pos
                                (member
                                  ((ceq_list (ceq_option _A1)),
@@ -6343,129 +6310,104 @@ let rec mmonitorable_exec (_A1, _A2)
                          set_impl_set)
                     (mapa (fvi (_A1, _A2) zero_nata) pos)))))
     | Neg (Pred (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Pred (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Pred (v, va))) &&
           mmonitorable_exec (_A1, _A2) (Pred (v, va))
     | Neg (Eq (Var vb, Const v)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Eq (Var vb, Const v)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Eq (Var vb, Const v))) &&
           mmonitorable_exec (_A1, _A2) (Eq (Var vb, Const v))
     | Neg (Eq (Const va, Var vb)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Eq (Const va, Var vb)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Eq (Const va, Var vb))) &&
           mmonitorable_exec (_A1, _A2) (Eq (Const va, Var vb))
     | Neg (Neg v) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Neg v))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Neg v)) &&
           mmonitorable_exec (_A1, _A2) (Neg v)
     | Neg (Or (Pred (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Pred (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Pred (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Pred (vb, vc), va))
     | Neg (Or (Eq (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Eq (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Eq (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Eq (vb, vc), va))
     | Neg (Or (Or (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Or (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Or (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Or (vb, vc), va))
     | Neg (Or (Ands vb, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Ands vb, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Ands vb, va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Ands vb, va))
     | Neg (Or (Exists vb, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Exists vb, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Exists vb, va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Exists vb, va))
     | Neg (Or (Agg (vb, vc, vd, ve, vf), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Agg (vb, vc, vd, ve, vf), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Agg (vb, vc, vd, ve, vf), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Agg (vb, vc, vd, ve, vf), va))
     | Neg (Or (Prev (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Prev (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Prev (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Prev (vb, vc), va))
     | Neg (Or (Next (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Next (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Next (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Next (vb, vc), va))
     | Neg (Or (Since (vb, vc, vd), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Since (vb, vc, vd), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Since (vb, vc, vd), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Since (vb, vc, vd), va))
     | Neg (Or (Until (vb, vc, vd), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (Until (vb, vc, vd), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (Until (vb, vc, vd), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (Until (vb, vc, vd), va))
     | Neg (Or (MatchF (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (MatchF (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (MatchF (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (MatchF (vb, vc), va))
     | Neg (Or (MatchP (vb, vc), va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Or (MatchP (vb, vc), va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Or (MatchP (vb, vc), va))) &&
           mmonitorable_exec (_A1, _A2) (Or (MatchP (vb, vc), va))
     | Neg (Ands v) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Ands v))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Ands v)) &&
           mmonitorable_exec (_A1, _A2) (Ands v)
     | Neg (Exists v) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Exists v))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Exists v)) &&
           mmonitorable_exec (_A1, _A2) (Exists v)
     | Neg (Agg (v, va, vb, vc, vd)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Agg (v, va, vb, vc, vd)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Agg (v, va, vb, vc, vd))) &&
           mmonitorable_exec (_A1, _A2) (Agg (v, va, vb, vc, vd))
     | Neg (Prev (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Prev (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Prev (v, va))) &&
           mmonitorable_exec (_A1, _A2) (Prev (v, va))
     | Neg (Next (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Next (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Next (v, va))) &&
           mmonitorable_exec (_A1, _A2) (Next (v, va))
     | Neg (Since (v, va, vb)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Since (v, va, vb)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Since (v, va, vb))) &&
           mmonitorable_exec (_A1, _A2) (Since (v, va, vb))
     | Neg (Until (v, va, vb)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (Until (v, va, vb)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (Until (v, va, vb))) &&
           mmonitorable_exec (_A1, _A2) (Until (v, va, vb))
     | Neg (MatchF (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (MatchF (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (MatchF (v, va))) &&
           mmonitorable_exec (_A1, _A2) (MatchF (v, va))
     | Neg (MatchP (v, va)) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi (_A1, _A2) zero_nata (MatchP (v, va)))
-          (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)) &&
+        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
+          (fvi (_A1, _A2) zero_nata (MatchP (v, va))) &&
           mmonitorable_exec (_A1, _A2) (MatchP (v, va))
     | Exists phi -> mmonitorable_exec (_A1, _A2) phi
     | Agg (y, omega, b, f, phi) ->
@@ -6539,9 +6481,8 @@ let rec minit_safe
 let rec convert_multiway (_A1, _A2)
   = function
     Neg phi ->
-      (if eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+      (if is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
             (fvi (_A1, _A2) zero_nata phi)
-            (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata))
         then Neg phi
         else (match phi with Pred (_, _) -> Neg phi | Eq (_, _) -> Neg phi
                | Neg _ -> Neg phi | Or (Pred (_, _), _) -> Neg phi

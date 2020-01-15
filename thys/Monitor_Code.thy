@@ -296,7 +296,13 @@ lemma is_empty_table_unfold [code_unfold]:
   "Cardinality.eq_set empty_table X \<longleftrightarrow> Set.is_empty X"
   "set_eq X empty_table \<longleftrightarrow> Set.is_empty X"
   "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
-  unfolding set_eq_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
+  "X = (set_empty impl) \<longleftrightarrow> Set.is_empty X"
+  "(set_empty impl) = X \<longleftrightarrow> Set.is_empty X"
+  "Cardinality.eq_set X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
+  "Cardinality.eq_set (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
+  "set_eq X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
+  "set_eq (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
+  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
 
 lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
   (case ID CCOMPARE(mregex) of None \<Rightarrow> Code.abort (STR ''tabulate RBT_Mapping: ccompare = None'') (\<lambda>_. Monitor.mrtabulate (xs :: mregex list) f)
