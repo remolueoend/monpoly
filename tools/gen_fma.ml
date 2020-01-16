@@ -21,8 +21,9 @@
 
 open Formula_generator
 
+
 (*** global parameters ***)
-let ver = "1.0"
+let ver = "1.1"
 let debug = ref false
 
 let size = ref 10
@@ -37,6 +38,11 @@ let max_interval = ref 20
 let past_only = ref false
 let all_rels = ref false
 let qtl = ref false
+let aggregations = ref false;;
+
+(* Printexc.record_backtrace true;; *)
+
+
 
 
 open IntMap
@@ -62,11 +68,14 @@ let parse_sig s =
 
 let main () = 
   if !qtl then 
-  past_only:=true;
-  max_lb:=-1;
+  begin
+    past_only:=true;
+    max_lb:=-1;
+    aggregations:=false;
+  end;
   let ssig = if sig_string = sig_string_cmp then "" else !sig_string in
   let sigmap = parse_sig ssig in
-  let (sigout,fma) = generate_formula ~signature:sigmap ~max_lb:!max_lb ~max_interval:!max_interval ~past_only:!past_only ~all_rels:!all_rels ~qtl:!qtl !free_vars !size in
+  let (sigout,fma) = generate_formula ~signature:sigmap ~max_lb:!max_lb ~max_interval:!max_interval ~past_only:!past_only ~all_rels:!all_rels ~aggr:!aggregations ~qtl:!qtl !free_vars !size in
   let output_str = Printf.sprintf "SIGNATURE:\n%s\nMFOTL FORMULA:\n%s\n" (string_of_sig sigout) (string_of_genformula fma) in
   let output_str = output_str ^ if !qtl then Printf.sprintf "\nQTL FORMULA:\n%s\n" (string_of_genformula_qtl fma) else "" in
   if out_file = out_file_cmp then
@@ -83,9 +92,9 @@ let main () =
 
   
 let usage_string = "gen_fma -- Generator of monitorable MFOTL formulas\n\n" ^
-                   "Monitorable fragment is defined operationally: MFOTL "^
+                   "Monitorable fragment is defined operationally: MFOTL" ^
                    "formulas accepted by the MONPOLY monitoring tool without rewriting (using the -no_rw flag)\n\n" ^
-                   "Usage: gen_fma [options]"
+                   "Usage: gen_fma [options]\n"
 
 let print_version () = 
   print_endline ("gen_log, version " ^ ver);
@@ -93,17 +102,18 @@ let print_version () =
 
 let _ = 
   Arg.parse [
-    "-size", Arg.Set_int size, "\t\tChoose the size of the random MFOTL formula";
-    "-free_vars", Arg.Set_int free_vars, "\t\tChoose the number of free variables in the random MFOTL formula";
-    "-sig", Arg.Set_string sig_string, "\t\t\tSignature as an immediate parameter";
-    "-sig_file", Arg.Set_string sig_file, "\t\tSignature as a file";
-    "-output", Arg.Set_string out_file, "\t\tOutput file names (suffixed with .sig and .mfotl)";
-    "-max_lb", Arg.Set_int max_lb, "\t\tSet the maximum value for the left bound of the intervals (-1 for FOTL formulas)";
-    "-max_interval", Arg.Set_int max_interval, "\tSet the maximum size of the intervals (ignored if -max_lb is -1)";
-    "-past_only", Arg.Set past_only, "\t\tGenerate past-only formulas";
-    "-all_rels", Arg.Set all_rels, "\t\tGenerate all rigid predicates (as opposed to only equalities)";
-    "-qtl", Arg.Set qtl, "\t\t\tGenerate a QTL formula and its equivalent MFOTL counterpart (this sets -max_lb -1 and -past_only)";
-    "-debug", Arg.Set debug, "\t\tSet debug mode";
+    "-size", Arg.Set_int size, "\t\tChoose the size of the random MFOTL formula (Default: 10)";
+    "-free_vars", Arg.Set_int free_vars, "\t\tChoose the number of free variables in the random MFOTL formula (Default: 3)";
+    "-sig", Arg.Set_string sig_string, "\t\t\tSignature as an immediate parameter (Default: nothing; the generator picks a random signature)";
+    "-sig_file", Arg.Set_string sig_file, "\t\tSignature as a file (Default: nothing; the generator picks a random signature)";
+    "-output", Arg.Set_string out_file, "\t\tOutput file names suffixed with .sig and .mfotl by the generator (Default: nothing; the generator writes on standard output";
+    "-max_lb", Arg.Set_int max_lb, "\t\tSet the maximum value for the left bound of the intervals; use a negative number for FOTL formulas (Default: 5)";
+    "-max_interval", Arg.Set_int max_interval, "\tSet the maximum size of the intervals; ignored if -max_lb is negative (Default: 20)";
+    "-past_only", Arg.Set past_only, "\t\tGenerate past-only formulas (Default: false)";
+    "-all_rels", Arg.Set all_rels, "\t\tGenerate all rigid predicates -- as opposed to only equalities (Default: false)";
+    "-qtl", Arg.Set qtl, "\t\t\tGenerate a QTL formula (and its equivalent MFOTL counterpart). Note that, this sets -max_lb to -1, -past_only, unsets -aggr, and outputs an additional qtl formula (Default: false)";
+    "-debug", Arg.Set debug, "\t\tSet debug mode (Default: false)";
+    "-aggr", Arg.Set aggregations, "\t\tGenerate aggregation operators (Default: false)";
     "-version", Arg.Unit print_version, "\t\tPrint version and exit";
     ]
     (fun _ -> ())

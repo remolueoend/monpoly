@@ -91,7 +91,7 @@ function make_fma {
     local fma=$(fma_path $name)
 
     gen_fma -size $size -free_vars $fvs -qtl -output $fma
-    gen_fma -size $size -free_vars $fvs -max_lb 5 -output "${fma}_future"
+    gen_fma -size $size -free_vars $fvs -max_lb 5 -aggr -output "${fma}_future"
     echo "${name}"
 }
 

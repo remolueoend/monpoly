@@ -1,23 +1,26 @@
 (* 
 Generate these formulas as base cases:
 
-| ERel         
-| EPred        
-| ENeg         
-| EAnd         
-| EOr          
-| EExists
-| EPrev        
-| ENext        
-| ESinceA      
-| ESince       
-| EOnceA       
-| EOnceZ       
-| EOnce        
-| ENUntil      
-| EUntil       
-| EEventuallyZ 
-| EEventually   
+| ERel           (EQ + optionally LT | GT | LEQ | GEQ)
+| EPred          (From a random singature, or optionally with a specific signature)
+| ENeg           
+| EAnd           
+| EOr            
+| EExists        
+| EPrev          (optionally non-metric)
+| ENext          (suppressed with for past-only formulas, optionally non-metric)
+| ESinceA        (optionally non-metric)
+| ESince         (optionally non-metric)
+| EOnceA         (optionally non-metric)
+| EOnceZ         (optionally non-metric)
+| EOnce          (optionally non-metric)
+| ENUntil        (suppressed with for past-only formulas, optionally non-metric)
+| EUntil         (suppressed with for past-only formulas, optionally non-metric)
+| EEventuallyZ   (suppressed with for past-only formulas, optionally non-metric)
+| EEventually    (suppressed with for past-only formulas, optionally non-metric)
+| EAggreg        (if aggregations enabled)
+| EAggOnce       (if aggregations enabled)
+| EAggMMOnce     (if aggregations enabled)
 *)
 
 open QCheck
@@ -29,6 +32,8 @@ module IntMap = Map.Make(struct type t = int let compare = Pervasives.compare en
 open IntMap
 
 type relop = LT | GT | LEQ | GEQ | EQ 
+
+type aggrop = AVG | MIN | MAX | MED | CNT | SUM 
 
 type genformula = 
   | GRel          of (relop * term * term)
@@ -57,33 +62,51 @@ type genformula =
   | GNSinceA      of (interval * genformula * genformula)  
   | GUntil        of (interval * genformula * genformula)
   | GNUntil       of (interval * genformula * genformula)
+  | GAggOnce      of (var * aggrop * var * var list * interval * genformula)
+  | GAggMMOnce    of (var * aggrop * var * var list * interval * genformula)
+  | GAggAvg       of (var * aggrop * var * var list * genformula)
+  | GAggMed       of (var * aggrop * var * var list * genformula)
+  | GAgg          of (var * aggrop * var * var list * genformula)
 
-let gRel         r t1 t2 = GRel         (r ,t1, t2) 
-let gPred        p       = GPred        p 
-let gNeg         f       = GNeg         f 
-let gOr          f1 f2   = GOr          (f1, f2) 
-let gSAndSUB     f1 f2   = GSAndSUB     (f1, f2) 
-let gSAnd        f1 f2   = GSAnd        (f1, f2) 
-let gNAndEQ      f1 f2   = GNAndEQ      (f1, f2) 
-let gNAnd        f1 f2   = GNAnd        (f1, f2) 
-let gAnd         f1 f2   = GAnd         (f1, f2) 
-let gAndEQ       f1 f2   = GAndEQ       (f1, f2) 
-let gAndSUB1     f1 f2   = GAndSUB1     (f1, f2) 
-let gAndSUB2     f1 f2   = GAndSUB2     (f1, f2) 
-let gExists      v f     = GExists      (v, f) 
-let gPrev        i f     = GPrev        (i, f) 
-let gNext        i f     = GNext        (i, f) 
-let gOnce        i f     = GOnce        (i, f) 
-let gOnceA       i f     = GOnceA       (i, f) 
-let gOnceZ       i f     = GOnceZ       (i, f) 
-let gEventually  i f     = GEventually  (i, f) 
-let gEventuallyZ i f     = GEventuallyZ (i, f) 
-let gSince       i f1 f2 = GSince       (i, f1, f2) 
-let gSinceA      i f1 f2 = GSinceA      (i, f1, f2) 
-let gNSince      i f1 f2 = GNSince      (i, f1, f2) 
-let gNSinceA     i f1 f2 = GNSinceA     (i, f1, f2) 
-let gUntil       i f1 f2 = GUntil       (i, f1, f2) 
-let gNUntil      i f1 f2 = GNUntil      (i, f1, f2) 
+let gRel         r t1 t2      = GRel         (r ,t1, t2) 
+let gPred        p            = GPred        p 
+let gNeg         f            = GNeg         f 
+let gOr          f1 f2        = GOr          (f1, f2) 
+let gSAndSUB     f1 f2        = GSAndSUB     (f1, f2) 
+let gSAnd        f1 f2        = GSAnd        (f1, f2) 
+let gNAndEQ      f1 f2        = GNAndEQ      (f1, f2) 
+let gNAnd        f1 f2        = GNAnd        (f1, f2) 
+let gAnd         f1 f2        = GAnd         (f1, f2) 
+let gAndEQ       f1 f2        = GAndEQ       (f1, f2) 
+let gAndSUB1     f1 f2        = GAndSUB1     (f1, f2) 
+let gAndSUB2     f1 f2        = GAndSUB2     (f1, f2) 
+let gExists      v f          = GExists      (v, f) 
+let gPrev        i f          = GPrev        (i, f) 
+let gNext        i f          = GNext        (i, f) 
+let gOnce        i f          = GOnce        (i, f) 
+let gOnceA       i f          = GOnceA       (i, f) 
+let gOnceZ       i f          = GOnceZ       (i, f) 
+let gEventually  i f          = GEventually  (i, f) 
+let gEventuallyZ i f          = GEventuallyZ (i, f) 
+let gSince       i f1 f2      = GSince       (i, f1, f2) 
+let gSinceA      i f1 f2      = GSinceA      (i, f1, f2) 
+let gNSince      i f1 f2      = GNSince      (i, f1, f2) 
+let gNSinceA     i f1 f2      = GNSinceA     (i, f1, f2) 
+let gUntil       i f1 f2      = GUntil       (i, f1, f2) 
+let gNUntil      i f1 f2      = GNUntil      (i, f1, f2) 
+let gAggOnce     r a v gs i f = GAggOnce     (r, a, v, gs, i, f)
+let gAggMMOnce   r a v gs i f = GAggMMOnce   (r, a, v, gs, i, f)
+let gAggAvg      r a v gs f   = GAggAvg      (r, a, v, gs, f)
+let gAggMed      r a v gs f   = GAggMed      (r, a, v, gs, f)
+let gAgg         r a v gs f   = GAgg         (r, a, v, gs, f)
+
+let aggr_op = function 
+| MAX -> Max
+| MIN -> Min
+| CNT -> Cnt
+| AVG -> Avg
+| MED -> Med
+| SUM -> Sum
 
 let rec formula_of_genformula = function
 | GRel         (rop,t1,t2) -> 
@@ -116,6 +139,11 @@ let rec formula_of_genformula = function
 | GNSinceA     (i, f1, f2) -> Since (i, Neg (formula_of_genformula f1), formula_of_genformula f2)
 | GUntil       (i, f1, f2) -> Until (i, formula_of_genformula f1, formula_of_genformula f2)
 | GNUntil      (i, f1, f2) -> Until (i, Neg (formula_of_genformula f1), formula_of_genformula f2)
+| GAggOnce     (r, a, v, gs, i, f) 
+| GAggMMOnce   (r, a, v, gs, i, f) -> Aggreg (r, (aggr_op a), v, gs, Once (i, formula_of_genformula f))
+| GAggAvg      (r, a, v, gs, f)
+| GAggMed      (r, a, v, gs, f) 
+| GAgg         (r, a, v, gs, f) -> Aggreg (r, (aggr_op a), v, gs, formula_of_genformula f)
 
 
 let rec string_of_arity = function
@@ -132,8 +160,8 @@ let mapSnd f (a,b) = (a,f b)
 let string_of_parenthesized_formula_qtl str g =
 let check_interval = function
 | (CBnd 0., Inf) -> ""
-| (OBnd 0., Inf) -> ""
-| _ -> failwith "Unsupported1" in
+(* | (OBnd 0., Inf) -> "" *)
+| _ -> failwith "Unsupported: metric operators" in
 let rec string_f_rec top par h =
   (match h with
     | Equal (t1,t2) ->
@@ -173,7 +201,7 @@ let rec string_f_rec top par h =
         string_f_rec false false f
         ^ ")"
 
-      | Aggreg (y,op,x,glist,f) -> failwith "Unsupported2"
+      | Aggreg (y,op,x,glist,f) -> failwith "Unsupported: aggregation operators"
       | Prev (intv,f) ->
         check_interval intv ^
         "(" ^
@@ -184,7 +212,7 @@ let rec string_f_rec top par h =
 
       | Next (intv,f) 
       | Always (intv,f) 
-      | Eventually (intv,f) -> failwith "Unsupported3"
+      | Eventually (intv,f) -> failwith "Unsupported: future operators"
         
       | Once (intv,f) ->
         check_interval intv ^
@@ -244,9 +272,9 @@ let rec string_f_rec top par h =
             string_f_rec false false f2
             ^ ")"
 
-          | Until (intv,f1,f2) -> failwith "Unsupported4"
+          | Until (intv,f1,f2) -> failwith "Unsupported: future operators"
 
-          | _ -> failwith "[print_formula] impossible"
+          | _ -> failwith "[print_formula] internal error"
         )
         
       ) 
@@ -259,20 +287,25 @@ let string_of_genformula f = string_of_parenthesized_formula "" (formula_of_genf
 
 let string_of_genformula_qtl f = string_of_parenthesized_formula_qtl "prop random : " (formula_of_genformula (gNeg f))
 
+(* Returns a generator for non-empty float intervals with integer bounds 
 
+*)
 let interval_gen_bound max_lb max_delta =
     let lb = Gen.int_bound (max max_lb 0) in
     let delta = Gen.int_bound max_delta in
     let ival = Gen.map2 (fun l d -> (l, (l + d))) lb delta in
     let lp = Gen.bool in
     let rp = Gen.bool in
-    Gen.map3 (fun (a,b) l r -> 
-    let (x,y) = (float_of_int a, float_of_int b) in
-    match (l,r) with 
-      | (true,true)   -> (CBnd x, CBnd y)
-      | (true, false)  -> (CBnd x, OBnd y)
-      | (false,true)  -> (OBnd x, CBnd y)
-      | _             -> (OBnd x, OBnd y)
+    Gen.map3 
+    (fun (a,b) l r -> 
+      let (x,y) = (float_of_int a, float_of_int b) in
+      if y <= x then (CBnd x, CBnd x) 
+      else
+        match (l,r) with 
+          | (true,true)   -> (CBnd x, CBnd y)
+          | (true, false)  -> (CBnd x, OBnd y)
+          | (false,true)  -> (OBnd x, CBnd y)
+          | _             -> (OBnd x, OBnd y)
     ) 
     ival lp rp
   
@@ -301,18 +334,20 @@ let (--) i j =
 
 let (>>=) = Random_generator.bind'
 
-let rec superset = function
+let rec powerset = function
       | [] -> [[]]
       | x :: xs -> 
-         let ps = superset xs in
+         let ps = powerset xs in
          ps @ List.map (fun ss -> x :: ss) ps
 
-let random_subset = Gen.oneofl << superset 
+let random_subset = Gen.oneofl << powerset 
 
-(* random_subset_2 acutally generates only singleton sets, 
-   since oracle does not accept var1 = var2 formulas 
-   change xl <= 1 below to xl <= 2 for more the general case*)
-let random_subset_2 = Gen.oneofl << List.filter (fun x -> let xl = List.length x in 0 < xl && xl <= 1) << superset 
+(* 
+   (random_bounded_subset n s) generates a random nonempty subset of s with cardinality no greater than n.
+    Since Verimon does not support var1 = var2 formulas this is used with n=1
+    to pick variables for constraints of the form var = const
+*)
+let random_bounded_subset n = Gen.oneofl << List.filter (fun x -> let l = List.length x in 1<=l && l <= n) << powerset 
 
 let shuffle l =
   let a = Array.of_list l in
@@ -322,6 +357,9 @@ let shuffle l =
     a.(j) <- t in
   let _ = Array.iteri (fun i _ -> swap a i (Random.int (i+1))) a in
   Array.to_list a
+
+
+let var_op f vs1 vs2 = Set.elements (f (Set.of_list vs1) (Set.of_list vs2))
 
 (* TODO: make the const a parameter *)
 let rel_gen vs all_rels = 
@@ -347,9 +385,13 @@ let predicate_gen map vs =
   Gen.map (fun (m,p) -> (m, make_predicate (p, shuffle vs))) 
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
-let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size = 
+let formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum size = 
   let fq = if past_only || qtl then 0 else 1 in
-  let mq = if max_lb == -1 then 0 else 1 in 
+  let mq = if (max_lb < 0) then 0 else 1 in
+  let aq = if aggr then 1 else 0 in 
+  let max_interval = max 0 max_interval in
+  let size = max 0 size in
+  let varnum = max 0 varnum in
   let vars = List.map (fun e -> "x" ^ string_of_int e) (1 -- varnum) in
   let rec toplvlq fg = function
   | [] -> fg
@@ -362,7 +404,7 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
       let predbool = Gen.bool in
       predbool >>= (fun b ->
         if b then 
-          let twovars = random_subset_2 vars in
+          let twovars = random_bounded_subset 1 vars in
           Gen.map (fun e -> (predmap,e)) (rel_gen twovars all_rels)
         else
           Gen.map (mapSnd gPred) (predicate_gen predmap vars)
@@ -370,8 +412,10 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
       else 
       Gen.map (mapSnd gPred) (predicate_gen predmap vars)
     | n -> 
+      let aq = min aq (List.length vars) in
+      let oq = min (n-1) 1 in 
       let sq = min (List.length vars) 1 in
-      let bound_variable = "y" ^ string_of_int
+      let new_bound_variable vs = "y" ^ string_of_int
         ((List.fold_left 
           max 
           0
@@ -379,7 +423,24 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
             (fun s -> int_of_string (String.sub s 1 ((String.length s)-1))) 
             (List.filter 
               (fun x -> String.contains x 'y') 
-              vars)))+1) in
+              vs)))+1) in
+      let new_bound_variables num vars = 
+        if num = 0 then [] else
+        List.filter (fun b -> String.contains b 'y') 
+          (List.fold_left (fun a _ -> let b = new_bound_variable a in (b::a) ) vars (1 -- num)) in
+      (* Exists *)
+      let new_bv = new_bound_variable vars in
+      (* Aggr *)
+      let num_bvs = Random.int 3 in (* TODO: parametrize *)
+      let num_bvs = if List.length vars = 0 then max 1 num_bvs else num_bvs in
+      let new_bvs = new_bound_variables num_bvs vars in 
+      let result_var = Gen.oneofl vars in 
+      (* let group_vars = Gen.map (fun r -> Set.diff (Set.of_list vars) (Set.singleton r)) result_var in *)
+      let aggr_free_vars = var_op Set.union vars new_bvs in
+      let aggr_var = Gen.oneofl aggr_free_vars in
+      let aggr_gen_all = Gen.oneofl [MAX ; MIN ; CNT ; SUM ; AVG ; MED] in
+      let aggr_gen_mm = Gen.oneofl [MAX ; MIN] in
+      let aggr_gen_mmcs = Gen.oneofl [MAX ; MIN ; CNT ; SUM] in
       let side = Gen.bool in
       let noint = Gen.return (CBnd 0., Inf) in
       let interval = if qtl then noint else interval_gen max_lb max_interval in
@@ -394,7 +455,7 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
         Set.elements (Set.union (Set.of_list v2) (Set.diff (Set.of_list vars) (Set.of_list v1))) in 
       let m = Random.int n in
       let unarybind f vars =
-        let twovars = random_subset_2 vars in
+        let twovars = random_bounded_subset 1 vars in
         let sf = rel_gen twovars all_rels in 
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf1) -> 
@@ -438,7 +499,7 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
         1, binarybind gAndEQ       vars vars;
         1, vars_sub1 >>= (fun v1 -> binarybind gAndSUB1     v1 vars);
         1, vars_sub1 >>= (fun v1 -> binarybind gAndSUB2     vars v1);
-        1, (go (predmap, (bound_variable :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [bound_variable] sf)));
+        1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [new_bv] sf)));
         1, metricunarybind gPrev        interval;
        fq, metricunarybind gNext        interval_bound;
         1, metricunarybind gOnce        interval;
@@ -451,12 +512,37 @@ let formula_gen signature max_lb max_interval past_only all_rels qtl varnum size
        mq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSince     interval v1 vars);
        mq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSinceA    interval_inf v1 vars);
        fq, vars_sub1 >>= (fun v1 -> metricbinarybind gUntil      interval_bound v1 vars);
-       fq, vars_sub1 >>= (fun v1 -> metricbinarybind gNUntil     interval_bound v1 vars);       
+       fq, vars_sub1 >>= (fun v1 -> metricbinarybind gNUntil     interval_bound v1 vars);
+       aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> fun s -> (newMap, gAggAvg r AVG a (var_op Set.diff vars [r]) sf))));
+       aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> fun s -> (newMap, gAggMed r MED a (var_op Set.diff vars [r]) sf))));
+       aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> aggr_gen_mmcs >>=
+                      (fun op -> fun s -> (newMap, gAgg r op a (var_op Set.diff vars [r]) sf)))));
+       aq*oq, (go (predmap, aggr_free_vars, (n-2))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> aggr_gen_mm >>=
+                      (fun op -> interval >>= 
+                        (fun i -> fun s -> (newMap, gAggMMOnce r op a (var_op Set.diff vars [r]) i sf))))));
+       aq*oq, (go (predmap, aggr_free_vars, (n-2))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> aggr_gen_all >>=
+                      (fun op -> interval >>= 
+                        (fun i -> fun s -> (newMap, gAggOnce r op a (var_op Set.diff vars [r]) i sf))))))
       ]) (signature, vars, size) in
       if qtl then toplvlq result vars
       else result
   
-  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels qtl varnum size))
+  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum size))
 
     (* TODO: check binary temporal ops for qtl  *)
     (* TODO: other special AND case *)
