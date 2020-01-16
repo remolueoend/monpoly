@@ -30,107 +30,20 @@ derive (no) cenum Monitor.mregex
 derive (rbt) set_impl event_data
 derive (rbt) mapping_impl event_data
 
-global_interpretation default: msaux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux" filter_mmsaux join_mmsaux
-  add_new_mmsaux result_mmsaux
-  defines minit0 = "msaux.minit0 init_mmsaux :: nat \<Rightarrow> event_data Formula.formula \<Rightarrow> (event_data mmsaux, event_data) mformula"
-  and minit = "msaux.minit init_mmsaux :: event_data Formula.formula \<Rightarrow> (event_data mmsaux, event_data) mstate"
-  and minit_safe = "msaux.minit_safe init_mmsaux :: event_data Formula.formula \<Rightarrow> (event_data mmsaux, event_data) mstate"
-  and update_since = "msaux.update_since filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _)"
-  and meval = "msaux.meval filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _)"
-  and mstep = "msaux.mstep filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _)"
-  and msteps0_stateless = "msaux.msteps0_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _)"
-  and msteps_stateless = "msaux.msteps_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _)"
-  and monitor = "msaux.monitor init_mmsaux filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _)"
-  using valid_init_mmsaux valid_filter_mmsaux valid_join_mmsaux
-    valid_add_new_mmsaux valid_result_mmsaux by unfold_locales assumption+
-
-type_synonym msaux = "nat \<times> \<I> \<times> (ts \<times> event_data table) list"
+global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux" filter_mmsaux join_mmsaux add_new_mmsaux result_mmsaux
+  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux" add_new_mmuaux length_mmuaux eval_mmuaux
+  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> event_data Formula.formula \<Rightarrow> _"
+  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: event_data Formula.formula \<Rightarrow> _"
+  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: event_data Formula.formula \<Rightarrow> _"
+  and update_since = "maux.update_since filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> event_data table)"
+  and meval = "maux.meval filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and mstep = "maux.mstep filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and msteps0_stateless = "maux.msteps0_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and msteps_stateless = "maux.msteps_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and monitor = "maux.monitor init_mmsaux filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  by unfold_locales
 
 (*
-global_interpretation default: msaux
-  "\<lambda>w n L R (nt, I, xs) ys. I = ivl w \<and> current w = nt \<and> xs = ys"
-  "\<lambda>I n L R. (0, I, [] :: (ts \<times> event_data table) list)"
-  "\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs)"
-  "\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs)"
-  "\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs)"
-  "\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {}"
-  defines minit0 = "msaux.minit0 (\<lambda>I n L R. (0, I, [] :: (ts \<times> event_data table) list)) :: nat \<Rightarrow> event_data Formula.formula \<Rightarrow> (msaux, event_data) mformula"
-  and minit = "msaux.minit (\<lambda>I n L R. (0, I, [] :: (ts \<times> event_data table) list)):: event_data Formula.formula \<Rightarrow> (msaux, event_data) mstate"
-  and minit_safe = "msaux.minit_safe (\<lambda>I n L R. (0, I, [] :: (ts \<times> event_data table) list)) :: event_data Formula.formula \<Rightarrow> (msaux, event_data) mstate"
-  and update_since = "msaux.update_since
-    (\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs) :: msaux)
-    (\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs))
-    (\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
-    (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
-  and meval = "msaux.meval
-    (\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs) :: msaux)
-    (\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs))
-    (\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
-    (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
-  and mstep = "msaux.mstep
-    (\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs) :: msaux)
-    (\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs))
-    (\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
-    (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
-  and msteps0_stateless = "msaux.msteps0_stateless
-    (\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs) :: msaux)
-    (\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs))
-    (\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
-    (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
-  and msteps_stateless = "msaux.msteps_stateless
-    (\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs) :: msaux)
-    (\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs))
-    (\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
-    (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
-  and monitor = "msaux.monitor (\<lambda>I n L R. (0, I, []))
-    (\<lambda>nt (t, I, xs). (t, I, filter (\<lambda>(t, X). enat (nt - t) \<le> right I) xs) :: msaux)
-    (\<lambda>pos rel1 (t, I, xs). (t, I, map (\<lambda>(t, X). (t, join X pos rel1)) xs))
-    (\<lambda>(nt, X) (t, I, xs). (nt, I, case xs of [] \<Rightarrow> [(nt, X)]
-    | (t, Y) # ts \<Rightarrow> if t = nt then (nt, Y \<union> X) # ts else (nt, X) # xs))
-    (\<lambda>(nt, I, xs). foldr (\<union>) [rel. (t, rel) \<leftarrow> xs, nt - t \<ge> left I] {})"
-    by unfold_locales (auto simp: init_window_def split: list.splits)
-*)
-
-
-(*
-definition update_since :: "\<I> \<Rightarrow> bool \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> ts \<Rightarrow>
-  'a msaux \<Rightarrow> 'a table \<times> 'a msaux" where
-  "update_since I pos rel1 rel2 nt aux =
-    (let auxrest0 = [(t, join rel pos rel1). (t, rel) \<leftarrow> snd aux];
-         auxrest0' = (case auxrest0 of
-             [] \<Rightarrow> (nt, rel2) # map (\<lambda>i. (i, empty_table)) (rev [r (fst aux) ..< nt])
-           | x # aux' \<Rightarrow> (if fst x = nt then (fst x, snd x \<union> rel2) # aux'
-              else (nt, rel2) # map (\<lambda>i. (i, empty_table)) (rev [Suc (fst x) ..< nt]) @ (x # aux')));
-         auxtree0 = map_tree (\<lambda>rel. join rel pos rel1) (fst aux);
-         auxtree' =
-           (if r auxtree0 = Suc nt then
-              update_rightmost (\<lambda>rel. rel + rel2) auxtree0
-            else if Suc nt - left I > 0 then
-              (let window = (max 1 (the_enat (enat (Suc nt) - right I)), Suc nt - left I);
-                   new_atoms = drop (left I) auxrest0'
-               in slide' (rev (map snd new_atoms)) auxtree0 window)
-            else auxtree0)
-     in (if Suc nt - left I > 0 then the (val auxtree') else empty_table, (auxtree', take (left I) auxrest0')))"
-
-(*
-  "wf_since_aux \<sigma> n R pos \<phi> I \<psi> aux ne \<longleftrightarrow>
-    (\<exists>auxlist.
-      l (fst aux) = (if ne = 0 then 0 else if Suc (\<tau> \<sigma> (ne-1)) - left I > 0 then max 1 (the_enat (enat (Suc (\<tau> \<sigma> (ne-1))) - right I)) else 0) \<and>
-      r (fst aux) = (if ne = 0 then 0 else Suc (\<tau> \<sigma> (ne-1)) - left I) \<and>
-      take (left I) auxlist = snd aux \<and>
-      valid (replicate (l (fst aux) - 1) empty_table @ rev (map snd (drop (left I) auxlist))) (fst aux) \<and>
-      sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
-      (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne-1) \<and> \<tau> \<sigma> (ne-1) - t \<le> right I \<and>
-        (if (\<exists>i. \<tau> \<sigma> i = t) then qtable n (MFOTL.fv \<psi>) (mem_restr R) (\<lambda>v. MFOTL.sat \<sigma> (map the v) (ne-1) (Sincep pos \<phi> (point (\<tau> \<sigma> (ne-1) - t)) \<psi>)) X else X = empty_table)) \<and>
-      (\<forall>t. ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne-1) \<and> \<tau> \<sigma> (ne-1) - t \<le> right I \<longrightarrow>
-        (\<exists>X. (t, X) \<in> set auxlist)))"
-*)
 fun fill where
   "fill ((t, X) # (u, Y) # xs) = (t, X) # map (\<lambda>t. (t, empty_table)) [t + 1 ..< u] @ fill ((u, Y) # xs)"
 | "fill xs = xs"
@@ -222,7 +135,7 @@ lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
 
 lemma meval_MPred: "meval n t db (MPred e ts) = ([Option.these
   ((map_option (\<lambda>f. Table.tabulate f 0 n) o match ts) ` (\<Union>(e', x)\<in>db. if e = e' then {x} else {}))], MPred e ts)"
-  unfolding default.meval.simps image_these image_image o_def ..
+  unfolding default_maux.meval.simps image_these image_image o_def ..
 
 lemma meval_MPred': "meval n t db (MPred e ts) = ([Option.these
   (\<Union>(e', x)\<in>db. if e = e' then {map_option (\<lambda>f. Table.tabulate f 0 n) (match ts x)} else {})], MPred e ts)"
@@ -237,7 +150,7 @@ lemma meval_MPred'': "meval n t db (MPred e ts) = ([
   unfolding meval_MPred' these_UNION o_def prod.case_distrib[of Option.these]
   by (auto simp: Option.these_def map_option_case image_iff split: if_splits option.splits)
 
-lemmas meval_code[code] = default.meval.simps(1) meval_MPred'' default.meval.simps(3-13)
+lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred'' default_maux.meval.simps(3-13)
 
 definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> (string \<times> event_data list) set" where
   "mk_db = set"

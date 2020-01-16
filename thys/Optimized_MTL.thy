@@ -1364,4 +1364,31 @@ lemma valid_result_mmsaux: "valid_mmsaux w n L R aux auxlist \<Longrightarrow>
   result_mmsaux aux = foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, left (ivl w) \<le> current w - t] {}"
   using valid_result_mmsaux_unfolded by (cases aux) fast
 
+interpretation default_msaux: msaux valid_mmsaux init_mmsaux filter_mmsaux join_mmsaux add_new_mmsaux result_mmsaux
+  using valid_init_mmsaux valid_filter_mmsaux valid_join_mmsaux valid_add_new_mmsaux
+    valid_result_mmsaux by unfold_locales assumption+
+
+(* default until data structure *)
+
+type_synonym 'a mmuaux = "ts \<times> \<I> \<times> ('a muaux)"
+
+definition valid_mmuaux :: "window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'a mmuaux \<Rightarrow> 'a muaux \<Rightarrow> bool" where
+  "valid_mmuaux = (\<lambda>w n L R (nt, I, xs) ys. ivl w = I \<and> current w = nt \<and> xs = ys)"
+
+fun init_mmuaux :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'a mmuaux" where
+  "init_mmuaux I n L R = (0, I, [])"
+
+fun add_new_mmuaux :: "bool \<Rightarrow> 'a table \<Rightarrow> 'a table \<Rightarrow> ts \<Rightarrow> 'a mmuaux \<Rightarrow> 'a mmuaux" where
+  "add_new_mmuaux pos rel1 rel2 nt (t, I, xs) = (nt, I, update_until I pos rel1 rel2 nt xs)"
+
+fun length_mmuaux :: "'a mmuaux \<Rightarrow> nat" where
+  "length_mmuaux (t, I, xs) = length xs"
+
+fun eval_mmuaux :: "nat \<Rightarrow> 'a mmuaux \<Rightarrow> 'a table list \<times> 'a mmuaux" where
+  "eval_mmuaux nt (t, I, xs) = (let (res, xs') = eval_until I nt xs in (res, (t, I, xs')))"
+
+interpretation default_muaux: muaux valid_mmuaux init_mmuaux add_new_mmuaux length_mmuaux eval_mmuaux
+  by unfold_locales
+    (auto simp add: valid_mmuaux_def init_window_def eval_until_length)
+
 end

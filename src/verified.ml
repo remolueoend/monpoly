@@ -97,8 +97,8 @@ module Monitor : sig
     Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula
     | MatchF of i * 'a formula regex | MatchP of i * 'a formula regex
   type ('a, 'b) mapping
-  type ('a, 'b) mformula
-  type ('a, 'b, 'c) mstate_ext
+  type ('a, 'b, 'c) mformula
+  type ('a, 'b, 'c, 'd) mstate_ext
   val wild : 'a regex
   val implode : char list -> string
   val interval : nat -> enat -> i
@@ -119,6 +119,10 @@ module Monitor : sig
                          (nat * ((event_data option) list) set) list) *
                         ((((event_data option) list), nat) mapping *
                           (((event_data option) list), nat) mapping)))))))),
+        (nat *
+          (i * (nat *
+                 (((event_data option) list) set *
+                   ((event_data option) list) set)) list)),
         event_data, unit)
         mstate_ext ->
         (nat * (event_data option) list) set *
@@ -132,6 +136,10 @@ module Monitor : sig
                              (nat * ((event_data option) list) set) list) *
                             ((((event_data option) list), nat) mapping *
                               (((event_data option) list), nat) mapping)))))))),
+            (nat *
+              (i * (nat *
+                     (((event_data option) list) set *
+                       ((event_data option) list) set)) list)),
             event_data, unit)
             mstate_ext
   val count_agg : (event_data * enat) set -> event_data
@@ -150,6 +158,10 @@ module Monitor : sig
                          (nat * ((event_data option) list) set) list) *
                         ((((event_data option) list), nat) mapping *
                           (((event_data option) list), nat) mapping)))))))),
+        (nat *
+          (i * (nat *
+                 (((event_data option) list) set *
+                   ((event_data option) list) set)) list)),
         event_data, unit)
         mstate_ext
   val rbt_verdict :
@@ -2966,40 +2978,40 @@ type 'a formula = Pred of char list * 'a trm list | Eq of 'a trm * 'a trm |
 type ('a, 'b) mapping = Assoc_List_Mapping of ('a, 'b) alist |
   RBT_Mapping of ('a, 'b) mapping_rbt | Mapping of ('a -> 'b option);;
 
-type ('a, 'b) mformula = MRel of (('b option) list) set |
-  MPred of char list * 'b trm list |
+type ('a, 'b, 'c) mformula = MRel of (('c option) list) set |
+  MPred of char list * 'c trm list |
   MAnd of
-    nat set * ('a, 'b) mformula * bool * nat set * ('a, 'b) mformula *
-      ((('b option) list) set list * (('b option) list) set list)
+    nat set * ('a, 'b, 'c) mformula * bool * nat set * ('a, 'b, 'c) mformula *
+      ((('c option) list) set list * (('c option) list) set list)
   | MAnds of
-      nat set list * nat set list * ('a, 'b) mformula list *
-        ((('b option) list) set list) list
+      nat set list * nat set list * ('a, 'b, 'c) mformula list *
+        ((('c option) list) set list) list
   | MOr of
-      ('a, 'b) mformula * ('a, 'b) mformula *
-        ((('b option) list) set list * (('b option) list) set list)
-  | MNeg of ('a, 'b) mformula | MExists of ('a, 'b) mformula |
+      ('a, 'b, 'c) mformula * ('a, 'b, 'c) mformula *
+        ((('c option) list) set list * (('c option) list) set list)
+  | MNeg of ('a, 'b, 'c) mformula | MExists of ('a, 'b, 'c) mformula |
   MAgg of
-    bool * nat * (('b * enat) set -> 'b) * nat * ('b list -> 'b) *
-      ('a, 'b) mformula
+    bool * nat * (('c * enat) set -> 'c) * nat * ('c list -> 'c) *
+      ('a, 'b, 'c) mformula
   | MPrev of
-      i * ('a, 'b) mformula * bool * (('b option) list) set list * nat list
-  | MNext of i * ('a, 'b) mformula * bool * nat list |
+      i * ('a, 'b, 'c) mformula * bool * (('c option) list) set list * nat list
+  | MNext of i * ('a, 'b, 'c) mformula * bool * nat list |
   MSince of
-    bool * ('a, 'b) mformula * i * ('a, 'b) mformula *
-      ((('b option) list) set list * (('b option) list) set list) * nat list *
+    bool * ('a, 'b, 'c) mformula * i * ('a, 'b, 'c) mformula *
+      ((('c option) list) set list * (('c option) list) set list) * nat list *
       'a
   | MUntil of
-      bool * ('a, 'b) mformula * i * ('a, 'b) mformula *
-        ((('b option) list) set list * (('b option) list) set list) * nat list *
-        (nat * ((('b option) list) set * (('b option) list) set)) list
+      bool * ('a, 'b, 'c) mformula * i * ('a, 'b, 'c) mformula *
+        ((('c option) list) set list * (('c option) list) set list) * nat list *
+        'b
   | MMatchP of
-      i * mregex * mregex list * ('a, 'b) mformula list *
-        ((('b option) list) set list) list * nat list *
-        (nat * (mregex, (('b option) list) set) mapping) list
+      i * mregex * mregex list * ('a, 'b, 'c) mformula list *
+        ((('c option) list) set list) list * nat list *
+        (nat * (mregex, (('c option) list) set) mapping) list
   | MMatchF of
-      i * mregex * mregex list * ('a, 'b) mformula list *
-        ((('b option) list) set list) list * nat list *
-        (nat * ((('b option) list) set list * (('b option) list) set)) list;;
+      i * mregex * mregex list * ('a, 'b, 'c) mformula list *
+        ((('c option) list) set list) list * nat list *
+        (nat * ((('c option) list) set list * (('c option) list) set)) list;;
 
 type ('b, 'a) comp_fun_idem = Abs_comp_fun_idem of ('b -> 'a -> 'a);;
 
@@ -3008,8 +3020,8 @@ type 'a semilattice_set = Abs_semilattice_set of ('a -> 'a -> 'a);;
 type mapping_impl = Mapping_Choose | Mapping_Assoc_List | Mapping_RBT |
   Mapping_Mapping;;
 
-type ('a, 'b, 'c) mstate_ext =
-  Mstate_ext of nat * ('a, 'b) mformula * nat * 'c;;
+type ('a, 'b, 'c, 'd) mstate_ext =
+  Mstate_ext of nat * ('a, 'b, 'c) mformula * nat * 'd;;
 
 let rec list_ex p x1 = match p, x1 with p, [] -> false
                   | p, x :: xs -> p x || list_ex p xs;;
@@ -4478,6 +4490,33 @@ let rec mrtabulate (_A1, _A2)
                     then None else Some (k, fk))))
               xs)));;
 
+let rec update_until (_A1, _A2, _A3)
+  i pos rel1 rel2 nt aux =
+    mapa (fun (t, (a1, a2)) ->
+           (t, ((if pos then join (_A1, _A2, _A3) a1 true rel1
+                  else sup_seta
+                         ((ceq_list (ceq_option _A1)),
+                           (ccompare_list (ccompare_option _A2)))
+                         a1 rel1),
+                 (if less_eq_nat (left i) (minus_nata nt t) &&
+                       less_eq_enat (Enat (minus_nata nt t)) (right i)
+                   then sup_seta
+                          ((ceq_list (ceq_option _A1)),
+                            (ccompare_list (ccompare_option _A2)))
+                          a2 (join (_A1, _A2, _A3) rel2 pos a1)
+                   else a2))))
+      aux @
+      [(nt, (rel1,
+              (if equal_nata (left i) zero_nata then rel2
+                else empty_table
+                       ((ceq_list (ceq_option _A1)),
+                         (ccompare_list (ccompare_option _A2)),
+                         set_impl_list))))];;
+
+let rec add_new_mmuaux (_A1, _A2, _A3)
+  pos rel1 rel2 nt (t, (i, xs)) =
+    (nt, (i, update_until (_A1, _A2, _A3) i pos rel1 rel2 nt xs));;
+
 let rec find_sub_in (_A1, _A2, _A3)
   x xa1 b = match x, xa1, b with x, [], b -> None
     | xa, x :: xs, b ->
@@ -5271,6 +5310,10 @@ let rec mmulti_join (_A1, _A2, _A3)
                                xs @ ys) @
                         l_neg))));;
 
+let rec eval_mmuaux
+  nt (t, (i, xs)) =
+    (let (res, xsa) = eval_until i nt xs in (res, (t, (i, xsa))));;
+
 let rec append_queue a q = (let (ls, fs) = q in (ls, a :: fs));;
 
 let rec upd_cfi (_A1, _A2)
@@ -5690,29 +5733,6 @@ let rec update_matchP (_A1, _A2, _A3)
            (of_phantom set_impl_lista)),
         auxa));;
 
-let rec update_until (_A1, _A2, _A3)
-  i pos rel1 rel2 nt aux =
-    mapa (fun (t, (a1, a2)) ->
-           (t, ((if pos then join (_A1, _A2, _A3) a1 true rel1
-                  else sup_seta
-                         ((ceq_list (ceq_option _A1)),
-                           (ccompare_list (ccompare_option _A2)))
-                         a1 rel1),
-                 (if less_eq_nat (left i) (minus_nata nt t) &&
-                       less_eq_enat (Enat (minus_nata nt t)) (right i)
-                   then sup_seta
-                          ((ceq_list (ceq_option _A1)),
-                            (ccompare_list (ccompare_option _A2)))
-                          a2 (join (_A1, _A2, _A3) rel2 pos a1)
-                   else a2))))
-      aux @
-      [(nt, (rel1,
-              (if equal_nata (left i) zero_nata then rel2
-                else empty_table
-                       ((ceq_list (ceq_option _A1)),
-                         (ccompare_list (ccompare_option _A2)),
-                         set_impl_list))))];;
-
 let rec mbufnt_take (_A1, _A2, _A3)
   f z buf ts =
     (if membera
@@ -5755,19 +5775,19 @@ let rec meval
           (fun (buf, ntsa) ->
             (zs, MMatchP (i, mr, mrs, phi_sa, buf, ntsa, auxa))))
           b)
-    | n, t, db, MUntil (pos, phi, i, psi, bufb, nts, auxa) ->
+    | n, t, db, MUntil (pos, phi, i, psi, bufb, nts, auxc) ->
         (let (xs, phia) = meval n t db phi in
          let (ys, psia) = meval n t db psi in
          let (aux, (buf, ntsa)) =
            mbuf2t_take
-             (update_until
-               (ceq_event_data, ccompare_event_data, equal_event_data) i pos)
-             auxa (mbuf2_add xs ys bufb) (nts @ [t])
+             (add_new_mmuaux
+               (ceq_event_data, ccompare_event_data, equal_event_data) pos)
+             auxc (mbuf2_add xs ys bufb) (nts @ [t])
            in
-         let (zs, auxb) =
-           eval_until i (match ntsa with [] -> t | nt :: _ -> nt) aux in
-          (zs, MUntil (pos, phia, i, psia, buf, ntsa, auxb)))
-    | n, t, db, MSince (pos, phi, i, psi, bufb, nts, auxc) ->
+         let (zs, auxa) =
+           eval_mmuaux (match ntsa with [] -> t | nt :: _ -> nt) aux in
+          (zs, MUntil (pos, phia, i, psia, buf, ntsa, auxa)))
+    | n, t, db, MSince (pos, phi, i, psi, bufb, nts, auxb) ->
         (let (xs, phia) = meval n t db phi in
          let (ys, psia) = meval n t db psi in
          let a =
@@ -5776,7 +5796,7 @@ let rec meval
                (let a = update_since i pos r1 r2 ta aux in
                 let (z, aa) = a in
                  (zs @ [z], aa)))
-             ([], auxc) (mbuf2_add xs ys bufb) (nts @ [t])
+             ([], auxb) (mbuf2_add xs ys bufb) (nts @ [t])
            in
          let (aa, b) = a in
           (let (zs, aux) = aa in
@@ -5914,6 +5934,8 @@ let rec meval
               db)],
           MPred (e, ts))
     | n, t, db, MRel rel -> ([rel], MRel rel);;
+
+let rec init_mmuaux i n l r = (zero_nata, (i, []));;
 
 let empty_queue : 'a list * 'a list = ([], []);;
 
@@ -6060,10 +6082,20 @@ let rec minit0
                          psi))))
     | n, Until (phi, i, psi) ->
         (if safe_formula (ccompare_event_data, equal_event_data) phi
-          then MUntil (true, minit0 n phi, i, minit0 n psi, ([], []), [], [])
+          then MUntil
+                 (true, minit0 n phi, i, minit0 n psi, ([], []), [],
+                   init_mmuaux i n
+                     (fvi (ccompare_event_data, equal_event_data) zero_nata phi)
+                     (fvi (ccompare_event_data, equal_event_data) zero_nata
+                       psi))
           else (let Neg phia = phi in
                  MUntil
-                   (false, minit0 n phia, i, minit0 n psi, ([], []), [], [])))
+                   (false, minit0 n phia, i, minit0 n psi, ([], []), [],
+                     init_mmuaux i n
+                       (fvi (ccompare_event_data, equal_event_data) zero_nata
+                         phia)
+                       (fvi (ccompare_event_data, equal_event_data) zero_nata
+                         psi))))
     | n, MatchP (i, r) ->
         (let (mr, phi_s) = to_mregex (ccompare_event_data, equal_event_data) r
            in
