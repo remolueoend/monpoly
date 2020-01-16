@@ -1319,39 +1319,6 @@ let add_index f i tsi db =
   in
   update f
 
-(** This function displays the "results" (if any) obtained after
-    analyzing event index [i]. The results are those tuples satisfying
-    the formula for some index [q<=i]. *)
-let rec show_results closed i q tsq rel =
-  if !Misc.stop_at_first_viol && Relation.cardinal rel > 1 then
-    let rel2 = Relation.singleton (Relation.choose rel) in
-    show_results closed i q tsq rel2
-  else if !Misc.verbose then
-    if closed then
-      Printf.printf "@%s (time point %d): %b\n%!"
-        (MFOTL.string_of_ts tsq) q (rel <> Relation.empty)
-    else
-      begin
-        Printf.printf "@%s (time point %d): " (MFOTL.string_of_ts tsq) q;
-        Relation.print_reln "" rel
-      end
-  else
-    begin
-      if Misc.debugging Dbg_perf then
-        Perf.show_results q tsq;
-      if rel <> Relation.empty then (* formula satisfied *)
-        if closed then (* no free variables *)
-          Printf.printf "@%s (time point %d): true\n%!" (MFOTL.string_of_ts tsq) q
-        else (* free variables *)
-          begin
-            Printf.printf "@%s (time point %d): " (MFOTL.string_of_ts tsq) q;
-            Relation.print_rel4 "" rel;
-            print_newline()
-          end
-    end
-
-
-
 let process_index ff closed neval i =
   if !Misc.verbose then
     Printf.printf "At time point %d:\n%!" i;
