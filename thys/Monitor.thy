@@ -723,7 +723,7 @@ locale muaux =
   assumes valid_length_muaux: "valid_muaux w n L R aux auxlist \<Longrightarrow> length_muaux aux = length auxlist"
   assumes valid_eval_muaux: "valid_muaux w n L R aux auxlist \<Longrightarrow> nt \<ge> current w \<Longrightarrow>
     eval_muaux nt aux = (res, aux') \<Longrightarrow> eval_until (ivl w) nt auxlist = (res', auxlist') \<Longrightarrow>
-    res = res' \<and> length_muaux aux = length res + length_muaux aux' \<and> valid_muaux w n L R aux' auxlist'"
+    res = res' \<and> valid_muaux w n L R aux' auxlist'"
 
 locale maux = msaux valid_msaux init_msaux filter_msaux join_msaux add_new_msaux result_msaux +
   muaux valid_muaux init_muaux add_new_muaux length_muaux eval_muaux
@@ -2422,7 +2422,6 @@ lemma concat_map_filter[simp]:
 lemma map_filter_alt:
   "map f (filter P xs) = concat (map (\<lambda>x. if P x then [f x] else []) xs)"
   by (induct xs) auto
-
 
 lemma (in maux) update_since:
   assumes pre: "wf_since_aux \<sigma> n R pos \<phi> I \<psi> aux ne"
@@ -4265,14 +4264,15 @@ next
         using \<tau>_mono diff_le_self by blast
     qed
     have valid_aux'': "valid_muaux w n (fv \<phi>'') (fv \<psi>'') aux'' auxlist''"
-      "length_muaux aux' = length zs + length_muaux aux''"
       using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
       by (auto simp add: zs''_def auxlist''_def)
     have length_aux'': "length_muaux aux'' = length auxlist''"
-      using valid_length_muaux[OF valid_aux''(1)] .
+      using valid_length_muaux[OF valid_aux''] .
     have eq2': "eval_until I (case nts' of [] \<Rightarrow> \<tau> \<sigma> j | nt # _ \<Rightarrow> nt) auxlist' = (zs, auxlist'')"
       using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
       by (auto simp add: ivl_w zs''_def auxlist''_def)
+    have length_aux'_aux'': "length_muaux aux' = length zs + length_muaux aux''"
+      using eval_until_length[OF eq2'] unfolding length_aux' length_aux'' .
     have "i \<le> progress \<sigma> (Formula.Until \<phi>''' I \<psi>'') (Suc j) \<Longrightarrow>
       wf_until_auxlist \<sigma> n R pos \<phi>'' I \<psi>'' auxlist' i \<Longrightarrow>
       i + length auxlist' = min (progress \<sigma> \<phi>''' (Suc j)) (progress \<sigma> \<psi>'' (Suc j)) \<Longrightarrow>
@@ -4351,7 +4351,8 @@ next
     note wf_aux'' = this[OF progress_mono[OF le_SucI, OF order.refl] wf_auxlist' conjunct2[OF update1, unfolded ne_def length_aux']]
     have "progress \<sigma> (formula.Until \<phi>''' I \<psi>'') j + length auxlist' =
       progress \<sigma> (formula.Until \<phi>''' I \<psi>'') (Suc j) + length auxlist''"
-      using wf_aux'' valid_aux'' by (auto simp add: ne_def length_aux' length_aux'')
+      using wf_aux'' valid_aux'' length_aux'_aux''
+      by (auto simp add: ne_def length_aux' length_aux'')
     then have "current w =
       (if progress \<sigma> (formula.Until \<phi>''' I \<psi>'') (Suc j) + length auxlist'' = 0 then 0
       else \<tau> \<sigma> (progress \<sigma> (formula.Until \<phi>''' I \<psi>'') (Suc j) + length auxlist'' - 1))"
