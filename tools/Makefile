@@ -85,3 +85,4 @@ fma_generator:
 
 clean:
 	rm -f *.cm[iox] *.o
+	rm -f gen_fma mfotl2sql gen_log
