@@ -156,7 +156,7 @@ let main () =
               let _ = Log.get_signature !sigfile in
               (* Test Slicing implementation *)
               if !slicer_file <> "" then
-                Algorithm.run_test !slicer_file pf
+                Algorithm.run_test sign !slicer_file pf
               (* start monitoring *)
               else if !Algorithm.resumefile <> "" then
                 Algorithm.resume !logfile
@@ -165,7 +165,7 @@ let main () =
               else if !verified then
                 Algorithm_verified.monitor !logfile pf
               else
-                Algorithm.monitor !logfile pf
+                Algorithm.monitor sign !logfile pf
           end
       end
 

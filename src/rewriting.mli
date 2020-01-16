@@ -66,5 +66,4 @@ val check_formula: bool -> schema -> formula -> bool * formula * (var * tcst) li
     formula and [vtypes] is the list of free variables of [pf]
     together with their types *)
 
-
-
+val check_syntax: schema -> formula -> (var * tcst) list

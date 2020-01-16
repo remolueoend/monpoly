@@ -1431,12 +1431,12 @@ let median xlist len fmed =
 
 
 
-let aggreg_empty_rel op glist =
+let aggreg_empty_rel op glist t =
   let op_str = MFOTL.string_of_agg_op op in
-  let default_value = function
-    | Avg -> Float 0.
-    | Cnt -> Int 0
-    | Min | Max | Sum | Med -> Float 0.
+  let default_value = match t with
+    | TFloat -> Float 0.
+    | TInt -> Int 0
+    | _ -> failwith "[Algorithm.aggreg_empty_rel] internal error"
   in
   if glist = [] then
     begin
@@ -1452,14 +1452,14 @@ let aggreg_empty_rel op glist =
        | Cnt | Sum -> ()
       );
 
-      Relation.singleton (Tuple.make_tuple [default_value op])
+      Relation.singleton (Tuple.make_tuple [default_value])
     end
   else
     Relation.empty
 
 
 
-let rec add_ext f =
+let rec add_ext dbschema f =
   match f with
   | Pred p ->
     EPred (p, Relation.eval_pred p, Queue.create())
@@ -1472,10 +1472,10 @@ let rec add_ext f =
     let rel = Relation.eval_not_equal t1 t2 in
     ERel rel
 
-  | Neg f -> ENeg (add_ext f)
+  | Neg f -> ENeg (add_ext dbschema f)
 
   | Exists (vl, f1) ->
-    let ff1 = add_ext f1 in
+    let ff1 = add_ext dbschema f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Pervasives.compare pos in
@@ -1483,8 +1483,8 @@ let rec add_ext f =
     EExists (comp,ff1)
 
   | Or (f1, f2) ->
-    let ff1 = add_ext f1 in
-    let ff2 = add_ext f2 in
+    let ff1 = add_ext dbschema f1 in
+    let ff2 = add_ext dbschema f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
     let comp =
@@ -1504,13 +1504,13 @@ let rec add_ext f =
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ff1 = add_ext f1 in
+    let ff1 = add_ext dbschema f1 in
     let f2_is_special = Rewriting.is_special_case attr1 attr2 f2 in
     let ff2 =
       if f2_is_special then ERel Relation.empty
       else match f2 with
-        | Neg f2' -> add_ext f2'
-        | _ -> add_ext f2
+        | Neg f2' -> add_ext dbschema f2'
+        | _ -> add_ext dbschema f2
     in
     let comp =
       if f2_is_special then
@@ -1554,6 +1554,7 @@ let rec add_ext f =
   | Aggreg (y, (Cnt as op), x, glist, Once (intv, f))
   | Aggreg (y, (Med as op), x, glist, Once (intv, f)) ->
 
+    let t_y = List.assoc y (Rewriting.check_syntax dbschema f) in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1668,7 +1669,7 @@ let rec add_ext f =
 
     let get_result state =
       if Hashtbl.length state.hres = 0 then
-        aggreg_empty_rel op glist
+        aggreg_empty_rel op glist t_y
       else
         let res = ref Relation.empty in
         Hashtbl.iter
@@ -1687,7 +1688,7 @@ let rec add_ext f =
     }
     in
 
-    EAggOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
+    EAggOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
   | Aggreg (y, (Min as op), x, glist, Once (intv, f))
@@ -1703,6 +1704,8 @@ let rec add_ext f =
     (* for Min: x is better than y iff x < y *)
     (* for Max: x is better than y iff x > y *)
     let is_better = get_comp_func op in
+
+    let t_y = List.assoc y (Rewriting.check_syntax dbschema f) in
 
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
@@ -1778,7 +1781,7 @@ let rec add_ext f =
 
     let get_result state =
       if Hashtbl.length state.tbl = 0 then
-        aggreg_empty_rel op glist
+        aggreg_empty_rel op glist t_y
       else
         let res = ref Relation.empty in
         Hashtbl.iter
@@ -1796,7 +1799,7 @@ let rec add_ext f =
     }
     in
 
-    EAggMMOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
+    EAggMMOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
 
@@ -1815,7 +1818,7 @@ let rec add_ext f =
     let comp_map = comp_aggreg init_value update posx posG in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel Avg glist
+        aggreg_empty_rel Avg glist TFloat 
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
@@ -1830,9 +1833,10 @@ let rec add_ext f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext f)
+    EAggreg (comp, add_ext dbschema f)
 
   | Aggreg (y, Med, x, glist, f) ->
+    let t_y = List.assoc y (Rewriting.check_syntax dbschema f) in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1847,7 +1851,7 @@ let rec add_ext f =
     in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel Med glist
+        aggreg_empty_rel Med glist t_y
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
@@ -1858,9 +1862,10 @@ let rec add_ext f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext f)
+    EAggreg (comp, add_ext dbschema f)
 
   | Aggreg (y, op, x, glist, f) ->
+    let t_y = List.assoc y (Rewriting.check_syntax dbschema f) in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1881,7 +1886,7 @@ let rec add_ext f =
     let comp_map = comp_aggreg init_value update posx posG in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel op glist
+        aggreg_empty_rel op glist t_y
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
@@ -1890,14 +1895,14 @@ let rec add_ext f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext f)
+    EAggreg (comp, add_ext dbschema f)
 
   | Prev (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     EPrev (intv, ff, {ptsq = MFOTL.ts_invalid})
 
   | Next (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     ENext (intv, ff, {init = true})
 
   | Since (intv,f1,f2) ->
@@ -1918,8 +1923,8 @@ let rec add_ext f =
         let matches2 = Table.get_matches attr2 attr1 in
         fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
+    let ff1 = add_ext dbschema ef1 in
+    let ff2 = add_ext dbschema f2 in
     if snd intv = Inf then
       let inf = {sres = Relation.empty; sarel2 = None; saauxrels = Mqueue.create()} in
       ESinceA (comp,intv,ff1,ff2,inf)
@@ -1928,12 +1933,12 @@ let rec add_ext f =
       ESince (comp,intv,ff1,ff2,inf)
 
   | Once ((_, Inf) as intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     EOnceA (intv,ff,{ores = Relation.empty;
                      oaauxrels = Mqueue.create()})
 
   | Once (intv,f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     if fst intv = CBnd MFOTL.ts_null then
       EOnceZ (intv,ff,{oztree = LNode {l = -1;
                                        r = -1;
@@ -1956,8 +1961,8 @@ let rec add_ext f =
        | _ -> f1,false
       )
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
+    let ff1 = add_ext dbschema ef1 in
+    let ff2 = add_ext dbschema f2 in
     if neg then
       let comp =
         let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
@@ -1987,7 +1992,7 @@ let rec add_ext f =
 
 
   | Eventually (intv,f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     if fst intv = CBnd MFOTL.ts_null then
       EEventuallyZ (intv,ff,{eztree = LNode {l = -1;
                                              r = -1;
@@ -2302,10 +2307,10 @@ let rec check_log lexbuf ff closed neval i =
   loop ff i
 
 
-let monitor_lexbuf lexbuf f =
-  check_log lexbuf (add_ext f) (MFOTL.free_vars f = []) (NEval.empty()) 0
+let monitor_lexbuf dbschema  lexbuf f =
+  check_log lexbuf (add_ext dbschema f) (MFOTL.free_vars f = []) (NEval.empty()) 0
 
-let monitor_string log f =
+let monitor_string dbschema log f =
   (let lexbuf = Lexing.from_string log in
    lastts := MFOTL.ts_invalid;
    crt_tp := -1;
@@ -2313,12 +2318,12 @@ let monitor_string log f =
    Log.tp := 0;
    Log.skipped_tps := 0;
    Log.last := false;
-   monitor_lexbuf lexbuf f;
+   monitor_lexbuf dbschema lexbuf f;
    Lexing.flush_input lexbuf;)
 
-let monitor logfile =
+let monitor dbschema logfile =
   let lexbuf = Log.log_open logfile in
-  monitor_lexbuf lexbuf
+  monitor_lexbuf dbschema lexbuf
 
 
 let test_filter logfile f =
@@ -2436,7 +2441,7 @@ let rec test_log lexbuf ff evaluation =
   loop ff
 
 
-let run_test testfile formula =
+let run_test dbschema testfile formula =
   let lexbuf = Log.log_open testfile in
   Printf.printf "Testing slicing configurations\n";
-  test_log lexbuf (add_ext formula) (NEval.empty())
+  test_log lexbuf (add_ext dbschema formula) (NEval.empty())

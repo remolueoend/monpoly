@@ -199,7 +199,7 @@ let onload _ =
         reset_errs ();
         Sys_js.set_channel_flusher stderr (append_err logframe);
         logframe##style##backgroundImage <- Js.string "none";
-        Algorithm.monitor_string (Js.to_string (logframe##value) ^ "\n") f;
+        Algorithm.monitor_string !sign (Js.to_string (logframe##value) ^ "\n") f;
         if Js.to_string (resframe##value) = ""
         then
           (ok logframe; hide_res ();
