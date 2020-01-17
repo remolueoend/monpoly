@@ -1024,7 +1024,7 @@ let rec check_syntax db_schema f =
       (*   failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^  *)
       (*          " should have an integer type"); *)
       if List.mem_assoc x assign then
-        if List.assoc x assign = TStr && (op = Avg || op = Sum) then
+        if List.assoc x assign = TStr && (op = Avg || op = Sum || op = Med) then
           failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^
                     " should have an numeric type");
       (* TODO: else *)
@@ -1033,6 +1033,7 @@ let rec check_syntax db_schema f =
       let assign' = List.filter (fun (x,_) -> List.mem x glist) assign in
       (match op with
        | Avg -> (y, TFloat) :: assign'
+       | Med -> (y, TFloat) :: assign'
        | Cnt -> (y, TInt) :: assign'
        | _ ->
          if List.mem_assoc x assign then

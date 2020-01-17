@@ -175,7 +175,7 @@ let eval_gterm t = eval_term [] t
 
 let avg a b =
   match a, b with
-  | Int x, Int y -> Int ((x+y)/2)
+  | Int x, Int y -> Float (((float_of_int x) +. (float_of_int y)) /. 2.)
   | Float x, Float y -> Float ((x+.y)/.2.)
   | _ -> failwith "[Predicate.fmed] type error"
 

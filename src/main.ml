@@ -94,6 +94,7 @@ let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
 let verified = ref false
 
+(* Printexc.record_backtrace true;; *)
 
 let starttime = Unix.time()
 
