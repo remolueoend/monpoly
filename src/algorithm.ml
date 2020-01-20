@@ -1830,8 +1830,7 @@ let rec add_ext dbschema f =
     in
     EAggreg (comp, add_ext dbschema f)
 
-  | Aggreg (y, Med, x, glist, f) as ff ->
-    let t_y = List.assoc y (Rewriting.check_syntax dbschema ff) in
+  | Aggreg (y, Med, x, glist, f) ->
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1846,7 +1845,7 @@ let rec add_ext dbschema f =
     in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel Med glist t_y
+        aggreg_empty_rel Med glist TFloat
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
