@@ -1,0 +1,1 @@
+((ONCE[0,10) A(a,b)) AND B(a,c)) AND EVENTUALLY[0,10) C(a,d)
