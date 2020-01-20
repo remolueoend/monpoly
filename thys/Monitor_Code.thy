@@ -150,7 +150,7 @@ lemma meval_MPred'': "meval n t db (MPred e ts) = ([
   unfolding meval_MPred' these_UNION o_def prod.case_distrib[of Option.these]
   by (auto simp: Option.these_def map_option_case image_iff split: if_splits option.splits)
 
-lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred'' default_maux.meval.simps(3-13)
+lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred'' default_maux.meval.simps(3-14)
 
 definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> (string \<times> event_data list) set" where
   "mk_db = set"

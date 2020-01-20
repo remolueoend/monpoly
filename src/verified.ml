@@ -3978,16 +3978,6 @@ let rec arg_min_list _B
           (if less_eq _B.order_linorder.preorder_order.ord_preorder (f x) (f m)
             then x else m));;
 
-let rec map_split
-  f x1 = match f, x1 with f, [] -> ([], [])
-    | f, x :: xs -> (let (y, z) = f x in
-                     let (ys, zs) = map_split f xs in
-                      (y :: ys, z :: zs));;
-
-let rec mbuf2_add xsa ysa (xs, ys) = (xs @ xsa, ys @ ysa);;
-
-let rec mbufn_add xsa xs = mapa (fun (a, b) -> a @ b) (zip xs xsa);;
-
 let rec unsafe_epsilon (_A1, _A2, _A3)
   guard phi_s x2 = match guard, phi_s, x2 with
     guard, phi_s, MSkip n ->
@@ -4006,6 +3996,50 @@ let rec unsafe_epsilon (_A1, _A2, _A3)
         join (_A1, _A2, _A3) (unsafe_epsilon (_A1, _A2, _A3) guard phi_s r) true
           (unsafe_epsilon (_A1, _A2, _A3) guard phi_s s)
     | guard, phi_s, MStar r -> guard;;
+
+let rec l_delta (_A1, _A2, _A3)
+  kappa x phi_s xa3 = match kappa, x, phi_s, xa3 with
+    kappa, x, phi_s, MSkip n ->
+      (if equal_nata n zero_nata
+        then empty_table
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list)
+        else lookupb (ccompare_mregex, equal_mregex)
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list)
+               x (kappa (MSkip (minus_nata n one_nata))))
+    | kappa, x, phi_s, MTestPos i ->
+        empty_table
+          ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
+            set_impl_list)
+    | kappa, x, phi_s, MTestNeg i ->
+        empty_table
+          ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
+            set_impl_list)
+    | kappa, x, phi_s, MPlus (r, s) ->
+        sup_seta
+          ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+          (l_delta (_A1, _A2, _A3) kappa x phi_s r)
+          (l_delta (_A1, _A2, _A3) kappa x phi_s s)
+    | kappa, x, phi_s, MTimes (r, s) ->
+        sup_seta
+          ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+          (l_delta (_A1, _A2, _A3) (fun t -> kappa (MTimes (t, s))) x phi_s r)
+          (unsafe_epsilon (_A1, _A2, _A3)
+            (l_delta (_A1, _A2, _A3) kappa x phi_s s) phi_s r)
+    | kappa, x, phi_s, MStar r ->
+        l_delta (_A1, _A2, _A3) (fun t -> kappa (MTimes (t, MStar r))) x phi_s
+          r;;
+
+let rec map_split
+  f x1 = match f, x1 with f, [] -> ([], [])
+    | f, x :: xs -> (let (y, z) = f x in
+                     let (ys, zs) = map_split f xs in
+                      (y :: ys, z :: zs));;
+
+let rec mbuf2_add xsa ysa (xs, ys) = (xs @ xsa, ys @ ysa);;
+
+let rec mbufn_add xsa xs = mapa (fun (a, b) -> a @ b) (zip xs xsa);;
 
 let rec r_delta (_A1, _A2, _A3)
   kappa x phi_s xa3 = match kappa, x, phi_s, xa3 with
@@ -5733,6 +5767,65 @@ let rec update_matchP (_A1, _A2, _A3)
            (of_phantom set_impl_lista)),
         auxa));;
 
+let rec update_matchF_step (_A1, _A2, _A3)
+  i mr mrs nt =
+    (fun (t, (rels, rel)) (aux, x) ->
+      (let y = mrtabulate (_A1, _A2) mrs (l_delta (_A1, _A2, _A3) id x rels) in
+        ((t, (rels,
+               (if less_eq_nat (left i) (minus_nata nt t) &&
+                     less_eq_enat (Enat (minus_nata nt t)) (right i)
+                 then sup_seta
+                        ((ceq_list (ceq_option _A1)),
+                          (ccompare_list (ccompare_option _A2)))
+                        rel (lookupb (ccompare_mregex, equal_mregex)
+                              ((ceq_list (ceq_option _A1)),
+                                (ccompare_list (ccompare_option _A2)),
+                                set_impl_list)
+                              y mr)
+                 else rel))) ::
+           aux,
+          y)));;
+
+let rec safe_l_epsilon (_A1, _A2, _A3)
+  n phi_s x2 = match n, phi_s, x2 with
+    n, phi_s, MSkip m ->
+      (if equal_nata m zero_nata then unit_table (_A1, _A2) n
+        else empty_table
+               ((ceq_list (ceq_option _A1)),
+                 (ccompare_list (ccompare_option _A2)), set_impl_list))
+    | n, phi_s, MTestPos i -> nth phi_s i
+    | n, phi_s, MPlus (r, s) ->
+        sup_seta
+          ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+          (safe_l_epsilon (_A1, _A2, _A3) n phi_s r)
+          (safe_l_epsilon (_A1, _A2, _A3) n phi_s s)
+    | n, phi_s, MTimes (r, s) ->
+        unsafe_epsilon (_A1, _A2, _A3)
+          (safe_l_epsilon (_A1, _A2, _A3) n phi_s s) phi_s r
+    | n, phi_s, MTestNeg v -> failwith "undefined"
+    | n, phi_s, MStar v -> failwith "undefined";;
+
+let rec update_matchF_base (_A1, _A2, _A3)
+  n i mr mrs rels nt =
+    (let x = mrtabulate (_A1, _A2) mrs (safe_l_epsilon (_A1, _A2, _A3) n rels)
+       in
+      ([(nt, (rels,
+               (if equal_nata (left i) zero_nata
+                 then lookupb (ccompare_mregex, equal_mregex)
+                        ((ceq_list (ceq_option _A1)),
+                          (ccompare_list (ccompare_option _A2)), set_impl_list)
+                        x mr
+                 else empty_table
+                        ((ceq_list (ceq_option _A1)),
+                          (ccompare_list (ccompare_option _A2)),
+                          set_impl_list))))],
+        x));;
+
+let rec update_matchF (_A1, _A2, _A3)
+  n i mr mrs rels nt aux =
+    fst (foldr (update_matchF_step (_A1, _A2, _A3) i mr mrs nt) aux
+          (update_matchF_base (_A1, _A2, _A3) n i mr mrs rels nt));;
+
 let rec mbufnt_take (_A1, _A2, _A3)
   f z buf ts =
     (if membera
@@ -5754,27 +5847,47 @@ let rec mbuf2t_take
     | f, z, (xs, []), ts -> (z, ((xs, []), ts))
     | f, z, (xs, ys), [] -> (z, ((xs, ys), []));;
 
+let rec eval_matchF
+  i mr nt x3 = match i, mr, nt, x3 with i, mr, nt, [] -> ([], [])
+    | i, mr, nt, (t, (rels, rel)) :: aux ->
+        (if less_enat (plus_enat (Enat t) (right i)) (Enat nt)
+          then (let a = eval_matchF i mr nt aux in
+                let (xs, aa) = a in
+                 (rel :: xs, aa))
+          else ([], (t, (rels, rel)) :: aux));;
+
 let rec meval
   n t db x3 = match n, t, db, x3 with
-    n, t, db, MMatchP (i, mr, mrs, phi_s, bufa, nts, aux) ->
+    n, t, db, MMatchF (i, mr, mrs, phi_s, bufa, nts, auxa) ->
       (let (xss, phi_sa) = map_split id (mapa (meval n t db) phi_s) in
-       let a =
+       let (aux, (buf, ntsa)) =
          mbufnt_take (ceq_event_data, ccompare_event_data, equal_event_data)
-           (fun rels ta (zs, auxa) ->
-             (let a =
-                update_matchP
-                  (ceq_event_data, ccompare_event_data, equal_event_data) n i mr
-                  mrs rels ta auxa
-                in
-              let (z, aa) = a in
-               (zs @ [z], aa)))
-           ([], aux) (mbufn_add xss bufa) (nts @ [t])
+           (update_matchF
+             (ceq_event_data, ccompare_event_data, equal_event_data) n i mr mrs)
+           auxa (mbufn_add xss bufa) (nts @ [t])
          in
-       let (aa, b) = a in
-        (let (zs, auxa) = aa in
-          (fun (buf, ntsa) ->
-            (zs, MMatchP (i, mr, mrs, phi_sa, buf, ntsa, auxa))))
-          b)
+       let (zs, auxb) =
+         eval_matchF i mr (match ntsa with [] -> t | nt :: _ -> nt) aux in
+        (zs, MMatchF (i, mr, mrs, phi_sa, buf, ntsa, auxb)))
+    | n, t, db, MMatchP (i, mr, mrs, phi_s, bufa, nts, aux) ->
+        (let (xss, phi_sa) = map_split id (mapa (meval n t db) phi_s) in
+         let a =
+           mbufnt_take (ceq_event_data, ccompare_event_data, equal_event_data)
+             (fun rels ta (zs, auxa) ->
+               (let a =
+                  update_matchP
+                    (ceq_event_data, ccompare_event_data, equal_event_data) n i
+                    mr mrs rels ta auxa
+                  in
+                let (z, aa) = a in
+                 (zs @ [z], aa)))
+             ([], aux) (mbufn_add xss bufa) (nts @ [t])
+           in
+         let (aa, b) = a in
+          (let (zs, auxa) = aa in
+            (fun (buf, ntsa) ->
+              (zs, MMatchP (i, mr, mrs, phi_sa, buf, ntsa, auxa))))
+            b)
     | n, t, db, MUntil (pos, phi, i, psi, bufb, nts, auxc) ->
         (let (xs, phia) = meval n t db phi in
          let (ys, psia) = meval n t db psi in
