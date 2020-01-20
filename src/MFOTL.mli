@@ -116,6 +116,9 @@ val in_right_ext: tsdiff -> interval -> bool
 val in_interval: tsdiff -> interval -> bool
 
 
+(** Default values for aggregations on empty sets: *)
+val aggreg_default_value: agg_op -> tcst -> cst
+
 
 (** Operations on formulas: *)
 

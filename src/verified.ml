@@ -102,9 +102,9 @@ module Monitor : sig
   val wild : 'a regex
   val implode : char list -> string
   val interval : nat -> enat -> i
-  val max_agg : (event_data * enat) set -> event_data
-  val min_agg : (event_data * enat) set -> event_data
-  val sum_agg : (event_data * enat) set -> event_data
+  val max_agg : event_data -> (event_data * enat) set -> event_data
+  val min_agg : event_data -> (event_data * enat) set -> event_data
+  val sum_agg : event_data -> (event_data * enat) set -> event_data
   val mk_db :
     (char list * event_data list) list -> (char list * event_data list) set
   val mstep :
@@ -4349,14 +4349,14 @@ let rec flatten_multiset (_A1, _A2)
           ((ceq_prod _A1 ceq_enat), (ccompare_prod _A2 ccompare_enat)) m);;
 
 let rec max_agg
-  m = (match flatten_multiset (ceq_event_data, ccompare_event_data) m
-        with [] -> EFloat (Pervasives.(~-.) Pervasives.infinity)
-        | a :: b -> foldl (max ord_event_data) a b);;
+  y0 m =
+    (match flatten_multiset (ceq_event_data, ccompare_event_data) m
+      with [] -> y0 | a :: b -> foldl (max ord_event_data) a b);;
 
 let rec min_agg
-  m = (match flatten_multiset (ceq_event_data, ccompare_event_data) m
-        with [] -> EFloat Pervasives.infinity
-        | a :: b -> foldl (min ord_event_data) a b);;
+  y0 m =
+    (match flatten_multiset (ceq_event_data, ccompare_event_data) m
+      with [] -> y0 | a :: b -> foldl (min ord_event_data) a b);;
 
 let rec plus_int
   k l = Int_of_integer (Z.add (integer_of_int k) (integer_of_int l));;
@@ -4370,11 +4370,10 @@ let rec plus_event_data
     | EString v, uv -> EFloat Pervasives.nan
     | uu, EString v -> EFloat Pervasives.nan;;
 
-let zero_int : int = Int_of_integer Z.zero;;
-
 let rec sum_agg
-  m = foldl plus_event_data (EInt zero_int)
-        (flatten_multiset (ceq_event_data, ccompare_event_data) m);;
+  y0 m =
+    foldl plus_event_data y0
+      (flatten_multiset (ceq_event_data, ccompare_event_data) m);;
 
 let rec insort_key _B
   f x xa2 = match f, x, xa2 with f, x, [] -> [x]
@@ -6353,15 +6352,17 @@ let rec map_regex
     | f, Times (x41, x42) -> Times (map_regex f x41, map_regex f x42)
     | f, Star x5 -> Star (map_regex f x5);;
 
+let zero_int : int = Int_of_integer Z.zero;;
+
 let rec average_agg
-  m = (let xs = flatten_multiset (ceq_event_data, ccompare_event_data) m in
-        (match xs with [] -> EFloat 0.0
-          | _ :: _ ->
-            EFloat
-              (Pervasives.(/.)
+  m = EFloat
+        (let xs = flatten_multiset (ceq_event_data, ccompare_event_data) m in
+          (match xs with [] -> 0.0
+            | _ :: _ ->
+              Pervasives.(/.)
                 (double_of_event_data
                   (foldl plus_event_data (EInt zero_int) xs))
-                (double_of_int (int_of_nat (size_list xs))))));;
+                (double_of_int (int_of_nat (size_list xs)))));;
 
 let rec is_Neg = function Pred (x11, x12) -> false
                  | Eq (x21, x22) -> false

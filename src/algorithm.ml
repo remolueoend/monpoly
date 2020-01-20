@@ -1433,20 +1433,7 @@ let median xlist len fmed =
 
 let aggreg_empty_rel op glist t =
   let op_str = MFOTL.string_of_agg_op op in
-  let default_value = match t with
-    | TFloat -> (match op with
-                | Cnt -> Int 0
-                | Min -> Float infinity
-                | Max -> Float neg_infinity
-                | _ -> Float 0.)
-    | TInt -> (match op with
-              | Avg | Med  -> Float 0.
-              | _ -> Int 0)
-    | TStr -> (match op with
-              | Cnt -> Int 0
-              | Min | Max -> Str ""
-              | _ -> failwith "[Algorithm.aggreg_empty_rel] internal error")
-  in
+  let default_value = MFOTL.aggreg_default_value op t in
   if glist = [] then
     begin
       (match op with

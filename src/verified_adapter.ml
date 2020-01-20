@@ -60,15 +60,17 @@ let convert_interval (l,r) =
                   else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
                   raise (UnsupportedFragment msg)
 
-let convert_agg_op = function
+let convert_agg_op op t =
+  let default_value = convert_cst (MFOTL.aggreg_default_value op t) in
+  match op with
   | Avg -> average_agg
   | Cnt -> count_agg
   | Med -> median_agg
-  | Min -> min_agg
-  | Max -> max_agg
-  | Sum -> sum_agg
+  | Min -> min_agg default_value
+  | Max -> max_agg default_value
+  | Sum -> sum_agg default_value
 
-let convert_formula f =
+let convert_formula dbschema f =
   let fvl = MFOTL.free_vars f in
   let truth = Equal (Cst (Int 0), Cst (Int 0)) in
   let rec createExists n f = match n with
@@ -89,16 +91,17 @@ let convert_formula f =
   | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
   | Exists (v,f) -> createExists (List.length v) (convert_formula_vars (v@bvl) f)
   | ForAll (v,f) -> convert_formula_vars bvl (Neg (Exists (v,(Neg f))))
-  | Aggreg (y,op,x,glist,f) ->
-    let attr = MFOTL.free_vars f in
-    let bound = Misc.diff attr glist in
-    let bvl_f = bound @ bvl in
-    let posx = Misc.get_pos x
-      (List.filter (fun x -> List.mem x attr) (bvl_f @ fvl)) in
-    let comp = (fun t -> List.nth t posx) in
-    let f' = convert_formula_vars bvl_f f in
-    Agg (convert_var fvl bvl y, convert_agg_op op,
-      nat_of_int (List.length bound), comp, f')
+  | Aggreg (y,op,x,glist,f) as ff ->
+      let t_y = List.assoc y (Rewriting.check_syntax dbschema ff) in
+      let attr = MFOTL.free_vars f in
+      let bound = Misc.diff attr glist in
+      let bvl_f = bound @ bvl in
+      let posx = Misc.get_pos x
+        (List.filter (fun x -> List.mem x attr) (bvl_f @ fvl)) in
+      let comp = (fun t -> List.nth t posx) in
+      let f' = convert_formula_vars bvl_f f in
+      Agg (convert_var fvl bvl y, convert_agg_op op t_y,
+        nat_of_int (List.length bound), comp, f')
   | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars bvl f))
   | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars bvl f))
   | Since (intv,f1,f2) -> Since (convert_formula_vars bvl f1,convert_interval intv,convert_formula_vars bvl f2)
@@ -151,5 +154,6 @@ let convert_violations vs =
     qtps
 
 
-let is_monitorable f = let s = (Verified.Monitor.mmonitorable_exec_e << convert_formula) f
-                in (s, (if s then None else Some (f, "MFODL formula is not monitorable")))
+let is_monitorable dbschema f =
+  let s = (Verified.Monitor.mmonitorable_exec_e << convert_formula dbschema) f in
+  (s, (if s then None else Some (f, "MFODL formula is not monitorable")))

@@ -154,6 +154,14 @@ let in_interval v intv =
   in_right_ext v intv && in_left_ext v intv
 
 
+let aggreg_default_value op t = match op, t with
+  | Min, TFloat -> Float infinity
+  | Max, TFloat -> Float neg_infinity
+  | _, TFloat -> Float 0.
+  | _, TInt -> Int 0
+  | _, TStr -> Str ""
+
+
 (** returns the list of all direct subformulas of f, ignoring the regexes *)
 let rec direct_subformulas = function
   | Equal (t1,t2) -> []

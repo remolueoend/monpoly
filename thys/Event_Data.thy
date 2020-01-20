@@ -63,8 +63,8 @@ definition flatten_multiset :: "('a::ccompare \<times> enat) set \<Rightarrow> '
   "flatten_multiset M = concat (map (\<lambda>(x, c). replicate (the_enat c) x)
     (csorted_list_of_set M))"
 
-definition sum_agg :: "(event_data \<times> enat) set \<Rightarrow> event_data" where
-  "sum_agg M = foldl plus (EInt 0) (flatten_multiset M)"
+definition sum_agg :: "event_data \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
+  "sum_agg y0 M = foldl plus y0 (flatten_multiset M)"
 
 definition count_agg :: "(event_data \<times> enat) set \<Rightarrow> event_data" where
   "count_agg M = EInt (length (flatten_multiset M))"
@@ -75,18 +75,18 @@ primrec double_of_event_data :: "event_data \<Rightarrow> double" where
 | "double_of_event_data (EString _) = nan"
 
 definition average_agg :: "(event_data \<times> enat) set \<Rightarrow> event_data" where
-  "average_agg M = (let xs = flatten_multiset M in case xs of
-      [] \<Rightarrow> EFloat 0
-    | _ \<Rightarrow>  EFloat (double_of_event_data (foldl plus (EInt 0) xs) / double_of_int (length xs)))"
+  "average_agg M = EFloat (let xs = flatten_multiset M in case xs of
+      [] \<Rightarrow> 0
+    | _ \<Rightarrow> double_of_event_data (foldl plus (EInt 0) xs) / double_of_int (length xs))"
 
-definition min_agg :: "(event_data \<times> enat) set \<Rightarrow> event_data" where
-  "min_agg M = (case flatten_multiset M of
-    [] \<Rightarrow> EFloat infinity
+definition min_agg :: "event_data \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
+  "min_agg y0 M = (case flatten_multiset M of
+    [] \<Rightarrow> y0
   | x # xs \<Rightarrow> foldl min x xs)"
 
-definition max_agg :: "(event_data \<times> enat) set \<Rightarrow> event_data" where
-  "max_agg M = (case flatten_multiset M of
-    [] \<Rightarrow> EFloat (- infinity)
+definition max_agg :: "event_data \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
+  "max_agg y0 M = (case flatten_multiset M of
+    [] \<Rightarrow> y0
   | x # xs \<Rightarrow> foldl max x xs)"
 
 definition median_agg :: "(event_data \<times> enat) set \<Rightarrow> event_data" where

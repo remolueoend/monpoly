@@ -1075,7 +1075,7 @@ let print_reason str reason =
     print_endline msg
   | None -> failwith "[Rewriting.print_reason] internal error"
 
-let check_formula v s f =
+let check_formula check_mon s f =
   (* we first the formula's syntax *)
   let fv = check_syntax s f in
 
@@ -1088,9 +1088,7 @@ let check_formula v s f =
     end;
 
   if !Misc.no_rw then
-    let is_mon, reason = 
-      if v then Verified_adapter.is_monitorable f
-           else is_monitorable f in
+    let is_mon, reason = check_mon f in
     if !Misc.verbose || !Misc.checkf then
       begin
         MFOTL.printnl_formula "The input formula is:\n  " f;
@@ -1108,9 +1106,7 @@ let check_formula v s f =
     if (Misc.debugging Dbg_monitorable) && nf <> f then
       MFOTL.printnl_formula "The normalized formula is:\n  " nf;
 
-    let is_mon = 
-        if v then Verified_adapter.is_monitorable nf
-             else is_monitorable nf in
+    let is_mon = check_mon nf in
     let rf = if fst is_mon then nf else rewrite nf in
     if (Misc.debugging Dbg_monitorable) && rf <> nf then
       MFOTL.printnl_formula "The \"rewritten\" formula is:\n  " rf;
@@ -1133,11 +1129,7 @@ let check_formula v s f =
         print_newline()
       end;
 
-    let is_mon = if not (fst is_mon) 
-                 then if v 
-                      then Verified_adapter.is_monitorable rf
-                      else is_monitorable rf
-                 else is_mon in
+    let is_mon = if not (fst is_mon) then check_mon rf else is_mon in
     if (not (fst is_mon)) then
       begin
         print_reason "The analyzed formula is NOT monitorable" (snd is_mon);

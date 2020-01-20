@@ -9,9 +9,9 @@ let no_mw = ref false
 module IntMap = Map.Make(struct type t = int let compare = Pervasives.compare end)
 open IntMap
 
-let monitor logfile f =
+let monitor dbschema logfile f =
   let closed = (free_vars f = []) in
-  let cf = convert_formula f in
+  let cf = convert_formula dbschema f in
   let cf = if !no_mw then cf else Monitor.convert_multiway_e cf in
   let init_state = Monitor.minit_safe cf in
   let lexbuf = Log.log_open logfile in

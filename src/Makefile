@@ -27,7 +27,7 @@ MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
       tuple.mli relation.mli table.mli db.mli \
       filter_rel.mli filter_empty_tp.mli sliding.mli \
 	  helper.mli domain_set.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
-	  murmur_hash3.mli hypercube_slicer.mli verified_adapter.mli rewriting.mli
+	  murmur_hash3.mli hypercube_slicer.mli rewriting.mli verified_adapter.mli
 
 OURMLI = $(MLI) log.mli algorithm_verified.mli algorithm.mli
 

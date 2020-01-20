@@ -142,7 +142,9 @@ let main () =
         let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
 
-        let is_mon, pf, vartypes = check_formula !verified sign f in
+        let check_mon = if !verified then Verified_adapter.is_monitorable sign
+          else is_monitorable in
+        let is_mon, pf, vartypes = check_formula check_mon sign f in
         if !sigout then
           Predicate.print_vartypes_list vartypes
         else if is_mon && not !Misc.checkf then
@@ -164,7 +166,7 @@ let main () =
               else if !Algorithm.combine_files <> "" then
                 Algorithm.combine !logfile
               else if !verified then
-                Algorithm_verified.monitor !logfile pf
+                Algorithm_verified.monitor sign !logfile pf
               else
                 Algorithm.monitor sign !logfile pf
           end
