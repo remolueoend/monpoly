@@ -126,14 +126,17 @@ let convert_formula dbschema f =
 
 
 let convert_db md =
-  let convert_relations db =
-    mk_db (List.flatten
-                  (List.map
-                    (fun t ->
-                      let (name,_) = (Table.get_schema t) in
-                      List.map (fun tup -> (explode name, List.map convert_cst tup)) (Relation.elements (Table.get_relation t)))
-                    (Db.get_tables db))) in
-  (convert_relations md.db, nat_of_float md.ts)
+  let add_builtin xs (name, tup) = (explode name, List.map convert_cst tup) :: xs in
+  let convert_table t =
+    let (name,_) = (Table.get_schema t) in
+    List.map (fun tup -> (explode name, List.map convert_cst tup))
+      (Relation.elements (Table.get_relation t))
+  in
+  let db_events = List.flatten (List.map convert_table (Db.get_tables md.db)) in
+  let all_events = List.fold_left add_builtin db_events
+    ["tp", [Int md.tp]; "ts", [Float md.ts]; "tpts", [Int md.tp; Float md.ts]]
+  in
+  (mk_db all_events, nat_of_float md.ts)
 
 let cst_of_event_data = function
   | EInt (Int_of_integer x) -> Int (Z.to_int x)  (* PARTIAL *)
