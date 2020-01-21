@@ -121,8 +121,8 @@ let get_signature_lexbuf lexbuf =
     else
       let predefined_predicates =
   [("tp", ["i", TInt]);
-   ("ts", ["t", TInt]);
-   ("tpts", [("i", TInt); ("t", TInt)]);]
+   ("ts", ["t", TFloat]);
+   ("tpts", [("i", TInt); ("t", TFloat)]);]
       in predefined_predicates @ sign
   with e ->
     Printf.eprintf

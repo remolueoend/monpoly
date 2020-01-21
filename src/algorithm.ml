@@ -1283,9 +1283,7 @@ let add_index f i tsi db =
          | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
          | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
          | "tpts" ->
-           let cst_i = Int i in
-           let cst_ts = Int (int_of_float tsi) in
-           Relation.singleton (Tuple.make_tuple [cst_i; cst_ts])
+           Relation.singleton (Tuple.make_tuple [Int i; Float tsi])
          | _ -> Relation.empty
         )
       in
