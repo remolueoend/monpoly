@@ -382,6 +382,31 @@ lemma set_minus_code[code]: "set_minus X Y =
 declare [[code drop: bin_join]]
 declare bin_join.simps[folded set_minus_def, code]
 
+definition remove_Union where
+  "remove_Union A X B = A - (\<Union>x \<in> X. B x)"
+
+lemma remove_Union_finite: 
+  assumes "finite X"
+  shows "remove_Union A X B = Finite_Set.fold (\<lambda>x A. A - B x) A X"
+proof -
+  interpret comp_fun_idem "\<lambda>x A. A - B x"
+    by unfold_locales auto
+  from assms show ?thesis
+    by (induct X arbitrary: A rule: finite_induct) (auto simp: remove_Union_def)
+qed
+
+lift_definition remove_Union_cfi :: "('a \<Rightarrow> 'b set) \<Rightarrow> ('a, 'b set) comp_fun_idem" is "\<lambda>B x A. A - B x"
+  by unfold_locales auto
+
+lemma remove_Union_code[code]: "remove_Union A X B =
+  (if finite X then set_fold_cfi (remove_Union_cfi B) A X else A - (\<Union>x \<in> X. B x))"
+  apply (transfer fixing: A X B)
+  using remove_Union_finite[of X A B] by (auto simp add: remove_Union_def)
+
+declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
+declare New_max.genericJoin.simps[folded remove_Union_def, code]
+declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
+
 definition mmonitorable_exec_e :: "event_data Formula.formula \<Rightarrow> bool" where
   [code_unfold]: "mmonitorable_exec_e = Monitor.mmonitorable_exec"
 
@@ -390,6 +415,7 @@ definition convert_multiway_e :: "event_data Formula.formula \<Rightarrow> event
 
 export_code convert_multiway_e minit_safe mstep mmonitorable_exec_e
   checking OCaml?
+
 
 export_code
   (*basic types*)

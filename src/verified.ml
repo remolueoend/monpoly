@@ -5260,6 +5260,21 @@ let rec newQuery (_A1, _A2, _A3)
         projectTable (_A1, _A2) v (semiJoin (_A1, _A2, _A3) tab (st, t)))
       q;;
 
+let rec remove_Union_cfi (_B1, _B2)
+  xa = Abs_comp_fun_idem (fun x a -> minus_set (_B1, _B2) a (xa x));;
+
+let rec remove_Union (_A1, _A2, _A3, _A4, _A5) (_B1, _B2, _B3)
+  a x b =
+    (if finite (_B1, _B2, _B3) x
+      then set_fold_cfi (_B2, _B3)
+             (remove_Union_cfi (_A3, _A4.ccompare_cproper_interval) b) a x
+      else minus_set (_A3, _A4.ccompare_cproper_interval) a
+             (sup_setb (_A1, _A2, _A3, _A4, _A5)
+               (image (_B2, _B3)
+                 ((ceq_set (_A2, _A3, _A4.ccompare_cproper_interval)),
+                   (ccompare_set (_A1, _A3, _A4, _A5)), set_impl_set)
+                 b x)));;
+
 let rec merge_option = function (None, None) -> None
                        | (Some x, None) -> Some x
                        | (None, Some x) -> Some x
@@ -5317,9 +5332,27 @@ let rec max_getIJ (_A1, _A2)
 let rec new_max_getIJ_genericJoin (_A1, _A2, _A3)
   v q_pos q_neg =
     (if less_eq_nat (card (card_UNIV_nat, ceq_nat, ccompare_nat) v) one_nata
-      then minus_set
-             ((ceq_list (ceq_option _A1)),
-               (ccompare_list (ccompare_option _A2)))
+      then remove_Union
+             (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
+               (cproper_interval_list (ccompare_option _A2)), set_impl_list)
+             ((finite_UNIV_prod (finite_UNIV_set finite_UNIV_nat)
+                (finite_UNIV_set finite_UNIV_list)),
+               (ceq_prod
+                 (ceq_set
+                   (cenum_nat, ceq_nat,
+                     cproper_interval_nat.ccompare_cproper_interval))
+                 (ceq_set
+                   (cenum_list, (ceq_list (ceq_option _A1)),
+                     (cproper_interval_list
+                       (ccompare_option _A2)).ccompare_cproper_interval))),
+               (ccompare_prod
+                 (ccompare_set
+                   (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
+                     set_impl_nat))
+                 (ccompare_set
+                   (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                     (cproper_interval_list (ccompare_option _A2)),
+                     set_impl_list))))
              (inf_setb
                (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
                  (cproper_interval_list (ccompare_option _A2)), set_impl_list)
@@ -5350,36 +5383,7 @@ let rec new_max_getIJ_genericJoin (_A1, _A2, _A3)
                        set_impl_list)),
                    set_impl_set)
                  (fun (_, x) -> x) q_pos))
-             (sup_setb
-               (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
-                 (cproper_interval_list (ccompare_option _A2)), set_impl_list)
-               (image
-                 ((ceq_prod
-                    (ceq_set
-                      (cenum_nat, ceq_nat,
-                        cproper_interval_nat.ccompare_cproper_interval))
-                    (ceq_set
-                      (cenum_list, (ceq_list (ceq_option _A1)),
-                        (cproper_interval_list
-                          (ccompare_option _A2)).ccompare_cproper_interval))),
-                   (ccompare_prod
-                     (ccompare_set
-                       (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
-                         set_impl_nat))
-                     (ccompare_set
-                       (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                         (cproper_interval_list (ccompare_option _A2)),
-                         set_impl_list))))
-                 ((ceq_set
-                    (cenum_list, (ceq_list (ceq_option _A1)),
-                      (cproper_interval_list
-                        (ccompare_option _A2)).ccompare_cproper_interval)),
-                   (ccompare_set
-                     (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                       (cproper_interval_list (ccompare_option _A2)),
-                       set_impl_list)),
-                   set_impl_set)
-                 (fun (_, x) -> x) q_neg))
+             q_neg (fun (_, x) -> x)
       else (let (i, j) = max_getIJ (_A1, _A2) q_pos q_neg v in
             let q_I_pos =
               projectQuery (_A1, _A2) i (filterQuery (_A1, _A2) i q_pos) in
@@ -5553,9 +5557,30 @@ let rec new_max_getIJ_wrapperGenericJoin (_A1, _A2, _A3)
                            (cproper_interval_list (ccompare_option _A2)),
                            set_impl_list))))
                    q
-               then minus_set
-                      ((ceq_list (ceq_option _A1)),
-                        (ccompare_list (ccompare_option _A2)))
+               then remove_Union
+                      (finite_UNIV_list, cenum_list,
+                        (ceq_list (ceq_option _A1)),
+                        (cproper_interval_list (ccompare_option _A2)),
+                        set_impl_list)
+                      ((finite_UNIV_prod (finite_UNIV_set finite_UNIV_nat)
+                         (finite_UNIV_set finite_UNIV_list)),
+                        (ceq_prod
+                          (ceq_set
+                            (cenum_nat, ceq_nat,
+                              cproper_interval_nat.ccompare_cproper_interval))
+                          (ceq_set
+                            (cenum_list, (ceq_list (ceq_option _A1)),
+                              (cproper_interval_list
+                                (ccompare_option
+                                  _A2)).ccompare_cproper_interval))),
+                        (ccompare_prod
+                          (ccompare_set
+                            (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
+                              set_impl_nat))
+                          (ccompare_set
+                            (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                              (cproper_interval_list (ccompare_option _A2)),
+                              set_impl_list))))
                       (inf_setb
                         (finite_UNIV_list, cenum_list,
                           (ceq_list (ceq_option _A1)),
@@ -5590,40 +5615,7 @@ let rec new_max_getIJ_wrapperGenericJoin (_A1, _A2, _A3)
                                 set_impl_list)),
                             set_impl_set)
                           (fun (_, x) -> x) q_pos))
-                      (sup_setb
-                        (finite_UNIV_list, cenum_list,
-                          (ceq_list (ceq_option _A1)),
-                          (cproper_interval_list (ccompare_option _A2)),
-                          set_impl_list)
-                        (image
-                          ((ceq_prod
-                             (ceq_set
-                               (cenum_nat, ceq_nat,
-                                 cproper_interval_nat.ccompare_cproper_interval))
-                             (ceq_set
-                               (cenum_list, (ceq_list (ceq_option _A1)),
-                                 (cproper_interval_list
-                                   (ccompare_option
-                                     _A2)).ccompare_cproper_interval))),
-                            (ccompare_prod
-                              (ccompare_set
-                                (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
-                                  set_impl_nat))
-                              (ccompare_set
-                                (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                                  (cproper_interval_list (ccompare_option _A2)),
-                                  set_impl_list))))
-                          ((ceq_set
-                             (cenum_list, (ceq_list (ceq_option _A1)),
-                               (cproper_interval_list
-                                 (ccompare_option
-                                   _A2)).ccompare_cproper_interval)),
-                            (ccompare_set
-                              (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                                (cproper_interval_list (ccompare_option _A2)),
-                                set_impl_list)),
-                            set_impl_set)
-                          (fun (_, x) -> x) q_neg))
+                      q_neg (fun (_, x) -> x)
                else (let v =
                        sup_setb
                          (finite_UNIV_nat, cenum_nat, ceq_nat,
