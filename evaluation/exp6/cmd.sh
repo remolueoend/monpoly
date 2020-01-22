@@ -4,7 +4,7 @@ er=$(echo $1 | cut -d "_" -f4)
 fma="${f}.mdl"
 sig="${f}.sig"
 
-echo "aerial -fmla fmas/$fma -log logs/$log -mode naive | sed  '/^[A-Z]/d'"
+echo "aerial -fmla fmas/$fma -log logs/$log -mode naive | sed  '/^[A-Z]/d' | grep false"
 
 echo "hydra fmas/$fma logs/$log | sed  '/^[A-Z]/d'"
 

@@ -134,6 +134,30 @@ function verdict_path() {
     echo "$VERDICT_DIR/${v}"
 }
 
+function diff_prefix {
+    local f1=$1
+    local f2=$2
+    local result=$3
+
+    local l1=$(cat $f1 | wc -l)
+    local l2=$(cat $f2 | wc -l)
+
+    local min=$l1
+    if [ $min -gt $l2 ]; then
+        min=$l2
+    fi
+    head -$min "${f1}" > "${f1}_tmp"
+    head -$min "${f2}" > "${f2}_tmp"
+
+    diff ${f1}_tmp ${f2}_tmp > $result
+    local res=$?
+
+    rm ${f1}_tmp
+    rm ${f2}_tmp
+
+    return $res
+}
+
 
 # runs all tools on a log and writes verdicts into a file and returns running time and space
 function run() {
@@ -200,10 +224,17 @@ function  compare() {
         echo ${perf1} > ${REPORT_DIR}/${log}_perf_${tool}
         echo ${perf2} > ${REPORT_DIR}/${log}_perf_oracle_${tool}
         #DIFF
-        local verdictdiff=$(diff ${verdictpath}_oracle ${verdictpath}_${tool})
+        diff ${verdictpath}_oracle ${verdictpath}_${tool} > ${REPORT_DIR}/${log}_diff_${tool}
         
-        if [ ! -z "${verdictdiff}" ]; then
-        echo ${verdictdiff} > ${REPORT_DIR}/${log}_diff_${tool}
+        if [ $? -eq 0 ]; then
+            #no difference
+            rm ${REPORT_DIR}/${log}_diff_${tool}
+        else 
+            diff_prefix ${verdictpath}_oracle ${verdictpath}_${tool} ${REPORT_DIR}/${log}_diff_${tool}
+            if [ $? -eq 0 ]; then
+                #no difference
+                rm ${REPORT_DIR}/${log}_diff_${tool}
+            fi
         fi
     fi
 
@@ -220,7 +251,7 @@ function monitor() {
     local fma=$(fma_path $formula)
 
     #MONPOLY
-    local aerialCMD="aerial -fmla ${fma}.mdl -log ${logpath} -mode naive | sed  '/^[A-Z]/d' > ${verdictpath}_aerial"
+    local aerialCMD="aerial -fmla ${fma}.mdl -log ${logpath} -mode naive | sed  '/^[A-Z]/d' | grep false > ${verdictpath}_aerial"
     
     #ORACLE-Monpoly
     local oracleCMD="verimon -no_rw -nofilteremptytp -nofilterrel -sig ${fma}.sig -formula ${fma}.mdl -log ${logpath} -negate -verified | sed 's/@//g;s/. (time point /:/g;s/)://g;s/ true/:false/g' | awk -F':' -v d=${er} '{print \$1,(\$2 % d),\$3}' OFS=':' | sed 's/:false/ false/g' > ${verdictpath}_oracle"

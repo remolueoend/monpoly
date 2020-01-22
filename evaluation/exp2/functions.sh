@@ -142,10 +142,11 @@ function  compare() {
     echo ${perf} > ${REPORT_DIR}/${log}_perf_oracle_${tool}
 
     #DIFF
-    local verdictdiff=$(diff ${verdictpath}_oracle_${tool} ${verdictpath}_${tool})
+    diff ${verdictpath}_oracle_${tool} ${verdictpath}_${tool} > ${REPORT_DIR}/${log}_diff_${tool}
     
-    if [ ! -z "${verdictdiff}" ]; then
-      echo ${verdictdiff} > ${REPORT_DIR}/${log}_diff_${tool}
+    if [ $? -eq 0 ]; then
+        #no difference
+        rm ${REPORT_DIR}/${log}_diff_${tool}
     fi
 
 }
