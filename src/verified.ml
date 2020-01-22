@@ -3907,14 +3907,13 @@ let rec restrict
                (if member (ceq_nat, ccompare_nat) i a then nth v i else None))
           (upt zero_nata (size_list v));;
 
-let rec combine_options
-  f x y =
-    (match x with None -> y
-      | Some xa -> (match y with None -> Some xa | Some ya -> Some (f xa ya)));;
-
-let rec combine
-  xb (Mapping xa) (Mapping x) =
-    Mapping (fun xc -> combine_options xb (xa xc) (x xc));;
+let rec combine _B
+  f (RBT_Mapping t) (RBT_Mapping u) =
+    (match ccompare _B
+      with None ->
+        failwith "combine RBT_Mapping: ccompare = None"
+          (fun _ -> combine _B f (RBT_Mapping t) (RBT_Mapping u))
+      | Some _ -> RBT_Mapping (joina _B (fun _ -> f) t u));;
 
 let rec neq_rel (_A1, _A2, _A3)
   n x1 x2 = match n, x1, x2 with
@@ -4606,22 +4605,22 @@ let rec max_tstp
     | Inl ts, Inr v -> Inl ts
     | Inr v, Inl ts -> Inl ts;;
 
-let rec upd_nested_max_tstp_cfi
+let rec upd_nested_max_tstp_cfi (_A1, _A2) (_B1, _B2, _B3)
   xa = Abs_comp_fun_idem
-         (upd_nested_step (ccompare_nat, equal_nat)
-           ((ccompare_list (ccompare_option ccompare_event_data)),
-             (equal_list (equal_option equal_event_data)), mapping_impl_list)
-           xa (max_tstp xa));;
+         (upd_nested_step (_A1, _A2) (_B1, _B2, _B3) xa (max_tstp xa));;
 
-let rec upd_nested_max_tstp
+let rec upd_nested_max_tstp (_A1, _A2, _A3, _A4) (_B1, _B2, _B3, _B4, _B5)
   m d x =
-    (if finitea (finite_UNIV_prod finite_UNIV_nat finite_UNIV_list) x
-      then set_fold_cfi
-             ((ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-               (ccompare_prod ccompare_nat
-                 (ccompare_list (ccompare_option ccompare_event_data))))
-             (upd_nested_max_tstp_cfi d) m x
-      else failwith "upd_set: infinite" (fun _ -> upd_nested_max_tstp m d x));;
+    (if finite
+          ((finite_UNIV_prod _A1 _B1), (ceq_prod _A2 _B2),
+            (ccompare_prod _A3 _B3))
+          x
+      then set_fold_cfi ((ceq_prod _A2 _B2), (ccompare_prod _A3 _B3))
+             (upd_nested_max_tstp_cfi (_A3, _A4) (_B3, _B4, _B5) d) m x
+      else failwith "upd_nested_max_tstp: infinite"
+             (fun _ ->
+               upd_nested_max_tstp (_A1, _A2, _A3, _A4)
+                 (_B1, _B2, _B3, _B4, _B5) m d x));;
 
 let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
 
@@ -4700,7 +4699,7 @@ let rec eval_step_mmuaux (_A1, _A2)
               lookupa (ccompare_nat, equal_nat) a2_map
                 (plus_nata (minus_nata tp len) one_nata)
               in
-             combine max_tstp ma a)
+             combine (ccompare_list (ccompare_option _A2)) max_tstp ma a)
            a2_map
          in
        let a2_mapb =
@@ -5006,7 +5005,13 @@ let rec add_new_mmuaux
              (mapping_empty
                (ccompare_list (ccompare_option ccompare_event_data))
                (of_phantom mapping_impl_lista))
-             (upd_nested_max_tstp a2_map new_tstp tmp)
+             (upd_nested_max_tstp
+               (finite_UNIV_nat, ceq_nat, ccompare_nat, equal_nat)
+               (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                 (ccompare_list (ccompare_option ccompare_event_data)),
+                 (equal_list (equal_option equal_event_data)),
+                 mapping_impl_list)
+               a2_map new_tstp tmp)
            in
          let a1_mapa =
            (if pos

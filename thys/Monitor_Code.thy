@@ -1,7 +1,6 @@
 (*<*)
 theory Monitor_Code
   imports Monitor
-    (*SWA*)
     Optimized_MTL
     Event_Data
     "HOL-Library.Code_Target_Nat"
@@ -51,93 +50,6 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
   and msteps_stateless = "maux.msteps_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and monitor = "maux.monitor init_mmsaux filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   by unfold_locales
-
-(*
-fun fill where
-  "fill ((t, X) # (u, Y) # xs) = (t, X) # map (\<lambda>t. (t, empty_table)) [t + 1 ..< u] @ fill ((u, Y) # xs)"
-| "fill xs = xs"
-
-lemma join_empty_table[simp]: "join empty_table pos rel = empty_table"
-  by (auto simp: Table.join_def empty_table_def)
-
-lemma map_join_fill:
-  "map (\<lambda>(t, X). (t, join X pos rel)) (fill xs) = fill (map (\<lambda>(t, X). (t, join X pos rel)) xs)"
-  by (induct xs rule: fill.induct) (auto simp: drop_Cons' gr0_conv_Suc drop_map)
-
-lemma map_join_take_fill:
-  "map (\<lambda>(t, X). (t, join X pos rel)) (take n (fill xs)) = take n (fill (map (\<lambda>(t, X). (t, join X pos rel)) xs))"
-  by (auto simp: take_map[symmetric] map_join_fill)
-
-lemma map_join_drop_fill:
-  "map (\<lambda>(t, X). (t, join X pos rel)) (drop n (fill xs)) = drop n (fill (map (\<lambda>(t, X). (t, join X pos rel)) xs))"
-  by (auto simp: drop_map[symmetric] map_join_fill)
-
-lemma join_distr: "join (A \<union> B) pos C = join A pos C \<union> join B pos C"
-  by (cases pos) (auto simp: join_False_code join_True_code)
-
-lemma map_snd_flip: "map f (map snd xs) = map snd (map (\<lambda>(a, b). (a, f b)) xs)"
-  by (auto simp: list.map_comp fun_eq_iff)
-
-global_interpretation swa: msaux
-  "\<lambda>w (I, t, xs) ys.
-     let auxlist = fill ys in
-     ivl w = I \<and>
-     current w = r t + length xs - Suc 0 \<and>
-     take (left (ivl w)) auxlist = xs \<and>
-     valid (replicate (l t - 1) empty_table @ rev (map snd (drop (left (ivl w)) auxlist))) t \<and>
-     l t = (if t = Leaf then 0 else earliest w + Suc 0) \<and>
-     r t = (if t = Leaf then 0 else latest w + Suc 0)"
-  "\<lambda>I. (I, Leaf, [])"
-  "undefined"
-  "\<lambda>pos rel (I, t, xs). (I, map_tree (\<lambda>X. join X pos rel) t, map (\<lambda>(t, X). (t, join X pos rel)) xs)"
-  "\<lambda>(nt, X) (I, t, xs).
-    let xs' =
-      (case xs of [] \<Rightarrow> (nt, X) # map (\<lambda>i. (i, empty_table)) (rev [r t ..< nt])
-           | x # aux' \<Rightarrow> (if fst x = nt then (fst x, snd x \<union> X) # aux'
-              else (nt, X) # map (\<lambda>i. (i, empty_table)) (rev [Suc (fst x) ..< nt])));
-      t' = (if r t = Suc nt then
-              update_rightmost (\<lambda>rel. rel + X) t
-            else if Suc nt - left I > 0 then
-              (let window = (max 1 (the_enat (enat (Suc nt) - right I)), Suc nt - left I);
-                   new_atoms = drop (left I) xs'
-               in slide' (rev (map snd new_atoms)) t window)
-            else t)
-    in (I, t', xs')"
-  "\<lambda>(I, t, xs). case val t of None \<Rightarrow> empty_table | Some X \<Rightarrow> X"
-  apply unfold_locales
-  subgoal by (auto simp: valid_Leaf init_window_def)
-  subgoal sorry
-  subgoal for w msaux auxlist pos rel
-    by (auto simp: valid_Leaf Let_def map_join_take_fill map_join_drop_fill map_join_fill[symmetric]
-      join_distr plus_set_def rev_map[symmetric] map_snd_flip simp del: map_map
-      dest!: valid_map_map_tree[where f="\<lambda>X. join X pos rel" and as = "replicate (earliest w) empty_table @ rev (map snd (drop (left (ivl w)) (fill auxlist)))", rotated])
-  subgoal sorry
-  subgoal for w msaux auxlist
-    apply (auto split: option.splits if_splits simp: Let_def)
-       apply (frule val_eq_Some_sum_if_valid_neq_Leaf)
-        apply auto []
-       apply (subst (asm) sum_alt)
-         apply simp
-        apply (unfold valid_def)
-        apply (case_tac a)
-         apply auto [2]
-         apply (auto simp: rev_filter[symmetric] filter_map o_def nth_append empty_table_def plus_set_def zero_set_def split: if_split) []
-       apply (simp add: foldr_conv_fold plus_set_def zero_set_def del: fold_simps)
-       apply (erule arg_cong[where f="\<lambda>x. _ \<in> x", THEN iffD1, rotated])
-       apply (rule arg_cong[where f="\<lambda>xs. fold (\<union>) (rev xs) {}"])
-    apply (rule nth_equalityI)
-        apply auto []
-    find_theorems "concat (map _ _)"
-    thm fold_plus_sum_list_rev
-(*
-    apply simp
-      apply (auto dest!: val_eq_Some_sum_if_valid_neq_Leaf simp: nth_append
-        rev_map[symmetric] foldr_conv_fold fold_plus_sum_list_rev split: if_splits)
-*)
-    find_theorems "fold (+)"
-    sorry
-  done
-*)
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
@@ -232,6 +144,13 @@ lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
   unfolding mrtabulate.abs_eq RBT_Mapping_def
   by (auto split: option.splits)
 
+lemma combine_Mapping[code]:
+  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
+  "Mapping.combine f (RBT_Mapping t) (RBT_Mapping u) = 
+  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''combine RBT_Mapping: ccompare = None'') (\<lambda>_. Mapping.combine f (RBT_Mapping t) (RBT_Mapping u))
+                     | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.join (\<lambda>_. f) t u))"
+  by (auto simp add: Mapping.combine.abs_eq Mapping_inject lookup_join split: option.split)
+
 lemma upd_set_empty[simp]: "upd_set m f {} = m"
   by transfer auto
 
@@ -316,9 +235,7 @@ lemma upd_nested_insert:
   by (auto simp add: Let_def upd_nested_lookup upd_set'_lookup Mapping.lookup_update'
       Mapping.lookup_empty split: option.splits prod.splits if_splits)
 
-definition upd_nested_max_tstp :: "(tp, (event_data tuple, ts + tp) mapping) mapping \<Rightarrow>
-  ts + tp \<Rightarrow> (tp \<times> event_data tuple) set \<Rightarrow>
-  (tp, (event_data tuple, ts + tp) mapping) mapping" where
+definition upd_nested_max_tstp where
   "upd_nested_max_tstp m d X = upd_nested m d (max_tstp d) X"
 
 lemma upd_nested_max_tstp_fold:
@@ -339,7 +256,7 @@ proof -
 qed
 
 lift_definition upd_nested_max_tstp_cfi ::
-  "ts + tp \<Rightarrow> (tp \<times> event_data tuple, (tp, (event_data tuple, ts + tp) mapping) mapping) comp_fun_idem"
+  "ts + tp \<Rightarrow> ('a \<times> 'b, ('a, ('b, ts + tp) mapping) mapping) comp_fun_idem"
   is "\<lambda>d. upd_nested_step d (max_tstp d)"
   apply (unfold_locales; rule ext)
   using max_tstp_d_d max_tstp_idem max_tstp_idem'
@@ -348,7 +265,7 @@ lift_definition upd_nested_max_tstp_cfi ::
 
 lemma upd_nested_max_tstp_code[code]:
   "upd_nested_max_tstp m d X = (if finite X then set_fold_cfi (upd_nested_max_tstp_cfi d) m X
-    else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. upd_nested_max_tstp m d X))"
+    else Code.abort (STR ''upd_nested_max_tstp: infinite'') (\<lambda>_. upd_nested_max_tstp m d X))"
   by transfer (auto simp add: upd_nested_max_tstp_fold)
 
 declare [[code drop: add_new_mmuaux']]
@@ -386,7 +303,7 @@ lemma filter_set_code[code]:
   "filter_set m A t = (if finite A then set_fold_cfi (filter_cfi t) m A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set m A t))"
   by (transfer fixing: m) (auto simp: filter_set_fold)
 
-lemma filter_Mapping [code]:
+lemma filter_Mapping[code]:
   fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
   "Mapping.filter P (RBT_Mapping t) = 
   (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''filter RBT_Mapping: ccompare = None'') (\<lambda>_. Mapping.filter P (RBT_Mapping t))
@@ -403,10 +320,6 @@ lemma filter_join_False_empty: "filter_join False {} m = m"
   apply transfer
   apply (rule ext)
   by (auto split: option.splits)
-
-lemma Mapping_lookup_delete: "Mapping.lookup (Mapping.delete a m) x =
-  (if a = x then None else Mapping.lookup m x)"
-  by (simp add: Mapping.delete.rep_eq Mapping.lookup.rep_eq)
 
 lemma filter_join_False_insert: "filter_join False (insert a A) m =
   filter_join False A (Mapping.delete a m)"
