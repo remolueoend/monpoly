@@ -3,14 +3,12 @@
 
 
 TOOL_JAR="$EVAL_DIR/evaluation-tools-1.0-SNAPSHOT.jar"
-DEJAVU_COMPILE="$EVAL_DIR/dejavu-compile"
-DEJAVU_RUN="$EVAL_DIR/dejavu-run"
 OUTPUT_DIR="$WORK_DIR/logs"
 FMA_DIR="$WORK_DIR/fmas"
 VERDICT_DIR="$WORK_DIR/verdicts"
 REPORT_DIR="$WORK_DIR/reports"
 
-EXP_NAME="sltrandom"
+EXP_NAME="mdlcompliance"
 
 
 # ============================================================
@@ -90,8 +88,10 @@ function make_fma {
     local name=$(fma_name "$size" "$fvs" "$id")
     local fma=$(fma_path $name)
 
-    gen_fma -size $size -free_vars $fvs -qtl -output $fma
-    gen_fma -size $size -free_vars $fvs -max_lb 5 -aggr -output "${fma}_future"
+    echo "P()"  > "${fma}.sig"
+    echo "Q()" >> "${fma}.sig"
+    echo "R()" >> "${fma}.sig"
+    gen_mdl_fma -size $size -atoms P,Q,R > "${fma}.mdl"
     echo "${name}"
 }
 
@@ -113,7 +113,7 @@ function make_log() {
     if [ -f "$log" ]; then
         debug "           Log exists, skipping..."
     else
-        "$WORK_DIR/generator.sh" -seed $seed -e $er -i $ir -t 0 -S $length > ${log}_tmp$$
+        "$WORK_DIR/generator.sh" -seed $seed -e $er -i $ir -t 0 -sig ${fma}.sig $length > ${log}_tmp$$
         cat ${log}_tmp$$ | "$WORK_DIR/replayer.sh" -a 0 -m > ${log} 
         rm ${log}_tmp$$
 
@@ -200,7 +200,7 @@ function  compare() {
         echo ${perf1} > ${REPORT_DIR}/${log}_perf_${tool}
         echo ${perf2} > ${REPORT_DIR}/${log}_perf_oracle_${tool}
         #DIFF
-        local verdictdiff=$(diff ${verdictpath}_oracle_${tool} ${verdictpath}_${tool})
+        local verdictdiff=$(diff ${verdictpath}_oracle ${verdictpath}_${tool})
         
         if [ ! -z "${verdictdiff}" ]; then
         echo ${verdictdiff} > ${REPORT_DIR}/${log}_diff_${tool}
@@ -212,6 +212,7 @@ function  compare() {
 function monitor() {
     local formula=$1
     local log=$2
+    local er=$3
 
     
     local logpath=$(log_path $log)
@@ -219,19 +220,16 @@ function monitor() {
     local fma=$(fma_path $formula)
 
     #MONPOLY
-    local monpolyCMD="monpoly -nofilteremptytp -nofilterrel -no_rw -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} > ${verdictpath}_monpoly"
+    local aerialCMD="aerial -fmla ${fma}.mdl -log ${logpath} -mode naive | sed  '/^[A-Z]/d' > ${verdictpath}_aerial"
     
     #ORACLE-Monpoly
-    local oracleCMD="verimon -no_rw -nofilteremptytp -nofilterrel -nonewlastts -sig ${fma}_future.sig -formula ${fma}_future.mfotl -log ${logpath} -verified > ${verdictpath}_oracle_monpoly"
+    local oracleCMD="verimon -no_rw -nofilteremptytp -nofilterrel -sig ${fma}.sig -formula ${fma}.mdl -log ${logpath} -negate -verified | sed 's/@//g;s/. (time point /:/g;s/)://g;s/ true/:false/g' | awk -F':' -v d=${er} '{print \$1,(\$2 % d),\$3}' OFS=':' | sed 's/:false/ false/g' > ${verdictpath}_oracle"
 
-    compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
+    compare "aerial" "${aerialCMD}" "${oracleCMD}" "${log}"
 
     #DEJAVU
-    local dejavuCMD="${DEJAVU_RUN} ${fma} ${logpath}_dejavu ${verdictpath}_dejavu"
+    local hydraCMD="hydra ${fma}.mdl ${logpath} | sed  '/^[A-Z]/d' > ${verdictpath}_hydra"
 
-    #ORACLE-Dejavu
-    local oracleCMD="verimon -nofilteremptytp -nofilterrel -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${logpath}_oracle -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
-
-    compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
+    compare "hydra" "${hydraCMD}" "${oracleCMD}" "${log}"
 }
 

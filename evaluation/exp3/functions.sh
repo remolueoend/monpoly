@@ -172,7 +172,7 @@ function monitor() {
     local monpolyCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log > ${verdictpath}_monpoly"
     
     #ORACLE-Monpoly
-    local oracleCMD="monpoly -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log -verified > ${verdictpath}_oracle_monpoly"
+    local oracleCMD="verimon -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula} -log ${logpath}.log -verified > ${verdictpath}_oracle_monpoly"
     
     compare "monpoly" "${monpolyCMD}" "${oracleCMD}" "${log}"
 
@@ -180,7 +180,7 @@ function monitor() {
     local dejavuCMD="${DEJAVU_RUN} ${WORK_DIR}/${formula_dejavu} ${logpath}.csv ${verdictpath}_dejavu"
 
     #ORACLE-Dejavu
-    local oracleCMD="monpoly  -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath}.log -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
+    local oracleCMD="verimon  -no_rw -nonewlastts -sig ${WORK_DIR}/synth.sig -formula ${WORK_DIR}/${formula_oracle_dejavu} -log ${logpath}.log -verified | cut -d ' ' -f4 | cut -d ')' -f1 | xargs -I J sh -c \"echo 'J+1' | bc -l\" > ${verdictpath}_oracle_dejavu"
 
     compare "dejavu" "${dejavuCMD}" "${oracleCMD}" "${log}"
 }
