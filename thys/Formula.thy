@@ -1,10 +1,22 @@
 (*<*)
 theory Formula
-  imports Interval
-    Trace Regex
+  imports Interval Trace Regex Event_Data
     "MFOTL_Monitor.Table"
+    "HOL-Library.Mapping"
+    Containers.Set_Impl
 begin
 (*>*)
+
+derive (eq) ceq enat
+
+instantiation enat :: ccompare begin
+definition ccompare_enat :: "enat comparator option" where
+  "ccompare_enat = Some (\<lambda>x y. if x = y then order.Eq else if x < y then order.Lt else order.Gt)"
+
+instance by intro_classes
+    (auto simp: ccompare_enat_def split: if_splits intro!: comparator.intro)
+end
+
 
 section \<open>Metric First-order Temporal Logic\<close>
 
@@ -13,48 +25,96 @@ context begin
 subsection \<open>Formulas and Satisfiability\<close>
 
 qualified type_synonym name = string
-qualified type_synonym 'a event = "(name \<times> 'a list)"
-qualified type_synonym 'a database = "'a event set"
-qualified type_synonym 'a prefix = "(name \<times> 'a list) prefix"
-qualified type_synonym 'a trace = "(name \<times> 'a list) trace"
+qualified type_synonym event = "(name \<times> event_data list)"
+qualified type_synonym database = "event set"
+qualified type_synonym prefix = "(name \<times> event_data list) prefix"
+qualified type_synonym trace = "(name \<times> event_data list) trace"
 
-qualified type_synonym 'a env = "'a list"
+qualified type_synonym env = "event_data list"
 
 subsubsection \<open>Syntax\<close>
 
-qualified datatype 'a trm = Var nat | is_Const: Const 'a
+qualified datatype trm = is_Var: Var nat | is_Const: Const event_data
+  | Plus trm trm | Minus trm trm | UMinus trm | Mult trm trm | Div trm trm | Mod trm trm
+  | F2i trm | I2f trm
 
-qualified primrec fvi_trm :: "nat \<Rightarrow> 'a trm \<Rightarrow> nat set" where
+qualified primrec fvi_trm :: "nat \<Rightarrow> trm \<Rightarrow> nat set" where
   "fvi_trm b (Var x) = (if b \<le> x then {x - b} else {})"
 | "fvi_trm b (Const _) = {}"
+| "fvi_trm b (Plus x y) = fvi_trm b x \<union> fvi_trm b y"
+| "fvi_trm b (Minus x y) = fvi_trm b x \<union> fvi_trm b y"
+| "fvi_trm b (UMinus x) = fvi_trm b x"
+| "fvi_trm b (Mult x y) = fvi_trm b x \<union> fvi_trm b y"
+| "fvi_trm b (Div x y) = fvi_trm b x \<union> fvi_trm b y"
+| "fvi_trm b (Mod x y) = fvi_trm b x \<union> fvi_trm b y"
+| "fvi_trm b (F2i x) = fvi_trm b x"
+| "fvi_trm b (I2f x) = fvi_trm b x"
 
 abbreviation "fv_trm \<equiv> fvi_trm 0"
 
-qualified primrec eval_trm :: "'a env \<Rightarrow> 'a trm \<Rightarrow> 'a" where
+qualified primrec eval_trm :: "env \<Rightarrow> trm \<Rightarrow> event_data" where
   "eval_trm v (Var x) = v ! x"
 | "eval_trm v (Const x) = x"
+| "eval_trm v (Plus x y) = eval_trm v x + eval_trm v y"
+| "eval_trm v (Minus x y) = eval_trm v x - eval_trm v y"
+| "eval_trm v (UMinus x) = - eval_trm v x"
+| "eval_trm v (Mult x y) = eval_trm v x * eval_trm v y"
+| "eval_trm v (Div x y) = eval_trm v x div eval_trm v y"
+| "eval_trm v (Mod x y) = eval_trm v x mod eval_trm v y"
+| "eval_trm v (F2i x) = EInt (integer_of_event_data (eval_trm v x))"
+| "eval_trm v (I2f x) = EFloat (double_of_event_data (eval_trm v x))"
 
 lemma eval_trm_fv_cong: "\<forall>x\<in>fv_trm t. v ! x = v' ! x \<Longrightarrow> eval_trm v t = eval_trm v' t"
-  by (cases t) simp_all
+  by (induction t) simp_all
 
-qualified datatype (discs_sels) 'a formula = Pred name "'a trm list" | Eq "'a trm" "'a trm"
-  | Neg "'a formula" | Or "'a formula" "'a formula" | Ands "'a formula list" | Exists "'a formula"
-  | Agg nat "('a \<times> enat) set \<Rightarrow> 'a" nat "'a env \<Rightarrow> 'a" "'a formula"
-  | Prev \<I> "'a formula" | Next \<I> "'a formula"
-  | Since "'a formula" \<I> "'a formula" | Until "'a formula" \<I> "'a formula"
-  | MatchF \<I> "'a formula Regex.regex" | MatchP \<I> "'a formula Regex.regex"
+
+qualified datatype agg_op = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
+
+definition flatten_multiset :: "(event_data \<times> enat) set \<Rightarrow> event_data list" where
+  "flatten_multiset M = concat (map (\<lambda>(x, c). replicate (the_enat c) x) (csorted_list_of_set M))"
+
+fun eval_agg_op :: "agg_op \<Rightarrow> event_data \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
+  "eval_agg_op Agg_Cnt y0 M = EInt (integer_of_int (length (flatten_multiset M)))"
+| "eval_agg_op Agg_Min y0 M = (case flatten_multiset M of
+      [] \<Rightarrow> y0
+    | x # xs \<Rightarrow> foldl min x xs)"
+| "eval_agg_op Agg_Max y0 M = (case flatten_multiset M of
+      [] \<Rightarrow> y0
+    | x # xs \<Rightarrow> foldl max x xs)"
+| "eval_agg_op Agg_Sum y0 M = foldl plus y0 (flatten_multiset M)"
+| "eval_agg_op Agg_Avg y0 M = EFloat (let xs = flatten_multiset M in case xs of
+      [] \<Rightarrow> 0
+    | _ \<Rightarrow> double_of_event_data (foldl plus (EInt 0) xs) / double_of_int (length xs))"
+| "eval_agg_op Agg_Med y0 M = EFloat (let xs = flatten_multiset M; u = length xs in
+    if u = 0 then 0 else
+      let u' = u div 2 in
+      if even u then
+        (double_of_event_data (xs ! (u'-1)) + double_of_event_data (xs ! u') / double_of_int 2)
+      else double_of_event_data (xs ! u'))"
+
+
+qualified datatype (discs_sels) formula = Pred name "trm list"
+  | Eq trm trm | Less trm trm | LessEq trm trm
+  | Neg formula | Or formula formula | And formula formula | Ands "formula list" | Exists formula
+  | Agg nat agg_op event_data nat trm formula
+  | Prev \<I> formula | Next \<I> formula
+  | Since formula \<I> formula | Until formula \<I> formula
+  | MatchF \<I> "formula Regex.regex" | MatchP \<I> "formula Regex.regex"
 
 qualified definition "FF = Exists (Neg (Eq (Var 0) (Var 0)))"
 qualified definition "TT \<equiv> Neg FF"
 
-qualified fun fvi :: "nat \<Rightarrow> 'a formula \<Rightarrow> nat set" where
+qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
   "fvi b (Pred r ts) = (\<Union>t\<in>set ts. fvi_trm b t)"
 | "fvi b (Eq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
+| "fvi b (Less t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
+| "fvi b (LessEq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
 | "fvi b (Neg \<phi>) = fvi b \<phi>"
 | "fvi b (Or \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
+| "fvi b (And \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (Ands \<phi>s) = (let xs = map (fvi b) \<phi>s in \<Union>x\<in>set xs. x)"
 | "fvi b (Exists \<phi>) = fvi (Suc b) \<phi>"
-| "fvi b (Agg y \<omega> b' f \<phi>) = fvi (b + b') \<phi> \<union> (if b \<le> y then {y - b} else {})"
+| "fvi b (Agg y \<omega> \<omega>\<^sub>0 b' f \<phi>) = fvi (b + b') \<phi> \<union> fvi_trm (b + b') f \<union> (if b \<le> y then {y - b} else {})"
 | "fvi b (Prev I \<phi>) = fvi b \<phi>"
 | "fvi b (Next I \<phi>) = fvi b \<phi>"
 | "fvi b (Since \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
@@ -72,30 +132,28 @@ lemma fv_subset_Ands: "\<phi> \<in> set \<phi>s \<Longrightarrow> fv \<phi> \<su
   by auto
 
 lemma finite_fvi_trm[simp]: "finite (fvi_trm b t)"
-  by (cases t) simp_all
+  by (induction t) simp_all
 
-lemma finite_fvi[simp]:
-  fixes \<phi> :: "'a formula"
-  shows "finite (fvi b \<phi>)"
+lemma finite_fvi[simp]: "finite (fvi b \<phi>)"
   by (induction \<phi> arbitrary: b) simp_all
 
 lemma fvi_trm_plus: "x \<in> fvi_trm (b + c) t \<longleftrightarrow> x + c \<in> fvi_trm b t"
-  by (cases t) auto
+  by (induction t) auto
 
-lemma fvi_plus:
-  fixes \<phi> :: "'a formula"
-  shows "x \<in> fvi (b + c) \<phi> \<longleftrightarrow> x + c \<in> fvi b \<phi>"
+lemma fvi_trm_iff_fv_trm: "x \<in> fvi_trm b t \<longleftrightarrow> x + b \<in> fv_trm t"
+  using fvi_trm_plus[where b=0 and c=b] by simp_all
+
+lemma fvi_plus: "x \<in> fvi (b + c) \<phi> \<longleftrightarrow> x + c \<in> fvi b \<phi>"
 proof (induction \<phi> arbitrary: b rule: formula.induct)
   case (Exists \<phi>)
   then show ?case by force
 next
-  case (Agg y \<omega> b' f \<phi>)
+  case (Agg y \<omega> \<omega>\<^sub>0 b' f \<phi>)
   have *: "b + c + b' = b + b' + c" by simp
-  from Agg show ?case by (force simp: *)
+  from Agg show ?case by (force simp: * fvi_trm_plus)
 qed (auto simp add: fvi_trm_plus fv_regex_commute[where g = "\<lambda>x. x + c"])
 
-lemma fvi_Suc:
-  "x \<in> fvi (Suc b) \<phi> \<longleftrightarrow> Suc x \<in> fvi b \<phi>"
+lemma fvi_Suc: "x \<in> fvi (Suc b) \<phi> \<longleftrightarrow> Suc x \<in> fvi b \<phi>"
   using fvi_plus[where c=1] by simp
 
 lemma fvi_plus_bound:
@@ -121,22 +179,22 @@ lemma fvi_Suc_bound:
   shows "\<forall>i\<in>fvi b \<phi>. i < Suc n"
   using assms fvi_plus_bound[where c=1] by simp
 
-lemma fvi_iff_fv:
-  "x \<in> fvi b \<phi> \<longleftrightarrow> x + b \<in> fv \<phi>"
+lemma fvi_iff_fv: "x \<in> fvi b \<phi> \<longleftrightarrow> x + b \<in> fv \<phi>"
   using fvi_plus[where b=0 and c=b] by simp_all
 
-qualified definition nfv :: "'a formula \<Rightarrow> nat" where
+qualified definition nfv :: "formula \<Rightarrow> nat" where
   "nfv \<phi> = Max (insert 0 (Suc ` fv \<phi>))"
 
 qualified abbreviation nfv_regex where
   "nfv_regex \<equiv> Regex.nfv_regex fv"
 
-qualified definition envs :: "'a formula \<Rightarrow> 'a env set" where
+qualified definition envs :: "formula \<Rightarrow> env set" where
   "envs \<phi> = {v. length v = nfv \<phi>}"
 
 lemma nfv_simps[simp]:
   "nfv (Neg \<phi>) = nfv \<phi>"
   "nfv (Or \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
+  "nfv (And \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   "nfv (Prev I \<phi>) = nfv \<phi>"
   "nfv (Next I \<phi>) = nfv \<phi>"
   "nfv (Since \<phi> I \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
@@ -174,14 +232,17 @@ lemma fvi_less_nfv_regex: "\<forall>i\<in>fv_regex \<phi>. i < nfv_regex \<phi>"
 
 subsubsection \<open>Future Reach\<close>
 
-qualified fun future_bounded :: "'a formula \<Rightarrow> bool" where
+qualified fun future_bounded :: "formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
 | "future_bounded (Eq _ _) = True"
+| "future_bounded (Less _ _) = True"
+| "future_bounded (LessEq _ _) = True"
 | "future_bounded (Neg \<phi>) = future_bounded \<phi>"
 | "future_bounded (Or \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
+| "future_bounded (And \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Ands l) = list_all future_bounded l"
 | "future_bounded (Exists \<phi>) = future_bounded \<phi>"
-| "future_bounded (Agg y \<omega> b f \<phi>) = future_bounded \<phi>"
+| "future_bounded (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) = future_bounded \<phi>"
 | "future_bounded (Prev I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Next I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Since \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
@@ -190,27 +251,23 @@ qualified fun future_bounded :: "'a formula \<Rightarrow> bool" where
 | "future_bounded (MatchF I r) = (Regex.pred_regex future_bounded r \<and> right I \<noteq> \<infinity>)"
 
 
-
 subsubsection \<open>Semantics\<close>
 
 definition "ecard A = (if finite A then card A else \<infinity>)"
 
-qualified definition fv_env :: "'a formula \<Rightarrow> 'a env \<Rightarrow> 'a env" where
-  "fv_env \<phi> v = [v ! x. x \<leftarrow> [0..<nfv \<phi>], x \<in> fv \<phi>]"
-
-lemma fv_env_fv_cong: "\<forall>x\<in>fv \<phi>. v ! x = v' ! x \<Longrightarrow> fv_env \<phi> v = fv_env \<phi> v'"
-  unfolding fv_env_def by (auto intro!: arg_cong[where f=concat] cong: map_cong)
-
-qualified fun sat :: "'a trace \<Rightarrow> 'a env \<Rightarrow> nat \<Rightarrow> 'a formula \<Rightarrow> bool" where
+qualified fun sat :: "trace \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
   "sat \<sigma> v i (Pred r ts) = ((r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i)"
 | "sat \<sigma> v i (Eq t1 t2) = (eval_trm v t1 = eval_trm v t2)"
+| "sat \<sigma> v i (Less t1 t2) = (eval_trm v t1 < eval_trm v t2)"
+| "sat \<sigma> v i (LessEq t1 t2) = (eval_trm v t1 \<le> eval_trm v t2)"
 | "sat \<sigma> v i (Neg \<phi>) = (\<not> sat \<sigma> v i \<phi>)"
 | "sat \<sigma> v i (Or \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<or> sat \<sigma> v i \<psi>)"
+| "sat \<sigma> v i (And \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> sat \<sigma> v i \<psi>)"
 | "sat \<sigma> v i (Ands l) = list_all id (map (sat \<sigma> v i) l)"
 | "sat \<sigma> v i (Exists \<phi>) = (\<exists>z. sat \<sigma> (z # v) i \<phi>)"
-| "sat \<sigma> v i (Agg y \<omega> b f \<phi>) =
-    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> (zs @ v) i \<phi> \<and> f (fv_env \<phi> (zs @ v)) = x} \<and> Zs \<noteq> {}}
-    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = \<omega> M)"
+| "sat \<sigma> v i (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) =
+    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> (zs @ v) i \<phi> \<and> eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
+    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> \<omega>\<^sub>0 M)"
 | "sat \<sigma> v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<phi>)"
 | "sat \<sigma> v i (Next I \<phi>) = (mem (\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i) I \<and> sat \<sigma> v (Suc i) \<phi>)"
 | "sat \<sigma> v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>))"
@@ -367,7 +424,13 @@ proof (induct \<phi> arbitrary: v v' i rule: formula.induct)
   show ?case by (simp cong: map_cong eval_trm_fv_cong[OF Pred[simplified, THEN bspec]])
 next
   case (Eq x1 x2)
-  then show ?case  unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
+  then show ?case unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
+next
+  case (Less x1 x2)
+  then show ?case unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
+next
+  case (LessEq x1 x2)
+  then show ?case unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
 next
   case (Ands l)
   have "\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>"
@@ -382,15 +445,15 @@ next
   case (Exists \<phi>)
   then show ?case unfolding sat.simps by (intro iff_exI) (simp add: fvi_Suc nth_Cons')
 next
-  case (Agg y \<omega> b f \<phi>)
+  case (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)
   have "v ! y = v' ! y"
     using Agg.prems by simp
   moreover have "sat \<sigma> (zs @ v) i \<phi> = sat \<sigma> (zs @ v') i \<phi>" if "length zs = b" for zs
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
         nth_append fvi_iff_fv(1)[where b=b])
-  moreover have "f (fv_env \<phi> (zs @ v)) = f (fv_env \<phi> (zs @ v'))" if "length zs = b" for zs
-    using that Agg.prems by (simp add: fv_env_fv_cong[where v="zs @ v" and v'="zs @ v'"]
-        nth_append fvi_iff_fv(1)[where b=b])
+  moreover have "eval_trm (zs @ v) f = eval_trm (zs @ v') f" if "length zs = b" for zs
+    using that Agg.prems by (auto intro!: eval_trm_fv_cong[where v="zs @ v" and v'="zs @ v'"]
+        simp: nth_append fvi_iff_fv(1)[where b=b] fvi_trm_iff_fv_trm[where b="length zs"])
   ultimately show ?case
     by (simp cong: conj_cong)
 next
@@ -415,40 +478,10 @@ lemma eps_fv_cong:
   "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.eps (sat \<sigma> v) i r = Regex.eps (sat \<sigma> v') i r"
   unfolding eps_match by (erule match_fv_cong[THEN fun_cong, THEN fun_cong])
 
-subsubsection \<open>Defined Connectives\<close>
-
-qualified definition "And \<phi> \<psi> = Neg (Or (Neg \<phi>) (Neg \<psi>))"
-
-lemma fvi_And: "fvi b (And \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
-  unfolding And_def by simp
-
-lemma nfv_And[simp]: "nfv (And \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
-  unfolding nfv_def by (simp add: fvi_And image_Un Max_Un[symmetric])
-
-lemma future_bounded_And: "future_bounded (And \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
-  unfolding And_def by simp
-
-lemma sat_And: "sat \<sigma> v i (And \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> sat \<sigma> v i \<psi>)"
-  unfolding And_def by simp
-
-qualified definition "And_Not \<phi> \<psi> = Neg (Or (Neg \<phi>) \<psi>)"
-
-lemma fvi_And_Not: "fvi b (And_Not \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
-  unfolding And_Not_def by simp
-
-lemma nfv_And_Not[simp]: "nfv (And_Not \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
-  unfolding nfv_def by (simp add: fvi_And_Not image_Un Max_Un[symmetric])
-
-lemma future_bounded_And_Not: "future_bounded (And_Not \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
-  unfolding And_Not_def by simp
-
-lemma sat_And_Not: "sat \<sigma> v i (And_Not \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> \<not> sat \<sigma> v i \<psi>)"
-  unfolding And_Not_def by simp
-
 
 subsection \<open>Safe Formulas\<close>
 
-fun remove_neg :: "'a formula \<Rightarrow> 'a formula" where
+fun remove_neg :: "formula \<Rightarrow> formula" where
   "remove_neg (Neg \<phi>) = \<phi>"
 | "remove_neg \<phi> = \<phi>"
 
@@ -462,19 +495,35 @@ lemma partition_cong[fundef_cong]:
 lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
   by (cases \<phi>) simp_all
 
-fun safe_formula :: "'a formula \<Rightarrow> bool" where
-  "safe_formula (Eq t1 t2) = (is_Const t1 \<or> is_Const t2)"
+fun is_constraint :: "formula \<Rightarrow> bool" where
+  "is_constraint (Eq t1 t2) = True"
+| "is_constraint (Less t1 t2) = True"
+| "is_constraint (LessEq t1 t2) = True"
+| "is_constraint (Neg (Eq t1 t2)) = True"
+| "is_constraint (Neg (Less t1 t2)) = True"
+| "is_constraint (Neg (LessEq t1 t2)) = True"
+| "is_constraint _ = False"
+
+fun safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool" where
+  "safe_assignment X (Eq (Var x) t) = (fv_trm t \<subseteq> X)"
+| "safe_assignment X \<phi> = False"
+
+fun safe_formula :: "formula \<Rightarrow> bool" where
+  "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
 | "safe_formula (Neg (Eq (Const x) (Const y))) = True"
 | "safe_formula (Neg (Eq (Var x) (Var y))) = (x = y)"
+| "safe_formula (Less t1 t2) = False"
+| "safe_formula (LessEq t1 t2) = False"
 | "safe_formula (Pred e ts) = True"
-| "safe_formula (Neg (Or (Neg \<phi>) \<psi>)) = (safe_formula \<phi> \<and>
-    (safe_formula \<psi> \<and> fv \<psi> \<subseteq> fv \<phi> \<or> (case \<psi> of Neg \<psi>' \<Rightarrow> safe_formula \<psi>' | _ \<Rightarrow> False)))"
 | "safe_formula (Neg \<phi>) = (fv \<phi> = {} \<and> safe_formula \<phi>)"
 | "safe_formula (Or \<phi> \<psi>) = (fv \<psi> = fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
+| "safe_formula (And \<phi> \<psi>) = (safe_formula \<phi> \<and>
+    (safe_assignment (fv \<phi>) \<psi> \<or> safe_formula \<psi> \<or>
+      fv \<psi> \<subseteq> fv \<phi> \<and> (is_constraint \<psi> \<or> (case \<psi> of Neg \<psi>' \<Rightarrow> safe_formula \<psi>' | _ \<Rightarrow> False))))"
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
     list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "safe_formula (Exists \<phi>) = (safe_formula \<phi>)"
-| "safe_formula (Agg y \<omega> b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi>)"
+| "safe_formula (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) = (safe_formula \<phi> \<and> y + b \<notin> fv \<phi> \<and> {0..<b} \<subseteq> fv \<phi> \<and> fv_trm f \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Since \<phi> I \<psi>) = (fv \<phi> \<subseteq> fv \<psi> \<and>
@@ -497,10 +546,10 @@ lemma safe_regex_safe_formula:
 lemma safe_abbrevs[simp]: "safe_formula TT" "safe_formula FF"
   unfolding TT_def FF_def by auto
 
-definition safe_neg :: "'a formula \<Rightarrow> bool" where
+definition safe_neg :: "formula \<Rightarrow> bool" where
   "safe_neg \<phi> \<longleftrightarrow> (\<not> safe_formula \<phi> \<longrightarrow> safe_formula (remove_neg \<phi>))"
 
-definition atms :: "'a formula Regex.regex \<Rightarrow> 'a formula set" where
+definition atms :: "formula Regex.regex \<Rightarrow> formula set" where
   "atms r = (\<Union>\<phi> \<in> Regex.atms r.
      if safe_formula \<phi> then {\<phi>} else case \<phi> of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {})"
 
@@ -518,86 +567,118 @@ lemma finite_atms[simp]: "finite (atms r)"
 lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
   by blast
 
-lemma safe_formula_induct[consumes 1]:
+lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Const neq_Var Pred
+    And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
+    Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
   assumes "safe_formula \<phi>"
-    and "\<And>t1 t2. is_Const t1 \<Longrightarrow> P (Eq t1 t2)"
-    and "\<And>t1 t2. is_Const t2 \<Longrightarrow> P (Eq t1 t2)"
-    and "\<And>x y. P (Neg (Eq (Const x) (Const y)))"
-    and "\<And>x y. x = y \<Longrightarrow> P (Neg (Eq (Var x) (Var y)))"
-    and "\<And>e ts. P (Pred e ts)"
-    and "\<And>\<phi> \<psi>. \<not> (safe_formula (Neg \<psi>) \<and> fv \<psi> \<subseteq> fv \<phi>) \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And \<phi> \<psi>)"
-    and "\<And>\<phi> \<psi>. safe_formula \<psi> \<Longrightarrow> fv \<psi> \<subseteq> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And_Not \<phi> \<psi>)"
-    and "\<And>l neg pos. (pos, neg) = partition safe_formula l \<Longrightarrow> pos \<noteq> [] \<Longrightarrow>
-      list_all safe_formula (map remove_neg neg) \<Longrightarrow>
+    and Eq_Const: "\<And>c d. P (Eq (Const c) (Const d))"
+    and Eq_Var1: "\<And>c x. P (Eq (Const c) (Var x))"
+    and Eq_Var2: "\<And>c x. P (Eq (Var x) (Const c))"
+    and neq_Const: "\<And>x y. P (Neg (Eq (Const x) (Const y)))"
+    and neq_Var: "\<And>x. P (Neg (Eq (Var x) (Var x)))"
+    and Pred: "\<And>e ts. P (Pred e ts)"
+    and And_assign: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (And \<phi> \<psi>)"
+    and And_safe: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> \<not> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow>
+      P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And \<phi> \<psi>)"
+    and And_constraint: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> \<not> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> \<not> safe_formula \<psi> \<Longrightarrow>
+      fv \<psi> \<subseteq> fv \<phi> \<Longrightarrow> is_constraint \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (And \<phi> \<psi>)"
+    and And_Not: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> \<not> safe_assignment (fv \<phi>) (Neg \<psi>) \<Longrightarrow> \<not> safe_formula (Neg \<psi>) \<Longrightarrow>
+      fv (Neg \<psi>) \<subseteq> fv \<phi> \<Longrightarrow> \<not> is_constraint (Neg \<psi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And \<phi> (Neg \<psi>))"
+    and Ands: "\<And>l pos neg. (pos, neg) = partition safe_formula l \<Longrightarrow> pos \<noteq> [] \<Longrightarrow>
+      list_all safe_formula pos \<Longrightarrow> list_all safe_formula (map remove_neg neg) \<Longrightarrow>
       (\<Union>\<phi>\<in>set neg. fv \<phi>) \<subseteq> (\<Union>\<phi>\<in>set pos. fv \<phi>) \<Longrightarrow>
       list_all P pos \<Longrightarrow> list_all P (map remove_neg neg) \<Longrightarrow> P (Ands l)"
-    and "\<And>\<phi>. \<lbrakk>\<forall>t1 t2. \<phi> \<noteq> Eq t1 t2; \<forall>\<psi>\<^sub>1 \<psi>\<^sub>2. \<not> (\<phi> = Or (Neg \<psi>\<^sub>1) \<psi>\<^sub>2 \<and> safe_formula \<psi>\<^sub>2 \<and> fv \<psi>\<^sub>2 \<subseteq> fv \<psi>\<^sub>1);
-              \<forall>\<psi>\<^sub>1 \<psi>\<^sub>2 \<psi>\<^sub>2'. \<not> (\<phi> = Or (Neg \<psi>\<^sub>1) \<psi>\<^sub>2 \<and> \<not>(safe_formula \<psi>\<^sub>2 \<and> fv \<psi>\<^sub>2 \<subseteq> fv \<psi>\<^sub>1) \<and> \<psi>\<^sub>2 = Neg \<psi>\<^sub>2') \<rbrakk> \<Longrightarrow>
-              fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
-    and "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
-    and "\<And>\<phi>. P \<phi> \<Longrightarrow> P (Exists \<phi>)"
-    and "\<And>y \<omega> b f \<phi>. y + b \<notin> fv \<phi> \<Longrightarrow> {0..<b} \<subseteq> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> b f \<phi>)"
-    and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
-    and "\<And>I \<phi>. P \<phi> \<Longrightarrow> P (Next I \<phi>)"
-    and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
-    and "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not> safe_formula (Neg \<phi>) \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since (Neg \<phi>) I \<psi> )"
-    and "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until \<phi> I \<psi>)"
-    and "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow>
-      \<not> safe_formula (Neg \<phi>) \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
-    and "\<And>I r. safe_regex Past Safe r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
-    and "\<And>I r. safe_regex Future Safe r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
+    and Neg: "\<And>\<phi>. fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
+    and Or: "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
+    and Exists: "\<And>\<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Exists \<phi>)"
+    and Agg: "\<And>y \<omega> \<omega>\<^sub>0 b f \<phi>. y + b \<notin> fv \<phi> \<Longrightarrow> {0..<b} \<subseteq> fv \<phi> \<Longrightarrow> fv_trm f \<subseteq> fv \<phi> \<Longrightarrow>
+      safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)"
+    and Prev: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
+    and Next: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Next I \<phi>)"
+    and Since: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since \<phi> I \<psi>)"
+    and Not_Since: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
+      \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Since (Neg \<phi>) I \<psi> )"
+    and Until: "\<And>\<phi> I \<psi>. fv \<phi> \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until \<phi> I \<psi>)"
+    and Not_Until: "\<And>\<phi> I \<psi>. fv (Neg \<phi>) \<subseteq> fv \<psi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
+      \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
+    and MatchP: "\<And>I r. safe_regex Past Safe r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
+    and MatchF: "\<And>I r. safe_regex Future Safe r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
   shows "P \<phi>"
 using assms(1) proof (induction \<phi> rule: safe_formula.induct)
-  case (5 \<phi> \<psi>)
-  then show ?case
-    by (cases \<psi>)
-      (auto 0 3 elim!: disjE_Not2 intro: assms[unfolded And_def And_Not_def])
+  case (1 t1 t2)
+  then show ?case using Eq_Const Eq_Var1 Eq_Var2 by (auto simp: trm.is_Const_def trm.is_Var_def)
 next
-  case (8 l)
+  case (9 \<phi> \<psi>)
+  from \<open>safe_formula (And \<phi> \<psi>)\<close> have "safe_formula \<phi>" by simp
+  from \<open>safe_formula (And \<phi> \<psi>)\<close> consider
+    (a) "safe_assignment (fv \<phi>) \<psi>"
+    | (b) "\<not> safe_assignment (fv \<phi>) \<psi>" "safe_formula \<psi>"
+    | (c) "fv \<psi> \<subseteq> fv \<phi>" "\<not> safe_assignment (fv \<phi>) \<psi>" "\<not> safe_formula \<psi>" "is_constraint \<psi>"
+    | (d) \<psi>' where "fv \<psi> \<subseteq> fv \<phi>" "\<not> safe_assignment (fv \<phi>) \<psi>" "\<not> safe_formula \<psi>" "\<not> is_constraint \<psi>"
+        "\<psi> = Neg \<psi>'" "safe_formula \<psi>'"
+    by (cases \<psi>) auto
+  then show ?case proof cases
+    case a
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (intro And_assign)
+  next
+    case b
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (intro And_safe)
+  next
+    case c
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (intro And_constraint)
+  next
+    case d
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (blast intro!: And_Not)
+  qed
+next
+  case (10 l)
   obtain pos neg where posneg: "(pos, neg) = partition safe_formula l" by simp
-  have "pos \<noteq> []" using "8.prems" posneg by simp
-  moreover have safe_remove_neg: "list_all safe_formula (map remove_neg neg)" using "8.prems" posneg by auto
+  have "pos \<noteq> []" using "10.prems" posneg by simp
+  moreover have "list_all safe_formula pos" using posneg by (simp add: list.pred_set)
+  moreover have safe_remove_neg: "list_all safe_formula (map remove_neg neg)" using "10.prems" posneg by auto
   moreover have "list_all P pos"
-    using posneg "8.IH"(1) by (simp add: list_all_iff)
+    using posneg "10.IH"(1) by (simp add: list_all_iff)
   moreover have "list_all P (map remove_neg neg)"
-    using "8.IH"(2)[OF posneg] safe_remove_neg by (simp add: list_all_iff)
-  ultimately show ?case using "8.IH"(1) "8.prems" assms(9) posneg by simp
+    using "10.IH"(2)[OF posneg] safe_remove_neg by (simp add: list_all_iff)
+  ultimately show ?case using "10.IH"(1) "10.prems" Ands posneg by simp
 next
-  case (13 \<phi> I \<psi>)
+  case (15 \<phi> I \<psi>)
   then show ?case
   proof (cases \<phi>)
     case (Ands l)
-    then show ?thesis using "13.IH"(1) "13.IH"(3) "13.prems" assms(16) by auto
-  qed (auto 0 3 elim!: disjE_Not2 intro: assms)
+    then show ?thesis using "15.IH"(1) "15.IH"(3) "15.prems" Since by auto
+  qed (auto 0 3 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
 next
-  case (14 \<phi> I \<psi>)
+  case (16 \<phi> I \<psi>)
   then show ?case
   proof (cases \<phi>)
     case (Ands l)
-    then show ?thesis using "14.IH"(1) "14.IH"(3) "14.prems" assms(18) by auto
-  qed (auto 0 3 elim!: disjE_Not2 intro: assms)
+    then show ?thesis using "16.IH"(1) "16.IH"(3) "16.prems" Until by auto
+  qed (auto 0 3 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
 next
-  case (15 I r)
+  case (17 I r)
   then show ?case
-    by (intro assms(20)) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
+    by (intro MatchP) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 next
-  case (16 I r)
+  case (18 I r)
   then show ?case
-    by (intro assms(21)) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
+    by (intro MatchF) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp: assms)
 
 
 subsection \<open>Slicing Traces\<close>
 
-qualified fun matches :: "'a env \<Rightarrow> 'a formula \<Rightarrow> name \<times> 'a list \<Rightarrow> bool" where
+qualified fun matches :: "env \<Rightarrow> formula \<Rightarrow> name \<times> event_data list \<Rightarrow> bool" where
   "matches v (Pred r ts) e = (r = fst e \<and> map (eval_trm v) ts = snd e)"
 | "matches v (Eq _ _) e = False"
+| "matches v (Less _ _) e = False"
+| "matches v (LessEq _ _) e = False"
 | "matches v (Neg \<phi>) e = matches v \<phi> e"
 | "matches v (Or \<phi> \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
+| "matches v (And \<phi> \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
 | "matches v (Ands l) e = list_ex id (map (\<lambda>\<phi>. matches v \<phi> e) l)"
 | "matches v (Exists \<phi>) e = (\<exists>z. matches (z # v) \<phi> e)"
-| "matches v (Agg y \<omega> b f \<phi>) e = (\<exists>zs. length zs = b \<and> matches (zs @ v) \<phi> e)"
+| "matches v (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) e = (\<exists>zs. length zs = b \<and> matches (zs @ v) \<phi> e)"
 | "matches v (Prev I \<phi>) e = matches v \<phi> e"
 | "matches v (Next I \<phi>) e = matches v \<phi> e"
 | "matches v (Since \<phi> I \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
@@ -627,7 +708,7 @@ next
   case (Exists \<phi>)
   then show ?case unfolding matches.simps by (intro iff_exI) (simp add: fvi_Suc nth_Cons')
 next
-  case (Agg y \<omega> b f \<phi>)
+  case (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)
   have "matches (zs @ v) \<phi> e = matches (zs @ v') \<phi> e" if "length zs = b" for zs
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
         nth_append fvi_iff_fv(1)[where b=b])
@@ -637,7 +718,7 @@ qed (auto 8 0 simp add: nth_Cons' fv_regex_alt)
 abbreviation relevant_events where
   "relevant_events \<phi> S \<equiv> {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}"
 
-qualified definition slice :: "'a formula \<Rightarrow> 'a env set \<Rightarrow> 'a trace \<Rightarrow> 'a trace" where
+qualified definition slice :: "formula \<Rightarrow> env set \<Rightarrow> trace \<Rightarrow> trace" where
   "slice \<phi> S \<sigma> = map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) \<sigma>"
 
 lemma \<tau>_slice[simp]: "\<tau> (slice \<phi> S \<sigma>) = \<tau> \<sigma>"
@@ -651,16 +732,12 @@ proof (induction \<phi> arbitrary: v S i)
   case (Pred r ts)
   then show ?case by (auto simp: subset_eq)
 next
-  case (Eq t1 t2)
-  show ?case
-    unfolding sat.simps
-    by simp
-next
-  case (Neg \<phi>)
-  then show ?case by simp
-next
   case (Or \<phi> \<psi>)
   show ?case using Or.IH[of S] Or.prems
+    by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
+next
+  case (And \<phi> \<psi>)
+  show ?case using And.IH[of S] And.prems
     by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
 next
   case (Ands l)
@@ -692,7 +769,7 @@ next
     using Exists.prems by (auto intro!: Exists.IH[of "{z # v | v. v \<in> S}"])
   then show ?case by simp
 next
-  case (Agg y \<omega> b f \<phi>)
+  case (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)
   have "sat \<sigma> (zs @ v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (zs @ v) i \<phi>" if "length zs = b" for zs
     using that Agg.prems by (auto intro!: Agg.IH[where S="{zs @ v | v. v \<in> S}"])
   then show ?case by (simp cong: conj_cong)
@@ -722,7 +799,7 @@ next
     by (intro Regex.match_fv_cong) (auto dest!: MatchF(1)[of _ S v, rotated 2])
   then show ?case
     by auto
-qed
+qed simp_all
 
 lemma sat_slice_iff:
   assumes "v \<in> S"
@@ -730,7 +807,7 @@ lemma sat_slice_iff:
   unfolding slice_def
   by (rule sat_slice_strong[OF assms subset_refl])
 
-qualified lift_definition pslice :: "'a formula \<Rightarrow> 'a env set \<Rightarrow> 'a prefix \<Rightarrow> 'a prefix" is
+qualified lift_definition pslice :: "formula \<Rightarrow> env set \<Rightarrow> prefix \<Rightarrow> prefix" is
   "\<lambda>\<phi> S \<pi>. map (\<lambda>(D, t). (D \<inter> relevant_events \<phi> S, t)) \<pi>"
   by (auto simp: o_def split_beta)
 
@@ -789,79 +866,40 @@ lemma prefix_of_sliceD:
 
 subsection \<open>Translation to n-ary Conjunction\<close>
 
-fun get_or_list :: "'a formula \<Rightarrow> 'a formula list" where
-  "get_or_list (Or \<phi> \<psi>) = (get_or_list \<phi>) @ (get_or_list \<psi>)"
-| "get_or_list \<phi> = [\<phi>]"
-
-lemma fv_get_or:
-  "(\<Union>x\<in>set (get_or_list \<phi>). fvi b x) = fvi b \<phi>"
-  by (induction \<phi> rule: get_or_list.induct) simp_all
-
-lemma safe_get_or:
-  "safe_formula \<phi> \<Longrightarrow> list_all safe_formula (get_or_list \<phi>)"
-  by (induction \<phi> rule: get_or_list.induct) simp_all
-
-lemma sat_get_or:
-  "sat \<sigma> v i \<phi> \<longleftrightarrow> list_ex (sat \<sigma> v i) (get_or_list \<phi>)"
-  by (induction \<phi> rule: get_or_list.induct) simp_all
-
-fun get_and_list :: "'a formula \<Rightarrow> 'a formula list" where
+fun get_and_list :: "formula \<Rightarrow> formula list" where
   "get_and_list (Ands l) = l"
-| "get_and_list (Neg \<phi>) = (if safe_formula (Neg \<phi>) then [Neg \<phi>] else map Neg (get_or_list \<phi>))"
 | "get_and_list \<phi> = [\<phi>]"
 
-lemma fv_get_and:
-  "(\<Union>x\<in>(set (get_and_list \<phi>)). fvi b x) = fvi b \<phi>"
-proof (induction \<phi> rule: get_and_list.induct)
-  case (2 \<phi>)
-  show ?case by (simp add: fv_get_or[where \<phi>=\<phi>])
-qed simp_all
+lemma fv_get_and: "(\<Union>x\<in>(set (get_and_list \<phi>)). fvi b x) = fvi b \<phi>"
+  by (induction \<phi> rule: get_and_list.induct) simp_all
 
-lemma safe_get_and:
-  "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (get_and_list \<phi>)"
+lemma safe_get_and: "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: safe_neg_def list_all_iff)
 
-lemma sat_get_and:
-  "sat \<sigma> v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> v i) (get_and_list \<phi>)"
-proof (induction \<phi> rule: get_and_list.induct)
-  case (2 \<phi>)
-  show ?case by (simp add: list_all_iff sat_get_or[where \<phi>=\<phi>] list_ex_iff)
-qed (simp_all add: list_all_iff)
+lemma sat_get_and: "sat \<sigma> v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> v i) (get_and_list \<phi>)"
+  by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
 
-fun convert_multiway :: "'a formula \<Rightarrow> 'a formula"
-  where
-  "convert_multiway (Neg \<phi>) = (if fv \<phi> = {}
-    then Neg \<phi>
-    else (case \<phi> of
-      Or (Neg \<alpha>) \<beta> \<Rightarrow>
-        let a = get_and_list (convert_multiway \<alpha>);
-            b = (if is_Neg \<beta> \<and> safe_formula (un_Neg \<beta>)
-              then (case \<beta> of Neg \<beta>' \<Rightarrow> get_and_list (convert_multiway \<beta>'))
-              else map Neg (get_or_list (convert_multiway \<beta>)))
-        in Ands (a @ b)
-    | _ \<Rightarrow> Neg \<phi>))"
+fun convert_multiway :: "formula \<Rightarrow> formula" where
+  "convert_multiway (Neg \<phi>) = Neg (convert_multiway \<phi>)"
 | "convert_multiway (Or \<phi> \<psi>) = Or (convert_multiway \<phi>) (convert_multiway \<psi>)"
+| "convert_multiway (And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
+      And (convert_multiway \<phi>) \<psi>
+    else if safe_formula \<psi> then
+      Ands (get_and_list (convert_multiway \<phi>) @ get_and_list (convert_multiway \<psi>))
+    else if is_constraint \<psi> then
+      And (convert_multiway \<phi>) \<psi>
+    else Ands (convert_multiway \<psi> # get_and_list (convert_multiway \<phi>)))"
 | "convert_multiway (Exists \<phi>) = Exists (convert_multiway \<phi>)"
-| "convert_multiway (Agg y \<omega> b f \<phi>) = Agg y \<omega> b f (convert_multiway \<phi>)"
-| "convert_multiway (Prev r \<phi> ) = Prev r (convert_multiway \<phi>)"
-| "convert_multiway (Next r \<phi>) = Next r (convert_multiway \<phi>)"
-| "convert_multiway (Since \<phi> r \<psi>) = (if safe_formula \<phi> then
-       Since (convert_multiway \<phi>) r (convert_multiway \<psi>)
-  else (case \<phi> of Neg \<phi>' \<Rightarrow> Since (Neg (convert_multiway \<phi>')) r (convert_multiway \<psi>) | _ \<Rightarrow> undefined))"
-| "convert_multiway (Until \<phi> r \<psi>) = (if safe_formula \<phi> then
-       Until (convert_multiway \<phi>) r (convert_multiway \<psi>)
-  else (case \<phi> of Neg \<phi>' \<Rightarrow> Until (Neg (convert_multiway \<phi>')) r (convert_multiway \<psi>) | _ \<Rightarrow> undefined))"
-| "convert_multiway (MatchP I r) = MatchP I (Regex.map_regex (\<lambda>\<phi>. if safe_formula \<phi>
-    then convert_multiway \<phi>
-    else (case \<phi> of Neg \<phi>' \<Rightarrow> Neg (convert_multiway \<phi>'))) r)"
-| "convert_multiway (MatchF I r) = MatchF I (Regex.map_regex (\<lambda>\<phi>. if safe_formula \<phi>
-    then convert_multiway \<phi>
-    else (case \<phi> of Neg \<phi>' \<Rightarrow> Neg (convert_multiway \<phi>'))) r)"
+| "convert_multiway (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) = Agg y \<omega> \<omega>\<^sub>0 b f (convert_multiway \<phi>)"
+| "convert_multiway (Prev I \<phi>) = Prev I (convert_multiway \<phi>)"
+| "convert_multiway (Next I \<phi>) = Next I (convert_multiway \<phi>)"
+| "convert_multiway (Since \<phi> I \<psi>) = Since (convert_multiway \<phi>) I (convert_multiway \<psi>)"
+| "convert_multiway (Until \<phi> I \<psi>) = Until (convert_multiway \<phi>) I (convert_multiway \<psi>)"
+| "convert_multiway (MatchP I r) = MatchP I (Regex.map_regex convert_multiway r)"
+| "convert_multiway (MatchF I r) = MatchF I (Regex.map_regex convert_multiway r)"
 | "convert_multiway \<phi> = \<phi>"
 
-abbreviation "convert_multiway_regex \<equiv> Regex.map_regex (\<lambda>\<phi>. if safe_formula \<phi>
-    then convert_multiway \<phi>
-    else (case \<phi> of Neg \<phi>' \<Rightarrow> Neg (convert_multiway \<phi>')))"
+abbreviation "convert_multiway_regex \<equiv> Regex.map_regex convert_multiway"
 
 lemma fv_safe_get_and:
   "safe_formula \<phi> \<Longrightarrow> fv \<phi> \<subseteq> (\<Union>x\<in>(set (filter safe_formula (get_and_list \<phi>))). fv x)"
@@ -889,343 +927,256 @@ proof (induction \<phi> rule: get_and_list.induct)
   then show ?case using posneg using Bex_set_list_ex by fastforce
 qed simp_all
 
+lemma case_NegE: "(case \<phi> of Neg \<phi>' \<Rightarrow> P \<phi>' | _ \<Rightarrow> False) \<Longrightarrow> (\<And>\<phi>'. \<phi> = Neg \<phi>' \<Longrightarrow> P \<phi>' \<Longrightarrow> Q) \<Longrightarrow> Q"
+  by (cases \<phi>) simp_all
+
+lemma convert_multiway_remove_neg: "safe_formula (remove_neg \<phi>) \<Longrightarrow> convert_multiway (remove_neg \<phi>) = remove_neg (convert_multiway \<phi>)"
+  by (cases \<phi>) (auto elim: case_NegE)
+
 lemma fv_convert_multiway: "safe_formula \<phi> \<Longrightarrow> fvi b (convert_multiway \<phi>) = fvi b \<phi>"
 proof (induction \<phi> arbitrary: b rule: safe_formula.induct)
-  case (5 \<phi> \<psi>)
-  show ?case proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
-    case True
-    then obtain \<psi>' where "\<psi> = Neg \<psi>'" by (auto simp: is_Neg_def)
-    with True have "safe_formula \<psi>'" by simp
-    with 5 show ?thesis
-      by (simp add: \<open>\<psi> = Neg \<psi>'\<close> fv_get_and)
-  next
-    case False
-    with "5.prems" have "safe_formula \<psi>" by (simp split: formula.splits)
-    with False 5 show ?thesis
-      by (auto simp: fv_get_and fv_get_or)
+  case (9 \<phi> \<psi>)
+  then show ?case by (cases \<psi>) (auto simp: fv_get_and Un_commute)
+(*next
+  case (10 l)
+  obtain pos neg where posneg: "(pos, neg) = partition safe_formula l" by simp
+  have "fvi b (convert_multiway \<phi>) = fvi b \<phi>" if "\<phi> \<in> set l" for \<phi> proof -
+    consider "safe_formula \<phi>" | "\<phi> \<in> set neg" "safe_formula (remove_neg \<phi>)"
+      using "10.prems" posneg \<open>\<phi> \<in> set l\<close> by (auto simp: list.pred_set)
+    then show ?thesis proof cases
+      case 1
+      then show ?thesis by (rule "10.IH"(1)[OF \<open>\<phi> \<in> set l\<close>])
+    next
+      case 2
+      then show ?thesis
+        using "10.IH"(2)[OF refl posneg, of "remove_neg \<phi>"]
+        by (simp add: convert_multiway_remove_neg)
+    qed
   qed
+  then show ?case by simp*)
 next
-  case (13 \<phi> I \<psi>)
+  case (15 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 13 show ?thesis by simp
+    with 15 show ?thesis by simp
   next
     case False
-    with "13.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 13 show ?thesis by simp
+    with "15.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 15 show ?thesis by simp
   qed
 next
-  case (14 \<phi> I \<psi>)
+  case (16 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
     case True
-    with 14 show ?thesis by simp
+    with 16 show ?thesis by simp
   next
     case False
-    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 14 show ?thesis by simp
+    with "16.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 16 show ?thesis by simp
   qed
 next
-  case (15 I r)
+  case (17 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
 next
-  case (16 I r)
+  case (18 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
-qed auto
-
-lemma get_or_nonempty:
-  assumes "safe_formula \<phi>"
-  shows "get_or_list \<phi> \<noteq> []"
-  using assms by (induction \<phi>) auto
+qed (auto simp del: convert_multiway.simps(3))
 
 lemma get_and_nonempty:
   assumes "safe_formula \<phi>"
   shows "get_and_list \<phi> \<noteq> []"
-  using assms by (induction \<phi>) (auto intro: Suc_leI)
-
-lemma future_bounded_get_or:
-  "list_all future_bounded (get_or_list \<phi>) = future_bounded \<phi>"
-  by (induction \<phi>) auto
+  using assms by (induction \<phi>) auto
 
 lemma future_bounded_get_and:
   "list_all future_bounded (get_and_list \<phi>) = future_bounded \<phi>"
-  by (induction \<phi>) (auto simp: list.pred_map o_def future_bounded_get_or)
+  by (induction \<phi>) simp_all
 
-lemma
-  fixes \<phi> :: "'a formula"
-  shows safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
-proof (induction \<phi> rule: safe_formula.induct)
-  case (5 \<phi> \<psi>)
-  then have "safe_formula \<phi>" by simp
-  show ?case proof (cases "fv \<phi> = {} \<and> fv \<psi> = {}")
-    case True
-    with 5 show ?thesis by simp
-  next
-    case not_closed: False
-    show ?thesis proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
-      case True
-      then obtain \<psi>' where "\<psi> = Neg \<psi>'" by (auto simp: is_Neg_def)
-      with True have "safe_formula \<psi>'" by simp
-      let ?a = "And \<phi> \<psi>'"
-      let ?b = "convert_multiway ?a"
-      let ?c\<phi> = "convert_multiway \<phi>"
-      let ?c\<psi> = "convert_multiway \<psi>'"
-      have b_def: "?b = Ands (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
-        using not_closed True by (simp add: And_def \<open>\<psi> = Neg \<psi>'\<close>)
-      have "safe_formula ?b"
+lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
+proof (induction \<phi> rule: safe_formula_induct)
+  case (And_safe \<phi> \<psi>)
+  let ?a = "And \<phi> \<psi>"
+  let ?b = "convert_multiway ?a"
+  let ?c\<phi> = "convert_multiway \<phi>"
+  let ?c\<psi> = "convert_multiway \<psi>"
+  have b_def: "?b = Ands (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
+    using And_safe by simp
+  show ?case proof -
+    let ?l = "get_and_list ?c\<phi> @ get_and_list ?c\<psi>"
+    obtain pos neg where posneg: "(pos, neg) = partition safe_formula ?l" by simp
+    then have "list_all safe_formula pos" by (auto simp: list_all_iff)
+    have lsafe_neg: "list_all safe_neg ?l"
+      using And_safe \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close>
+      by (simp add: safe_get_and)
+    then have "list_all safe_formula (map remove_neg neg)"
+    proof -
+      have "\<And>x. x \<in> set neg \<Longrightarrow> safe_formula (remove_neg x)"
       proof -
-        let ?l = "get_and_list ?c\<phi> @ get_and_list ?c\<psi>"
-        obtain pos neg where posneg: "(pos, neg) = partition safe_formula ?l" by simp
-        then have "list_all safe_formula pos" by (auto simp: list_all_iff)
-        have lsafe_neg: "list_all safe_neg ?l"
-          using "5.IH" \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>'\<close> \<open>\<psi> = Neg \<psi>'\<close>
-          by (simp add: safe_get_and)
-        then have "list_all safe_formula (map remove_neg neg)"
-        proof -
-          have "\<And>x. x \<in> set neg \<Longrightarrow> safe_formula (remove_neg x)"
-          proof -
-            fix x assume "x \<in> set neg"
-            then have "\<not> safe_formula x" using posneg by auto
-            moreover have "safe_neg x" using lsafe_neg \<open>x \<in> set neg\<close>
-              unfolding safe_neg_def list_all_iff partition_set[OF posneg[symmetric], symmetric]
-              by simp
-            ultimately show "safe_formula (remove_neg x)" using safe_neg_def by blast
-          qed
-          then show ?thesis by (auto simp: list_all_iff)
-        qed
-
-        have pos_filter: "pos = filter safe_formula (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
-          using posneg by simp
-        have "(\<Union>x\<in>set neg. fv x) \<subseteq> (\<Union>x\<in>set pos. fv x)"
-        proof -
-          have 1: "fv ?c\<phi> \<subseteq> (\<Union>x\<in>(set (filter safe_formula (get_and_list ?c\<phi>))). fv x)" (is "_ \<subseteq> ?fv\<phi>")
-            using "5.IH" \<open>safe_formula \<phi>\<close> by (blast intro!: fv_safe_get_and)
-          have 2: "fv ?c\<psi> \<subseteq> (\<Union>x\<in>(set (filter safe_formula (get_and_list ?c\<psi>))). fv x)" (is "_ \<subseteq> ?fv\<psi>")
-            using "5.IH" \<open>safe_formula \<psi>'\<close> \<open>\<psi> = Neg \<psi>'\<close> by (blast intro!: fv_safe_get_and)
-          have "(\<Union>x\<in>set neg. fv x) \<subseteq> fv ?c\<phi> \<union> fv ?c\<psi>" proof -
-            have "\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` (set pos \<union> set neg))"
-              by simp
-            also have "... \<subseteq> fv (convert_multiway \<phi>) \<union> fv (convert_multiway \<psi>')"
-              unfolding partition_set[OF posneg[symmetric], simplified]
-              by (simp add: fv_get_and)
-            finally show ?thesis .
-          qed
-          then have "(\<Union>x\<in>set neg. fv x) \<subseteq> ?fv\<phi> \<union> ?fv\<psi>" using 1 2 by blast
-          then show ?thesis unfolding pos_filter by simp
-        qed
-        have "pos \<noteq> []"
-        proof -
-          obtain x where "x \<in> set (get_and_list ?c\<phi>)" "safe_formula x"
-            using "5.IH" \<open>safe_formula \<phi>\<close> ex_safe_get_and by (auto simp: list_ex_iff)
-          then show ?thesis
-            unfolding pos_filter by (auto simp: filter_empty_conv)
-        qed
-        then show ?thesis unfolding b_def
-          using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> \<open>list_all safe_formula (map remove_neg neg)\<close>
-            \<open>list_all safe_formula pos\<close> posneg
+        fix x assume "x \<in> set neg"
+        then have "\<not> safe_formula x" using posneg by auto
+        moreover have "safe_neg x" using lsafe_neg \<open>x \<in> set neg\<close>
+          unfolding safe_neg_def list_all_iff partition_set[OF posneg[symmetric], symmetric]
           by simp
+        ultimately show "safe_formula (remove_neg x)" using safe_neg_def by blast
       qed
-      then show ?thesis unfolding And_def \<open>\<psi> = Neg \<psi>'\<close> .
-
-    next
-      case False
-      with "5.prems" have "safe_formula \<psi>" "fv \<psi> \<subseteq> fv \<phi>" by (simp_all split: formula.splits)
-      let ?a = "And_Not \<phi> \<psi>"
-      let ?b = "convert_multiway ?a"
-      let ?c\<phi> = "convert_multiway \<phi>"
-      let ?c\<psi> = "convert_multiway \<psi>"
-      have b_def: "?b = Ands (get_and_list ?c\<phi> @ map Neg (get_or_list ?c\<psi>))"
-        using not_closed False by (auto simp: And_Not_def)
-      have fvi_psi:"\<And>b. (\<Union>x\<in>(set (map Neg (get_or_list ?c\<psi>))). fvi b x) = fvi b \<psi>"
-      proof -
-        fix b
-        have "(\<Union>x\<in>(set (get_or_list ?c\<psi>)). fvi b (Neg x)) = fvi b ?c\<psi>" using fv_get_or by auto
-        then have "(\<Union>x\<in>(set (map Neg (get_or_list ?c\<psi>))). fvi b x) = fvi b ?c\<psi>" by auto
-        then show "(\<Union>x\<in>(set (map Neg (get_or_list ?c\<psi>))). fvi b x) = fvi b \<psi>"
-          by (simp add: fv_convert_multiway[OF \<open>safe_formula \<psi>\<close>])
-      qed
-      have "safe_formula ?b"
-      proof -
-        let ?l = "(get_and_list ?c\<phi>) @ (map Neg (get_or_list ?c\<psi>))"
-        have "safe_formula ?c\<phi>" "safe_formula ?c\<psi>"
-          using "5.IH" \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close> by blast+
-        then have "list_all safe_neg (get_and_list ?c\<phi>)" by (simp add: safe_get_and)
-        moreover have "list_all safe_formula (get_or_list ?c\<psi>)"
-          by (simp add: \<open>safe_formula (convert_multiway \<psi>)\<close> safe_get_or)
-        then have "list_all safe_neg (map Neg (get_or_list ?c\<psi>))" using safe_neg_def
-          by (simp add: safe_neg_def list_all_length)
-        then have lsafe_neg: "list_all safe_neg ?l" using calculation list_all_append by blast
-        obtain pos neg where posneg: "(pos, neg) = partition safe_formula ?l" by simp
-        then have "list_all safe_formula pos" by (auto simp: list_all_iff)
-        then have "list_all safe_formula (map remove_neg neg)"
-        proof -
-          have "\<And>x. x \<in> (set neg) \<Longrightarrow> safe_formula (remove_neg x)"
-          proof -
-            fix x assume "x \<in> set neg"
-            then have "\<not> safe_formula x" using posneg by auto
-            moreover have "safe_neg x" using lsafe_neg \<open>x \<in> set neg\<close>
-              unfolding safe_neg_def list_all_iff partition_set[OF posneg[symmetric], symmetric]
-              by simp
-            ultimately show "safe_formula (remove_neg x)" using safe_neg_def by blast
-          qed
-          then show ?thesis using Ball_set_list_all by force
-        qed
-
-        have pos_filter: "pos = filter safe_formula (get_and_list ?c\<phi> @ map Neg (get_or_list ?c\<psi>))"
-          using posneg by simp
-        have neg_filter: "neg = filter (Not \<circ> safe_formula) (get_and_list ?c\<phi> @ map Neg (get_or_list ?c\<psi>))"
-          using posneg by simp
-        have "(\<Union>x\<in>(set neg). fv x) \<subseteq> (\<Union>x\<in>(set pos). fv x)"
-        proof -
-          have fv_neg: "(\<Union>x\<in>(set neg). fv x) \<subseteq> (\<Union>x\<in>(set ?l). fv x)" using posneg by auto
-          have "(\<Union>x\<in>(set ?l). fv x) \<subseteq> fv ?c\<phi> \<union> fv ?c\<psi>"
-            using fvi_psi \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close>
-            by (simp add: fv_get_and fv_convert_multiway)
-          also have "fv ?c\<phi> \<union> fv ?c\<psi> \<subseteq> fv ?c\<phi>"
-            using \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close> \<open>fv \<psi> \<subseteq> fv \<phi>\<close>
-            by (simp add: fv_convert_multiway[symmetric])
-          finally have "(\<Union>x\<in>(set neg). fv x) \<subseteq> fv ?c\<phi>"
-            using fv_neg unfolding neg_filter by blast
-          then show ?thesis
-            unfolding pos_filter
-            using fv_safe_get_and[OF "5.IH"(1), OF \<open>safe_formula \<phi>\<close>]
-            by auto
-        qed
-        have "pos \<noteq> []"
-        proof -
-          obtain x where "x \<in> set (get_and_list ?c\<phi>)" "safe_formula x"
-            using "5.IH" \<open>safe_formula \<phi>\<close> ex_safe_get_and by (auto simp: list_ex_iff)
-          then show ?thesis
-            unfolding pos_filter by (auto simp: filter_empty_conv)
-        qed
-        then show ?thesis unfolding b_def
-          using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> \<open>list_all safe_formula (map remove_neg neg)\<close>
-            \<open>list_all safe_formula pos\<close> posneg
-          by simp
-      qed
-      then show ?thesis unfolding And_Not_def .
+      then show ?thesis by (auto simp: list_all_iff)
     qed
+
+    have pos_filter: "pos = filter safe_formula (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
+      using posneg by simp
+    have "(\<Union>x\<in>set neg. fv x) \<subseteq> (\<Union>x\<in>set pos. fv x)"
+    proof -
+      have 1: "fv ?c\<phi> \<subseteq> (\<Union>x\<in>(set (filter safe_formula (get_and_list ?c\<phi>))). fv x)" (is "_ \<subseteq> ?fv\<phi>")
+        using And_safe \<open>safe_formula \<phi>\<close> by (blast intro!: fv_safe_get_and)
+      have 2: "fv ?c\<psi> \<subseteq> (\<Union>x\<in>(set (filter safe_formula (get_and_list ?c\<psi>))). fv x)" (is "_ \<subseteq> ?fv\<psi>")
+        using And_safe \<open>safe_formula \<psi>\<close> by (blast intro!: fv_safe_get_and)
+      have "(\<Union>x\<in>set neg. fv x) \<subseteq> fv ?c\<phi> \<union> fv ?c\<psi>" proof -
+        have "\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` (set pos \<union> set neg))"
+          by simp
+        also have "... \<subseteq> fv (convert_multiway \<phi>) \<union> fv (convert_multiway \<psi>)"
+          unfolding partition_set[OF posneg[symmetric], simplified]
+          by (simp add: fv_get_and)
+        finally show ?thesis .
+      qed
+      then have "(\<Union>x\<in>set neg. fv x) \<subseteq> ?fv\<phi> \<union> ?fv\<psi>" using 1 2 by blast
+      then show ?thesis unfolding pos_filter by simp
+    qed
+    have "pos \<noteq> []"
+    proof -
+      obtain x where "x \<in> set (get_and_list ?c\<phi>)" "safe_formula x"
+        using And_safe \<open>safe_formula \<phi>\<close> ex_safe_get_and by (auto simp: list_ex_iff)
+      then show ?thesis
+        unfolding pos_filter by (auto simp: filter_empty_conv)
+    qed
+    then show ?thesis unfolding b_def
+      using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> \<open>list_all safe_formula (map remove_neg neg)\<close>
+        \<open>list_all safe_formula pos\<close> posneg
+      by simp
   qed
 next
-  case (13 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 13 show ?thesis by (simp add: fv_convert_multiway)
-  next
-    case False
-    with "13.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 13 show ?thesis by (simp add: fv_convert_multiway)
+  case (And_Not \<phi> \<psi>)
+  let ?a = "And \<phi> (Neg \<psi>)"
+  let ?b = "convert_multiway ?a"
+  let ?c\<phi> = "convert_multiway \<phi>"
+  let ?c\<psi> = "convert_multiway \<psi>"
+  have b_def: "?b = Ands (Neg ?c\<psi> # get_and_list ?c\<phi>)"
+    using And_Not by simp
+  show ?case proof -
+    let ?l = "Neg ?c\<psi> # get_and_list ?c\<phi>"
+    note \<open>safe_formula ?c\<phi>\<close>
+    then have "list_all safe_neg (get_and_list ?c\<phi>)" by (simp add: safe_get_and)
+    moreover have "safe_neg (Neg ?c\<psi>)"
+      using \<open>safe_formula ?c\<psi>\<close> by (simp add: safe_neg_def)
+    then have lsafe_neg: "list_all safe_neg ?l" using calculation by simp
+    obtain pos neg where posneg: "(pos, neg) = partition safe_formula ?l" by simp
+    then have "list_all safe_formula pos" by (auto simp: list_all_iff)
+    then have "list_all safe_formula (map remove_neg neg)"
+    proof -
+      have "\<And>x. x \<in> (set neg) \<Longrightarrow> safe_formula (remove_neg x)"
+      proof -
+        fix x assume "x \<in> set neg"
+        then have "\<not> safe_formula x" using posneg by (auto simp del: filter.simps)
+        moreover have "safe_neg x" using lsafe_neg \<open>x \<in> set neg\<close>
+          unfolding safe_neg_def list_all_iff partition_set[OF posneg[symmetric], symmetric]
+          by simp
+        ultimately show "safe_formula (remove_neg x)" using safe_neg_def by blast
+      qed
+      then show ?thesis using Ball_set_list_all by force
+    qed
+
+    have pos_filter: "pos = filter safe_formula ?l"
+      using posneg by simp
+    have neg_filter: "neg = filter (Not \<circ> safe_formula) ?l"
+      using posneg by simp
+    have "(\<Union>x\<in>(set neg). fv x) \<subseteq> (\<Union>x\<in>(set pos). fv x)"
+    proof -
+      have fv_neg: "(\<Union>x\<in>(set neg). fv x) \<subseteq> (\<Union>x\<in>(set ?l). fv x)" using posneg by auto
+      have "(\<Union>x\<in>(set ?l). fv x) \<subseteq> fv ?c\<phi> \<union> fv ?c\<psi>"
+        using \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close>
+        by (simp add: fv_get_and fv_convert_multiway)
+      also have "fv ?c\<phi> \<union> fv ?c\<psi> \<subseteq> fv ?c\<phi>"
+        using \<open>safe_formula \<phi>\<close> \<open>safe_formula \<psi>\<close> \<open>fv (Neg \<psi>) \<subseteq> fv \<phi>\<close>
+        by (simp add: fv_convert_multiway[symmetric])
+      finally have "(\<Union>x\<in>(set neg). fv x) \<subseteq> fv ?c\<phi>"
+        using fv_neg unfolding neg_filter by blast
+      then show ?thesis
+        unfolding pos_filter
+        using fv_safe_get_and[OF And_Not.IH(1)]
+        by auto
+    qed
+    have "pos \<noteq> []"
+    proof -
+      obtain x where "x \<in> set (get_and_list ?c\<phi>)" "safe_formula x"
+        using And_Not.IH \<open>safe_formula \<phi>\<close> ex_safe_get_and by (auto simp: list_ex_iff)
+      then show ?thesis
+        unfolding pos_filter by (auto simp: filter_empty_conv)
+    qed
+    then show ?thesis unfolding b_def
+      using \<open>\<Union> (fv ` set neg) \<subseteq> \<Union> (fv ` set pos)\<close> \<open>list_all safe_formula (map remove_neg neg)\<close>
+        \<open>list_all safe_formula pos\<close> posneg
+      by simp
   qed
 next
-  case (14 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 14 show ?thesis by (simp add: fv_convert_multiway)
-  next
-    case False
-    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 14 show ?thesis by (simp add: fv_convert_multiway)
-  qed
+  case (Neg \<phi>)
+  have "safe_formula (Neg \<phi>') \<longleftrightarrow> safe_formula \<phi>'" if "fv \<phi>' = {}" for \<phi>'
+    using that by (cases "Neg \<phi>'" rule: safe_formula.cases) simp_all
+  with Neg show ?case by (simp add: fv_convert_multiway)
 next
-  case (15 I r)
+  case (MatchP I r)
   then show ?case
-    by (auto 0 3 simp: fv_convert_multiway intro!: safe_regex_map_regex
+    by (auto 0 3 simp: atms_def fv_convert_multiway intro!: safe_regex_map_regex
+      elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
 next
-  case (16 I r)
+  case (MatchF I r)
   then show ?case
-    by (auto 0 3 simp: fv_convert_multiway intro!: safe_regex_map_regex
+    by (auto 0 3 simp: atms_def fv_convert_multiway intro!: safe_regex_map_regex
+      elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp: fv_convert_multiway)
 
-lemma
-  fixes \<phi> :: "'a formula"
-  shows future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
-proof (induction \<phi> rule: safe_formula.induct)
-  case (5 \<phi> \<psi>)
-  then have "safe_formula \<phi>" by simp
-  show ?case proof (cases "fv \<phi> = {} \<and> fv \<psi> = {}")
-    case True
-    with 5 show ?thesis by simp
-  next
-    case not_closed: False
-    show ?thesis
-    proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
-      case True
-      then obtain \<psi>' where "\<psi> = Neg \<psi>'" by (auto simp: is_Neg_def)
-      with True have "safe_formula \<psi>'" by simp
-      let ?a = "And \<phi> \<psi>'"
-      let ?b = "convert_multiway ?a"
-      let ?c\<phi> = "convert_multiway \<phi>"
-      let ?c\<psi> = "convert_multiway \<psi>'"
-      have b_def: "?b = Ands (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
-        using not_closed True by (simp add: And_def \<open>\<psi> = Neg \<psi>'\<close>)
-      moreover have "future_bounded ?c\<phi> = future_bounded \<phi>" using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
-      moreover have "future_bounded ?c\<psi> = future_bounded \<psi>'" using "5.IH"(3)[OF \<open>\<psi> = Neg \<psi>'\<close> \<open>safe_formula \<psi>'\<close>] .
-      ultimately have "future_bounded ?a = (future_bounded ?c\<phi> \<and> future_bounded ?c\<psi>)"
-        by (simp add: future_bounded_And)
-      moreover have "future_bounded ?c\<phi> = list_all future_bounded (get_and_list ?c\<phi>)"
-        using \<open>safe_formula \<phi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
-      moreover have "future_bounded ?c\<psi> = list_all future_bounded (get_and_list ?c\<psi>)"
-        using \<open>safe_formula \<psi>'\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
-      moreover have "future_bounded ?b = list_all future_bounded (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
-        unfolding b_def
-        by simp
-      ultimately show ?thesis unfolding And_def \<open>\<psi> = Neg \<psi>'\<close> by simp
-
-    next
-      case False
-      with "5.prems" have "safe_formula \<psi>" "fv \<psi> \<subseteq> fv \<phi>" by (simp_all split: formula.splits)
-      let ?a = "And_Not \<phi> \<psi>"
-      let ?b = "convert_multiway ?a"
-      let ?c\<phi> = "convert_multiway \<phi>"
-      let ?c\<psi> = "convert_multiway \<psi>"
-      have b_def: "?b = Ands (get_and_list ?c\<phi> @ map Neg (get_or_list ?c\<psi>))"
-        using not_closed False by (auto simp: And_Not_def)
-
-      moreover have "future_bounded ?c\<phi> = future_bounded \<phi>" using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
-      moreover have "future_bounded ?c\<psi> = future_bounded \<psi>" using "5.IH"(2)[OF \<open>safe_formula \<psi>\<close>] .
-      ultimately have "future_bounded ?a = (future_bounded ?c\<phi> \<and> future_bounded ?c\<psi>)"
-        by (simp add: future_bounded_And_Not)
-      moreover have "future_bounded ?c\<phi> = list_all future_bounded (get_and_list ?c\<phi>)"
-        using \<open>safe_formula \<phi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
-      moreover have "future_bounded ?c\<psi> = list_all future_bounded (get_or_list ?c\<psi>)"
-        using \<open>safe_formula \<psi>\<close> by (simp add: future_bounded_get_or safe_convert_multiway)
-      moreover have "future_bounded ?b = list_all future_bounded (get_and_list ?c\<phi> @ get_or_list ?c\<psi>)"
-        unfolding b_def
-        by (simp add: list.pred_map o_def)
-      ultimately show ?thesis unfolding And_Not_def by simp
-    qed
-  qed
+lemma future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
+proof (induction \<phi> rule: safe_formula_induct)
+  case (And_safe \<phi> \<psi>)
+  let ?a = "And \<phi> \<psi>"
+  let ?b = "convert_multiway ?a"
+  let ?c\<phi> = "convert_multiway \<phi>"
+  let ?c\<psi> = "convert_multiway \<psi>"
+  have b_def: "?b = Ands (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
+    using And_safe by simp
+  have "future_bounded ?a = (future_bounded ?c\<phi> \<and> future_bounded ?c\<psi>)"
+    using And_safe by simp
+  moreover have "future_bounded ?c\<phi> = list_all future_bounded (get_and_list ?c\<phi>)"
+    using \<open>safe_formula \<phi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
+  moreover have "future_bounded ?c\<psi> = list_all future_bounded (get_and_list ?c\<psi>)"
+    using \<open>safe_formula \<psi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
+  moreover have "future_bounded ?b = list_all future_bounded (get_and_list ?c\<phi> @ get_and_list ?c\<psi>)"
+    unfolding b_def by simp
+  ultimately show ?case by simp
 next
-  case (13 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 13 show ?thesis by simp
-  next
-    case False
-    with "13.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 13 show ?thesis by simp
-  qed
+  case (And_Not \<phi> \<psi>)
+  let ?a = "And \<phi> (Neg \<psi>)"
+  let ?b = "convert_multiway ?a"
+  let ?c\<phi> = "convert_multiway \<phi>"
+  let ?c\<psi> = "convert_multiway \<psi>"
+  have b_def: "?b = Ands (Neg ?c\<psi> # get_and_list ?c\<phi>)"
+    using And_Not by simp
+  have "future_bounded ?a = (future_bounded ?c\<phi> \<and> future_bounded ?c\<psi>)"
+    using And_Not by simp
+  moreover have "future_bounded ?c\<phi> = list_all future_bounded (get_and_list ?c\<phi>)"
+    using \<open>safe_formula \<phi>\<close> by (simp add: future_bounded_get_and safe_convert_multiway)
+  moreover have "future_bounded ?b = list_all future_bounded (Neg ?c\<psi> # get_and_list ?c\<phi>)"
+    unfolding b_def by (simp add: list.pred_map o_def)
+  ultimately show ?case by auto
 next
-  case (14 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 14 show ?thesis by simp
-  next
-    case False
-    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 14 show ?thesis by simp
-  qed
-next
-  case (15 I r)
+  case (MatchP I r)
   then show ?case
-    apply (auto simp: regex.pred_set regex.set_map ball_Un)
+    apply (auto simp: atms_def regex.pred_set regex.set_map ball_Un)
      apply (erule safe_regex_safe_formula[THEN disjE_Not2])
        apply assumption
       apply simp
@@ -1236,9 +1187,9 @@ next
     apply force
     done
 next
-  case (16 I r)
+  case (MatchF I r)
   then show ?case
-    apply (auto simp: regex.pred_set regex.set_map ball_Un)
+    apply (auto simp: atms_def regex.pred_set regex.set_map ball_Un)
      apply (erule safe_regex_safe_formula[THEN disjE_Not2])
        apply assumption
       apply simp
@@ -1250,90 +1201,46 @@ next
     done
 qed auto
 
-lemma
-  fixes \<phi> :: "'a formula"
-  shows sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> v i \<phi>"
-proof (induction \<phi> arbitrary: v i rule: safe_formula.induct)
-  case (5 \<phi> \<psi>)
-  then have "safe_formula \<phi>" by simp
-  show ?case proof (cases "fv \<phi> = {} \<and> fv \<psi> = {}")
-    case True
-    with 5 show ?thesis by simp
-  next
-    case not_closed: False
-    let ?a = "Neg (Or (Neg \<phi>) \<psi>)"
-    let ?b = "convert_multiway ?a"
-    let ?la = "get_and_list (convert_multiway \<phi>)"
-    let ?sat = "sat \<sigma> v i"
-    show ?thesis proof (cases "is_Neg \<psi> \<and> safe_formula (un_Neg \<psi>)")
-      case True
-      then obtain \<psi>' where "\<psi> = Neg \<psi>'" by (auto simp: is_Neg_def)
-      with True have "safe_formula \<psi>'" by simp
-      let ?lb = "get_and_list (convert_multiway \<psi>')"
-      have b_def: "?b = Ands (?la @ ?lb)" using not_closed True \<open>\<psi> = Neg \<psi>'\<close> by simp
-      moreover have "?sat (convert_multiway \<phi>) \<longleftrightarrow> ?sat \<phi>"
-        using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
-      then have "list_all ?sat ?la \<longleftrightarrow> ?sat \<phi>" using sat_get_and by blast
-      moreover have "?sat (convert_multiway \<psi>') \<longleftrightarrow> ?sat \<psi>'"
-        using "5.IH"(3)[OF \<open>\<psi> = Neg \<psi>'\<close> \<open>safe_formula \<psi>'\<close>] .
-      then have "list_all ?sat ?lb \<longleftrightarrow> ?sat \<psi>'" using sat_get_and by blast
-      ultimately show ?thesis
-        unfolding \<open>\<psi> = Neg \<psi>'\<close> by (auto simp: list_all_iff)
-    next
-      case False
-      with "5.prems" have "safe_formula \<psi>" "fv \<psi> \<subseteq> fv \<phi>" by (simp_all split: formula.splits)
-      let ?lb = "map Neg (get_or_list (convert_multiway \<psi>))"
-      have b_def: "?b = Ands (?la @ ?lb)" using not_closed False by auto
-      moreover have "?sat (convert_multiway \<phi>) \<longleftrightarrow> ?sat \<phi>"
-        using "5.IH"(1)[OF \<open>safe_formula \<phi>\<close>] .
-      then have "list_all ?sat ?la \<longleftrightarrow> ?sat \<phi>" using sat_get_and by blast
-      moreover have "list_all ?sat ?lb \<longleftrightarrow> list_all (\<lambda>\<psi>. \<not> ?sat \<psi>) (get_or_list (convert_multiway \<psi>))"
-        by (simp add: list_all_length)
-      moreover have "?sat \<psi> \<longleftrightarrow> ?sat (convert_multiway \<psi>)"
-        using "5.IH"(2)[OF \<open>safe_formula \<psi>\<close>] ..
-      moreover have "?sat (convert_multiway \<psi>) \<longleftrightarrow> list_ex ?sat (get_or_list (convert_multiway \<psi>))"
-        by (simp add: sat_get_or)
-      moreover have "list_all (\<lambda>\<psi>. \<not> ?sat \<psi>) (get_or_list (convert_multiway \<psi>)) \<longleftrightarrow> \<not> (list_ex ?sat (get_or_list (convert_multiway \<psi>)))"
-        by (simp add: list_all_iff list_ex_iff)
-      ultimately show ?thesis by (auto simp: list_all_iff)
-    qed
-  qed
+lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> v i \<phi>"
+proof (induction \<phi> arbitrary: v i rule: safe_formula_induct)
+  case (And_safe \<phi> \<psi>)
+  let ?a = "And \<phi> \<psi>"
+  let ?b = "convert_multiway ?a"
+  let ?la = "get_and_list (convert_multiway \<phi>)"
+  let ?lb = "get_and_list (convert_multiway \<psi>)"
+  let ?sat = "sat \<sigma> v i"
+  have b_def: "?b = Ands (?la @ ?lb)" using And_safe by simp
+  have "list_all ?sat ?la \<longleftrightarrow> ?sat \<phi>" using And_safe sat_get_and by blast
+  moreover have "list_all ?sat ?lb \<longleftrightarrow> ?sat \<psi>" using And_safe sat_get_and by blast
+  ultimately show ?case using And_safe by (simp add: list.pred_map)
 next
-  case (10 y \<omega> b f \<phi>)
+  case (And_Not \<phi> \<psi>)
+  let ?a = "And \<phi> (Neg \<psi>)"
+  let ?b = "convert_multiway ?a"
+  let ?la = "get_and_list (convert_multiway \<phi>)"
+  let ?lb = "convert_multiway \<psi>"
+  let ?sat = "sat \<sigma> v i"
+  have b_def: "?b = Ands (Neg ?lb # ?la)" using And_Not by simp
+  have "list_all ?sat ?la \<longleftrightarrow> ?sat \<phi>" using And_Not sat_get_and by blast
+  then show ?case using And_Not by (auto simp: list.pred_map)
+next
+  case (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)
   then show ?case
-    by (simp add: fv_env_def nfv_def fv_convert_multiway cong: conj_cong)
+    by (simp add: nfv_def fv_convert_multiway cong: conj_cong)
 next
-  case (13 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 13 show ?thesis by simp
-  next
-    case False
-    with "13.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 13 show ?thesis by simp
-  qed
-next
-  case (14 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 14 show ?thesis by simp
-  next
-    case False
-    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 14 show ?thesis by simp
-  qed
-next
-  case (15 I r)
+  case (MatchP I r)
   then have "Regex.match (sat \<sigma> v) (convert_multiway_regex r) = Regex.match (sat \<sigma> v) r"
     unfolding match_map_regex
-    by (intro Regex.match_fv_cong) (auto dest!: safe_regex_safe_formula)
+    by (intro Regex.match_fv_cong)
+      (auto 0 4 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
   then show ?case
     by auto
 next
-  case (16 I r)
+  case (MatchF I r)
   then have "Regex.match (sat \<sigma> v) (convert_multiway_regex r) = Regex.match (sat \<sigma> v) r"
     unfolding match_map_regex
-    by (intro Regex.match_fv_cong) (auto dest!: safe_regex_safe_formula)
+    by (intro Regex.match_fv_cong)
+      (auto 0 4 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
   then show ?case
     by auto
 qed (auto cong: nat.case_cong)

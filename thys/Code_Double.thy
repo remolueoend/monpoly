@@ -234,7 +234,7 @@ lift_definition sqrt_double :: "double \<Rightarrow> double" is float_sqrt
 
 no_notation plus_infinity ("\<infinity>")
 
-lift_definition infinity :: "double" ("\<infinity>") is plus_infinity .
+lift_definition infinity :: "double" is plus_infinity .
 
 lift_definition nan :: "double" is some_nan .
 
@@ -281,12 +281,19 @@ lemma compare_double_le_0: "compare_double x y \<le> 0 \<longleftrightarrow>
     (auto simp: compare_double_simps nan_fcompare_double)
 
 lift_definition double_of_integer :: "integer \<Rightarrow> double" is
-  "\<lambda>x. intround To_nearest (int_of_integer x)" .
+  "\<lambda>x. zerosign 0 (intround To_nearest (int_of_integer x))" .
 
-definition double_of_int where [code del]: "double_of_int x = double_of_integer (of_int x)"
+definition double_of_int where [code del]: "double_of_int x = double_of_integer (integer_of_int x)"
 
 lemma [code]: "double_of_int (int_of_integer x) = double_of_integer x"
   unfolding double_of_int_def by simp
+
+lift_definition integer_of_double :: "double \<Rightarrow> integer" is
+  "\<lambda>x. if IEEE.is_nan x \<or> IEEE.is_infinity x then undefined
+     else integer_of_int \<lfloor>valof (intround float_To_zero (valof x) :: (11, 52) float)\<rfloor>"
+  by auto
+
+definition int_of_double: "int_of_double x = int_of_integer (integer_of_double x)"
 
 
 subsection \<open>Linear ordering\<close>
@@ -448,7 +455,7 @@ declare [[code drop:
       "less :: double \<Rightarrow> _"
       "divide :: double \<Rightarrow> _"
       sqrt_double infinity nan is_zero is_infinite is_nan copysign_double fcompare_double
-      double_of_integer
+      double_of_integer integer_of_double
       ]]
 
 code_printing
@@ -489,6 +496,7 @@ code_printing
   | constant "copysign_double :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "FloatUtil.copysign"
   | constant "compare_double :: double \<Rightarrow> double \<Rightarrow> integer" \<rightharpoonup> (OCaml) "FloatUtil.compare"
   | constant "double_of_integer :: integer \<Rightarrow> double" \<rightharpoonup> (OCaml) "Z.to'_float"
+  | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (OCaml) "Z.of'_float"
 
 hide_const (open) fcompare_double
 
