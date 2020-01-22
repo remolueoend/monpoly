@@ -9,8 +9,8 @@ exception UnsupportedFragment of string
 let (<<) f g x = f(g(x))
 let nat_of_int = nat_of_integer << Z.of_int
 let nat_of_int64 = nat_of_integer << Z.of_int64
-let nat_of_float f = if (float_of_int max_int) < f then (nat_of_int64 Int64.max_int) else (nat_of_int64 << Int64.of_float) f
-let enat_of_float f = Enat ((nat_of_int64 << Int64.of_float) f)
+let nat_of_float = nat_of_integer << Z.of_float 
+let enat_of_float f = Enat (nat_of_float f)
 let int_of_nat = Z.to_int << integer_of_nat (* Problem? *)
 let float_of_nat = Z.to_float << integer_of_nat (* Problem? *)
 let int_of_enat = function
