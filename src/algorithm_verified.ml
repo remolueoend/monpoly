@@ -37,7 +37,11 @@ let monitor dbschema logfile f =
         let tpts = add d.tp d.ts tpts in
         let (vs, new_state) = Monitor.mstep (convert_db d) state in
         let vs = convert_violations vs in
-        List.iter (fun (qtp, rel) -> show_results closed d.tp qtp (find qtp tpts) rel) vs;
+        List.iter (fun (qtp, rel) ->
+            let qts = find qtp tpts in
+            if qts < MFOTL.ts_max then
+              show_results closed d.tp qtp qts rel
+          ) vs;
         let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
         loop new_state tpts d.tp d.ts
       end
