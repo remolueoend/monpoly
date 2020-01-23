@@ -7,13 +7,13 @@ begin
 section \<open>Abstract Specification of a Monitor\<close>
 
 locale monitorable =
-  fixes monitorable :: "'a Formula.formula \<Rightarrow> bool"
+  fixes monitorable :: "Formula.formula \<Rightarrow> bool"
 
 text \<open>The following locale specifies the desired behavior ouf a monitor abstractly.\<close>
 
 locale monitor = monitorable +
   fixes
-    M :: "'a Formula.formula \<Rightarrow> 'a Formula.prefix \<Rightarrow> (nat \<times> 'a option list) set"
+    M :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> (nat \<times> event_data tuple) set"
   assumes
     mono_monitor: "monitorable \<phi> \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow> M \<phi> \<pi> \<subseteq> M \<phi> \<pi>'"
     and sound_monitor: "monitorable \<phi> \<Longrightarrow> (i, v) \<in> M \<phi> \<pi> \<Longrightarrow>
@@ -26,7 +26,7 @@ locale slicable_monitor = monitor +
   assumes monitor_slice: "mem_restr S v \<Longrightarrow> (i, v) \<in> M \<phi> (Formula.pslice \<phi> S \<pi>) \<longleftrightarrow> (i, v) \<in> M \<phi> \<pi>"
 
 locale monitor_pre_progress = monitorable +
-  fixes progress :: "'a Formula.trace \<Rightarrow> 'a Formula.formula \<Rightarrow> nat \<Rightarrow> nat"
+  fixes progress :: "Formula.trace \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat"
   assumes
     progress_mono: "j \<le> j' \<Longrightarrow> progress \<sigma> \<phi> j \<le> progress \<sigma> \<phi> j'"
     and progress_le: "progress \<sigma> \<phi> j \<le> j"
@@ -37,7 +37,7 @@ locale monitor_progress = monitor_pre_progress +
     progress \<sigma> \<phi> (plen \<pi>) = progress \<sigma>' \<phi> (plen \<pi>)"
 begin
 
-definition verdicts :: "'a Formula.formula \<Rightarrow> 'a Formula.prefix \<Rightarrow> (nat \<times> 'a tuple) set" where
+definition verdicts :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> (nat \<times> event_data tuple) set" where
   "verdicts \<phi> \<pi> = {(i, v). wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and>
     (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma> (map the v) i \<phi>)}"
 
@@ -124,7 +124,7 @@ lemma (in monitor_timed_progress) verdicts_alt:
 
 sublocale monitor_timed_progress \<subseteq> slicable_monitor monitorable verdicts
 proof
-  fix S :: "'a list set" and v i \<phi> \<pi>
+  fix S :: "event_data list set" and v i \<phi> \<pi>
   assume *: "mem_restr S v"
   show "((i, v) \<in> verdicts \<phi> (Formula.pslice \<phi> S \<pi>)) = ((i, v) \<in> verdicts \<phi> \<pi>)" (is "?L = ?R")
   proof
@@ -144,14 +144,17 @@ qed
 
 text \<open>Past-only Formulas.\<close>
 
-fun past_only :: "'a Formula.formula \<Rightarrow> bool" where
+fun past_only :: "Formula.formula \<Rightarrow> bool" where
   "past_only (Formula.Pred _ _) = True"
 | "past_only (Formula.Eq _ _) = True"
+| "past_only (Formula.Less _ _) = True"
+| "past_only (Formula.LessEq _ _) = True"
 | "past_only (Formula.Neg \<psi>) = past_only \<psi>"
 | "past_only (Formula.Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Formula.And \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Formula.Ands l) = (\<forall>\<alpha>\<in>set l. past_only \<alpha>)"
 | "past_only (Formula.Exists \<psi>) = past_only \<psi>"
-| "past_only (Formula.Agg _ _ _ _ \<psi>) = past_only \<psi>"
+| "past_only (Formula.Agg _ _ _ _ _ \<psi>) = past_only \<psi>"
 | "past_only (Formula.Prev _ \<psi>) = past_only \<psi>"
 | "past_only (Formula.Next _ _) = False"
 | "past_only (Formula.Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
