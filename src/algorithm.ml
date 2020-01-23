@@ -1764,11 +1764,9 @@ let rec add_ext dbschema f =
     in
 
     let update_state_old state tsq =
-      Hashtbl.iter (fun gtuple dllist ->
+      Hashtbl.filter_map_inplace (fun _ dllist ->
           update_list_old tsq dllist;
-          if Dllist.is_empty dllist then
-            (* TODO: is it safe to modify the hash table while we iterate on it!? *)
-            Hashtbl.remove state.tbl gtuple;
+          if Dllist.is_empty dllist then None else Some dllist
         ) state.tbl
     in
 
