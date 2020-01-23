@@ -150,23 +150,15 @@ let cst_of_event_data = function
 
 let convert_tuple xs = Tuple.make_tuple (List.map cst_of_event_data (deoptionalize xs))
 
-(* (Verified.Monitor.nat * Verified.Monitor.event_data option list) Verified.Monitor.set -> (timestamp * relation) *)
-let convert_violations vs =
-  let vsl = match vs with
-    | RBT_set rbt -> rbt
+(* (Verified.Monitor.nat * Verified.Monitor.event_data option list Verified.Monitor.set) list -> (int * relation) list *)
+let convert_violations =
+  List.map (fun (tp, rbt) -> 
+  let v = match rbt with 
+    | RBT_set r -> r
     | _ -> failwith "Impossible!" in
-  let hm = Hashtbl.create 100 in
-  rbt_fold (fun (ctp, tuple) _ ->             
-             let tp = int_of_nat ctp in
-             let new_tuple = convert_tuple tuple in
-             begin 
-              try
-                let rel = Hashtbl.find hm tp in
-                Hashtbl.remove hm tp;
-                Hashtbl.add hm tp (Relation.add new_tuple rel);
-              with Not_found -> Hashtbl.add hm tp (Relation.make_relation [new_tuple]);
-             end) vsl ();
- Hashtbl.fold (fun k v l -> (k,v)::l) hm []
+    ((int_of_nat tp), 
+     Relation.make_relation 
+      (rbt_fold (fun t l -> (convert_tuple t) :: l) v [] ))) 
 
 
 
