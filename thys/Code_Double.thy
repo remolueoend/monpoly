@@ -480,7 +480,7 @@ code_printing
   type_constructor double \<rightharpoonup> (OCaml) "float"
   | constant "uminus :: double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(~-.)"
   | constant "(+) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(+.)"
-  | constant "(*) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(*.)"
+  | constant "(*) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.( *. )"
   | constant "(/) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.('/.)"
   | constant "(-) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(-.)"
   | constant "0 :: double" \<rightharpoonup> (OCaml) "0.0"
