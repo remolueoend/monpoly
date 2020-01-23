@@ -97,7 +97,7 @@ let convert_formula dbschema f =
       let bound = Misc.diff attr glist in
       let bvl_f = bound @ bvl in
       let posx = Misc.get_pos x
-        (List.filter (fun x -> List.mem x attr) (bvl_f @ fvl)) in
+        (List.filter (fun x -> List.mem x attr) (Misc.remove_duplicates (bvl_f @ fvl))) in
       let comp = (fun t -> List.nth t posx) in
       let f' = convert_formula_vars bvl_f f in
       Agg (convert_var fvl bvl y, convert_agg_op op t_y,
