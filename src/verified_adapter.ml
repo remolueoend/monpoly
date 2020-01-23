@@ -127,7 +127,7 @@ let convert_formula dbschema f =
 let unorderedFlatMap m = 
   let rec flatmap_rec acc = function 
   | [] -> acc
-  | x::xs -> List.rev_append (m x) acc in
+  | x::xs -> flatmap_rec (List.rev_append (m x) acc) xs in
   flatmap_rec [] 
 
 let convert_db md =
