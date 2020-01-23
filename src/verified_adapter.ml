@@ -153,10 +153,10 @@ let convert_tuple xs = Tuple.make_tuple (List.map cst_of_event_data (deoptionali
 (* (Verified.Monitor.nat * Verified.Monitor.event_data option list) Verified.Monitor.set -> (timestamp * relation) *)
 let convert_violations vs =
   let vsl = match vs with
-    | RBT_set rbt -> (rbt_verdict rbt)
+    | RBT_set rbt -> rbt
     | _ -> failwith "Impossible!" in
   let hm = Hashtbl.create 100 in
-  List.iter (fun (ctp, tuple) -> 
+  rbt_fold (fun (ctp, tuple) _ ->             
              let tp = int_of_nat ctp in
              let new_tuple = convert_tuple tuple in
              begin 
@@ -164,7 +164,7 @@ let convert_violations vs =
                 let rel = Hashtbl.find hm tp in
                 Hashtbl.add hm tp (Relation.add new_tuple rel);
               with Not_found -> Hashtbl.add hm tp (Relation.make_relation [new_tuple]);
-             end) vsl;
+             end) vsl ();
  Hashtbl.fold (fun k v l -> (k,v)::l) hm []
 
 
