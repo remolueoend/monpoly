@@ -22,7 +22,7 @@ function monitor_cmd() {
   local log=$3
 
   if [ $monitor = "monpoly" ]; then
-      echo "monpoly-legacy -nofilteremptytp -nofilterrel -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${log} > /dev/null"
+      echo "monpoly -nofilteremptytp -nofilterrel -no_rw -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${log} > /dev/null"
       return
   fi
 
@@ -32,12 +32,12 @@ function monitor_cmd() {
   fi
 
   if [ $monitor = "verimon" ]; then
-      echo "monpoly -no_rw -nofilteremptytp -nofilterrel -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${log} -verified > /dev/null"
+      echo "verimon -no_rw -nofilteremptytp -nofilterrel -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${log} -verified > /dev/null"
       return
   fi
 
   if [ $monitor = "verimon-old" ]; then
-      echo "verimon -no_rw -nofilteremptytp -nofilterrel -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${log} -verified > /dev/null"
+      echo "verimon-old -no_rw -nofilteremptytp -nofilterrel -nonewlastts -sig ${fma}.sig -formula ${fma}.mfotl -log ${log} -verified > /dev/null"
       return
   fi
 
