@@ -159,6 +159,9 @@ mapping)
             mstate_ext
   val count_agg : (event_data * enat) set -> event_data
   val median_agg : (event_data * enat) set -> event_data
+  val rbt_fold :
+    (nat * (event_data option) list -> 'a -> 'a) ->
+      ((nat * (event_data option) list), unit) mapping_rbt -> 'a -> 'a
   val average_agg : (event_data * enat) set -> event_data
   val explode : string -> char list
   val minit_safe :
@@ -6816,6 +6819,11 @@ let rec median_agg
                             (Pervasives.(/.) (double_of_event_data (nth xs ua))
                               (double_of_int (Int_of_integer (Z.of_int 2))))
                      else double_of_event_data (nth xs ua)))));;
+
+let rec rbt_fold
+  x = foldb (ccompare_prod ccompare_nat
+              (ccompare_list (ccompare_option ccompare_event_data)))
+        x;;
 
 let rec map_regex
   f x1 = match f, x1 with f, Skip x1 -> Skip x1

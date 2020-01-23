@@ -79,6 +79,9 @@ definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> (strin
 definition rbt_verdict :: "_ \<Rightarrow> (nat \<times> event_data option list) list" where
   "rbt_verdict = RBT_Set2.keys"
 
+definition rbt_fold :: "_ \<Rightarrow> (nat \<times> event_data option list) set_rbt \<Rightarrow> _ \<Rightarrow> _" where
+  "rbt_fold = RBT_Set2.fold"
+
 lemma saturate_commute:
   assumes "\<And>s. r \<in> g s" "\<And>s. g (insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
   and terminates: "mono g" "\<And>X. X \<subseteq> C \<Longrightarrow> g X \<subseteq> C" "finite C"
@@ -420,7 +423,7 @@ export_code convert_multiway_e minit_safe mstep mmonitorable_exec_e
 export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
-  String.explode String.implode interval mk_db RBT_set rbt_verdict
+  String.explode String.implode interval mk_db RBT_set rbt_verdict rbt_fold
   (*term, formula, and constructors*)
   Formula.Var Formula.Pred Regex.Skip Regex.Wild
   (*event data and aggregations*)
