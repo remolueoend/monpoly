@@ -162,6 +162,7 @@ let convert_violations vs =
              begin 
               try
                 let rel = Hashtbl.find hm tp in
+                Hashtbl.remove hm tp;
                 Hashtbl.add hm tp (Relation.add new_tuple rel);
               with Not_found -> Hashtbl.add hm tp (Relation.make_relation [new_tuple]);
              end) vsl ();
