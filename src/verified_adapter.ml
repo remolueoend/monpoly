@@ -97,7 +97,7 @@ let convert_formula dbschema f =
       let bound = Misc.diff attr glist in
       let bvl_f = bound @ bvl in
       let posx = Misc.get_pos x
-        (List.filter (fun x -> List.mem x attr) (bvl_f @ fvl)) in
+        (List.filter (fun x -> List.mem x attr) (Misc.remove_duplicates (bvl_f @ fvl))) in
       let comp = (fun t -> List.nth t posx) in
       let f' = convert_formula_vars bvl_f f in
       Agg (convert_var fvl bvl y, convert_agg_op op t_y,
@@ -124,6 +124,11 @@ let convert_formula dbschema f =
   | Star r -> Star (convert_re_vars bvl r)
   in convert_formula_vars [] f
 
+let unorderedFlatMap m = 
+  let rec flatmap_rec acc = function 
+  | [] -> acc
+  | x::xs -> List.rev_append (m x) acc in
+  flatmap_rec [] 
 
 let convert_db md =
   let add_builtin xs (name, tup) = (explode name, List.map convert_cst tup) :: xs in
@@ -132,7 +137,7 @@ let convert_db md =
     List.map (fun tup -> (explode name, List.map convert_cst tup))
       (Relation.elements (Table.get_relation t))
   in
-  let db_events = List.flatten (List.map convert_table (Db.get_tables md.db)) in
+  let db_events = unorderedFlatMap convert_table (Db.get_tables md.db) in
   let all_events = List.fold_left add_builtin db_events
     ["tp", [Int md.tp]; "ts", [Float md.ts]; "tpts", [Int md.tp; Float md.ts]]
   in
@@ -148,13 +153,21 @@ let convert_tuple xs = Tuple.make_tuple (List.map cst_of_event_data (deoptionali
 (* (Verified.Monitor.nat * Verified.Monitor.event_data option list) Verified.Monitor.set -> (timestamp * relation) *)
 let convert_violations vs =
   let vsl = match vs with
-    | RBT_set rbt -> List.map (fun (tp, rel) -> (int_of_nat tp, rel)) (rbt_verdict rbt)
+    | RBT_set rbt -> rbt
     | _ -> failwith "Impossible!" in
-  let qtps = List.sort_uniq (fun x y -> x - y) (List.map fst vsl) in
-  let qmap tp = List.filter (fun (tp', _) -> tp = tp') vsl in
-  List.map
-    (fun qtp -> (qtp, Relation.make_relation ((List.map (convert_tuple<<snd) (qmap qtp)))))
-    qtps
+  let hm = Hashtbl.create 100 in
+  rbt_fold (fun (ctp, tuple) _ ->             
+             let tp = int_of_nat ctp in
+             let new_tuple = convert_tuple tuple in
+             begin 
+              try
+                let rel = Hashtbl.find hm tp in
+                Hashtbl.remove hm tp;
+                Hashtbl.add hm tp (Relation.add new_tuple rel);
+              with Not_found -> Hashtbl.add hm tp (Relation.make_relation [new_tuple]);
+             end) vsl ();
+ Hashtbl.fold (fun k v l -> (k,v)::l) hm []
+
 
 
 let is_monitorable dbschema f =
