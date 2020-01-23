@@ -40,9 +40,9 @@ interpretation muaux valid_mmuaux init_mmuaux add_new_mmuaux' length_mmuaux eval
 
 global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux" filter_mmsaux join_mmsaux add_new_mmsaux result_mmsaux
   valid_mmuaux "init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' length_mmuaux eval_mmuaux
-  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> event_data Formula.formula \<Rightarrow> _"
-  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: event_data Formula.formula \<Rightarrow> _"
-  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: event_data Formula.formula \<Rightarrow> _"
+  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
+  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
   and update_since = "maux.update_since filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> event_data table)"
   and meval = "maux.meval filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and mstep = "maux.mstep filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
@@ -246,7 +246,7 @@ proof -
     apply (unfold_locales; rule ext)
     using max_tstp_d_d max_tstp_idem max_tstp_idem'
     by (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
-        intro!: mapping_eqI split: option.splits)
+        intro!: mapping_eqI split: option.splits) (*VERY SLOW*)
   note upd_nested_insert' = upd_nested_insert[of d "max_tstp d",
     OF max_tstp_d_d[symmetric] max_tstp_idem']
   show ?thesis
@@ -407,26 +407,17 @@ declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]
 declare New_max.genericJoin.simps[folded remove_Union_def, code]
 declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
 
-definition mmonitorable_exec_e :: "event_data Formula.formula \<Rightarrow> bool" where
-  [code_unfold]: "mmonitorable_exec_e = Monitor.mmonitorable_exec"
-
-definition convert_multiway_e :: "event_data Formula.formula \<Rightarrow> event_data Formula.formula" where
-  [code_unfold]: "convert_multiway_e = Formula.convert_multiway"
-
-export_code convert_multiway_e minit_safe mstep mmonitorable_exec_e
-  checking OCaml?
-
+export_code convert_multiway minit_safe mstep mmonitorable_exec
+   checking OCaml?
 
 export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
-  String.explode String.implode interval mk_db RBT_set rbt_fold
-  (*term, formula, and constructors*)
-  Formula.Var Formula.Pred Regex.Skip Regex.Wild
-  (*event data and aggregations*)
-  EInt sum_agg count_agg average_agg min_agg max_agg median_agg
+  String.explode String.implode interval mk_db RBT_set rbt_fold EInt
+  (*term, formula, and regex constructors*)
+  Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild
   (*main functions*)
-  convert_multiway_e minit_safe mstep mmonitorable_exec_e
+  convert_multiway minit_safe mstep mmonitorable_exec
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

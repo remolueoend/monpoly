@@ -2092,7 +2092,7 @@ lift_definition upd_set' :: "('a, 'b) mapping \<Rightarrow> 'b \<Rightarrow> ('b
 
 lemma upd_set'_lookup: "Mapping.lookup (upd_set' m d f X) a = (if a \<in> X then
   (case Mapping.lookup m a of Some b \<Rightarrow> Some (f b) | None \<Rightarrow> Some d) else Mapping.lookup m a)"
-  by (simp add: lookup.rep_eq upd_set'.rep_eq)
+  by (simp add: Mapping.lookup.rep_eq upd_set'.rep_eq)
 
 lemma upd_set'_keys: "Mapping.keys (upd_set' m d f X) = Mapping.keys m \<union> X"
   by (auto simp add: upd_set'_lookup intro!: Mapping_keys_intro
@@ -2106,7 +2106,7 @@ lift_definition upd_nested :: "('a, ('b, 'c) mapping) mapping \<Rightarrow>
 lemma upd_nested_lookup: "Mapping.lookup (upd_nested m d f X) a =
   (case Mapping.lookup m a of Some m' \<Rightarrow> Some (upd_set' m' d f {b. (a, b) \<in> X})
   | None \<Rightarrow> if a \<in> fst ` X then Some (upd_set' Mapping.empty d f {b. (a, b) \<in> X}) else None)"
-  by (simp add: lookup.abs_eq upd_nested.abs_eq)
+  by (simp add: Mapping.lookup.abs_eq upd_nested.abs_eq)
 
 lemma upd_nested_keys: "Mapping.keys (upd_nested m d f X) = Mapping.keys m \<union> fst ` X"
   by (auto simp add: upd_nested_lookup Domain.DomainI fst_eq_Domain intro!: Mapping_keys_intro

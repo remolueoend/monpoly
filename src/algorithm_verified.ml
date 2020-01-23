@@ -12,7 +12,7 @@ open IntMap
 let monitor dbschema logfile f =
   let closed = (free_vars f = []) in
   let cf = convert_formula dbschema f in
-  let cf = if !no_mw then cf else Monitor.convert_multiway_e cf in
+  let cf = if !no_mw then cf else Monitor.convert_multiway cf in
   let init_state = Monitor.minit_safe cf in
   let lexbuf = Log.log_open logfile in
   let init_i = 0 in
