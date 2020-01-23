@@ -615,32 +615,32 @@ subsection \<open>The Executable Monitor\<close>
 
 type_synonym ts = nat
 
-type_synonym mbuf2 = "event_data table list \<times> event_data table list"
-type_synonym mbufn = "event_data table list list"
-type_synonym msaux = "(ts \<times> event_data table) list"
-type_synonym muaux = "(ts \<times> event_data table \<times> event_data table) list"
-type_synonym mr\<delta>aux = "(ts \<times> (mregex, event_data table) mapping) list"
-type_synonym ml\<delta>aux = "(ts \<times> event_data table list \<times> event_data table) list"
+type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
+type_synonym 'a mbufn = "'a table list list"
+type_synonym 'a msaux = "(ts \<times> 'a table) list"
+type_synonym 'a muaux = "(ts \<times> 'a table \<times> 'a table) list"
+type_synonym 'a mr\<delta>aux = "(ts \<times> (mregex, 'a table) mapping) list"
+type_synonym 'a ml\<delta>aux = "(ts \<times> 'a table list \<times> 'a table) list"
 
 datatype mconstraint = MEq | MLess | MLessEq
 
 datatype ('msaux, 'muaux) mformula =
     MRel "event_data table"
   | MPred Formula.name "Formula.trm list"
-  | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "mbuf2"
+  | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
   | MAndAssign "('msaux, 'muaux) mformula" "nat \<times> Formula.trm"
   | MAndRel "('msaux, 'muaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
-  | MAnds "nat set list" "nat set list" "('msaux, 'muaux) mformula list" "mbufn"
-  | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "mbuf2"
+  | MAnds "nat set list" "nat set list" "('msaux, 'muaux) mformula list" "event_data mbufn"
+  | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2"
   | MNeg "('msaux, 'muaux) mformula"
   | MExists "('msaux, 'muaux) mformula"
   | MAgg bool nat Formula.agg_op event_data nat "Formula.trm" "('msaux, 'muaux) mformula"
   | MPrev \<I> "('msaux, 'muaux) mformula" bool "event_data table list" "ts list"
   | MNext \<I> "('msaux, 'muaux) mformula" bool "ts list"
-  | MSince bool "('msaux, 'muaux) mformula" \<I> "('msaux, 'muaux) mformula" "mbuf2" "ts list" "'msaux"
-  | MUntil bool "('msaux, 'muaux) mformula" \<I> "('msaux, 'muaux) mformula" "mbuf2" "ts list" "'muaux"
-  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "mbufn" "ts list" "mr\<delta>aux"
-  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "mbufn" "ts list" "ml\<delta>aux"
+  | MSince bool "('msaux, 'muaux) mformula" \<I> "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" "'msaux"
+  | MUntil bool "('msaux, 'muaux) mformula" \<I> "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" "'muaux"
+  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
+  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data ml\<delta>aux"
 
 record ('msaux, 'muaux) mstate =
   mstate_i :: nat
@@ -679,7 +679,7 @@ definition init_window :: "\<I> \<Rightarrow> window" where
   "init_window I = \<lparr>ivl = I, earliest = 0, latest = 0, current = 0\<rparr>"
 
 locale msaux =
-  fixes valid_msaux :: "window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux \<Rightarrow> msaux \<Rightarrow> bool"
+  fixes valid_msaux :: "window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux \<Rightarrow> event_data msaux \<Rightarrow> bool"
   and init_msaux :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux"
   and filter_msaux :: "ts \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and join_msaux :: "bool \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
@@ -706,7 +706,7 @@ fun check_before :: "\<I> \<Rightarrow> ts \<Rightarrow> (ts \<times> 'a \<times
 fun proj_thd :: "('a \<times> 'b \<times> 'c) \<Rightarrow> 'c" where
   "proj_thd (t, a1, a2) = a2"
 
-definition update_until :: "\<I> \<Rightarrow> bool \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> muaux \<Rightarrow> muaux" where
+definition update_until :: "\<I> \<Rightarrow> bool \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data muaux \<Rightarrow> event_data muaux" where
   "update_until I pos rel1 rel2 nt aux =
     (map (\<lambda>x. case x of (t, a1, a2) \<Rightarrow> (t, if pos then join a1 True rel1 else a1 \<union> rel1,
       if mem (nt - t) I then a2 \<union> join rel2 pos a1 else a2)) aux) @
@@ -718,7 +718,7 @@ lemma map_proj_thd_update_until: "map proj_thd (takeWhile (check_before I nt) au
    apply (auto simp add: update_until_def split: if_splits)
   by (smt ab_semigroup_add_class.add_ac(1) leD le_cases le_iff_add ordered_cancel_comm_monoid_diff_class.add_diff_inverse plus_enat_simps(1))+
 
-fun eval_until :: "\<I> \<Rightarrow> ts \<Rightarrow> muaux \<Rightarrow> event_data table list \<times> muaux" where
+fun eval_until :: "\<I> \<Rightarrow> ts \<Rightarrow> event_data muaux \<Rightarrow> event_data table list \<times> event_data muaux" where
   "eval_until I nt [] = ([], [])"
 | "eval_until I nt ((t, a1, a2) # aux) = (if t + right I < nt then
     (let (xs, aux) = eval_until I nt aux in (a2 # xs, aux)) else ([], (t, a1, a2) # aux))"
@@ -739,7 +739,7 @@ lemma eval_until_auxlist': "eval_until I nt auxlist = (res, auxlist') \<Longrigh
      (auto split: if_splits prod.splits)
 
 locale muaux =
-  fixes valid_muaux :: "window \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'muaux \<Rightarrow> muaux \<Rightarrow> bool"
+  fixes valid_muaux :: "window \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'muaux \<Rightarrow> event_data muaux \<Rightarrow> bool"
   and init_muaux :: "\<I> \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'muaux"
   and add_new_muaux :: "event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
   and length_muaux :: "'muaux \<Rightarrow> nat"
@@ -756,13 +756,13 @@ locale muaux =
 
 locale maux = msaux valid_msaux init_msaux filter_msaux join_msaux add_new_msaux result_msaux +
   muaux valid_muaux init_muaux add_new_muaux length_muaux eval_muaux
-  for valid_msaux :: "window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux \<Rightarrow> msaux \<Rightarrow> bool"
+  for valid_msaux :: "window \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux \<Rightarrow> event_data msaux \<Rightarrow> bool"
   and init_msaux :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'msaux"
   and filter_msaux :: "ts \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and join_msaux :: "bool \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and add_new_msaux :: "nat \<times> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
   and result_msaux :: "'msaux \<Rightarrow> event_data table"
-  and valid_muaux :: "window \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'muaux \<Rightarrow> muaux \<Rightarrow> bool"
+  and valid_muaux :: "window \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'muaux \<Rightarrow> event_data muaux \<Rightarrow> bool"
   and init_muaux :: "\<I> \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> 'muaux"
   and add_new_muaux :: "event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
   and length_muaux :: "'muaux \<Rightarrow> nat"
@@ -839,15 +839,15 @@ fun mprev_next :: "\<I> \<Rightarrow> event_data table list \<Rightarrow> ts lis
 | "mprev_next I (x # xs) (t # t' # ts) = (let (ys, zs) = mprev_next I xs (t' # ts)
     in ((if mem (t' - t) I then x else empty_table) # ys, zs))"
 
-fun mbuf2_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> mbuf2 \<Rightarrow> mbuf2" where
+fun mbuf2_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> event_data mbuf2 \<Rightarrow> event_data mbuf2" where
  "mbuf2_add xs' ys' (xs, ys) = (xs @ xs', ys @ ys')"
 
-fun mbuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> mbuf2 \<Rightarrow> 'b list \<times> mbuf2" where
+fun mbuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data mbuf2 \<Rightarrow> 'b list \<times> event_data mbuf2" where
   "mbuf2_take f (x # xs, y # ys) = (let (zs, buf) = mbuf2_take f (xs, ys) in (f x y # zs, buf))"
 | "mbuf2_take f (xs, ys) = ([], (xs, ys))"
 
 fun mbuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
-    mbuf2 \<Rightarrow> ts list \<Rightarrow> 'b \<times> mbuf2 \<times> ts list" where
+    event_data mbuf2 \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbuf2 \<times> ts list" where
   "mbuf2t_take f z (x # xs, y # ys) (t # ts) = mbuf2t_take f (f x y t z) (xs, ys) ts"
 | "mbuf2t_take f z (xs, ys) ts = (z, (xs, ys), ts)"
 
@@ -859,10 +859,10 @@ proof (induct xs)
     by (cases xs) auto
 qed simp
 
-fun mbufn_add :: "event_data table list list \<Rightarrow> mbufn \<Rightarrow> mbufn" where
+fun mbufn_add :: "event_data table list list \<Rightarrow> event_data mbufn \<Rightarrow> event_data mbufn" where
  "mbufn_add xs' xs = List.map2 (@) xs xs'"
 
-function mbufn_take :: "(event_data table list \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow> mbufn \<Rightarrow> 'b \<times> mbufn" where
+function mbufn_take :: "(event_data table list \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow> event_data mbufn \<Rightarrow> 'b \<times> event_data mbufn" where
   "mbufn_take f z buf = (if buf = [] \<or> [] \<in> set buf then (z, buf)
     else mbufn_take f (f (map hd buf) z) (map tl buf))"
   by pat_completeness auto
@@ -870,7 +870,7 @@ termination by (relation "measure (\<lambda>(_, _, buf). size_list length buf)")
   (auto simp: comp_def Suc_le_eq size_list_length_diff1)
 
 fun mbufnt_take :: "(event_data table list \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow>
-    'b \<Rightarrow> mbufn \<Rightarrow> ts list \<Rightarrow> 'b \<times> mbufn \<times> ts list" where
+    'b \<Rightarrow> event_data mbufn \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbufn \<times> ts list" where
   "mbufnt_take f z buf ts =
     (if [] \<in> set buf \<or> ts = [] then (z, buf, ts)
     else mbufnt_take f (f (map hd buf) (hd ts) z) (map tl buf) (tl ts))"
@@ -964,7 +964,7 @@ lemma lookup_tabulate:
     split: if_splits option.splits)
 
 definition update_matchP :: "nat \<Rightarrow> \<I> \<Rightarrow> mregex \<Rightarrow> mregex list \<Rightarrow> event_data table list \<Rightarrow> ts \<Rightarrow>
-  mr\<delta>aux \<Rightarrow> event_data table \<times> mr\<delta>aux" where
+  event_data mr\<delta>aux \<Rightarrow> event_data table \<times> event_data mr\<delta>aux" where
   "update_matchP n I mr mrs rels nt aux =
     (let aux = (case [(t, mrtabulate mrs (\<lambda>mr.
         r\<delta> id rel rels mr \<union> (if t = nt then safe_r\<epsilon> n rels mr else {}))).
@@ -984,11 +984,11 @@ definition update_matchF_step where
      (let Y = mrtabulate mrs (l\<delta> id X rels')
      in ((t, rels', if mem (nt - t) I then rel \<union> lookup Y mr else rel) # aux', Y)))"
 
-definition update_matchF :: "nat \<Rightarrow> \<I> \<Rightarrow> mregex \<Rightarrow> mregex list \<Rightarrow> event_data table list \<Rightarrow> ts \<Rightarrow> ml\<delta>aux \<Rightarrow> ml\<delta>aux" where
+definition update_matchF :: "nat \<Rightarrow> \<I> \<Rightarrow> mregex \<Rightarrow> mregex list \<Rightarrow> event_data table list \<Rightarrow> ts \<Rightarrow> event_data ml\<delta>aux \<Rightarrow> event_data ml\<delta>aux" where
   "update_matchF n I mr mrs rels nt aux =
      fst (foldr (update_matchF_step I mr mrs nt) aux (update_matchF_base n I mr mrs rels nt))"
 
-fun eval_matchF :: "\<I> \<Rightarrow> mregex \<Rightarrow> ts \<Rightarrow> ml\<delta>aux \<Rightarrow> event_data table list \<times> ml\<delta>aux" where
+fun eval_matchF :: "\<I> \<Rightarrow> mregex \<Rightarrow> ts \<Rightarrow> event_data ml\<delta>aux \<Rightarrow> event_data table list \<times> event_data ml\<delta>aux" where
   "eval_matchF I mr nt [] = ([], [])"
 | "eval_matchF I mr nt ((t, rels, rel) # aux) = (if t + right I < nt then
     (let (xs, aux) = eval_matchF I mr nt aux in (rel # xs, aux)) else ([], (t, rels, rel) # aux))"
@@ -1488,7 +1488,7 @@ subsection \<open>Correctness\<close>
 subsubsection \<open>Invariants\<close>
 
 definition wf_mbuf2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow>
-    mbuf2 \<Rightarrow> bool" where
+    event_data mbuf2 \<Rightarrow> bool" where
   "wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
     list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
 
@@ -1537,18 +1537,18 @@ lemma list_all3_refl [intro?]:
   "(\<And>x. x \<in> set xs \<Longrightarrow> P x x x) \<Longrightarrow> list_all3 P xs xs xs"
   by (simp add: list_all3_conv_all_nth)
 
-definition wf_mbufn :: "nat \<Rightarrow> nat list \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) list \<Rightarrow> mbufn \<Rightarrow> bool" where
+definition wf_mbufn :: "nat \<Rightarrow> nat list \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) list \<Rightarrow> event_data mbufn \<Rightarrow> bool" where
   "wf_mbufn i js Ps buf \<longleftrightarrow> list_all3 (\<lambda>P j xs. i \<le> j \<and> list_all2 P [i..<j] xs) Ps js buf"
 
 definition wf_mbuf2' :: "Formula.trace \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
-  Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> mbuf2 \<Rightarrow> bool" where
+  Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> event_data mbuf2 \<Rightarrow> bool" where
   "wf_mbuf2' \<sigma> j n R \<phi> \<psi> buf \<longleftrightarrow> wf_mbuf2 (min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j))
     (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)
     (\<lambda>i. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>))
     (\<lambda>i. qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<psi>)) buf"
 
 definition wf_mbufn' :: "Formula.trace \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
-  Formula.formula Regex.regex \<Rightarrow> mbufn \<Rightarrow> bool" where
+  Formula.formula Regex.regex \<Rightarrow> event_data mbufn \<Rightarrow> bool" where
   "wf_mbufn' \<sigma> j n R r buf \<longleftrightarrow> (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
     wf_mbufn (min_regex_default (progress \<sigma>) r j) (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) \<phi>s)
     (map (\<lambda>\<phi> i. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>)) \<phi>s)
@@ -1584,7 +1584,7 @@ definition (in msaux) wf_since_aux :: "Formula.trace \<Rightarrow> nat \<Rightar
       (\<exists>X. (t, X) \<in> set auxlist)))"
 
 definition wf_matchP_aux :: "Formula.trace \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
-    \<I> \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> mr\<delta>aux \<Rightarrow> nat \<Rightarrow> bool" where
+    \<I> \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> event_data mr\<delta>aux \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_matchP_aux \<sigma> n R I r aux ne \<longleftrightarrow> sorted_wrt (\<lambda>x y. fst x > fst y) aux \<and>
     (\<forall>t X. (t, X) \<in> set aux \<longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne-1) \<and> \<tau> \<sigma> (ne-1) - t \<le> right I \<and> (\<exists>i. \<tau> \<sigma> i = t) \<and>
       (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
@@ -1612,7 +1612,7 @@ lemma (in msaux) wf_since_aux_UNIV_alt:
   unfolding wf_since_aux_def qtable_mem_restr_UNIV ..
 
 definition wf_until_auxlist :: "Formula.trace \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow> bool \<Rightarrow>
-    Formula.formula \<Rightarrow> \<I> \<Rightarrow> Formula.formula \<Rightarrow> muaux \<Rightarrow> nat \<Rightarrow> bool" where
+    Formula.formula \<Rightarrow> \<I> \<Rightarrow> Formula.formula \<Rightarrow> event_data muaux \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_until_auxlist \<sigma> n R pos \<phi> I \<psi> auxlist ne \<longleftrightarrow>
     list_all2 (\<lambda>x i. case x of (t, r1, r2) \<Rightarrow> t = \<tau> \<sigma> i \<and>
       qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. if pos then (\<forall>k\<in>{i..<ne+length auxlist}. Formula.sat \<sigma> (map the v) k \<phi>)
@@ -1646,7 +1646,7 @@ lemma (in muaux) wf_until_aux_UNIV_alt:
   unfolding wf_until_aux_def wf_until_auxlist_def qtable_mem_restr_UNIV ..
 
 definition wf_matchF_aux :: "Formula.trace \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
-    \<I> \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> ml\<delta>aux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
+    \<I> \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> event_data ml\<delta>aux \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_matchF_aux \<sigma> n R I r aux ne k \<longleftrightarrow> (case to_mregex r of (mr, \<phi>s) \<Rightarrow>
       list_all2 (\<lambda>x i. case x of (t, rels, rel) \<Rightarrow> t = \<tau> \<sigma> i \<and>
         list_all2 (\<lambda>\<phi>. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v.
@@ -4936,7 +4936,7 @@ text \<open>We summarize the main results proved above.
 \end{enumerate}
 \<close>
 
-end \<comment> \<open>msaux\<close>
+end \<comment> \<open>event_data msaux\<close>
 
 (*<*)
 end
