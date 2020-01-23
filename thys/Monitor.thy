@@ -1016,18 +1016,11 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts \<Rightarrow> 'a Formula.databa
       (zs, aux) = eval_matchF I mr (case nts of [] \<Rightarrow> t | nt # _ \<Rightarrow> nt) aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts aux))"
 
-definition (in maux) mstep :: "'a Formula.database \<times> ts \<Rightarrow> ('msaux, 'muaux, 'a) mstate \<Rightarrow> (nat \<times> 'a tuple) set \<times> ('msaux, 'muaux, 'a) mstate" where
+definition (in maux) mstep :: "'a Formula.database \<times> ts \<Rightarrow> ('msaux, 'muaux, 'a) mstate \<Rightarrow> (nat \<times> 'a table) list \<times> ('msaux, 'muaux, 'a) mstate" where
   "mstep tdb st =
      (let (xs, m) = meval (mstate_n st) (snd tdb) (fst tdb) (mstate_m st)
-     in (\<Union> (set (map (\<lambda>(i, X). (\<lambda>v. (i, v)) ` X) (List.enumerate (mstate_i st) xs))),
+     in (List.enumerate (mstate_i st) xs,
       \<lparr>mstate_i = mstate_i st + length xs, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
-
-lemma (in maux) mstep_alt: "mstep tdb st =
-     (let (xs, m) = meval (mstate_n st) (snd tdb) (fst tdb) (mstate_m st)
-     in (\<Union>(i, X) \<in> set (List.enumerate (mstate_i st) xs). \<Union>v \<in> X. {(i,v)},
-      \<lparr>mstate_i = mstate_i st + length xs, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
-  unfolding mstep_def
-  by (auto split: prod.split)
 
 subsection \<open>Verdict Delay\<close>
 
@@ -4573,9 +4566,15 @@ lemma (in maux) wf_mstate_mstep: "wf_mstate \<phi> \<pi> R st \<Longrightarrow> 
   by (fastforce simp add: progress_mono le_imp_diff_is_add split: prod.splits
       elim!: prefix_of_psnocE dest: meval list_all2_lengthD)
 
+definition "flatten_verdicts Vs = (\<Union> (set (map (\<lambda>(i, X). (\<lambda>v. (i, v)) ` X) Vs)))"
+
+lemma flatten_verdicts_append[simp]:
+  "flatten_verdicts (Vs @ Us) = flatten_verdicts Vs \<union> flatten_verdicts Us"
+  by (induct Vs) (auto simp: flatten_verdicts_def)
+
 lemma (in maux) mstep_output_iff:
   assumes "wf_mstate \<phi> \<pi> R st" "last_ts \<pi> \<le> snd tdb" "prefix_of (psnoc \<pi> tdb) \<sigma>" "mem_restr R v"
-  shows "(i, v) \<in> fst (mstep tdb st) \<longleftrightarrow>
+  shows "(i, v) \<in> flatten_verdicts (fst (mstep tdb st)) \<longleftrightarrow>
     progress \<sigma> \<phi> (plen \<pi>) \<le> i \<and> i < progress \<sigma> \<phi> (Suc (plen \<pi>)) \<and>
     wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> Formula.sat \<sigma> (map the v) i \<phi>"
 proof -
@@ -4595,7 +4594,7 @@ proof -
     using that by (auto simp: list_all2_conv_all_nth
       dest!: spec[of _ "(i - progress \<sigma> \<phi> (plen \<pi>))"])
   ultimately show ?thesis
-    using assms(4) unfolding mstep_def Let_def
+    using assms(4) unfolding mstep_def Let_def flatten_verdicts_def
     by (auto simp: in_set_enumerate_eq list_all2_conv_all_nth progress_mono le_imp_diff_is_add
       elim!: in_qtableE in_qtableI intro!: bexI[of _ "(i, Vs ! (i - progress \<sigma> \<phi> (plen \<pi>)))"])
 qed
@@ -4616,7 +4615,7 @@ lemma mstep_mverdicts:
   assumes wf: "wf_mstate \<phi> \<pi> R st"
     and le[simp]: "last_ts \<pi> \<le> snd tdb"
     and restrict: "mem_restr R v"
-  shows "(i, v) \<in> fst (mstep tdb st) \<longleftrightarrow> (i, v) \<in> mverdicts \<phi> (psnoc \<pi> tdb) - mverdicts \<phi> \<pi>"
+  shows "(i, v) \<in> flatten_verdicts (fst (mstep tdb st)) \<longleftrightarrow> (i, v) \<in> mverdicts \<phi> (psnoc \<pi> tdb) - mverdicts \<phi> \<pi>"
 proof -
   obtain \<sigma> where p2: "prefix_of (psnoc \<pi> tdb) \<sigma>"
     using ex_prefix_of by blast
@@ -4630,32 +4629,32 @@ proof -
 qed
 
 primrec msteps0 where
-  "msteps0 [] st = ({}, st)"
+  "msteps0 [] st = ([], st)"
 | "msteps0 (tdb # \<pi>) st =
-    (let (V', st') = mstep tdb st; (V'', st'') = msteps0 \<pi> st' in (V' \<union> V'', st''))"
+    (let (V', st') = mstep tdb st; (V'', st'') = msteps0 \<pi> st' in (V' @ V'', st''))"
 
 primrec msteps0_stateless where
-  "msteps0_stateless [] st = {}"
-| "msteps0_stateless (tdb # \<pi>) st = (let (V', st') = mstep tdb st in V' \<union> msteps0_stateless \<pi> st')"
+  "msteps0_stateless [] st = []"
+| "msteps0_stateless (tdb # \<pi>) st = (let (V', st') = mstep tdb st in V' @ msteps0_stateless \<pi> st')"
 
 lemma msteps0_msteps0_stateless: "fst (msteps0 w st) = msteps0_stateless w st"
   by (induct w arbitrary: st) (auto simp: split_beta)
 
-lift_definition msteps :: "'a Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'a) mstate \<Rightarrow> (nat \<times> 'a option list) set \<times> ('msaux, 'muaux, 'a) mstate"
+lift_definition msteps :: "'a Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'a) mstate \<Rightarrow> (nat \<times> 'a table) list \<times> ('msaux, 'muaux, 'a) mstate"
   is msteps0 .
 
-lift_definition msteps_stateless :: "'a Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'a) mstate \<Rightarrow> (nat \<times> 'a option list) set"
+lift_definition msteps_stateless :: "'a Formula.prefix \<Rightarrow> ('msaux, 'muaux, 'a) mstate \<Rightarrow> (nat \<times> 'a table) list"
   is msteps0_stateless .
 
 lemma msteps_msteps_stateless: "fst (msteps w st) = msteps_stateless w st"
   by transfer (rule msteps0_msteps0_stateless)
 
 lemma msteps0_snoc: "msteps0 (\<pi> @ [tdb]) st =
-   (let (V', st') = msteps0 \<pi> st; (V'', st'') = mstep tdb st' in (V' \<union> V'', st''))"
+   (let (V', st') = msteps0 \<pi> st; (V'', st'') = mstep tdb st' in (V' @ V'', st''))"
   by (induct \<pi> arbitrary: st) (auto split: prod.splits)
 
 lemma msteps_psnoc: "last_ts \<pi> \<le> snd tdb \<Longrightarrow> msteps (psnoc \<pi> tdb) st =
-   (let (V', st') = msteps \<pi> st; (V'', st'') = mstep tdb st' in (V' \<union> V'', st''))"
+   (let (V', st') = msteps \<pi> st; (V'', st'') = mstep tdb st' in (V' @ V'', st''))"
   by transfer (auto simp: msteps0_snoc split: list.splits prod.splits if_splits)
 
 definition monitor where
@@ -4666,12 +4665,12 @@ lemma Suc_length_conv_snoc: "(Suc n = length xs) = (\<exists>y ys. xs = ys @ [y]
 
 lemma wf_mstate_msteps: "wf_mstate \<phi> \<pi> R st \<Longrightarrow> mem_restr R v \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
   X = msteps (pdrop (plen \<pi>) \<pi>') st \<Longrightarrow> wf_mstate \<phi> \<pi>' R (snd X) \<and>
-  ((i, v) \<in> fst X) = ((i, v) \<in> mverdicts \<phi> \<pi>' - mverdicts \<phi> \<pi>)"
+  ((i, v) \<in> flatten_verdicts (fst X)) = ((i, v) \<in> mverdicts \<phi> \<pi>' - mverdicts \<phi> \<pi>)"
 proof (induct "plen \<pi>' - plen \<pi>" arbitrary: X st \<pi> \<pi>')
   case 0
-  from 0(1,4,5) have "\<pi> = \<pi>'"  "X = ({}, st)"
+  from 0(1,4,5) have "\<pi> = \<pi>'"  "X = ([], st)"
     by (transfer; auto)+
-  with 0(2) show ?case by simp
+  with 0(2) show ?case unfolding flatten_verdicts_def by simp
 next
   case (Suc x)
   from Suc(2,5) obtain \<pi>'' tdb where "x = plen \<pi>'' - plen \<pi>"  "\<pi> \<le> \<pi>''"
@@ -4696,11 +4695,11 @@ qed
 
 lemma wf_mstate_msteps_stateless:
   assumes "wf_mstate \<phi> \<pi> R st" "mem_restr R v" "\<pi> \<le> \<pi>'"
-  shows "(i, v) \<in> msteps_stateless (pdrop (plen \<pi>) \<pi>') st \<longleftrightarrow> (i, v) \<in> mverdicts \<phi> \<pi>' - mverdicts \<phi> \<pi>"
+  shows "(i, v) \<in> flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) \<longleftrightarrow> (i, v) \<in> mverdicts \<phi> \<pi>' - mverdicts \<phi> \<pi>"
   using wf_mstate_msteps[OF assms refl] unfolding msteps_msteps_stateless by simp
 
 lemma wf_mstate_msteps_stateless_UNIV: "wf_mstate \<phi> \<pi> UNIV st \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
-  msteps_stateless (pdrop (plen \<pi>) \<pi>') st = mverdicts \<phi> \<pi>' - mverdicts \<phi> \<pi>"
+  flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) = mverdicts \<phi> \<pi>' - mverdicts \<phi> \<pi>"
   by (auto dest: wf_mstate_msteps_stateless[OF _ mem_restr_UNIV])
 
 lemma mverdicts_Nil: "mverdicts \<phi> pnil = {}"
@@ -4710,12 +4709,14 @@ lemma mverdicts_Nil: "mverdicts \<phi> pnil = {}"
 lemma wf_mstate_minit_safe: "mmonitorable \<phi> \<Longrightarrow> wf_mstate \<phi> pnil R (minit_safe \<phi>)"
   using wf_mstate_minit minit_safe_minit mmonitorable_def by metis
 
-lemma monitor_mverdicts: "mmonitorable \<phi> \<Longrightarrow> monitor \<phi> \<pi> = mverdicts \<phi> \<pi>"
+lemma monitor_mverdicts: "mmonitorable \<phi> \<Longrightarrow> flatten_verdicts (monitor \<phi> \<pi>) = mverdicts \<phi> \<pi>"
   unfolding monitor_def
   by (subst wf_mstate_msteps_stateless_UNIV[OF wf_mstate_minit_safe, simplified])
     (auto simp: mmonitorable_def mverdicts_Nil)
 
 subsection \<open>Collected Correctness Results\<close>
+
+thm mstep_mverdicts
 
 text \<open>We summarize the main results proved above.
 \begin{enumerate}

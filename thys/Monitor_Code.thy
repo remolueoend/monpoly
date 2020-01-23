@@ -76,10 +76,7 @@ lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred'' default_maux
 definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> (string \<times> event_data list) set" where
   "mk_db = set"
 
-definition rbt_verdict :: "_ \<Rightarrow> (nat \<times> event_data option list) list" where
-  "rbt_verdict = RBT_Set2.keys"
-
-definition rbt_fold :: "_ \<Rightarrow> (nat \<times> event_data option list) set_rbt \<Rightarrow> _ \<Rightarrow> _" where
+definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"
 
 lemma saturate_commute:
@@ -423,7 +420,7 @@ export_code convert_multiway_e minit_safe mstep mmonitorable_exec_e
 export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
-  String.explode String.implode interval mk_db RBT_set rbt_verdict rbt_fold
+  String.explode String.implode interval mk_db RBT_set rbt_fold
   (*term, formula, and constructors*)
   Formula.Var Formula.Pred Regex.Skip Regex.Wild
   (*event data and aggregations*)

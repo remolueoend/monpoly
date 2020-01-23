@@ -133,7 +133,7 @@ module Monitor : sig
                                nat)))))))))),
         event_data, unit)
         mstate_ext ->
-        (nat * (event_data option) list) set *
+        (nat * ((event_data option) list) set) list *
           ((nat *
              (nat *
                (i * (bool list *
@@ -160,8 +160,8 @@ mapping)
   val count_agg : (event_data * enat) set -> event_data
   val median_agg : (event_data * enat) set -> event_data
   val rbt_fold :
-    (nat * (event_data option) list -> 'a -> 'a) ->
-      ((nat * (event_data option) list), unit) mapping_rbt -> 'a -> 'a
+    ((event_data option) list -> 'a -> 'a) ->
+      (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
   val average_agg : (event_data * enat) set -> event_data
   val explode : string -> char list
   val minit_safe :
@@ -188,9 +188,6 @@ mapping)
                                nat)))))))))),
         event_data, unit)
         mstate_ext
-  val rbt_verdict :
-    ((nat * (event_data option) list), unit) mapping_rbt ->
-      (nat * (event_data option) list) list
   val convert_multiway_e : event_data formula -> event_data formula
   val mmonitorable_exec_e : event_data formula -> bool
 end = struct
@@ -6722,38 +6719,7 @@ let rec mstate_i (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_i;;
 let rec mstep
   tdb st =
     (let (xs, m) = meval (mstate_n st) (snd tdb) (fst tdb) (mstate_m st) in
-      (sup_setb
-         ((finite_UNIV_prod finite_UNIV_nat finite_UNIV_list),
-           (cenum_prod cenum_nat cenum_list),
-           (ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-           (cproper_interval_prod cproper_interval_nat
-             (cproper_interval_list (ccompare_option ccompare_event_data))),
-           (set_impl_prod set_impl_nat set_impl_list))
-         (set ((ceq_set
-                 ((cenum_prod cenum_nat cenum_list),
-                   (ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-                   (cproper_interval_prod cproper_interval_nat
-                     (cproper_interval_list
-                       (ccompare_option
-                         ccompare_event_data))).ccompare_cproper_interval)),
-                (ccompare_set
-                  ((finite_UNIV_prod finite_UNIV_nat finite_UNIV_list),
-                    (ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-                    (cproper_interval_prod cproper_interval_nat
-                      (cproper_interval_list
-                        (ccompare_option ccompare_event_data))),
-                    (set_impl_prod set_impl_nat set_impl_list))),
-                set_impl_set)
-           (mapa (fun (i, a) ->
-                   image ((ceq_list (ceq_option ceq_event_data)),
-                           (ccompare_list
-                             (ccompare_option ccompare_event_data)))
-                     ((ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-                       (ccompare_prod ccompare_nat
-                         (ccompare_list (ccompare_option ccompare_event_data))),
-                       (set_impl_prod set_impl_nat set_impl_list))
-                     (fun aa -> (i, aa)) a)
-             (enumerate (mstate_i st) xs))),
+      (enumerate (mstate_i st) xs,
         Mstate_ext
           (plus_nata (mstate_i st) (size_list xs), m, mstate_n st, ())));;
 
@@ -6821,9 +6787,7 @@ let rec median_agg
                      else double_of_event_data (nth xs ua)))));;
 
 let rec rbt_fold
-  x = foldb (ccompare_prod ccompare_nat
-              (ccompare_list (ccompare_option ccompare_event_data)))
-        x;;
+  x = foldb (ccompare_list (ccompare_option ccompare_event_data)) x;;
 
 let rec map_regex
   f x1 = match f, x1 with f, Skip x1 -> Skip x1
@@ -7180,11 +7144,6 @@ let rec convert_multiway (_A1, _A2)
     | Pred (v, va) -> Pred (v, va)
     | Eq (v, va) -> Eq (v, va)
     | Ands v -> Ands v;;
-
-let rec rbt_verdict
-  x = keysb (ccompare_prod ccompare_nat
-              (ccompare_list (ccompare_option ccompare_event_data)))
-        x;;
 
 let rec convert_multiway_e
   x = convert_multiway (ccompare_event_data, equal_event_data) x;;
