@@ -29,7 +29,7 @@ derive (no) cenum Monitor.mregex
 derive (rbt) set_impl event_data
 derive (rbt) mapping_impl event_data
 
-definition add_new_mmuaux' :: "event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow>
+definition add_new_mmuaux' :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow>
   event_data mmuaux" where
   "add_new_mmuaux' = add_new_mmuaux"
 
@@ -38,17 +38,30 @@ interpretation muaux valid_mmuaux init_mmuaux add_new_mmuaux' length_mmuaux eval
   unfolding add_new_mmuaux'_def
   by unfold_locales assumption+
 
-global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux" filter_mmsaux join_mmsaux add_new_mmsaux result_mmsaux
-  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' length_mmuaux eval_mmuaux
-  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
-  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
-  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
-  and update_since = "maux.update_since filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> event_data table)"
-  and meval = "maux.meval filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and mstep = "maux.mstep filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and msteps0_stateless = "maux.msteps0_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and msteps_stateless = "maux.msteps_stateless filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and monitor = "maux.monitor init_mmsaux filter_mmsaux join_mmsaux add_new_mmsaux (result_mmsaux :: event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+global_interpretation verimon_maux: maux "\<lambda>_ cur (t, aux) auxlist. t = cur \<and> aux = auxlist" "\<lambda>_. (0, [])"
+  "\<lambda>args nt (t, auxlist). (nt, filter (\<lambda>(t, rel). enat (nt - t) \<le> right (args_ivl args)) auxlist)"
+  "\<lambda>args rel1 (t, auxlist). (t, map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)"
+  "\<lambda>args rel2 (cur, auxlist). (cur, (case auxlist of
+    [] => [(cur, rel2)]
+  | ((t, y) # ts) \<Rightarrow> if t = cur then (t, y \<union> rel2) # ts else (cur, rel2) # auxlist))"
+  "\<lambda>args (cur, auxlist). foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, left (args_ivl args) \<le> cur - t] {}"
+  "\<lambda>_ cur (t, aux) auxlist. t = cur \<and> aux = auxlist" "\<lambda>_. (0, [])"
+  "\<lambda>args rel1 rel2 nt (t, auxlist). (nt, update_until args rel1 rel2 nt auxlist)"
+  "\<lambda>_ (_, auxlist). length auxlist"
+  "\<lambda>args nt (t, auxlist). (let (res, auxlist') = eval_until (args_ivl args) nt auxlist in (res, (t, auxlist')))"
+  by unfold_locales auto
+
+global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> event_data mmsaux" add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux
+  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' length_mmuaux eval_mmuaux
+  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
+  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  and update_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)"
+  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -182,8 +195,8 @@ lemma lexordp_eq_code[code]: "lexordp_eq xs ys \<longleftrightarrow> (case xs of
 
 definition "filter_set m X t = Mapping.filter (filter_cond X m t) m"
 
-declare [[code drop: filter_mmsaux]]
-declare filter_mmsaux.simps[folded filter_set_def, code]
+declare [[code drop: shift_end]]
+declare shift_end.simps[folded filter_set_def, code]
 
 lemma upd_set'_empty[simp]: "upd_set' m d f {} = m"
   by (rule mapping_eqI) (auto simp add: upd_set'_lookup)
