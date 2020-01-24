@@ -113,7 +113,7 @@ function make_log() {
     if [ -f "$log" ]; then
         debug "           Log exists, skipping..."
     else
-        "$WORK_DIR/generator.sh" -seed $seed -e $er -i $ir -t 0 -S $length > ${log}_tmp$$
+        "$WORK_DIR/generator.sh" -seed $seed -e $er -i $ir -t 0 $strategy $length > ${log}_tmp$$
         cat ${log}_tmp$$ | "$WORK_DIR/replayer.sh" -a 0 -m > ${log} 
         rm ${log}_tmp$$
 

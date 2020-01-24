@@ -13,7 +13,7 @@ source "$WORK_DIR/functions.sh"
 # EXPERIMENT PARAMETERS:
 REPETITIONS=1
 FORMULAS="multiway/monpoly;verimon;verimon-old sliding/monpoly;verimon;verimon-old aggregation/monpoly;verimon regex/aerial;hydra;verimon"
-EVENT_RATES="10 50 100 200 500" 
+EVENT_RATES="10 50 100 200 500 1000" 
 LOG_LENGTH="60"
 
 function monitor_cmd() {
@@ -69,7 +69,16 @@ for f in $FORMULAS; do
         info "      Repetition ${r} (out of $REPETITIONS)"
 
         info "       Generating log ..."
-        name=$(make_log "$fma" "$e" "1" "1" "$r" "$LOG_LENGTH" "")
+
+        if [ $fma = "regex" ]; then
+            name=$(make_log "$fma" "$e" "1" "1" "$r" "$LOG_LENGTH" "-sig ./fma/regex.sig")
+        else
+            if [ $fma = "aggregation" ]; then
+                name=$(make_log "$fma" "$e" "1" "1" "$r" "$LOG_LENGTH" "-S -z w=2")
+            else
+                name=$(make_log "$fma" "$e" "1" "1" "$r" "$LOG_LENGTH" "-S")
+            fi
+        fi
 
         export IFS=";"
         for m in $monitors; do
