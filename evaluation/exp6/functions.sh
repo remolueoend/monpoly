@@ -251,14 +251,14 @@ function monitor() {
     local fma=$(fma_path $formula)
 
     #MONPOLY
-    local aerialCMD="aerial -fmla ${fma}.mdl -log ${logpath} -mode naive | sed  '/^[A-Z]/d' | grep false > ${verdictpath}_aerial"
+    local aerialCMD="aerial -fmla ${fma}.mdl -log ${logpath} -mode naive | sed  '/^[A-Z]/d' | grep false | sort > ${verdictpath}_aerial"
     
     #ORACLE-Monpoly
     local oracleCMD="verimon -no_rw -nofilteremptytp -nofilterrel -sig ${fma}.sig -formula ${fma}.mdl -log ${logpath} -negate -verified | sed 's/@//g;s/. (time point /:/g;s/)://g;s/ true/:false/g' | awk -F':' -v d=${er} '{print \$1,(\$2 % d),\$3}' OFS=':' | sed 's/:false/ false/g' > ${verdictpath}_oracle"
 
     compare "aerial" "${aerialCMD}" "${oracleCMD}" "${log}"
 
-    #DEJAVU
+    #Hydra
     local hydraCMD="hydra ${fma}.mdl ${logpath} | sed  '/^[A-Z]/d' > ${verdictpath}_hydra"
 
     compare "hydra" "${hydraCMD}" "${oracleCMD}" "${log}"

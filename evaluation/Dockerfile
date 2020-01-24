@@ -34,7 +34,7 @@ COPY --from=build-verimon /usr/local/bin/gen_fma /bin/gen_fma
 COPY --from=build-aerial /usr/local/bin/aerial /bin/aerial
 COPY --from=build-aerial /usr/local/bin/gen_fma /bin/gen_mdl_fma
 COPY --from=build-hydra /usr/local/bin/hydra /bin/hydra
-COPY --from=build-verimon /usr/local/bin/monpoly /bin/verimon-old
+COPY --from=build-verimon-old /usr/local/bin/monpoly /bin/verimon-old
 
 USER root
 ENV WDIR /home/root/monpoly
