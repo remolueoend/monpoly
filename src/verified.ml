@@ -91,12 +91,13 @@ module Monitor : sig
   type safety
   type ('a, 'b) sum
   type i
-  type agg_op = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
   type modality
+  type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
   type formula = Pred of char list * trm list | Eq of trm * trm |
     Less of trm * trm | LessEq of trm * trm | Neg of formula |
     Or of formula * formula | And of formula * formula | Ands of formula list |
-    Exists of formula | Agg of nat * agg_op * event_data * nat * trm * formula |
+    Exists of formula |
+    Agg of nat * (agg_type * event_data) * nat * trm * formula |
     Prev of i * formula | Next of i * formula | Since of formula * i * formula |
     Until of formula * i * formula | MatchF of i * formula regex |
     MatchP of i * formula regex
@@ -3180,15 +3181,15 @@ type ('a, 'b) sum = Inl of 'a | Inr of 'b;;
 
 type i = Abs_I of (nat * enat);;
 
-type agg_op = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med;;
-
 type modality = Past | Future;;
+
+type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med;;
 
 type formula = Pred of char list * trm list | Eq of trm * trm |
   Less of trm * trm | LessEq of trm * trm | Neg of formula |
   Or of formula * formula | And of formula * formula | Ands of formula list |
-  Exists of formula | Agg of nat * agg_op * event_data * nat * trm * formula |
-  Prev of i * formula | Next of i * formula | Since of formula * i * formula |
+  Exists of formula | Agg of nat * (agg_type * event_data) * nat * trm * formula
+  | Prev of i * formula | Next of i * formula | Since of formula * i * formula |
   Until of formula * i * formula | MatchF of i * formula regex |
   MatchP of i * formula regex;;
 
@@ -3215,7 +3216,7 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
         (((event_data option) list) set list *
           ((event_data option) list) set list)
   | MNeg of ('a, 'b) mformula | MExists of ('a, 'b) mformula |
-  MAgg of bool * nat * agg_op * event_data * nat * trm * ('a, 'b) mformula |
+  MAgg of bool * nat * (agg_type * event_data) * nat * trm * ('a, 'b) mformula |
   MPrev of
     i * ('a, 'b) mformula * bool * ((event_data option) list) set list *
       nat list
@@ -3762,7 +3763,7 @@ let rec fvi
                      set_impl_set)
                 xs)))
     | b, Exists phi -> fvi (suc b) phi
-    | ba, Agg (y, omega, omega_0, b, f, phi) ->
+    | ba, Agg (y, omega, b, f, phi) ->
         sup_seta (ceq_nat, ccompare_nat)
           (sup_seta (ceq_nat, ccompare_nat) (fvi (plus_nata ba b) phi)
             (fvi_trm (plus_nata ba b) f))
@@ -4202,17 +4203,17 @@ let rec dvd (_A1, _A2)
           (zero _A2.algebraic_semidom_semidom_modulo.semidom_divide_algebraic_semidom.semidom_semidom_divide.comm_semiring_1_cancel_semidom.comm_semiring_1_comm_semiring_1_cancel.semiring_1_comm_semiring_1.semiring_0_semiring_1.mult_zero_semiring_0.zero_mult_zero);;
 
 let rec eval_agg_op
-  x0 y0 m = match x0, y0, m with
-    Agg_Cnt, y0, m ->
+  x0 m = match x0, m with
+    (Agg_Cnt, y0), m ->
       EInt (integer_of_int (int_of_nat (size_list (flatten_multiset m))))
-    | Agg_Min, y0, m ->
+    | (Agg_Min, y0), m ->
         (match flatten_multiset m with [] -> y0
           | a :: b -> foldl (min ord_event_data) a b)
-    | Agg_Max, y0, m ->
+    | (Agg_Max, y0), m ->
         (match flatten_multiset m with [] -> y0
           | a :: b -> foldl (max ord_event_data) a b)
-    | Agg_Sum, y0, m -> foldl plus_event_data y0 (flatten_multiset m)
-    | Agg_Avg, y0, m ->
+    | (Agg_Sum, y0), m -> foldl plus_event_data y0 (flatten_multiset m)
+    | (Agg_Avg, y0), m ->
         EFloat
           (let xs = flatten_multiset m in
             (match xs with [] -> 0.0
@@ -4221,7 +4222,7 @@ let rec eval_agg_op
                   (double_of_event_data
                     (foldl plus_event_data (EInt Z.zero) xs))
                   (double_of_int (int_of_nat (size_list xs)))))
-    | Agg_Med, y0, m ->
+    | (Agg_Med, y0), m ->
         EFloat
           (let xs = flatten_multiset m in
            let u = size_list xs in
@@ -4309,13 +4310,13 @@ let rec meval_trm
     | I2f x, v -> EFloat (double_of_event_data (meval_trm x v));;
 
 let rec eval_agg
-  n g0 y omega omega_0 b f rel =
+  n g0 y omega b f rel =
     (if g0 && is_empty
                 (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
                   (cproper_interval_list (ccompare_option ccompare_event_data)))
                 rel
       then singleton_table (ceq_event_data, ccompare_event_data) n y
-             (eval_agg_op omega omega_0
+             (eval_agg_op omega
                (set_empty
                  ((ceq_prod ceq_event_data ceq_enat),
                    (ccompare_prod ccompare_event_data ccompare_enat))
@@ -4335,12 +4336,6 @@ let rec eval_agg
                       equal_lista (equal_option equal_event_data) (drop b x) k)
                     rel
                   in
-                let images =
-                  image ((ceq_list (ceq_option ceq_event_data)),
-                          (ccompare_list (ccompare_option ccompare_event_data)))
-                    (ceq_event_data, ccompare_event_data, set_impl_event_data)
-                    (meval_trm f) group
-                  in
                 let m =
                   image (ceq_event_data, ccompare_event_data)
                     ((ceq_prod ceq_event_data ceq_enat),
@@ -4357,9 +4352,13 @@ let rec eval_agg
                                    (ccompare_option ccompare_event_data)))
                                (fun x -> equal_event_dataa (meval_trm f x) ya)
                                group)))
-                    images
+                    (image
+                      ((ceq_list (ceq_option ceq_event_data)),
+                        (ccompare_list (ccompare_option ccompare_event_data)))
+                      (ceq_event_data, ccompare_event_data, set_impl_event_data)
+                      (meval_trm f) group)
                   in
-                 list_update k y (Some (eval_agg_op omega omega_0 m))))
+                 list_update k y (Some (eval_agg_op omega m))))
              (image
                ((ceq_list (ceq_option ceq_event_data)),
                  (ccompare_list (ccompare_option ccompare_event_data)))
@@ -4668,7 +4667,7 @@ let rec safe_assignment
     | x, And (v, va) -> false
     | x, Ands v -> false
     | x, Exists v -> false
-    | x, Agg (v, va, vb, vc, vd, ve) -> false
+    | x, Agg (v, va, vb, vc, vd) -> false
     | x, Prev (v, va) -> false
     | x, Next (v, va) -> false
     | x, Since (v, va, vb) -> false
@@ -4689,7 +4688,7 @@ let rec is_constraint = function Eq (t1, t2) -> true
                         | Neg (And (va, vb)) -> false
                         | Neg (Ands va) -> false
                         | Neg (Exists va) -> false
-                        | Neg (Agg (va, vb, vc, vd, ve, vf)) -> false
+                        | Neg (Agg (va, vb, vc, vd, ve)) -> false
                         | Neg (Prev (va, vb)) -> false
                         | Neg (Next (va, vb)) -> false
                         | Neg (Since (va, vb, vc)) -> false
@@ -4700,7 +4699,7 @@ let rec is_constraint = function Eq (t1, t2) -> true
                         | And (v, va) -> false
                         | Ands v -> false
                         | Exists v -> false
-                        | Agg (v, va, vb, vc, vd, ve) -> false
+                        | Agg (v, va, vb, vc, vd) -> false
                         | Prev (v, va) -> false
                         | Next (v, va) -> false
                         | Since (v, va, vb) -> false
@@ -4730,23 +4729,22 @@ let rec is_Var = function Var x1 -> true
                  | F2i x9 -> false
                  | I2f x10 -> false;;
 
-let rec remove_neg
-  = function Neg phi -> phi
-    | Pred (v, va) -> Pred (v, va)
-    | Eq (v, va) -> Eq (v, va)
-    | Less (v, va) -> Less (v, va)
-    | LessEq (v, va) -> LessEq (v, va)
-    | Or (v, va) -> Or (v, va)
-    | And (v, va) -> And (v, va)
-    | Ands v -> Ands v
-    | Exists v -> Exists v
-    | Agg (v, va, vb, vc, vd, ve) -> Agg (v, va, vb, vc, vd, ve)
-    | Prev (v, va) -> Prev (v, va)
-    | Next (v, va) -> Next (v, va)
-    | Since (v, va, vb) -> Since (v, va, vb)
-    | Until (v, va, vb) -> Until (v, va, vb)
-    | MatchF (v, va) -> MatchF (v, va)
-    | MatchP (v, va) -> MatchP (v, va);;
+let rec remove_neg = function Neg phi -> phi
+                     | Pred (v, va) -> Pred (v, va)
+                     | Eq (v, va) -> Eq (v, va)
+                     | Less (v, va) -> Less (v, va)
+                     | LessEq (v, va) -> LessEq (v, va)
+                     | Or (v, va) -> Or (v, va)
+                     | And (v, va) -> And (v, va)
+                     | Ands v -> Ands v
+                     | Exists v -> Exists v
+                     | Agg (v, va, vb, vc, vd) -> Agg (v, va, vb, vc, vd)
+                     | Prev (v, va) -> Prev (v, va)
+                     | Next (v, va) -> Next (v, va)
+                     | Since (v, va, vb) -> Since (v, va, vb)
+                     | Until (v, va, vb) -> Until (v, va, vb)
+                     | MatchF (v, va) -> MatchF (v, va)
+                     | MatchP (v, va) -> MatchP (v, va);;
 
 let rec safe_formula
   = function
@@ -4860,10 +4858,10 @@ let rec safe_formula
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
           (fvi zero_nata (Exists v)) &&
           safe_formula (Exists v)
-    | Neg (Agg (v, va, vb, vc, vd, ve)) ->
+    | Neg (Agg (v, va, vb, vc, vd)) ->
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Agg (v, va, vb, vc, vd, ve))) &&
-          safe_formula (Agg (v, va, vb, vc, vd, ve))
+          (fvi zero_nata (Agg (v, va, vb, vc, vd))) &&
+          safe_formula (Agg (v, va, vb, vc, vd))
     | Neg (Prev (v, va)) ->
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
           (fvi zero_nata (Prev (v, va))) &&
@@ -4903,7 +4901,7 @@ let rec safe_formula
                     | Less (_, _) -> false | LessEq (_, _) -> false
                     | Neg a -> safe_formula a | Or (_, _) -> false
                     | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                    | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                    | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                     | Next (_, _) -> false | Since (_, _, _) -> false
                     | Until (_, _, _) -> false | MatchF (_, _) -> false
                     | MatchP (_, _) -> false))))
@@ -4935,7 +4933,7 @@ let rec safe_formula
                          set_impl_set)
                     (mapa (fvi zero_nata) pos)))))
     | Exists phi -> safe_formula phi
-    | Agg (y, omega, omega_0, b, f, phi) ->
+    | Agg (y, omega, b, f, phi) ->
         safe_formula phi &&
           (not (member (ceq_nat, ccompare_nat) (plus_nata y b)
                  (fvi zero_nata phi)) &&
@@ -4954,7 +4952,7 @@ let rec safe_formula
                | Less (_, _) -> false | LessEq (_, _) -> false
                | Neg a -> safe_formula a | Or (_, _) -> false
                | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-               | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+               | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                | Next (_, _) -> false | Since (_, _, _) -> false
                | Until (_, _, _) -> false | MatchF (_, _) -> false
                | MatchP (_, _) -> false)) &&
@@ -4967,7 +4965,7 @@ let rec safe_formula
                | Less (_, _) -> false | LessEq (_, _) -> false
                | Neg a -> safe_formula a | Or (_, _) -> false
                | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-               | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+               | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                | Next (_, _) -> false | Since (_, _, _) -> false
                | Until (_, _, _) -> false | MatchF (_, _) -> false
                | MatchP (_, _) -> false)) &&
@@ -4982,7 +4980,7 @@ let rec safe_formula
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> safe_formula a | Or (_, _) -> false
                   | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                   | Next (_, _) -> false | Since (_, _, _) -> false
                   | Until (_, _, _) -> false | MatchF (_, _) -> false
                   | MatchP (_, _) -> false))
@@ -4997,7 +4995,7 @@ let rec safe_formula
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> safe_formula a | Or (_, _) -> false
                   | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                   | Next (_, _) -> false | Since (_, _, _) -> false
                   | Until (_, _, _) -> false | MatchF (_, _) -> false
                   | MatchP (_, _) -> false))
@@ -5016,7 +5014,7 @@ let rec to_mregex_exec
                  | And (_, _) -> (MSkip zero_nata, xs)
                  | Ands _ -> (MSkip zero_nata, xs)
                  | Exists _ -> (MSkip zero_nata, xs)
-                 | Agg (_, _, _, _, _, _) -> (MSkip zero_nata, xs)
+                 | Agg (_, _, _, _, _) -> (MSkip zero_nata, xs)
                  | Prev (_, _) -> (MSkip zero_nata, xs)
                  | Next (_, _) -> (MSkip zero_nata, xs)
                  | Since (_, _, _) -> (MSkip zero_nata, xs)
@@ -7005,10 +7003,10 @@ let rec meval
                     zs
              else zs),
             MPrev (i, phia, false, bufa, ntsa)))
-    | n, t, db, MAgg (g0, y, omega, omega_0, b, f, phi) ->
+    | n, t, db, MAgg (g0, y, omega, b, f, phi) ->
         (let (xs, phia) = meval (plus_nata b n) t db phi in
-          (mapa (eval_agg n g0 y omega omega_0 b f) xs,
-            MAgg (g0, y, omega, omega_0, b, f, phia)))
+          (mapa (eval_agg n g0 y omega b f) xs,
+            MAgg (g0, y, omega, b, f, phia)))
     | n, t, db, MExists phi ->
         (let (xs, phia) = meval (suc n) t db phi in
           (mapa (image
@@ -7181,7 +7179,7 @@ let rec split_constraint
     | Neg (And (va, vb)) -> failwith "undefined"
     | Neg (Ands va) -> failwith "undefined"
     | Neg (Exists va) -> failwith "undefined"
-    | Neg (Agg (va, vb, vc, vd, ve, vf)) -> failwith "undefined"
+    | Neg (Agg (va, vb, vc, vd, ve)) -> failwith "undefined"
     | Neg (Prev (va, vb)) -> failwith "undefined"
     | Neg (Next (va, vb)) -> failwith "undefined"
     | Neg (Since (va, vb, vc)) -> failwith "undefined"
@@ -7192,7 +7190,7 @@ let rec split_constraint
     | And (v, va) -> failwith "undefined"
     | Ands v -> failwith "undefined"
     | Exists v -> failwith "undefined"
-    | Agg (v, va, vb, vc, vd, ve) -> failwith "undefined"
+    | Agg (v, va, vb, vc, vd) -> failwith "undefined"
     | Prev (v, va) -> failwith "undefined"
     | Next (v, va) -> failwith "undefined"
     | Since (v, va, vb) -> failwith "undefined"
@@ -7220,7 +7218,7 @@ let rec split_assignment
     | And (v, va) -> failwith "undefined"
     | Ands v -> failwith "undefined"
     | Exists v -> failwith "undefined"
-    | Agg (v, va, vb, vc, vd, ve) -> failwith "undefined"
+    | Agg (v, va, vb, vc, vd) -> failwith "undefined"
     | Prev (v, va) -> failwith "undefined"
     | Next (v, va) -> failwith "undefined"
     | Since (v, va, vb) -> failwith "undefined"
@@ -7261,11 +7259,11 @@ let rec minit0
          let vneg = mapa (fvi zero_nata) neg in
           MAnds (vpos, vneg, mpos @ mneg, replicate (size_list l) []))
     | n, Exists phi -> MExists (minit0 (suc n) phi)
-    | n, Agg (y, omega, omega_0, b, f, phi) ->
+    | n, Agg (y, omega, b, f, phi) ->
         MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
                 (fvi zero_nata phi)
                 (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b)),
-               y, omega, omega_0, b, f, minit0 (plus_nata b n) phi)
+               y, omega, b, f, minit0 (plus_nata b n) phi)
     | n, Prev (i, phi) -> MPrev (i, minit0 n phi, true, [], [])
     | n, Next (i, phi) -> MNext (i, minit0 n phi, true, [])
     | n, Since (phi, i, psi) ->
@@ -7342,23 +7340,22 @@ let rec mstep
         Mstate_ext
           (plus_nata (mstate_i st) (size_list xs), m, mstate_n st, ())));;
 
-let rec get_and_list
-  = function Ands l -> l
-    | Pred (v, va) -> [Pred (v, va)]
-    | Eq (v, va) -> [Eq (v, va)]
-    | Less (v, va) -> [Less (v, va)]
-    | LessEq (v, va) -> [LessEq (v, va)]
-    | Neg v -> [Neg v]
-    | Or (v, va) -> [Or (v, va)]
-    | And (v, va) -> [And (v, va)]
-    | Exists v -> [Exists v]
-    | Agg (v, va, vb, vc, vd, ve) -> [Agg (v, va, vb, vc, vd, ve)]
-    | Prev (v, va) -> [Prev (v, va)]
-    | Next (v, va) -> [Next (v, va)]
-    | Since (v, va, vb) -> [Since (v, va, vb)]
-    | Until (v, va, vb) -> [Until (v, va, vb)]
-    | MatchF (v, va) -> [MatchF (v, va)]
-    | MatchP (v, va) -> [MatchP (v, va)];;
+let rec get_and_list = function Ands l -> l
+                       | Pred (v, va) -> [Pred (v, va)]
+                       | Eq (v, va) -> [Eq (v, va)]
+                       | Less (v, va) -> [Less (v, va)]
+                       | LessEq (v, va) -> [LessEq (v, va)]
+                       | Neg v -> [Neg v]
+                       | Or (v, va) -> [Or (v, va)]
+                       | And (v, va) -> [And (v, va)]
+                       | Exists v -> [Exists v]
+                       | Agg (v, va, vb, vc, vd) -> [Agg (v, va, vb, vc, vd)]
+                       | Prev (v, va) -> [Prev (v, va)]
+                       | Next (v, va) -> [Next (v, va)]
+                       | Since (v, va, vb) -> [Since (v, va, vb)]
+                       | Until (v, va, vb) -> [Until (v, va, vb)]
+                       | MatchF (v, va) -> [MatchF (v, va)]
+                       | MatchP (v, va) -> [MatchP (v, va)];;
 
 let rec is_simple_eq
   t1 t2 =
@@ -7509,10 +7506,10 @@ let rec mmonitorable_exec
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
           (fvi zero_nata (Exists v)) &&
           mmonitorable_exec (Exists v)
-    | Neg (Agg (v, va, vb, vc, vd, ve)) ->
+    | Neg (Agg (v, va, vb, vc, vd)) ->
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Agg (v, va, vb, vc, vd, ve))) &&
-          mmonitorable_exec (Agg (v, va, vb, vc, vd, ve))
+          (fvi zero_nata (Agg (v, va, vb, vc, vd))) &&
+          mmonitorable_exec (Agg (v, va, vb, vc, vd))
     | Neg (Prev (v, va)) ->
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
           (fvi zero_nata (Prev (v, va))) &&
@@ -7552,7 +7549,7 @@ let rec mmonitorable_exec
                     | Less (_, _) -> false | LessEq (_, _) -> false
                     | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                     | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                    | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                    | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                     | Next (_, _) -> false | Since (_, _, _) -> false
                     | Until (_, _, _) -> false | MatchF (_, _) -> false
                     | MatchP (_, _) -> false))))
@@ -7584,7 +7581,7 @@ let rec mmonitorable_exec
                          set_impl_set)
                     (mapa (fvi zero_nata) pos)))))
     | Exists phi -> mmonitorable_exec phi
-    | Agg (y, omega, omega_0, b, f, phi) ->
+    | Agg (y, omega, b, f, phi) ->
         mmonitorable_exec phi &&
           (not (member (ceq_nat, ccompare_nat) (plus_nata y b)
                  (fvi zero_nata phi)) &&
@@ -7603,7 +7600,7 @@ let rec mmonitorable_exec
                | Less (_, _) -> false | LessEq (_, _) -> false
                | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-               | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+               | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                | Next (_, _) -> false | Since (_, _, _) -> false
                | Until (_, _, _) -> false | MatchF (_, _) -> false
                | MatchP (_, _) -> false)) &&
@@ -7617,7 +7614,7 @@ let rec mmonitorable_exec
                  | Less (_, _) -> false | LessEq (_, _) -> false
                  | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                  | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                 | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                 | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                  | Next (_, _) -> false | Since (_, _, _) -> false
                  | Until (_, _, _) -> false | MatchF (_, _) -> false
                  | MatchP (_, _) -> false)) &&
@@ -7632,7 +7629,7 @@ let rec mmonitorable_exec
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                   | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                   | Next (_, _) -> false | Since (_, _, _) -> false
                   | Until (_, _, _) -> false | MatchF (_, _) -> false
                   | MatchP (_, _) -> false))
@@ -7647,7 +7644,7 @@ let rec mmonitorable_exec
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> mmonitorable_exec a | Or (_, _) -> false
                   | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _, _) -> false | Prev (_, _) -> false
+                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                   | Next (_, _) -> false | Since (_, _, _) -> false
                   | Until (_, _, _) -> false | MatchF (_, _) -> false
                   | MatchP (_, _) -> false))
@@ -7672,8 +7669,7 @@ let rec convert_multiway
                         else Ands (convert_multiway psi ::
                                     get_and_list (convert_multiway phi)))))
     | Exists phi -> Exists (convert_multiway phi)
-    | Agg (y, omega, omega_0, b, f, phi) ->
-        Agg (y, omega, omega_0, b, f, convert_multiway phi)
+    | Agg (y, omega, b, f, phi) -> Agg (y, omega, b, f, convert_multiway phi)
     | Prev (i, phi) -> Prev (i, convert_multiway phi)
     | Next (i, phi) -> Next (i, convert_multiway phi)
     | Since (phi, i, psi) ->

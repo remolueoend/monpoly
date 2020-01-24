@@ -102,8 +102,7 @@ let convert_formula dbschema f =
       let bound = Misc.diff attr glist in
       let bvl_f = bound @ bvl in
       Agg (convert_var fvl bvl y,
-        convert_agg_op op,
-        convert_cst (aggreg_default_value op t_y),
+        (convert_agg_op op, convert_cst (aggreg_default_value op t_y)),
         nat_of_int (List.length bound),
         convert_term fvl bvl_f (Var x),
         convert_formula_vars bvl_f f)

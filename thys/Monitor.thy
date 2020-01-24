@@ -33,7 +33,7 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     pos \<noteq> [] \<and> list_all mmonitorable_exec (map remove_neg neg) \<and>
     \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
 | "mmonitorable_exec (Formula.Exists \<phi>) = (mmonitorable_exec \<phi>)"
-| "mmonitorable_exec (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) = (mmonitorable_exec \<phi> \<and>
+| "mmonitorable_exec (Formula.Agg y \<omega> b f \<phi>) = (mmonitorable_exec \<phi> \<and>
     y + b \<notin> Formula.fv \<phi> \<and> {0..<b} \<subseteq> Formula.fv \<phi> \<and> Formula.fv_trm f \<subseteq> Formula.fv \<phi>)"
 | "mmonitorable_exec (Formula.Prev I \<phi>) = (mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Next I \<phi>) = (mmonitorable_exec \<phi>)"
@@ -641,7 +641,7 @@ datatype ('msaux, 'muaux) mformula =
   | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2"
   | MNeg "('msaux, 'muaux) mformula"
   | MExists "('msaux, 'muaux) mformula"
-  | MAgg bool nat Formula.agg_op event_data nat "Formula.trm" "('msaux, 'muaux) mformula"
+  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux) mformula"
   | MPrev \<I> "('msaux, 'muaux) mformula" bool "event_data table list" "ts list"
   | MNext \<I> "('msaux, 'muaux) mformula" bool "ts list"
   | MSince args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" "'msaux"
@@ -810,7 +810,7 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
     let vneg = map fv neg in
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) []))"
 | "minit0 n (Formula.Exists \<phi>) = MExists (minit0 (Suc n) \<phi>)"
-| "minit0 n (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> \<omega>\<^sub>0 b f (minit0 (b + n) \<phi>)"
+| "minit0 n (Formula.Agg y \<omega> b f \<phi>) = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f (minit0 (b + n) \<phi>)"
 | "minit0 n (Formula.Prev I \<phi>) = MPrev I (minit0 n \<phi>) True [] []"
 | "minit0 n (Formula.Next I \<phi>) = MNext I (minit0 n \<phi>) True []"
 | "minit0 n (Formula.Since \<phi> I \<psi>) = (if safe_formula \<phi>
@@ -904,15 +904,14 @@ fun meval_trm :: "Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> event
 | "meval_trm (Formula.F2i x) v = EInt (integer_of_event_data (meval_trm x v))"
 | "meval_trm (Formula.I2f x) v = EFloat (double_of_event_data (meval_trm x v))"
 
-definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.agg_op \<Rightarrow> event_data \<Rightarrow> nat \<Rightarrow>
-  Formula.trm \<Rightarrow> event_data table \<Rightarrow> event_data table" where
-  "eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel = (if g0 \<and> rel = empty_table
-    then singleton_table n y (eval_agg_op \<omega> \<omega>\<^sub>0 {})
+definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.agg_op \<Rightarrow> nat \<Rightarrow> Formula.trm \<Rightarrow>
+  event_data table \<Rightarrow> event_data table" where
+  "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = empty_table
+    then singleton_table n y (eval_agg_op \<omega> {})
     else (\<lambda>k.
       let group = Set.filter (\<lambda>x. drop b x = k) rel;
-        images = meval_trm f ` group;
-        M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` images
-      in k[y:=Some (eval_agg_op \<omega> \<omega>\<^sub>0 M)]) ` (drop b) ` rel)"
+        M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+      in k[y:=Some (eval_agg_op \<omega> M)]) ` (drop b) ` rel)"
 
 definition (in maux) update_since :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow>
   'msaux \<Rightarrow> event_data table \<times> 'msaux" where
@@ -1043,8 +1042,8 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts \<Rightarrow> Formula.database 
     (let (xs, \<phi>) = meval n t db \<phi> in (map (\<lambda>r. (if r = empty_table then unit_table n else empty_table)) xs, MNeg \<phi>))"
 | "meval n t db (MExists \<phi>) =
     (let (xs, \<phi>) = meval (Suc n) t db \<phi> in (map (\<lambda>r. tl ` r) xs, MExists \<phi>))"
-| "meval n t db (MAgg g0 y \<omega> \<omega>\<^sub>0 b f \<phi>) =
-    (let (xs, \<phi>) = meval (b + n) t db \<phi> in (map (eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f) xs, MAgg g0 y \<omega> \<omega>\<^sub>0 b f \<phi>))"
+| "meval n t db (MAgg g0 y \<omega> b f \<phi>) =
+    (let (xs, \<phi>) = meval (b + n) t db \<phi> in (map (eval_agg n g0 y \<omega> b f) xs, MAgg g0 y \<omega> b f \<phi>))"
 | "meval n t db (MPrev I \<phi> first buf nts) =
     (let (xs, \<phi>) = meval n t db \<phi>;
       (zs, buf, nts) = mprev_next I (buf @ xs) (nts @ [t])
@@ -1095,7 +1094,7 @@ fun progress :: "Formula.trace \<Rightarrow> Formula.formula \<Rightarrow> nat \
 | "progress \<sigma> (Formula.And \<phi> \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
 | "progress \<sigma> (Formula.Ands l) j = (if l = [] then j else Min (set (map (\<lambda>\<phi>. progress \<sigma> \<phi> j) l)))"
 | "progress \<sigma> (Formula.Exists \<phi>) j = progress \<sigma> \<phi> j"
-| "progress \<sigma> (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>) j = progress \<sigma> \<phi> j"
+| "progress \<sigma> (Formula.Agg y \<omega> b f \<phi>) j = progress \<sigma> \<phi> j"
 | "progress \<sigma> (Formula.Prev I \<phi>) j = (if j = 0 then 0 else min (Suc (progress \<sigma> \<phi> j)) j)"
 | "progress \<sigma> (Formula.Next I \<phi>) j = progress \<sigma> \<phi> j - 1"
 | "progress \<sigma> (Formula.Since \<phi> I \<psi>) j = min (progress \<sigma> \<phi> j) (progress \<sigma> \<psi> j)"
@@ -1720,7 +1719,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     {0..<b} \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
     Formula.fv_trm f \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
     g0 = (Formula.fv \<phi>' \<subseteq> {0..<b}) \<Longrightarrow>
-    wf_mformula \<sigma> j n R (MAgg g0 y \<omega> \<omega>\<^sub>0 b f \<phi>) (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>')"
+    wf_mformula \<sigma> j n R (MAgg g0 y \<omega> b f \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
 | Prev: "wf_mformula \<sigma> j n R \<phi> \<phi>' \<Longrightarrow>
     first \<longleftrightarrow> j = 0 \<Longrightarrow>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>'))
@@ -1888,7 +1887,7 @@ next
   case (Exists \<phi>)
   then show ?case by (auto simp: fvi_Suc_bound intro!: wf_mformula.Exists)
 next
-  case (Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)
+  case (Agg y \<omega> b f \<phi>)
   then show ?case by (auto intro!: wf_mformula.Agg Agg.IH fvi_plus_bound)
 next
   case (Prev I \<phi>)
@@ -2086,13 +2085,13 @@ lemma meval_trm_eval_trm: "wf_tuple n A x \<Longrightarrow> fv_trm t \<subseteq>
 lemma qtable_eval_agg:
   assumes inner: "qtable (b + n) (Formula.fv \<phi>) (mem_restr (lift_envs' b R))
       (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel"
-    and n: "\<forall>x\<in>Formula.fv (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>). x < n"
+    and n: "\<forall>x\<in>Formula.fv (Formula.Agg y \<omega> b f \<phi>). x < n"
     and fresh: "y + b \<notin> Formula.fv \<phi>"
     and b_fv: "{0..<b} \<subseteq> Formula.fv \<phi>"
     and f_fv: "Formula.fv_trm f \<subseteq> Formula.fv \<phi>"
     and g0: "g0 = (Formula.fv \<phi> \<subseteq> {0..<b})"
-  shows "qtable n (Formula.fv (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)) (mem_restr R)
-      (\<lambda>v. Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)) (eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel)"
+  shows "qtable n (Formula.fv (Formula.Agg y \<omega> b f \<phi>)) (mem_restr R)
+      (\<lambda>v. Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)) (eval_agg n g0 y \<omega> b f rel)"
       (is "qtable _ ?fv _ ?Q ?rel'")
 proof -
   define M where "M = (\<lambda>v. {(x, ecard Zs) | x Zs.
@@ -2129,16 +2128,16 @@ proof -
       qed
       then have M_empty: "M (map the v) = {}"
         unfolding M_def by blast
-      show "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)"
-        if "v \<in> eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel"
+      show "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
+        if "v \<in> eval_agg n g0 y \<omega> b f rel"
         using M_empty True that n
         by (simp add: M_def eval_agg_def g0 singleton_table_def)
       have "v \<in> singleton_table n y (the (v ! y))" "length v = n"
         using \<open>wf_tuple n ?fv v\<close> unfolding wf_tuple_def singleton_table_def
         by (auto simp add: tabulate_alt map_nth
              intro!: trans[OF map_cong[where g="(!) v", simplified nth_map, OF refl], symmetric])
-      then show "v \<in> eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel"
-        if "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)"
+      then show "v \<in> eval_agg n g0 y \<omega> b f rel"
+        if "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
         using M_empty True that n
         by (simp add: M_def eval_agg_def g0)
     qed
@@ -2221,8 +2220,8 @@ proof -
         apply (auto simp: False Let_def image_def Set.filter_def 1 3)
         by (metis "2")
     qed
-    then have alt: "v \<in> eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel \<longleftrightarrow>
-        v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> \<omega>\<^sub>0 (M (map the k)))]) ` drop b ` rel"
+    then have alt: "v \<in> eval_agg n g0 y \<omega> b f rel \<longleftrightarrow>
+        v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> (M (map the k)))]) ` drop b ` rel"
       if "mem_restr R v" for v
       using that unfolding eval_agg_def M'_def
       apply (simp add: False Let_def)
@@ -2267,8 +2266,8 @@ proof -
     next
       fix v
       assume "wf_tuple n ?fv v" "mem_restr R v"
-      show "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)"
-        if "v \<in> eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel"
+      show "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
+        if "v \<in> eval_agg n g0 y \<omega> b f rel"
         using that unfolding alt[OF \<open>mem_restr R v\<close>]
         apply simp
         apply (intro conjI impI)
@@ -2280,7 +2279,7 @@ proof -
           apply (intro conjI)
            apply (simp add: table_def[unfolded wf_tuple_def])
           apply (subst sat_fv_cong[where v'="map the a"])
-          apply (smt \<open>wf_tuple n (fv (formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)) v\<close> add.commute add_diff_inverse_nat add_right_imp_eq append_take_drop_id drop_map fresh length_append length_list_update length_map map_update nth_append nth_list_update_neq table_def take_map wf_tuple_length)
+          apply (smt \<open>wf_tuple n (fv (formula.Agg y \<omega> b f \<phi>)) v\<close> add.commute add_diff_inverse_nat add_right_imp_eq append_take_drop_id drop_map fresh length_append length_list_update length_map map_update nth_append nth_list_update_neq table_def take_map wf_tuple_length)
           apply (drule spec[where x=a])
           apply (drule conjunct1)
           apply simp
@@ -2326,10 +2325,10 @@ proof -
           apply (subgoal_tac "y < length u")
            apply (simp add: M_def)
           apply meson
-          using \<open>wf_tuple n (fv (formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)) v\<close> p n wf_tuple_length by force
+          using \<open>wf_tuple n (fv (formula.Agg y \<omega> b f \<phi>)) v\<close> p n wf_tuple_length by force
         done
-      show "v \<in> eval_agg n g0 y \<omega> \<omega>\<^sub>0 b f rel"
-        if "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> \<omega>\<^sub>0 b f \<phi>)"
+      show "v \<in> eval_agg n g0 y \<omega> b f rel"
+        if "Formula.sat \<sigma> (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
         using that unfolding alt[OF \<open>mem_restr R v\<close>]
         apply (clarsimp simp: image_image)
         apply (subst (asm) conj_cong[OF refl, of "length zs = b" "_ zs \<and> _ zs = x" "_ zs x" for zs x])
@@ -3898,7 +3897,7 @@ next
     by (auto dest: bspec[where x="remove_neg _"])
   then show ?case using Ands.hyps(2) by auto
 next
-  case (Agg b n R \<phi> \<phi>' y f g0 \<omega> \<omega>\<^sub>0)
+  case (Agg b n R \<phi> \<phi>' y f g0 \<omega>)
   then have "Formula.fvi_trm b f \<subseteq> Formula.fvi b \<phi>'"
     by (auto simp: fvi_trm_iff_fv_trm[where b=b] fvi_iff_fv[where b=b])
   with Agg show ?case by (auto 0 3 simp: Un_absorb2 fvi_iff_fv[where b=b])
@@ -4292,7 +4291,7 @@ next
         elim!: list.rel_mono_strong table_fvi_tl qtable_cong sat_fv_cong[THEN iffD1, rotated -1]
         split: if_splits)+
 next
-  case (MAgg g0 y \<omega> \<omega>\<^sub>0 b f \<phi>)
+  case (MAgg g0 y \<omega> b f \<phi>)
   from MAgg.prems show ?case
     using wf_mformula_wf_set[OF MAgg.prems, unfolded wf_set_def]
     by (cases rule: wf_mformula.cases)
