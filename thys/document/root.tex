@@ -16,22 +16,26 @@
 
 \begin{document}
 
-\title{Formalization of a Monitoring Algorithm for\\ Metric First-Order Temporal Logic}
-\author{Thibault Dardinier \and Joshua Schneider \and Dmitriy Traytel}
+\title{Formalization of a Monitoring Algorithm for\\ Metric First-Order Dynamic Logic}
+\author{Thibault Dardinier \and Lukas Heimes \and Martin Raszyk \and Joshua Schneider \and Dmitriy Traytel}
 
 \maketitle
 
-\begin{abstract} A monitor is a runtime verification tool that solves the following
-problem: Given a stream of time-stamped events and a policy formulated in a specification
-language, decide whether the policy is satisfied at every point in the stream. We verify
-the correctness of an executable monitor for specifications given as formulas in metric
-first-order temporal logic (MFOTL)~\cite{BasinKMZ-JACM15}, an expressive extension of
-linear temporal logic with real-time constraints, first-order parameters, and
-quantification. The verified monitor implements a simplified variant of the algorithm
-used in the efficient MonPoly tool~\cite{monpoly}. The formalization is presented in a
-forthcoming RV 2019 paper~\cite{SchneiderBKT-RV19}, which also compares the output of the
-verified monitor to that of other monitoring tools on randomly generated inputs. This
-case study revealed several errors in the optimized but unverified tools. \end{abstract}
+\begin{abstract}
+A monitor is a runtime verification tool that solves the following problem: Given a stream
+of time-stamped events and a policy formulated in a specification language, decide
+whether the policy is satisfied at every point in the stream. We verify the correctness
+of an executable monitor for specifications given as formulas in metric first-order
+dynamic logic (MFODL), which combines the features of metric first-order temporal logic
+(MFOTL)~\cite{BasinKMZ-JACM15} and metric dynamic logic~\cite{BasinKT-RV17}. Thus, MFODL
+can express real-time constraints, first-order parameters, and regular expressions.
+Additionally, the monitor supports aggregation operations such as count and sum.
+This formalization extends previous work on a verified monitor for
+MFOTL~\cite{SchneiderBKT2019RV}, which was based on the efficient MonPoly
+tool~\cite{monpoly}. Apart from the addition of regular expressions and aggregations, we
+implemented multi-way joins~\cite{Dardinier2019AFP} and a specialized sliding window
+algorithm to further optimize the monitor.
+\end{abstract}
 
 \tableofcontents
 

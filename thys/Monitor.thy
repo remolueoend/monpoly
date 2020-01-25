@@ -4957,7 +4957,7 @@ text \<open>We summarize the main results proved above.
 \end{enumerate}
 \<close>
 
-end \<comment> \<open>event_data msaux\<close>
+end \<comment> \<open>@{typ "event_data msaux"}\<close>
 
 (*<*)
 end
