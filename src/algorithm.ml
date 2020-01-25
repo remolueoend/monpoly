@@ -553,7 +553,7 @@ let comp_aggMM_once tsq intv state update_state_old update_state_new get_result 
           (* current relation in the interval, so we process it *)
           begin
             ignore (Queue.pop state.non_tw_rels);
-            update_state_new state tsq arel;
+            update_state_new state tsj arel;
             consider_other_rels ()
           end
           (* else, that is, not (MFOTL.in_right_ext diff intv) *)
