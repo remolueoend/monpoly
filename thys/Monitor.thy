@@ -41,8 +41,8 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Until \<phi> I \<psi>) = (Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> right I \<noteq> \<infinity> \<and>
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
-| "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Safe r"
-| "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Unsafe \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Future Safe r \<and> right I \<noteq> \<infinity>)"
+| "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Strict r"
+| "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Futu Strict r \<and> right I \<noteq> \<infinity>)"
 | "mmonitorable_exec _ = False"
 
 lemma cases_Neg_iff:
@@ -233,10 +233,9 @@ primrec ok where
 primrec from_mregex where
   "from_mregex (MSkip n) _ = Regex.Skip n"
 | "from_mregex (MTestPos n) \<phi>s = Regex.Test (\<phi>s ! n)"
-| "from_mregex (MTestNeg n) \<phi>s = (if safe_formula (Formula.Neg (\<phi>s ! n)) then
-       Regex.Times (Regex.Star (Regex.Test Formula.FF))
-         (Regex.Times (Regex.Test (Formula.Neg (\<phi>s ! n))) (Regex.Star (Regex.Test Formula.FF))) \<comment> \<open>hack to produce a sound but unsafe formula\<close>
-     else Regex.Test (Formula.Neg (\<phi>s ! n)))"
+| "from_mregex (MTestNeg n) \<phi>s = (if safe_formula (Formula.Neg (\<phi>s ! n))
+    then Regex.Test (Formula.Neg (Formula.Neg (Formula.Neg (\<phi>s ! n))))
+    else Regex.Test (Formula.Neg (\<phi>s ! n)))"
 | "from_mregex (MPlus r s) \<phi>s = Regex.Plus (from_mregex r \<phi>s) (from_mregex s \<phi>s)"
 | "from_mregex (MTimes r s) \<phi>s = Regex.Times (from_mregex r \<phi>s) (from_mregex s \<phi>s)"
 | "from_mregex (MStar r) \<phi>s = Regex.Star (from_mregex r \<phi>s)"
@@ -922,34 +921,36 @@ definition (in maux) update_since :: "args \<Rightarrow> event_data table \<Righ
 
 definition "lookup = Mapping.lookup_default empty_table"
 
-fun unsafe_\<epsilon> where
-  "unsafe_\<epsilon> guard \<phi>s (MSkip n) = (if n = 0 then guard else empty_table)"
-| "unsafe_\<epsilon> guard \<phi>s (MTestPos i) = join guard True (\<phi>s ! i)"
-| "unsafe_\<epsilon> guard \<phi>s (MTestNeg i) = join guard False (\<phi>s ! i)"
-| "unsafe_\<epsilon> guard \<phi>s (MPlus r s) = unsafe_\<epsilon> guard \<phi>s r \<union> unsafe_\<epsilon> guard \<phi>s s"
-| "unsafe_\<epsilon> guard \<phi>s (MTimes r s) = join (unsafe_\<epsilon> guard \<phi>s r) True (unsafe_\<epsilon> guard \<phi>s s)"
-| "unsafe_\<epsilon> guard \<phi>s (MStar r) = guard"
+fun \<epsilon>_lax where
+  "\<epsilon>_lax guard \<phi>s (MSkip n) = (if n = 0 then guard else empty_table)"
+| "\<epsilon>_lax guard \<phi>s (MTestPos i) = join guard True (\<phi>s ! i)"
+| "\<epsilon>_lax guard \<phi>s (MTestNeg i) = join guard False (\<phi>s ! i)"
+| "\<epsilon>_lax guard \<phi>s (MPlus r s) = \<epsilon>_lax guard \<phi>s r \<union> \<epsilon>_lax guard \<phi>s s"
+| "\<epsilon>_lax guard \<phi>s (MTimes r s) = join (\<epsilon>_lax guard \<phi>s r) True (\<epsilon>_lax guard \<phi>s s)"
+| "\<epsilon>_lax guard \<phi>s (MStar r) = guard"
 
-fun safe_r\<epsilon> where
-  "safe_r\<epsilon> n \<phi>s (MSkip m) = (if m = 0 then unit_table n else empty_table)"
-| "safe_r\<epsilon> n \<phi>s (MTestPos i) = \<phi>s ! i"
-| "safe_r\<epsilon> n \<phi>s (MPlus r s) = safe_r\<epsilon> n \<phi>s r \<union> safe_r\<epsilon> n \<phi>s s"
-| "safe_r\<epsilon> n \<phi>s (MTimes r s) = unsafe_\<epsilon> (safe_r\<epsilon> n \<phi>s r) \<phi>s s"
-| "safe_r\<epsilon> n \<phi>s _ = undefined"
+fun r\<epsilon>_strict where
+  "r\<epsilon>_strict n \<phi>s (MSkip m) = (if m = 0 then unit_table n else empty_table)"
+| "r\<epsilon>_strict n \<phi>s (MTestPos i) = \<phi>s ! i"
+| "r\<epsilon>_strict n \<phi>s (MTestNeg i) = (if \<phi>s ! i = empty_table then unit_table n else empty_table)"
+| "r\<epsilon>_strict n \<phi>s (MPlus r s) = r\<epsilon>_strict n \<phi>s r \<union> r\<epsilon>_strict n \<phi>s s"
+| "r\<epsilon>_strict n \<phi>s (MTimes r s) = \<epsilon>_lax (r\<epsilon>_strict n \<phi>s r) \<phi>s s"
+| "r\<epsilon>_strict n \<phi>s (MStar r) = unit_table n"
 
-fun safe_l\<epsilon> where
-  "safe_l\<epsilon> n \<phi>s (MSkip m) = (if m = 0 then unit_table n else empty_table)"
-| "safe_l\<epsilon> n \<phi>s (MTestPos i) = \<phi>s ! i"
-| "safe_l\<epsilon> n \<phi>s (MPlus r s) = safe_l\<epsilon> n \<phi>s r \<union> safe_l\<epsilon> n \<phi>s s"
-| "safe_l\<epsilon> n \<phi>s (MTimes r s) = unsafe_\<epsilon> (safe_l\<epsilon> n \<phi>s s) \<phi>s r"
-| "safe_l\<epsilon> n \<phi>s _ = undefined"
+fun l\<epsilon>_strict where
+  "l\<epsilon>_strict n \<phi>s (MSkip m) = (if m = 0 then unit_table n else empty_table)"
+| "l\<epsilon>_strict n \<phi>s (MTestPos i) = \<phi>s ! i"
+| "l\<epsilon>_strict n \<phi>s (MTestNeg i) = (if \<phi>s ! i = empty_table then unit_table n else empty_table)"
+| "l\<epsilon>_strict n \<phi>s (MPlus r s) = l\<epsilon>_strict n \<phi>s r \<union> l\<epsilon>_strict n \<phi>s s"
+| "l\<epsilon>_strict n \<phi>s (MTimes r s) = \<epsilon>_lax (l\<epsilon>_strict n \<phi>s s) \<phi>s r"
+| "l\<epsilon>_strict n \<phi>s (MStar r) = unit_table n"
 
 fun r\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table) mapping \<Rightarrow> 'a table list \<Rightarrow> mregex \<Rightarrow> 'a table"  where
   "r\<delta> \<kappa> X \<phi>s (MSkip n) = (case n of 0 \<Rightarrow> empty_table | Suc m \<Rightarrow> lookup X (\<kappa> (MSkip m)))"
 | "r\<delta> \<kappa> X \<phi>s (MTestPos i) = empty_table"
 | "r\<delta> \<kappa> X \<phi>s (MTestNeg i) = empty_table"
 | "r\<delta> \<kappa> X \<phi>s (MPlus r s) = r\<delta> \<kappa> X \<phi>s r \<union> r\<delta> \<kappa> X \<phi>s s"
-| "r\<delta> \<kappa> X \<phi>s (MTimes r s) = r\<delta> (\<lambda>t. \<kappa> (MTimes r t)) X \<phi>s s \<union> unsafe_\<epsilon> (r\<delta> \<kappa> X \<phi>s r) \<phi>s s"
+| "r\<delta> \<kappa> X \<phi>s (MTimes r s) = r\<delta> (\<lambda>t. \<kappa> (MTimes r t)) X \<phi>s s \<union> \<epsilon>_lax (r\<delta> \<kappa> X \<phi>s r) \<phi>s s"
 | "r\<delta> \<kappa> X \<phi>s (MStar r) = r\<delta> (\<lambda>t. \<kappa> (MTimes (MStar r) t)) X \<phi>s r"
 
 fun l\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table) mapping \<Rightarrow> 'a table list \<Rightarrow> mregex \<Rightarrow> 'a table" where
@@ -957,7 +958,7 @@ fun l\<delta> :: "(mregex \<Rightarrow> mregex) \<Rightarrow> (mregex, 'a table)
 | "l\<delta> \<kappa> X \<phi>s (MTestPos i) = empty_table"
 | "l\<delta> \<kappa> X \<phi>s (MTestNeg i) = empty_table"
 | "l\<delta> \<kappa> X \<phi>s (MPlus r s) = l\<delta> \<kappa> X \<phi>s r \<union> l\<delta> \<kappa> X \<phi>s s"
-| "l\<delta> \<kappa> X \<phi>s (MTimes r s) = l\<delta> (\<lambda>t. \<kappa> (MTimes t s)) X \<phi>s r \<union> unsafe_\<epsilon> (l\<delta> \<kappa> X \<phi>s s) \<phi>s r"
+| "l\<delta> \<kappa> X \<phi>s (MTimes r s) = l\<delta> (\<lambda>t. \<kappa> (MTimes t s)) X \<phi>s r \<union> \<epsilon>_lax (l\<delta> \<kappa> X \<phi>s s) \<phi>s r"
 | "l\<delta> \<kappa> X \<phi>s (MStar r) = l\<delta> (\<lambda>t. \<kappa> (MTimes t (MStar r))) X \<phi>s r"
 
 lift_definition mrtabulate :: "mregex list \<Rightarrow> (mregex \<Rightarrow> 'b table) \<Rightarrow> (mregex, 'b table) mapping"
@@ -973,16 +974,16 @@ definition update_matchP :: "nat \<Rightarrow> \<I> \<Rightarrow> mregex \<Right
   event_data mr\<delta>aux \<Rightarrow> event_data table \<times> event_data mr\<delta>aux" where
   "update_matchP n I mr mrs rels nt aux =
     (let aux = (case [(t, mrtabulate mrs (\<lambda>mr.
-        r\<delta> id rel rels mr \<union> (if t = nt then safe_r\<epsilon> n rels mr else {}))).
+        r\<delta> id rel rels mr \<union> (if t = nt then r\<epsilon>_strict n rels mr else {}))).
       (t, rel) \<leftarrow> aux, enat (nt - t) \<le> right I]
-      of [] \<Rightarrow> [(nt, mrtabulate mrs (safe_r\<epsilon> n rels))]
+      of [] \<Rightarrow> [(nt, mrtabulate mrs (r\<epsilon>_strict n rels))]
       | x # aux' \<Rightarrow> (if fst x = nt then x # aux'
-                     else (nt, mrtabulate mrs (safe_r\<epsilon> n rels)) # x # aux'))
+                     else (nt, mrtabulate mrs (r\<epsilon>_strict n rels)) # x # aux'))
     in (foldr (\<union>) [lookup rel mr. (t, rel) \<leftarrow> aux, left I \<le> nt - t] {}, aux))"
 
 definition update_matchF_base where
   "update_matchF_base n I mr mrs rels nt =
-     (let X = mrtabulate mrs (safe_l\<epsilon> n rels)
+     (let X = mrtabulate mrs (l\<epsilon>_strict n rels)
      in ([(nt, rels, if left I = 0 then lookup X mr else empty_table)], X))"
 
 definition update_matchF_step where
@@ -1758,7 +1759,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
 | MatchP: "(case to_mregex r of (mr', \<phi>s') \<Rightarrow>
       list_all2 (wf_mformula \<sigma> j n R) \<phi>s \<phi>s' \<and> mr = mr') \<Longrightarrow>
     mrs = sorted_list_of_set (RPDs mr) \<Longrightarrow>
-    safe_regex Past Safe r \<Longrightarrow>
+    safe_regex Past Strict r \<Longrightarrow>
     wf_mbufn' \<sigma> j n R r buf \<Longrightarrow>
     wf_ts_regex \<sigma> j r nts \<Longrightarrow>
     wf_matchP_aux \<sigma> n R I r aux (progress \<sigma> (Formula.MatchP I r) j) \<Longrightarrow>
@@ -1766,7 +1767,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
 | MatchF: "(case to_mregex r of (mr', \<phi>s') \<Rightarrow>
       list_all2 (wf_mformula \<sigma> j n R) \<phi>s \<phi>s' \<and> mr = mr') \<Longrightarrow>
     mrs = sorted_list_of_set (LPDs mr) \<Longrightarrow>
-    safe_regex Future Safe r \<Longrightarrow>
+    safe_regex Futu Strict r \<Longrightarrow>
     wf_mbufn' \<sigma> j n R r buf \<Longrightarrow>
     wf_ts_regex \<sigma> j r nts \<Longrightarrow>
     wf_matchF_aux \<sigma> n R I r aux (progress \<sigma> (Formula.MatchF I r) j) 0 \<Longrightarrow>
@@ -2677,12 +2678,12 @@ lemma fv_regex_from_mregex:
   "ok (length \<phi>s) mr \<Longrightarrow> fv_regex (from_mregex mr \<phi>s) \<subseteq> (\<Union>\<phi> \<in> set \<phi>s. fv \<phi>)"
   by (induct mr) (auto simp: Bex_def in_set_conv_nth)+
 
-lemma qtable_unsafe_\<epsilon>:
+lemma qtable_\<epsilon>_lax:
   assumes "ok (length \<phi>s) mr"
   and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
   and "fv_regex (from_mregex mr \<phi>s) \<subseteq> A" and "qtable n A (mem_restr R) Q guard"
   shows "qtable n A (mem_restr R)
-   (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s) \<and> Q v) (unsafe_\<epsilon> guard rels mr)"
+   (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s) \<and> Q v) (\<epsilon>_lax guard rels mr)"
   using assms
 proof (induct mr)
   case (MPlus mr1 mr2)
@@ -2698,19 +2699,36 @@ qed (auto split: prod.splits if_splits simp: qtable_empty_iff list_all2_conv_all
   in_set_conv_nth restrict_idle sat_the_restrict
   intro: in_qtableI qtableI elim!: qtable_join[where A=A and C=A])
 
-lemma qtable_safe_r\<epsilon>:
-  assumes "safe_regex Past Safe (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
+lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
+  by (simp add: qtable_def table_empty)
+
+lemma qtable_empty_unit_table:
+  "qtable n {} R P empty_table \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) (unit_table n)"
+  by (auto intro: qtable_unit_table simp add: qtable_empty_iff)
+
+lemma qtable_unit_empty_table:
+  "qtable n {} R P (unit_table n) \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
+  by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty unit_table_def)
+
+lemma qtable_nonempty_empty_table:
+  "qtable n {} R P X \<Longrightarrow> x \<in> X \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
+  by (frule nullary_qtable_cases) (auto dest: qtable_unit_empty_table)
+
+
+lemma qtable_r\<epsilon>_strict:
+  assumes "safe_regex Past Strict (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
   and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
-  shows "qtable n A (mem_restr R) (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s)) (safe_r\<epsilon> n rels mr)"
+  shows "qtable n A (mem_restr R) (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s)) (r\<epsilon>_strict n rels mr)"
   using assms
-proof (hypsubst, induct Past Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
+proof (hypsubst, induct Past Strict "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
   case (Skip n)
   then show ?case
     by (cases mr) (auto simp: qtable_empty_iff qtable_unit_table split: if_splits)
 next
   case (Test \<phi>)
   then show ?case
-    by (cases mr) (auto simp: qtable_unit_table list_all2_conv_all_nth split: if_splits)
+    by (cases mr) (auto simp: list_all2_conv_all_nth qtable_empty_unit_table
+      dest!: qtable_nonempty_empty_table split: if_splits)
 next
   case (Plus r s)
   then show ?case
@@ -2718,26 +2736,27 @@ next
 next
   case (TimesP r s)
   then show ?case
-    by (cases mr) (auto intro: qtable_cong[OF qtable_unsafe_\<epsilon>] split: if_splits)+
+    by (cases mr) (auto intro: qtable_cong[OF qtable_\<epsilon>_lax] split: if_splits)+
 next
   case (Star r)
   then show ?case
-    by (cases mr) (auto split: if_splits)
+    by (cases mr) (auto simp: qtable_unit_table split: if_splits)
 qed
 
-lemma qtable_safe_l\<epsilon>:
-  assumes "safe_regex Future Safe (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
+lemma qtable_l\<epsilon>_strict:
+  assumes "safe_regex Futu Strict (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
   and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
-  shows "qtable n A (mem_restr R) (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s)) (safe_l\<epsilon> n rels mr)"
+  shows "qtable n A (mem_restr R) (\<lambda>v. Regex.eps (Formula.sat \<sigma> (map the v)) i (from_mregex mr \<phi>s)) (l\<epsilon>_strict n rels mr)"
   using assms
-proof (hypsubst, induct Future Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
+proof (hypsubst, induct Futu Strict "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
   case (Skip n)
   then show ?case
     by (cases mr) (auto simp: qtable_empty_iff qtable_unit_table split: if_splits)
 next
   case (Test \<phi>)
   then show ?case
-    by (cases mr) (auto simp: qtable_unit_table list_all2_conv_all_nth split: if_splits)
+    by (cases mr) (auto simp: list_all2_conv_all_nth qtable_empty_unit_table
+      dest!: qtable_nonempty_empty_table split: if_splits)
 next
   case (Plus r s)
   then show ?case
@@ -2745,11 +2764,11 @@ next
 next
   case (TimesF r s)
   then show ?case
-    by (cases mr) (auto intro: qtable_cong[OF qtable_unsafe_\<epsilon>] split: if_splits)+
+    by (cases mr) (auto intro: qtable_cong[OF qtable_\<epsilon>_lax] split: if_splits)+
 next
   case (Star r)
   then show ?case
-    by (cases mr) (auto split: if_splits)
+    by (cases mr) (auto simp: qtable_unit_table split: if_splits)
 qed
 
 lemma rtranclp_False: "(\<lambda>i j. False)\<^sup>*\<^sup>* = (=)"
@@ -2792,7 +2811,7 @@ next
 next
   case (MTimes mr1 mr2)
   from MTimes(3-7) show ?case
-    by (auto intro!: qtable_union[OF MTimes(2) qtable_unsafe_\<epsilon>[OF _ _ _ MTimes(1)]]
+    by (auto intro!: qtable_union[OF MTimes(2) qtable_\<epsilon>_lax[OF _ _ _ MTimes(1)]]
       elim!: ok_rctxt.intros(2) simp: MTimesL_def Ball_def)
 next
   case (MStar mr)
@@ -2834,7 +2853,7 @@ next
 next
   case (MTimes mr1 mr2)
   from MTimes(3-7) show ?case
-    by (auto intro!: qtable_union[OF MTimes(1) qtable_unsafe_\<epsilon>[OF _ _ _ MTimes(2)]]
+    by (auto intro!: qtable_union[OF MTimes(1) qtable_\<epsilon>_lax[OF _ _ _ MTimes(2)]]
       elim!: ok_lctxt.intros(2) simp: MTimesR_def Ball_def)
 next
   case (MStar mr)
@@ -2872,12 +2891,17 @@ next
   proof (cases mrs)
     case (MTimes mr ms)
     with TimesP(3-5) show ?thesis
-      by (cases g) (auto 0 4 simp: MTimesL_def dest: RPD_fv_regex_le split: modality.splits dest: TimesP(1,2))
+      by (cases g) (auto 0 4 simp: MTimesL_def dest: RPD_fv_regex_le TimesP(1,2))
   qed auto
 next
   case (Star g r)
   then show ?case
-    by (cases mr) (auto simp: MTimesL_def)
+  proof (cases mr)
+    case (MStar x6)
+    with Star(2-4) show ?thesis
+      by (cases g) (auto 0 4 simp: MTimesL_def dest: RPD_fv_regex_le
+         elim!: safe_cosafe[rotated] dest!: Star(1))
+  qed auto
 qed
 
 lemma RPDi_safe: "safe_regex Past g (from_mregex mr \<phi>s) \<Longrightarrow>
@@ -2888,9 +2912,9 @@ lemma RPDs_safe: "safe_regex Past g (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> RPDs mr ==> safe_regex Past g (from_mregex ms \<phi>s)"
   unfolding RPDs_def by (auto dest: RPDi_safe)
 
-lemma RPD_safe_fv_regex: "safe_regex Past Safe (from_mregex mr \<phi>s) \<Longrightarrow>
-  ms \<in> RPD mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
-proof (induct Past Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
+lemma RPD_safe_fv_regex: "safe_regex Past Strict (from_mregex mr \<phi>s) \<Longrightarrow>
+  ms \<in> RPD mr \<Longrightarrow> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
+proof (induct Past Strict "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
   case (Skip n)
   then show ?case
     by (cases mr) (auto split: nat.splits)
@@ -2909,14 +2933,14 @@ next
 next
   case (Star r)
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto 0 3 simp: MTimesL_def dest: RPD_fv_regex_le)
 qed
 
-lemma RPDi_safe_fv_regex: "safe_regex Past Safe (from_mregex mr \<phi>s) \<Longrightarrow>
+lemma RPDi_safe_fv_regex: "safe_regex Past Strict (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> RPDi n mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
   by (induct n arbitrary: ms mr) (auto 5 0 dest: RPD_safe_fv_regex RPD_safe)
 
-lemma RPDs_safe_fv_regex: "safe_regex Past Safe (from_mregex mr \<phi>s) \<Longrightarrow>
+lemma RPDs_safe_fv_regex: "safe_regex Past Strict (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> RPDs mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
   unfolding RPDs_def by (auto dest: RPDi_safe_fv_regex)
 
@@ -2945,9 +2969,9 @@ lemma LPD_fv_regex_le:
   "ms \<in> LPD mr \<Longrightarrow> fv_regex (from_mregex ms \<phi>s) \<subseteq> fv_regex (from_mregex mr \<phi>s)"
   by (induct mr arbitrary: ms) (auto simp: MTimesR_def split: nat.splits)+
 
-lemma LPD_safe: "safe_regex Future g (from_mregex mr \<phi>s) \<Longrightarrow>
-  ms \<in> LPD mr ==> safe_regex Future g (from_mregex ms \<phi>s)"
-proof (induct Future g "from_mregex mr \<phi>s" arbitrary: mr ms rule: safe_regex_induct)
+lemma LPD_safe: "safe_regex Futu g (from_mregex mr \<phi>s) \<Longrightarrow>
+  ms \<in> LPD mr ==> safe_regex Futu g (from_mregex ms \<phi>s)"
+proof (induct Futu g "from_mregex mr \<phi>s" arbitrary: mr ms rule: safe_regex_induct)
   case Skip
   then show ?case
     by (cases mr) (auto split: nat.splits)
@@ -2974,20 +2998,25 @@ next
 next
   case (Star g r)
   then show ?case
-    by (cases mr) (auto simp: MTimesR_def)
+  proof (cases mr)
+    case (MStar x6)
+    with Star(2-4) show ?thesis
+      by (cases g) (auto 0 4 simp: MTimesR_def dest: LPD_fv_regex_le
+         elim!: safe_cosafe[rotated] dest!: Star(1))
+  qed auto
 qed
 
-lemma LPDi_safe: "safe_regex Future g (from_mregex mr \<phi>s) \<Longrightarrow>
-  ms \<in> LPDi n mr ==> safe_regex Future g (from_mregex ms \<phi>s)"
+lemma LPDi_safe: "safe_regex Futu g (from_mregex mr \<phi>s) \<Longrightarrow>
+  ms \<in> LPDi n mr ==> safe_regex Futu g (from_mregex ms \<phi>s)"
   by (induct n arbitrary: ms mr) (auto dest: LPD_safe)
 
-lemma LPDs_safe: "safe_regex Future g (from_mregex mr \<phi>s) \<Longrightarrow>
-  ms \<in> LPDs mr ==> safe_regex Future g (from_mregex ms \<phi>s)"
+lemma LPDs_safe: "safe_regex Futu g (from_mregex mr \<phi>s) \<Longrightarrow>
+  ms \<in> LPDs mr ==> safe_regex Futu g (from_mregex ms \<phi>s)"
   unfolding LPDs_def by (auto dest: LPDi_safe)
 
-lemma LPD_safe_fv_regex: "safe_regex Future Safe (from_mregex mr \<phi>s) \<Longrightarrow>
+lemma LPD_safe_fv_regex: "safe_regex Futu Strict (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> LPD mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
-proof (induct Future Safe "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
+proof (induct Futu Strict "from_mregex mr \<phi>s" arbitrary: mr rule: safe_regex_induct)
   case Skip
   then show ?case
     by (cases mr) (auto split: nat.splits)
@@ -3006,14 +3035,14 @@ next
 next
   case (Star r)
   then show ?case
-    by (cases mr) auto
+    by (cases mr) (auto 0 3 simp: MTimesR_def dest: LPD_fv_regex_le)
 qed
 
-lemma LPDi_safe_fv_regex: "safe_regex Future Safe (from_mregex mr \<phi>s) \<Longrightarrow>
+lemma LPDi_safe_fv_regex: "safe_regex Futu Strict (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> LPDi n mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
   by (induct n arbitrary: ms mr) (auto 5 0 dest: LPD_safe_fv_regex LPD_safe)
 
-lemma LPDs_safe_fv_regex: "safe_regex Future Safe (from_mregex mr \<phi>s) \<Longrightarrow>
+lemma LPDs_safe_fv_regex: "safe_regex Futu Strict (from_mregex mr \<phi>s) \<Longrightarrow>
   ms \<in> LPDs mr ==> fv_regex (from_mregex ms \<phi>s) = fv_regex (from_mregex mr \<phi>s)"
   unfolding LPDs_def by (auto dest: LPDi_safe_fv_regex)
 
@@ -3040,7 +3069,7 @@ lemma LPDs_ok: "ok m mr \<Longrightarrow> ms \<in> LPDs mr \<Longrightarrow> ok 
 
 lemma update_matchP:
   assumes pre: "wf_matchP_aux \<sigma> n R I r aux ne"
-    and safe: "safe_regex Past Safe r"
+    and safe: "safe_regex Past Strict r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and mrs: "mrs = sorted_list_of_set (RPDs mr)"
     and qtables: "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) ne \<phi>) rel) \<phi>s rels"
@@ -3050,7 +3079,7 @@ lemma update_matchP:
 proof -
   let ?wf_tuple = "\<lambda>v. wf_tuple n (Formula.fv_regex r) v"
   let ?update = "\<lambda>rel t. mrtabulate mrs (\<lambda>mr.
-    r\<delta> id rel rels mr \<union> (if t = \<tau> \<sigma> ne then safe_r\<epsilon> n rels mr else {}))"
+    r\<delta> id rel rels mr \<union> (if t = \<tau> \<sigma> ne then r\<epsilon>_strict n rels mr else {}))"
   note sat.simps[simp del]
 
   define aux0 where "aux0 = [(t, ?update rel t). (t, rel) \<leftarrow> aux, enat (\<tau> \<sigma> ne - t) \<le> right I]"
@@ -3061,7 +3090,7 @@ proof -
   { fix ms
     assume "ms \<in> RPDs mr"
     then have "fv_regex (from_mregex ms \<phi>s) = fv_regex r"
-      "safe_regex Past Safe (from_mregex ms \<phi>s)" "ok (length \<phi>s) ms" "RPD ms \<subseteq> RPDs mr"
+      "safe_regex Past Strict (from_mregex ms \<phi>s)" "ok (length \<phi>s) ms" "RPD ms \<subseteq> RPDs mr"
       using safe RPDs_safe RPDs_safe_fv_regex mr from_mregex_to_mregex RPDs_ok to_mregex_ok RPDs_trans
       by fastforce+
   } note * = this
@@ -3077,7 +3106,7 @@ proof -
     unfolding aux0_def using safe mr mrs
     by (auto simp: lookup_tabulate map_of_map_restrict restrict_map_def finite_RPDs * ** RPDs_trans diff_le_mono2
         intro!: sat_MatchP_rec["of" \<sigma> _ ne, THEN iffD2]
-        qtable_union[OF qtable_r\<delta>[OF _ _ qtables] qtable_safe_r\<epsilon>[OF _ _ _ qtables],
+        qtable_union[OF qtable_r\<delta>[OF _ _ qtables] qtable_r\<epsilon>_strict[OF _ _ _ qtables],
           of ms "fv_regex r" "\<lambda>v r. Formula.sat \<sigma> v (ne - Suc 0) (Formula.MatchP (point 0) r)" _ ms for ms]
         qtable_cong[OF qtable_r\<delta>[OF _ _ qtables],
           of ms "fv_regex r" "\<lambda>v r. Formula.sat \<sigma> v (ne - Suc 0) (Formula.MatchP (point (\<tau> \<sigma> (ne - Suc 0) - \<tau> \<sigma> i)) r)"
@@ -3105,9 +3134,9 @@ proof -
     using in_aux0_2 by (cases "ne = 0") (auto)
 
   have aux'_eq: "aux' = (case aux0 of
-      [] \<Rightarrow> [(\<tau> \<sigma> ne, mrtabulate mrs (safe_r\<epsilon> n rels))]
+      [] \<Rightarrow> [(\<tau> \<sigma> ne, mrtabulate mrs (r\<epsilon>_strict n rels))]
     | x # aux' \<Rightarrow> (if fst x = \<tau> \<sigma> ne then x # aux'
-       else (\<tau> \<sigma> ne, mrtabulate mrs (safe_r\<epsilon> n rels)) # x # aux'))"
+       else (\<tau> \<sigma> ne, mrtabulate mrs (r\<epsilon>_strict n rels)) # x # aux'))"
     using result_eq unfolding aux0_def update_matchP_def Let_def by simp
   have sorted_aux': "sorted_wrt (\<lambda>x y. fst x > fst y) aux'"
     unfolding aux'_eq
@@ -3123,7 +3152,7 @@ proof -
       unfolding aux'_eq using safe mrs qtables aux0_Nil *
       by (auto simp: zero_enat_def[symmetric] sat_MatchP_rec[where i=ne]
           lookup_tabulate finite_RPDs split: option.splits
-          intro!: qtable_cong[OF qtable_safe_r\<epsilon>]
+          intro!: qtable_cong[OF qtable_r\<epsilon>_strict]
           dest: spec[of _ "\<tau> \<sigma> (ne-1)"])
   next
     case (Cons a as)
@@ -3144,13 +3173,13 @@ proof -
           by auto
       next
         case False
-        with aux' Cons t have "X = mrtabulate mrs (safe_r\<epsilon> n rels)"
+        with aux' Cons t have "X = mrtabulate mrs (r\<epsilon>_strict n rels)"
           unfolding aux'_eq using sorted_aux0 in_aux0_le_\<tau>[of "fst a" "snd a"] by auto
         with aux' Cons t False show ?thesis
           unfolding aux'_eq using safe mrs qtables * in_aux0_2[of "\<tau> \<sigma> (ne-1)"] in_aux0_le_\<tau>[of "fst a" "snd a"] sorted_aux0
           by (auto simp: sat_MatchP_rec[where i=ne] sat.simps(5) zero_enat_def[symmetric] enat_0_iff not_le
               lookup_tabulate finite_RPDs split: option.splits
-              intro!: qtable_cong[OF qtable_safe_r\<epsilon>] dest!: le_\<tau>_less meta_mp)
+              intro!: qtable_cong[OF qtable_r\<epsilon>_strict] dest!: le_\<tau>_less meta_mp)
       qed
     next
       case False
@@ -3315,7 +3344,7 @@ lemma length_update_matchF: "length (update_matchF n I mr mrs rels nt aux) = Suc
   by (auto simp: Let_def)
 
 lemma wf_update_matchF_base_invar:
-  assumes safe: "safe_regex Future Safe r"
+  assumes safe: "safe_regex Futu Strict r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and mrs: "mrs = sorted_list_of_set (LPDs mr)"
     and qtables: "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) j \<phi>) rel) \<phi>s rels"
@@ -3326,7 +3355,7 @@ proof -
   { fix ms
     assume "ms \<in> LPDs mr"
     then have "fv_regex (from_mregex ms \<phi>s) = fv_regex r"
-      "safe_regex Future Safe (from_mregex ms \<phi>s)" "ok (length \<phi>s) ms" "LPD ms \<subseteq> LPDs mr"
+      "safe_regex Futu Strict (from_mregex ms \<phi>s)" "ok (length \<phi>s) ms" "LPD ms \<subseteq> LPDs mr"
       using safe LPDs_safe LPDs_safe_fv_regex mr from_mregex_to_mregex LPDs_ok to_mregex_ok LPDs_trans
       by fastforce+
   } note * = this
@@ -3335,7 +3364,7 @@ proof -
   using safe
   by (auto simp: * from_mregex qtables qtable_empty_iff zero_enat_def[symmetric]
     lookup_tabulate finite_LPDs eps_match less_Suc_eq LPDs_refl
-    intro!: qtable_cong[OF qtable_safe_l\<epsilon>[where \<phi>s=\<phi>s]] intro: qtables exI[of _ j]
+    intro!: qtable_cong[OF qtable_l\<epsilon>_strict[where \<phi>s=\<phi>s]] intro: qtables exI[of _ j]
     split: option.splits)
 qed
 
@@ -3344,7 +3373,7 @@ lemma Un_empty_table[simp]: "rel \<union> empty_table = rel" "empty_table \<unio
 
 lemma wf_matchF_invar_step:
   assumes wf: "wf_matchF_invar \<sigma> n R I r st (Suc i)"
-    and safe: "safe_regex Future Safe r"
+    and safe: "safe_regex Futu Strict r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and mrs: "mrs = sorted_list_of_set (LPDs mr)"
     and qtables: "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (map the v) i \<phi>) rel) \<phi>s rels"
@@ -3359,7 +3388,7 @@ proof -
   { fix ms
     assume "ms \<in> LPDs mr"
     then have "fv_regex (from_mregex ms \<phi>s) = fv_regex r"
-      "safe_regex Future Safe (from_mregex ms \<phi>s)" "ok (length \<phi>s) ms" "LPD ms \<subseteq> LPDs mr"
+      "safe_regex Futu Strict (from_mregex ms \<phi>s)" "ok (length \<phi>s) ms" "LPD ms \<subseteq> LPDs mr"
       using safe LPDs_safe LPDs_safe_fv_regex mr from_mregex_to_mregex LPDs_ok to_mregex_ok LPDs_trans
       by fastforce+
   } note * = this
@@ -3387,7 +3416,7 @@ qed
 lemma wf_update_matchF_invar:
   assumes pre: "wf_matchF_aux \<sigma> n R I r aux ne (length (fst st) - 1)"
     and wf: "wf_matchF_invar \<sigma> n R I r st (ne + length aux)"
-    and safe: "safe_regex Future Safe r"
+    and safe: "safe_regex Futu Strict r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and mrs: "mrs = sorted_list_of_set (LPDs mr)"
     and j: "j = ne + length aux + length (fst st) - 1"
@@ -3405,7 +3434,7 @@ qed simp
 
 lemma wf_update_matchF:
   assumes pre: "wf_matchF_aux \<sigma> n R I r aux ne 0"
-    and safe: "safe_regex Future Safe r"
+    and safe: "safe_regex Futu Strict r"
     and mr: "to_mregex r = (mr, \<phi>s)"
     and mrs: "mrs = sorted_list_of_set (LPDs mr)"
     and nt: "nt = \<tau> \<sigma> (ne + length aux)"
@@ -3986,17 +4015,6 @@ lemma nth_partition: "i < length xs \<Longrightarrow>
   (\<And>i'. i' < length (filter P xs) \<Longrightarrow> Q (filter P xs ! i')) \<Longrightarrow>
   (\<And>i'. i' < length (filter (Not \<circ> P) xs) \<Longrightarrow> Q (filter (Not \<circ> P) xs ! i')) \<Longrightarrow> Q (xs ! i)"
   by (metis (no_types, lifting) in_set_conv_nth set_filter mem_Collect_eq comp_apply)
-
-lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
-  by (simp add: qtable_def table_empty)
-
-lemma qtable_empty_unit_table:
-  "qtable n {} R P empty_table \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) (unit_table n)"
-  by (auto intro: qtable_unit_table simp add: qtable_empty_iff)
-
-lemma qtable_unit_empty_table:
-  "qtable n {} R P (unit_table n) \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
-  by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty unit_table_def)
 
 lemma qtable_bin_join:
   assumes "qtable n A P Q1 X" "qtable n B P Q2 Y" "\<not> b \<Longrightarrow> B \<subseteq> A" "C = A \<union> B"
@@ -4606,7 +4624,7 @@ next
   case (MMatchP I mr mrs \<phi>s buf nts aux)
   note sat.simps[simp del] mbufnt_take.simps[simp del] mbufn_add.simps[simp del]
   from MMatchP.prems obtain r \<psi>s where eq: "\<phi>' = Formula.MatchP I r"
-    and safe: "safe_regex Past Safe r"
+    and safe: "safe_regex Past Strict r"
     and mr: "to_mregex r = (mr, \<psi>s)"
     and mrs: "mrs = sorted_list_of_set (RPDs mr)"
     and \<psi>s: "list_all2 (wf_mformula \<sigma> j n R) \<phi>s \<psi>s"
@@ -4655,7 +4673,7 @@ next
   case (MMatchF I mr mrs \<phi>s buf nts aux)
   note sat.simps[simp del] mbufnt_take.simps[simp del] mbufn_add.simps[simp del] progress.simps[simp del]
   from MMatchF.prems obtain r \<psi>s where eq: "\<phi>' = Formula.MatchF I r"
-    and safe: "safe_regex Future Safe r"
+    and safe: "safe_regex Futu Strict r"
     and mr: "to_mregex r = (mr, \<psi>s)"
     and mrs: "mrs = sorted_list_of_set (LPDs mr)"
     and \<psi>s: "list_all2 (wf_mformula \<sigma> j n R) \<phi>s \<psi>s"

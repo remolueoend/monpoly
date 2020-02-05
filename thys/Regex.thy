@@ -244,8 +244,8 @@ lemma eps_fv_cong:
   "(\<And>i x. x \<in> atms r \<Longrightarrow> test i x = test' i x) \<Longrightarrow> eps test i r = eps test' i r"
   by (induct r) auto
 
-datatype modality = Past | Future
-datatype safety = Safe | Unsafe
+datatype modality = Past | Futu
+datatype safety = Strict | Lax
 
 context
   fixes fv :: "'a \<Rightarrow> 'b set"
@@ -255,26 +255,26 @@ begin
 qualified fun safe_regex :: "modality \<Rightarrow> safety \<Rightarrow> 'a regex \<Rightarrow> bool" where
   "safe_regex m _ (Skip n) = True"
 | "safe_regex m g (Test \<phi>) = safe g \<phi>"
-| "safe_regex m g (Plus r s) = ((g = Unsafe \<or> fv_regex fv r = fv_regex fv s) \<and> safe_regex m g r \<and> safe_regex m g s)"
-| "safe_regex Future g (Times r s) =
-    ((g = Unsafe \<or> fv_regex fv r \<subseteq> fv_regex fv s) \<and> safe_regex Future g s \<and> safe_regex Future Unsafe r)"
+| "safe_regex m g (Plus r s) = ((g = Lax \<or> fv_regex fv r = fv_regex fv s) \<and> safe_regex m g r \<and> safe_regex m g s)"
+| "safe_regex Futu g (Times r s) =
+    ((g = Lax \<or> fv_regex fv r \<subseteq> fv_regex fv s) \<and> safe_regex Futu g s \<and> safe_regex Futu Lax r)"
 | "safe_regex Past g (Times r s) =
-    ((g = Unsafe \<or> fv_regex fv s \<subseteq> fv_regex fv r) \<and> safe_regex Past g r \<and> safe_regex Past Unsafe s)"
-| "safe_regex m g (Star r) = (g = Unsafe \<and> safe_regex m g r)"
+    ((g = Lax \<or> fv_regex fv s \<subseteq> fv_regex fv r) \<and> safe_regex Past g r \<and> safe_regex Past Lax s)"
+| "safe_regex m g (Star r) = ((g = Lax \<or> fv_regex fv r = {}) \<and> safe_regex m g r)"
 
 lemmas safe_regex_induct = safe_regex.induct[case_names Skip Test Plus TimesF TimesP Star]
 
 lemma safe_cosafe:
-  "(\<And>x. x \<in> atms r \<Longrightarrow> safe Safe x \<Longrightarrow> safe Unsafe x) \<Longrightarrow> safe_regex m Safe r \<Longrightarrow> safe_regex m Unsafe r"
+  "(\<And>x. x \<in> atms r \<Longrightarrow> safe Strict x \<Longrightarrow> safe Lax x) \<Longrightarrow> safe_regex m Strict r \<Longrightarrow> safe_regex m Lax r"
   by (induct r; cases m) auto
 
-lemma safe_lpd_fv_regex_le: "safe_regex Future Safe r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> fv_regex fv r \<subseteq> fv_regex fv s"
+lemma safe_lpd_fv_regex_le: "safe_regex Futu Strict r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> fv_regex fv r \<subseteq> fv_regex fv s"
   by (induct r) (auto simp: TimesR_def split: if_splits)
 
-lemma safe_lpd_fv_regex: "safe_regex Future Safe r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> fv_regex fv s = fv_regex fv r"
+lemma safe_lpd_fv_regex: "safe_regex Futu Strict r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> fv_regex fv s = fv_regex fv r"
   by (simp add: eq_iff lpd_fv_regex safe_lpd_fv_regex_le)
 
-lemma cosafe_lpd: "safe_regex Future Unsafe r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> safe_regex Future Unsafe s"
+lemma cosafe_lpd: "safe_regex Futu Lax r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> safe_regex Futu Lax s"
 proof (induct r arbitrary: s)
   case (Plus r1 r2)
   from Plus(3,4) show ?case
@@ -285,24 +285,30 @@ next
     by (auto simp: TimesR_def elim: Times(1,2) split: if_splits)
 qed (auto simp: TimesR_def split: nat.splits)
 
-lemma safe_lpd: "safe_regex Future Safe r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> safe_regex Future Safe s"
+lemma safe_lpd: "(\<forall>x \<in> atms r. safe Strict x \<longrightarrow> safe Lax x) \<Longrightarrow>
+  safe_regex Futu Strict r \<Longrightarrow> s \<in> lpd test i r \<Longrightarrow> safe_regex Futu Strict s"
 proof (induct r arbitrary: s)
   case (Plus r1 r2)
-  from Plus(3,4) show ?case
-    by (auto elim: Plus(1,2))
+  from Plus(3,4,5) show ?case
+    by (auto elim: Plus(1,2) simp: ball_Un)
 next
   case (Times r1 r2)
-  from Times(3,4) show ?case
-    by (force simp: TimesR_def elim: Times(1,2) cosafe_lpd dest: lpd_fv_regex split: if_splits)
+  from Times(3,4,5) show ?case
+    by (force simp: TimesR_def ball_Un elim: Times(1,2) cosafe_lpd dest: lpd_fv_regex split: if_splits)
+next
+  case (Star r)
+  from Star(2,3,4) show ?case
+    by (force simp: TimesR_def elim: Star(1) cosafe_lpd
+      dest: safe_cosafe[rotated] lpd_fv_regex[where fv=fv] split: if_splits)
 qed (auto split: nat.splits)
 
-lemma safe_rpd_fv_regex_le: "safe_regex Past Safe r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> fv_regex fv r \<subseteq> fv_regex fv s"
+lemma safe_rpd_fv_regex_le: "safe_regex Past Strict r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> fv_regex fv r \<subseteq> fv_regex fv s"
   by (induct r) (auto simp: TimesL_def split: if_splits)
 
-lemma safe_rpd_fv_regex: "safe_regex Past Safe r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> fv_regex fv s = fv_regex fv r"
+lemma safe_rpd_fv_regex: "safe_regex Past Strict r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> fv_regex fv s = fv_regex fv r"
   by (simp add: eq_iff rpd_fv_regex safe_rpd_fv_regex_le)
 
-lemma cosafe_rpd: "safe_regex Past Unsafe r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> safe_regex Past Unsafe s"
+lemma cosafe_rpd: "safe_regex Past Lax r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> safe_regex Past Lax s"
 proof (induct r arbitrary: s)
   case (Plus r1 r2)
   from Plus(3,4) show ?case
@@ -313,19 +319,25 @@ next
     by (auto simp: TimesL_def elim: Times(1,2) split: if_splits)
 qed (auto simp: TimesL_def split: nat.splits)
 
-lemma safe_rpd: "safe_regex Past Safe r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> safe_regex Past Safe s"
+lemma safe_rpd: "(\<forall>x \<in> atms r. safe Strict x \<longrightarrow> safe Lax x) \<Longrightarrow>
+  safe_regex Past Strict r \<Longrightarrow> s \<in> rpd test i r \<Longrightarrow> safe_regex Past Strict s"
 proof (induct r arbitrary: s)
   case (Plus r1 r2)
-  from Plus(3,4) show ?case
-    by (auto elim: Plus(1,2))
+  from Plus(3,4,5) show ?case
+    by (auto elim: Plus(1,2) simp: ball_Un)
 next
   case (Times r1 r2)
-  from Times(3,4) show ?case
-    by (force simp: TimesL_def elim: Times(1,2) cosafe_rpd dest: rpd_fv_regex split: if_splits)
+  from Times(3,4,5) show ?case
+    by (force simp: TimesL_def ball_Un elim: Times(1,2) cosafe_rpd dest: rpd_fv_regex split: if_splits)
+next
+  case (Star r)
+  from Star(2,3,4) show ?case
+    by (force simp: TimesL_def elim: Star(1) cosafe_rpd
+      dest: safe_cosafe[rotated] rpd_fv_regex[where fv=fv] split: if_splits)
 qed (auto split: nat.splits)
 
-lemma safe_regex_safe: "(\<And>g r. safe g r \<Longrightarrow> safe Unsafe r) \<Longrightarrow>
-  safe_regex m g r \<Longrightarrow> x \<in> atms r \<Longrightarrow> safe Unsafe x"
+lemma safe_regex_safe: "(\<And>g r. safe g r \<Longrightarrow> safe Lax r) \<Longrightarrow>
+  safe_regex m g r \<Longrightarrow> x \<in> atms r \<Longrightarrow> safe Lax x"
   by (induct m g r rule: safe_regex.induct) auto
 
 lemma safe_regex_map_regex:
