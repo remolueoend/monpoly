@@ -395,10 +395,9 @@ let remove_positions posl l =
 let get_positions posl l =
   List.map (List.nth l) posl
 
-
-
-
-
+let rec zip l1 l2 = match l1, l2 with
+  | x::xs , y::ys -> (x,y):: zip xs ys
+  | _ -> []
 
 
 

@@ -854,217 +854,241 @@ and is_re_future = function
  [check_syntax db_schema f] returns the list of free variables of [f]
  together with their types
 *)
-let rec check_syntax db_schema f =
-  let get_type p pos =
-    let vartype_list = List.assoc p db_schema in
-    snd (List.nth vartype_list pos)
-  in
 
-  let rec check_term p assign pos = function
-    | Var v ->
-      if List.mem_assoc v assign then
-        if get_type p pos <> List.assoc v assign then
-          let str = Printf.sprintf
-              "[Rewriting.check_syntax] Type check error on variable \
-               at position %d in predicate %s." pos p
-          in failwith str
+type tcl = TNum | TAny 
+type tsymb = TSymb of (tcl * int) | TCst of tcst
+let (<<) f g x = f (g x)
+
+let new_type_symbol cls vs = 
+  let maxtype = ((List.fold_left (fun a e -> (max a e)) 0) 
+                << (List.map (fun x -> match x with TSymb (_,a) -> a | _ -> -1))
+                 << (List.filter (fun x -> match x with TSymb _ -> true | _ -> false)) 
+                  << (List.map snd)) vs in
+  TSymb (cls, maxtype + 1)
+
+let (|<=|) t1 t2 = match t1, t2 with 
+   | TSymb (TNum,a), TSymb (TNum,b) 
+   | TSymb (TAny,a), TSymb (TAny,b) -> a <= b
+   | TSymb (TNum,_), TSymb (_,_) -> true
+   | TSymb _ , _ -> false
+   | TCst _ , _ -> true
+
+let type_clash t1 t2 = match t1, t2 with 
+   | TCst a, TCst b -> a<>b
+   | TSymb (TNum,_), TCst TStr
+   | TCst TStr, TSymb (TNum,_) -> true
+   | _ -> false
+
+let more_spec_type t1 t2 = if t1 |<=| t2 then t1 else t2 
+
+let string_of_type = function
+| TCst TInt -> "Int"
+| TCst TFloat -> "Float"
+| TCst TStr -> "String"
+| TSymb (TNum,a) -> "(Num t" ^ (string_of_int a) ^ ") =>  t" ^ (string_of_int a)
+| TSymb (_,a) -> "t" ^ (string_of_int a)
+
+let type_error t1 t2 t =
+  if type_clash t1 t2 then 
+        let str = Printf.sprintf "[Rewriting.type_check_term] Type check error on \
+        term %s: expected type %s, actual type %s" (string_of_term t) (string_of_type t1) (string_of_type t2)
+        in failwith str
+  else ()
+
+let symbol_union vars1 vars2 =
+  let symbol_filter assign1 assign2 =
+  List.filter
+      (fun (x, xtype) ->
+        if List.mem_assoc x assign2 then
+          let xtype' = List.assoc x assign2 in
+          type_error xtype xtype' (Var x);
+          xtype |<=| xtype'
         else
-          assign
-      else
-        (v, get_type p pos) :: assign
-
-
-    | Cst c ->
-      (match c, get_type p pos with
-       | Int _, TInt
-       | Str _, TStr -> assign
-       | _ -> let str = Printf.sprintf
-                  "[Rewriting.check_syntax] Type check error on constant \
-                   at position %d in predicate %s." pos p
-         in failwith str
+          true
       )
+      assign1 in
+  (symbol_filter vars1 vars2) @ (symbol_filter vars2 vars1)
 
-    | F2i t (* TODO: term should have type float! *)
-    | I2f t (* TODO: term should have type int! *)
-    | UMinus t -> (* TODO: term should have a numeric type! *)
-      check_term p assign pos t
+(*
+Type judgement is of the form (Δ;Γ) ⊢ t::τ  
+where Δ is the predicate schema
+      Γ is the symbol table containing variable types
+      t term and 
+      τ is a type
 
-    | Plus (t1, t2)
-    | Minus (t1, t2)
-    | Mult (t1, t2)
-    | Div (t1, t2)
-    | Mod (t1, t2)
-      ->
-      (* TODO: both terms should have numeric or int type! *)
-      let assign' = check_term p assign pos t1 in
-      check_term p assign' pos t2
-  in
+Parameters:
+(sch, vars) are (Δ,Γ)
+typ is the type of t as expected by the caller
+t is the term
 
-  let rec check_vars p assign pos = function
-    | [] -> assign
-    | term :: rest ->
-      let assign' = check_term p assign pos term in
-      check_vars p assign' (pos + 1) rest
+Returns a triple (Δ',Γ', typ') where Δ' and Γ' are the new Δ and Γ
+and typ' is the inferred type of t.
+Fails of expected (typ) and inferred (typ') types do not match.
+*)
+let rec type_check_term (sch, vars) typ = function 
+  | Var v as tt -> 
+    if List.mem_assoc v vars then
+      let vtyp = (List.assoc v vars) in 
+      type_error typ vtyp tt;
+      let tspec = more_spec_type typ vtyp in 
+      (sch, vars, tspec)  
+    else 
+      (sch, (v,typ)::vars, typ)
+  | Cst c as tt -> 
+    let ctyp = TCst (type_of_cst c) in
+    type_error typ ctyp tt;
+    (sch, vars, ctyp)
+  | F2i t as tt ->
+    type_error typ (TCst TInt) tt;
+    let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+    type_error t_typ (TCst TFloat) t;
+    (s,v,(TCst TInt))             
+  | I2f t as tt ->
+    type_error typ (TCst TFloat) tt;
+    let (s,v,t_typ) = type_check_term (sch, vars) (TCst TInt) t in
+    type_error t_typ (TCst TInt) t;
+    (s,v,(TCst TFloat))
+  | UMinus t as tt -> 
+    let exp_typ = new_type_symbol TNum vars in
+    type_error typ exp_typ tt;
+    let (s,v,t_typ) = type_check_term (sch, vars) exp_typ t in
+    type_error t_typ exp_typ t;
+    (s,v,t_typ)
+  | Plus (t1, t2) 
+  | Minus (t1, t2) 
+  | Mult (t1, t2)  
+  | Div (t1, t2) as tt ->
+    let exp_typ = new_type_symbol TNum vars in
+    type_error typ exp_typ tt;
+    let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
+    type_error t1_typ exp_typ t1;
+    let (s2,v2,t2_typ) = type_check_term (s1, v1) t1_typ t2 in
+    type_error t2_typ t1_typ t2;
+    (s2,v2,t2_typ)
+  | Mod (t1, t2) as tt ->
+    let exp_typ = (TCst TInt) in
+    type_error typ exp_typ tt;
+    let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
+    type_error t1_typ exp_typ t1;
+    let (s2,v2,t2_typ) = type_check_term (s1, v1) exp_typ t2 in
+    type_error t2_typ exp_typ t2;
+    (s2,v2,exp_typ)
 
-  in
 
-  let union assign1 assign2 =
-    assign2 @
-    (List.filter
-       (fun (x, xtype) ->
-          if List.mem_assoc x assign2 then
-            if xtype = List.assoc x assign2 then
-              false
-            else
-              failwith (Printf.sprintf "[Rewriting.check_syntax] Type check error on variable %s." x)
-          else
-            true
-       )
-       assign1)
-  in
+(*
+Type judgement is of the form (Δ;Γ) ⊢ ϕ wff  
+where Δ is the predicate schema
+      Γ is the symbol table containing variable types
+      ϕ formula 
 
-  let rec check assign = function
-    | Equal (t1, t2)
-    | Less (t1, t2)
-    | LessEq (t1, t2) ->
-      (match t1, t2 with
-       | Var x, Var y ->
-         if List.mem_assoc x assign then
-           let xtype = List.assoc x assign in
-           if List.mem_assoc y assign then
-             if xtype <> List.assoc y assign then
-               let str = Printf.sprintf
-                   "[Rewriting.check_syntax] The comparison %s ? %s does not type check." x y
-               in failwith str
-             else
-               assign
-           else
-             (y, xtype) :: assign
-         else
-         if List.mem_assoc y assign then
-           let ytype = List.assoc y assign in
-           (x, ytype) :: assign
-         else
-           (* Remark: not a complete check, as if both variables haven't
-              yet been assigned a type, then they might have one later on...*)
-           assign
+Parameters:
+(sch, vars) are (Δ,Γ)
+ϕ is the term
 
-       | Var x, Cst c
-       | Cst c, Var x ->
-         if List.mem_assoc x assign then
-           (match c, List.assoc x assign with
-            | Int _, TInt
-            | Float _, TFloat
-            | Str _, TStr -> assign
-            | _ -> failwith ("[Rewriting.check_syntax] The comparison " ^ x ^ " ? " ^
-                             (Predicate.string_of_cst true c) ^ " does not type check.")
-           )
-         else
-           let xtype = Predicate.type_of_cst c in
-           (x, xtype) :: assign
-
-       | Cst c, Cst c' ->
-         (match c, c' with
-          | Int _, Int _
-          | Float _, Float _
-          | Str _, Str _ -> assign
-          | _ -> let str = Printf.sprintf
-                     "[Rewriting.check_syntax] The comparison %s ? %s does not type check."
-                     (Predicate.string_of_cst true c) (Predicate.string_of_cst true c')
-            in failwith str
-         )
-
-       | _ -> assign
-      )
-
-    | Pred p ->
-      let name, ar, args = Predicate.get_info p in
-      if List.mem_assoc name db_schema then
-        begin
-          let vartype_list = List.assoc name db_schema in
-          if ar <> List.length vartype_list then
-            failwith ("[Rewriting.check_syntax] wrong arity for predicate " ^ name ^
+Returns a pair (Δ',Γ') where Δ' and Γ' are the new Δ and Γ
+Fails if ϕ is not a well formed formula
+*)
+let rec type_check_formula (sch, vars) = function 
+| Equal (t1,t2)
+| Less (t1,t2) 
+| LessEq (t1,t2) -> 
+  let exp_typ = new_type_symbol TAny vars in
+  let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
+  type_error t1_typ exp_typ t1;
+  let (s2,v2,t2_typ) = type_check_term (s1, v1) exp_typ t2 in
+  type_error t2_typ exp_typ t2;
+  (s2,v2)
+| Pred p ->
+  let name = Predicate.get_name p in
+  let exp_typ_list =
+  if List.mem_assoc name sch then
+    List.assoc name sch
+  else 
+    (match name with
+      | "tp" -> [(TCst TInt)]
+      | "ts" -> [(TCst TFloat)]
+      | "tpts" -> [(TCst TInt); (TCst TFloat)]
+      | _ ->
+        failwith ("[Rewriting.check_syntax] unknown predicate " ^ name  ^
                       " in input formula")
-        end
-      else
-        (match name with
-         | "tp" | "ts" | "tpts" -> ()
-         | _ ->
-           failwith ("[Rewriting.check_syntax] unknown predicate " ^ name  ^
-                     " in input formula")
-        );
-      check_vars name assign 0 args
+    ) 
+  in 
+  let t_list = Predicate.get_args p in 
+  if (List.length t_list) = (List.length exp_typ_list) then
+    let ts = zip exp_typ_list t_list in  
+    let (s,v,_) = 
+      List.fold_left 
+        (fun (s,v,_) (exp_t,t) -> 
+            let (s1,v1,t1) = type_check_term (s,v) exp_t t in
+            type_error exp_t t1 t;
+            (s1,v1,t1)
+        ) (sch, vars, (TCst TInt)) ts in
+    (s,v)
+  else 
+    failwith ("[Rewriting.check_syntax] wrong arity for predicate " ^ name ^
+    " in input formula")
+| Neg f
+| Prev (_,f)
+| Next (_,f)
+| Eventually (_,f)
+| Once (_,f)
+| Always (_,f)
+| PastAlways (_,f) -> type_check_formula (sch, vars) f
 
-    | Neg f -> check assign f
-    | Prev (i,f)
-    | Next (i,f)
-    | Eventually (i,f)
-    | Once (i,f)
-    | Always (i,f)
-    | PastAlways (i,f) -> if (check_interval i)
-                          then check assign f
-                          else failwith ("[Rewriting.check_syntax] negative or empty interval " ^ (string_of_interval i) ^
-                          " in input formula")
-    
-    | Frex (i,r) 
-    | Prex (i,r) -> if (check_interval i)
-                    then check_re assign r
-                    else failwith ("[Rewriting.check_syntax] negative or empty interval " ^ (string_of_interval i) ^
-                    " in input formula")
+| And (f1,f2) 
+| Or (f1,f2) 
+| Implies (f1,f2) 
+| Equiv (f1,f2) 
+| Since (_,f1,f2) 
+| Until (_,f1,f2) -> 
+  let (s1,v1) = type_check_formula (sch, vars) f1 in
+  type_check_formula (s1, v1) f2
 
-    | Exists (vl,f)
-    | ForAll (vl,f) ->
-      let assign' = List.filter (fun (x,t) -> not (List.mem x vl)) assign in
-      List.filter (fun (x,t) -> not (List.mem x vl)) (check assign' f)
+| Exists (v,f) 
+| ForAll (v,f) -> 
+  let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr v) vars in
+  let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars v in
+  let (s1,v1) = type_check_formula (sch,new_vars) f in
+  let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr v)) v1 in
+  (s1,unshadowed_vars@shadowed_vars)
 
-    | Aggreg (y,op,x,glist,f) ->
-      let assign' = List.filter (fun (x,_) -> (List.mem x glist)) assign in
-      let assign = check assign' f in
-      (* if List.assoc x assign = TStr then *)
-      (*   failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^  *)
-      (*          " should have an integer type"); *)
-      if List.mem_assoc x assign then
-        if List.assoc x assign = TStr && (op = Avg || op = Sum || op = Med) then
-          failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^
-                    " should have an numeric type");
-      (* TODO: else *)
-      (*   failwith ("[check_syntax] aggregation attribute " ^ x ^  *)
-      (*          " not found in subformula"); *)
-      let assign' = List.filter (fun (x,_) -> List.mem x glist) assign in
-      (match op with
-       | Avg -> (y, TFloat) :: assign'
-       | Med -> (y, TFloat) :: assign'
-       | Cnt -> (y, TInt) :: assign'
-       | _ ->
-         if List.mem_assoc x assign then
-           let typ_x = List.assoc x assign in
-           (y, typ_x) :: assign'
-         else
-           assign'
-      )
-
-    | And (f1,f2)
-    | Or (f1,f2)
-    | Implies (f1,f2)
-    | Equiv (f1,f2) -> 
-      let assign1 = check assign f1 in
-      union assign1 (check assign1 f2)
-    | Since (i,f1,f2)
-    | Until (i,f1,f2) -> if (check_interval i)
-                         then let assign1 = check assign f1 in
-                              union assign1 (check assign1 f2)
-                         else failwith ("[Rewriting.check_syntax] negative or empty interval " ^ (string_of_interval i) ^
-                         " in input formula")
-  and check_re assign = function
-    | Wild -> []
-    | Test f -> check assign f
-    | Concat (r1,r2) 
-    | Plus (r1, r2) -> 
-      let assign1 = check_re assign r1 in
-      union assign1 (check_re assign1 r2)
-    | Star r -> check_re assign r
+| Aggreg (r,op,x,gs,f) -> 
+  let zs = List.filter (fun v -> List.mem v gs) (MFOTL.free_vars f) in
+  let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr zs) vars in
+  let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars zs in
+  let type_check_aggregation exp_typ1 exp_typ2 =
+      let (s1,v1,t1) = type_check_term (sch,new_vars) exp_typ1 (Var r) in
+      let (s2,v2,t2) = type_check_term (s1,v1) exp_typ2 (Var x) in
+      let (s3,v3) = type_check_formula (s2,v2) f in
+      let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr zs)) v3 in
+      (s3, unshadowed_vars@shadowed_vars)
   in
-  List.rev (check [] f)
+  let exp_typ = new_type_symbol TAny vars in
+  let exp_num_typ = new_type_symbol TNum vars in
+  (match op with
+    | Min | Max -> type_check_aggregation exp_typ exp_typ
+    | Cnt -> type_check_aggregation (TCst TInt) exp_typ
+    | Sum -> type_check_aggregation exp_num_typ exp_num_typ
+    | Avg | Med -> type_check_aggregation (TCst TFloat) exp_num_typ)
+
+| Frex (_,r) 
+| Prex (_,r) -> type_check_re_formula (sch, vars) r
+and type_check_re_formula (sch, vars) = function 
+| Wild -> (sch, vars)
+| Test f -> type_check_formula (sch, vars) f
+| Concat (r1,r2) 
+| Plus (r1,r2) -> 
+  let (s1,v1) = type_check_re_formula (sch, vars) r1 in
+  type_check_re_formula (s1, v1) r2
+| Star r -> type_check_re_formula (sch, vars) r
+
+
+let rec check_syntax db_schema f =
+  let lift_type t = TCst t in
+  let sch = List.map (fun (t, l) -> (t, List.map (fun (_,t) -> lift_type t) l)) db_schema in 
+  let (s,v) = type_check_formula (sch,[]) f in
+  List.map (fun (v,t) -> (v,match t with | TCst a -> a | _ -> TFloat)) v
+ 
 
 
 let print_reason str reason =
