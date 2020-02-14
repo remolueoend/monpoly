@@ -10,8 +10,8 @@ echo "==========================================================================
 \time -f "Time: %e s Memory: %M KB" monpoly -sig synth.sig -formula ./star.mfotl -log ./400.log -no_rw -nonewlastts > /dev/null
 
 echo "================================================================================"
-echo "Oracle's performance on a log with 40000 events"
+echo "Verimon's performance on a log with 40000 events"
 echo "================================================================================"
-\time -f "Time: %e s Memory: %M KB" monpoly -sig synth.sig -formula ./star.mfotl -log ./400.log -no_rw -nonewlastts -verified > /dev/null
+\time -f "Time: %e s Memory: %M KB" verimon -sig synth.sig -formula ./star.mfotl -log ./400.log -no_rw -nonewlastts > /dev/null
 
 

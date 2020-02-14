@@ -1,0 +1,2 @@
+((NOT (0 = 1)) UNTIL[0,1]  (EVENTUALLY [0,1] Q(x)))
+

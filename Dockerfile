@@ -29,6 +29,7 @@ RUN sudo chown -R opam:opam . \
     && make log_generator \
     && make fma_generator \
     && sudo cp ./monpoly /usr/local/bin/monpoly \
+    && sudo cp ./verimon /usr/local/bin/verimon \
     && sudo cp ./tools/gen_log /usr/local/bin/gen_log \
     && sudo cp ./tools/gen_fma /usr/local/bin/gen_fma \
     && make clean 
