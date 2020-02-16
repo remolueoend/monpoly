@@ -67,6 +67,9 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
 
+thm maux.meval.simps(2)
+
+(*
 lemma meval_MPred: "meval n t db (MPred e ts) = ([Option.these
   ((map_option (\<lambda>f. Table.tabulate f 0 n) o match ts) ` (\<Union>(e', x)\<in>db. if e = e' then {x} else {}))], MPred e ts)"
   unfolding default_maux.meval.simps image_these image_image o_def ..
@@ -85,9 +88,10 @@ lemma meval_MPred'': "meval n t db (MPred e ts) = ([
   by (auto simp: Option.these_def map_option_case image_iff split: if_splits option.splits)
 
 lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred'' default_maux.meval.simps(3-16)
+*)
 
-definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> (string \<times> event_data list) set" where
-  "mk_db = set"
+definition mk_db :: "(string \<times> event_data list) list \<Rightarrow> _" where
+  "mk_db = Monitor.mk_db o set"
 
 definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"
@@ -415,6 +419,13 @@ lemma remove_Union_code[code]: "remove_Union A X B =
   (if finite X then set_fold_cfi (remove_Union_cfi B) A X else A - (\<Union>x \<in> X. B x))"
   apply (transfer fixing: A X B)
   using remove_Union_finite[of X A B] by (auto simp add: remove_Union_def)
+
+lemma mk_db_code[code]: "mk_db xs p =
+    (case List.map_filter (\<lambda>(p',ts). if p = p' then Some ts else None) xs of
+    [] \<Rightarrow> None | xs \<Rightarrow> Some [set xs])"
+  unfolding mk_db_def Monitor.mk_db_def
+  by (auto 0 3 simp: map_filter_def filter_empty_conv filter_eq_Cons_iff image_iff
+    split: list.splits option.splits if_splits prod.splits)
 
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin.simps[folded remove_Union_def, code]

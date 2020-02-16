@@ -17,10 +17,10 @@ locale monitor = monitorable +
   assumes
     mono_monitor: "monitorable \<phi> \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow> M \<phi> \<pi> \<subseteq> M \<phi> \<pi>'"
     and sound_monitor: "monitorable \<phi> \<Longrightarrow> (i, v) \<in> M \<phi> \<pi> \<Longrightarrow>
-      i < plen \<pi> \<and> wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> (map the v) i \<phi>)"
+      i < plen \<pi> \<and> wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> Map.empty (map the v) i \<phi>)"
     and complete_monitor: "monitorable \<phi> \<Longrightarrow> prefix_of \<pi> \<sigma> \<Longrightarrow>
       i < plen \<pi> \<Longrightarrow> wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<Longrightarrow>
-      (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> (map the v) i \<phi>) \<Longrightarrow> \<exists>\<pi>'. prefix_of \<pi>' \<sigma> \<and> (i, v) \<in> M \<phi> \<pi>'"
+      (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> Map.empty (map the v) i \<phi>) \<Longrightarrow> \<exists>\<pi>'. prefix_of \<pi>' \<sigma> \<and> (i, v) \<in> M \<phi> \<pi>'"
 
 locale slicable_monitor = monitor +
   assumes monitor_slice: "mem_restr S v \<Longrightarrow> (i, v) \<in> M \<phi> (Formula.pslice \<phi> S \<pi>) \<longleftrightarrow> (i, v) \<in> M \<phi> \<pi>"
@@ -39,7 +39,7 @@ begin
 
 definition verdicts :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> (nat \<times> event_data tuple) set" where
   "verdicts \<phi> \<pi> = {(i, v). wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and>
-    (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma> (map the v) i \<phi>)}"
+    (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma>  Map.empty (map the v) i \<phi>)}"
 
 lemma verdicts_mono: "\<pi> \<le> \<pi>' \<Longrightarrow> verdicts \<phi> \<pi> \<subseteq> verdicts \<phi> \<pi>'"
   unfolding verdicts_def
@@ -98,7 +98,7 @@ qed
 locale monitor_timed_progress = monitor_pre_progress +
   assumes progress_time_conv: "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i \<Longrightarrow> progress \<sigma> \<phi> j = progress \<sigma>' \<phi> j"
     and progress_sat_cong: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of \<pi> \<sigma>' \<Longrightarrow> i < progress \<sigma> \<phi> (plen \<pi>) \<Longrightarrow>
-      Formula.sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' v i \<phi>"
+      Formula.sat \<sigma>  Map.empty v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' Map.empty v i \<phi>"
 begin
 
 lemma progress_map_conv: "progress (map_\<Gamma> f \<sigma>) \<phi> j = progress (map_\<Gamma> g \<sigma>) \<phi> j"
@@ -117,7 +117,7 @@ sublocale monitor_timed_progress \<subseteq> monitor_progress
 
 lemma (in monitor_timed_progress) verdicts_alt:
   "verdicts \<phi> \<pi> = {(i, v). wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and>
-    (\<exists>\<sigma>. prefix_of \<pi> \<sigma> \<and> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma> (map the v) i \<phi>)}"
+    (\<exists>\<sigma>. prefix_of \<pi> \<sigma> \<and> i < progress \<sigma> \<phi> (plen \<pi>) \<and> Formula.sat \<sigma> Map.empty (map the v) i \<phi>)}"
   unfolding verdicts_def
   using ex_prefix_of[of \<pi>]
   by (auto dest: progress_prefix_conv[of \<pi> _ _ \<phi>] elim!: progress_sat_cong[THEN iffD1, rotated -1])
@@ -149,6 +149,7 @@ fun past_only :: "Formula.formula \<Rightarrow> bool" where
 | "past_only (Formula.Eq _ _) = True"
 | "past_only (Formula.Less _ _) = True"
 | "past_only (Formula.LessEq _ _) = True"
+| "past_only (Formula.Let _ _ \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Formula.Neg \<psi>) = past_only \<psi>"
 | "past_only (Formula.Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Formula.And \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
@@ -164,13 +165,30 @@ fun past_only :: "Formula.formula \<Rightarrow> bool" where
 
 lemma past_only_sat:
   assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
-  shows "i < plen \<pi> \<Longrightarrow> past_only \<phi> \<Longrightarrow> Formula.sat \<sigma> v i \<phi> = Formula.sat \<sigma>' v i \<phi>"
-proof (induction \<phi> arbitrary: v i)
+  shows "i < plen \<pi> \<Longrightarrow> dom V = dom V' \<Longrightarrow>
+     (\<And>p i. p \<in> dom V \<Longrightarrow> i < plen \<pi> \<Longrightarrow> the (V p) i = the (V' p) i) \<Longrightarrow>
+     past_only \<phi> \<Longrightarrow> Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>"
+proof (induction \<phi> arbitrary: V V' v i)
   case (Pred e ts)
-  with \<Gamma>_prefix_conv[OF assms] show ?case by simp
+  with \<Gamma>_prefix_conv[OF assms(1,2)] show ?case
+    apply (auto 10 0 split: option.splits)
+    apply force
+    apply force
+    done
+next
+  case (Let p b \<phi> \<psi>)
+  from Let.prems Let.IH(1)[of _ V V'] show ?case unfolding sat.simps
+    apply -
+    apply (intro Let.IH(2))
+       apply auto
+       apply blast
+      apply blast
+     apply fastforce
+    apply fastforce
+    done
 next
   case (Ands l)
-  with \<Gamma>_prefix_conv[OF assms] show ?case by (simp add: list_all_iff)
+  with \<Gamma>_prefix_conv[OF assms] show ?case by simp
 next
   case (Prev I \<phi>)
   with \<tau>_prefix_conv[OF assms] show ?case by (simp split: nat.split)
@@ -179,7 +197,7 @@ next
   with \<tau>_prefix_conv[OF assms] show ?case by auto
 next
   case (MatchP I r)
-  then have "Regex.match (Formula.sat \<sigma> v) r a b = Regex.match (Formula.sat \<sigma>' v) r a b" if "b < plen \<pi>" for a b
+  then have "Regex.match (Formula.sat \<sigma> V v) r a b = Regex.match (Formula.sat \<sigma>' V' v) r a b" if "b < plen \<pi>" for a b
     using that by (intro Regex.match_cong_strong) (auto simp: regex.pred_set)
   with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
 qed auto

@@ -26,7 +26,7 @@ subsection \<open>Formulas and Satisfiability\<close>
 
 qualified type_synonym name = string
 qualified type_synonym event = "(name \<times> event_data list)"
-qualified type_synonym database = "event set"
+qualified type_synonym database = "name \<rightharpoonup> event_data list set list"
 qualified type_synonym prefix = "(name \<times> event_data list) prefix"
 qualified type_synonym trace = "(name \<times> event_data list) trace"
 
@@ -94,6 +94,7 @@ fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Righta
       else double_of_event_data (xs ! u'))"
 
 qualified datatype (discs_sels) formula = Pred name "trm list"
+  | Let name nat formula formula
   | Eq trm trm | Less trm trm | LessEq trm trm
   | Neg formula | Or formula formula | And formula formula | Ands "formula list" | Exists formula
   | Agg nat agg_op nat trm formula
@@ -106,6 +107,7 @@ qualified definition "TT \<equiv> Neg FF"
 
 qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
   "fvi b (Pred r ts) = (\<Union>t\<in>set ts. fvi_trm b t)"
+| "fvi b (Let p _ \<phi> \<psi>) = fvi b \<psi>"
 | "fvi b (Eq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
 | "fvi b (Less t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
 | "fvi b (LessEq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
@@ -192,6 +194,7 @@ qualified definition envs :: "formula \<Rightarrow> env set" where
   "envs \<phi> = {v. length v = nfv \<phi>}"
 
 lemma nfv_simps[simp]:
+  "nfv (Let p b \<phi> \<psi>) = nfv \<psi>"
   "nfv (Neg \<phi>) = nfv \<phi>"
   "nfv (Or \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   "nfv (And \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
@@ -234,6 +237,7 @@ subsubsection \<open>Future Reach\<close>
 
 qualified fun future_bounded :: "formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
+| "future_bounded (Let p b \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Eq _ _) = True"
 | "future_bounded (Less _ _) = True"
 | "future_bounded (LessEq _ _) = True"
@@ -255,69 +259,73 @@ subsubsection \<open>Semantics\<close>
 
 definition "ecard A = (if finite A then card A else \<infinity>)"
 
-qualified fun sat :: "trace \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
-  "sat \<sigma> v i (Pred r ts) = ((r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i)"
-| "sat \<sigma> v i (Eq t1 t2) = (eval_trm v t1 = eval_trm v t2)"
-| "sat \<sigma> v i (Less t1 t2) = (eval_trm v t1 < eval_trm v t2)"
-| "sat \<sigma> v i (LessEq t1 t2) = (eval_trm v t1 \<le> eval_trm v t2)"
-| "sat \<sigma> v i (Neg \<phi>) = (\<not> sat \<sigma> v i \<phi>)"
-| "sat \<sigma> v i (Or \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<or> sat \<sigma> v i \<psi>)"
-| "sat \<sigma> v i (And \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> sat \<sigma> v i \<psi>)"
-| "sat \<sigma> v i (Ands l) = list_all id (map (sat \<sigma> v i) l)"
-| "sat \<sigma> v i (Exists \<phi>) = (\<exists>z. sat \<sigma> (z # v) i \<phi>)"
-| "sat \<sigma> v i (Agg y \<omega> b f \<phi>) =
-    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> (zs @ v) i \<phi> \<and> eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
+qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
+  "sat \<sigma> V v i (Pred r ts) = (case V r of
+       None \<Rightarrow> (r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i
+     | Some X \<Rightarrow> map (eval_trm v) ts \<in> X i)"
+| "sat \<sigma> V v i (Let p b \<phi> \<psi>) =
+    sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = nfv \<phi> - b \<and> (\<exists>zs. length zs = b \<and> sat \<sigma> V (zs @ v) i \<phi>)})) v i \<psi>"
+| "sat \<sigma> V v i (Eq t1 t2) = (eval_trm v t1 = eval_trm v t2)"
+| "sat \<sigma> V v i (Less t1 t2) = (eval_trm v t1 < eval_trm v t2)"
+| "sat \<sigma> V v i (LessEq t1 t2) = (eval_trm v t1 \<le> eval_trm v t2)"
+| "sat \<sigma> V v i (Neg \<phi>) = (\<not> sat \<sigma> V v i \<phi>)"
+| "sat \<sigma> V v i (Or \<phi> \<psi>) = (sat \<sigma> V v i \<phi> \<or> sat \<sigma> V v i \<psi>)"
+| "sat \<sigma> V v i (And \<phi> \<psi>) = (sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v i \<psi>)"
+| "sat \<sigma> V v i (Ands l) = (\<forall>\<phi> \<in> set l. sat \<sigma> V v i \<phi>)"
+| "sat \<sigma> V v i (Exists \<phi>) = (\<exists>z. sat \<sigma> V (z # v) i \<phi>)"
+| "sat \<sigma> V v i (Agg y \<omega> b f \<phi>) =
+    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> V (zs @ v) i \<phi> \<and> eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
     in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M)"
-| "sat \<sigma> v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<phi>)"
-| "sat \<sigma> v i (Next I \<phi>) = (mem (\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i) I \<and> sat \<sigma> v (Suc i) \<phi>)"
-| "sat \<sigma> v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>))"
-| "sat \<sigma> v i (Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> v k \<phi>))"
-| "sat \<sigma> v i (MatchP I r) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> Regex.match (sat \<sigma> v) r j i)"
-| "sat \<sigma> v i (MatchF I r) = (\<exists>j\<ge>i. mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> Regex.match (sat \<sigma> v) r i j)"
+| "sat \<sigma> V v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> V v j \<phi>)"
+| "sat \<sigma> V v i (Next I \<phi>) = (mem (\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i) I \<and> sat \<sigma> V v (Suc i) \<phi>)"
+| "sat \<sigma> V v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))"
+| "sat \<sigma> V v i (Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>))"
+| "sat \<sigma> V v i (MatchP I r) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> Regex.match (sat \<sigma> V v) r j i)"
+| "sat \<sigma> V v i (MatchF I r) = (\<exists>j\<ge>i. mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> Regex.match (sat \<sigma> V v) r i j)"
 
 lemma sat_abbrevs[simp]:
-  "sat \<sigma> v i TT" "\<not> sat \<sigma> v i FF"
+  "sat \<sigma> V v i TT" "\<not> sat \<sigma> V v i FF"
   unfolding TT_def FF_def by auto
 
-lemma sat_Ands: "sat \<sigma> v i (Ands l) \<longleftrightarrow> (\<forall>\<phi>\<in>set l. sat \<sigma> v i \<phi>)"
+lemma sat_Ands: "sat \<sigma> V v i (Ands l) \<longleftrightarrow> (\<forall>\<phi>\<in>set l. sat \<sigma> V v i \<phi>)"
   by (simp add: list_all_iff)
 
-lemma sat_Until_rec: "sat \<sigma> v i (Until \<phi> I \<psi>) \<longleftrightarrow>
-  mem 0 I \<and> sat \<sigma> v i \<psi> \<or>
-  (\<Delta> \<sigma> (i + 1) \<le> right I \<and> sat \<sigma> v i \<phi> \<and> sat \<sigma> v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>))"
+lemma sat_Until_rec: "sat \<sigma> V v i (Until \<phi> I \<psi>) \<longleftrightarrow>
+  mem 0 I \<and> sat \<sigma> V v i \<psi> \<or>
+  (\<Delta> \<sigma> (i + 1) \<le> right I \<and> sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>))"
   (is "?L \<longleftrightarrow> ?R")
 proof (rule iffI; (elim disjE conjE)?)
   assume ?L
-  then obtain j where j: "i \<le> j" "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I" "sat \<sigma> v j \<psi>" "\<forall>k \<in> {i ..< j}. sat \<sigma> v k \<phi>"
+  then obtain j where j: "i \<le> j" "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I" "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>"
     by auto
   then show ?R
   proof (cases "i = j")
     case False
     with j(1,2) have "\<Delta> \<sigma> (i + 1) \<le> right I"
       by (auto elim: order_trans[rotated] simp: diff_le_mono)
-    moreover from False j(1,4) have "sat \<sigma> v i \<phi>" by auto
-    moreover from False j have "sat \<sigma> v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>)"
+    moreover from False j(1,4) have "sat \<sigma> V v i \<phi>" by auto
+    moreover from False j have "sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>)"
       by (cases "right I") (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j])
     ultimately show ?thesis by blast
   qed simp
 next
-  assume \<Delta>: "\<Delta> \<sigma> (i + 1) \<le> right I" and now: "sat \<sigma> v i \<phi>" and
-   "next": "sat \<sigma> v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>)"
+  assume \<Delta>: "\<Delta> \<sigma> (i + 1) \<le> right I" and now: "sat \<sigma> V v i \<phi>" and
+   "next": "sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>)"
   from "next" obtain j where j: "i + 1 \<le> j" "mem (\<tau> \<sigma> j - \<tau> \<sigma> (i + 1)) ((subtract (\<Delta> \<sigma> (i + 1)) I))"
-      "sat \<sigma> v j \<psi>" "\<forall>k \<in> {i + 1 ..< j}. sat \<sigma> v k \<phi>"
+      "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {i + 1 ..< j}. sat \<sigma> V v k \<phi>"
     by auto
   from \<Delta> j(1,2) have "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I"
     by (cases "right I") (auto simp: le_diff_conv2)
   with now j(1,3,4) show ?L by (auto simp: le_eq_less_or_eq[of i] intro!: exI[of _ j])
 qed auto
 
-lemma sat_Since_rec: "sat \<sigma> v i (Since \<phi> I \<psi>) \<longleftrightarrow>
-  mem 0 I \<and> sat \<sigma> v i \<psi> \<or>
-  (i > 0 \<and> \<Delta> \<sigma> i \<le> right I \<and> sat \<sigma> v i \<phi> \<and> sat \<sigma> v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>))"
+lemma sat_Since_rec: "sat \<sigma> V v i (Since \<phi> I \<psi>) \<longleftrightarrow>
+  mem 0 I \<and> sat \<sigma> V v i \<psi> \<or>
+  (i > 0 \<and> \<Delta> \<sigma> i \<le> right I \<and> sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>))"
   (is "?L \<longleftrightarrow> ?R")
 proof (rule iffI; (elim disjE conjE)?)
   assume ?L
-  then obtain j where j: "j \<le> i" "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I" "sat \<sigma> v j \<psi>" "\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>"
+  then obtain j where j: "j \<le> i" "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I" "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>"
     by auto
   then show ?R
   proof (cases "i = j")
@@ -326,33 +334,33 @@ proof (rule iffI; (elim disjE conjE)?)
       by (cases i) auto
     with j(1,2) False have "\<Delta> \<sigma> i \<le> right I"
       by (auto elim: order_trans[rotated] simp: diff_le_mono2 le_Suc_eq)
-    moreover from False j(1,4) have "sat \<sigma> v i \<phi>" by auto
-    moreover from False j have "sat \<sigma> v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>)"
+    moreover from False j(1,4) have "sat \<sigma> V v i \<phi>" by auto
+    moreover from False j have "sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>)"
       by (cases "right I") (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j])
     ultimately show ?thesis by auto
   qed simp
 next
-  assume i: "0 < i" and \<Delta>: "\<Delta> \<sigma> i \<le> right I" and now: "sat \<sigma> v i \<phi>" and
-   "prev": "sat \<sigma> v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>)"
+  assume i: "0 < i" and \<Delta>: "\<Delta> \<sigma> i \<le> right I" and now: "sat \<sigma> V v i \<phi>" and
+   "prev": "sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>)"
   from "prev" obtain j where j: "j \<le> i - 1" "mem (\<tau> \<sigma> (i - 1) - \<tau> \<sigma> j) ((subtract (\<Delta> \<sigma> i) I))"
-      "sat \<sigma> v j \<psi>" "\<forall>k \<in> {j <.. i - 1}. sat \<sigma> v k \<phi>"
+      "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {j <.. i - 1}. sat \<sigma> V v k \<phi>"
     by auto
   from \<Delta> i j(1,2) have "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I"
     by (cases "right I") (auto simp: le_diff_conv2)
   with now i j(1,3,4) show ?L by (auto simp: le_Suc_eq gr0_conv_Suc intro!: exI[of _ j])
 qed auto
 
-lemma sat_MatchF_rec: "sat \<sigma> v i (MatchF I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> v) i r \<or>
-  \<Delta> \<sigma> (i + 1) \<le> right I \<and> (\<exists>s \<in> Regex.lpd (sat \<sigma> v) i r. sat \<sigma> v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s))"
+lemma sat_MatchF_rec: "sat \<sigma> V v i (MatchF I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> V v) i r \<or>
+  \<Delta> \<sigma> (i + 1) \<le> right I \<and> (\<exists>s \<in> Regex.lpd (sat \<sigma> V v) i r. sat \<sigma> V v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s))"
   (is "?L \<longleftrightarrow> ?R1 \<or> ?R2")
 proof (rule iffI; (elim disjE conjE bexE)?)
   assume ?L
-  then obtain j where j: "j \<ge> i" "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I" and "Regex.match (sat \<sigma> v) r i j" by auto
+  then obtain j where j: "j \<ge> i" "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I" and "Regex.match (sat \<sigma> V v) r i j" by auto
   then show "?R1 \<or> ?R2"
   proof (cases "i < j")
     case True
-    with \<open>Regex.match (sat \<sigma> v) r i j\<close> lpd_match[of i j "sat \<sigma> v" r]
-    obtain s where "s \<in> Regex.lpd (sat \<sigma> v) i r" "Regex.match (sat \<sigma> v) s (i + 1) j" by auto
+    with \<open>Regex.match (sat \<sigma> V v) r i j\<close> lpd_match[of i j "sat \<sigma> V v" r]
+    obtain s where "s \<in> Regex.lpd (sat \<sigma> V v) i r" "Regex.match (sat \<sigma> V v) s (i + 1) j" by auto
     with True j have ?R2
       by (cases "right I")
         (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j] elim: le_trans[rotated])
@@ -362,25 +370,25 @@ next
   assume "enat (\<Delta> \<sigma> (i + 1)) \<le> right I"
   moreover
   fix s
-  assume [simp]: "s \<in> Regex.lpd (sat \<sigma> v) i r" and "sat \<sigma> v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s)"
-  then obtain j where "j > i" "Regex.match (sat \<sigma> v) s (i + 1) j"
+  assume [simp]: "s \<in> Regex.lpd (sat \<sigma> V v) i r" and "sat \<sigma> V v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s)"
+  then obtain j where "j > i" "Regex.match (sat \<sigma> V v) s (i + 1) j"
     "mem (\<tau> \<sigma> j - \<tau> \<sigma> (Suc i)) (subtract (\<Delta> \<sigma> (i + 1)) I)" by (auto simp: Suc_le_eq)
   ultimately show ?L
     by (cases "right I")
       (auto simp: le_diff_conv lpd_match intro!: exI[of _ j] bexI[of _ s])
 qed (auto simp: eps_match intro!: exI[of _ i])
 
-lemma sat_MatchP_rec: "sat \<sigma> v i (MatchP I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> v) i r \<or>
-  i > 0 \<and> \<Delta> \<sigma> i \<le> right I \<and> (\<exists>s \<in> Regex.rpd (sat \<sigma> v) i r. sat \<sigma> v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s))"
+lemma sat_MatchP_rec: "sat \<sigma> V v i (MatchP I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> V v) i r \<or>
+  i > 0 \<and> \<Delta> \<sigma> i \<le> right I \<and> (\<exists>s \<in> Regex.rpd (sat \<sigma> V v) i r. sat \<sigma> V v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s))"
   (is "?L \<longleftrightarrow> ?R1 \<or> ?R2")
 proof (rule iffI; (elim disjE conjE bexE)?)
   assume ?L
-  then obtain j where j: "j \<le> i" "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I" and "Regex.match (sat \<sigma> v) r j i" by auto
+  then obtain j where j: "j \<le> i" "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I" and "Regex.match (sat \<sigma> V v) r j i" by auto
   then show "?R1 \<or> ?R2"
   proof (cases "j < i")
     case True
-    with \<open>Regex.match (sat \<sigma> v) r j i\<close> rpd_match[of j i "sat \<sigma> v" r]
-    obtain s where "s \<in> Regex.rpd (sat \<sigma> v) i r" "Regex.match (sat \<sigma> v) s j (i - 1)" by auto
+    with \<open>Regex.match (sat \<sigma> V v) r j i\<close> rpd_match[of j i "sat \<sigma> V v" r]
+    obtain s where "s \<in> Regex.rpd (sat \<sigma> V v) i r" "Regex.match (sat \<sigma> V v) s j (i - 1)" by auto
     with True j have ?R2
       by (cases "right I")
         (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j] elim: le_trans)
@@ -390,38 +398,42 @@ next
   assume "enat (\<Delta> \<sigma> i) \<le> right I"
   moreover
   fix s
-  assume [simp]: "s \<in> Regex.rpd (sat \<sigma> v) i r" and "sat \<sigma> v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s)" "i > 0"
-  then obtain j where "j < i" "Regex.match (sat \<sigma> v) s j (i - 1)"
+  assume [simp]: "s \<in> Regex.rpd (sat \<sigma> V v) i r" and "sat \<sigma> V v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s)" "i > 0"
+  then obtain j where "j < i" "Regex.match (sat \<sigma> V v) s j (i - 1)"
     "mem (\<tau> \<sigma> (i - 1) - \<tau> \<sigma> j) (subtract (\<Delta> \<sigma> i) I)" by (auto simp: gr0_conv_Suc less_Suc_eq_le)
   ultimately show ?L
     by (cases "right I")
       (auto simp: le_diff_conv rpd_match intro!: exI[of _ j] bexI[of _ s])
 qed (auto simp: eps_match intro!: exI[of _ i])
 
-lemma sat_Since_0: "sat \<sigma> v 0 (Since \<phi> I \<psi>) \<longleftrightarrow> mem 0 I \<and> sat \<sigma> v 0 \<psi>"
+lemma sat_Since_0: "sat \<sigma> V v 0 (Since \<phi> I \<psi>) \<longleftrightarrow> mem 0 I \<and> sat \<sigma> V v 0 \<psi>"
   by auto
 
-lemma sat_MatchP_0: "sat \<sigma> v 0 (MatchP I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> v) 0 r"
+lemma sat_MatchP_0: "sat \<sigma> V v 0 (MatchP I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> V v) 0 r"
   by (auto simp: eps_match)
 
-lemma sat_Since_point: "sat \<sigma> v i (Since \<phi> I \<psi>) \<Longrightarrow>
-    (\<And>j. j \<le> i \<Longrightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<Longrightarrow> sat \<sigma> v i (Since \<phi> (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<psi>) \<Longrightarrow> P) \<Longrightarrow> P"
+lemma sat_Since_point: "sat \<sigma> V v i (Since \<phi> I \<psi>) \<Longrightarrow>
+    (\<And>j. j \<le> i \<Longrightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<Longrightarrow> sat \<sigma> V v i (Since \<phi> (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<psi>) \<Longrightarrow> P) \<Longrightarrow> P"
   by (auto intro: diff_le_self)
 
-lemma sat_MatchP_point: "sat \<sigma> v i (MatchP I r) \<Longrightarrow>
-    (\<And>j. j \<le> i \<Longrightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<Longrightarrow> sat \<sigma> v i (MatchP (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) r) \<Longrightarrow> P) \<Longrightarrow> P"
+lemma sat_MatchP_point: "sat \<sigma> V v i (MatchP I r) \<Longrightarrow>
+    (\<And>j. j \<le> i \<Longrightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<Longrightarrow> sat \<sigma> V v i (MatchP (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) r) \<Longrightarrow> P) \<Longrightarrow> P"
   by (auto intro: diff_le_self)
 
-lemma sat_Since_pointD: "sat \<sigma> v i (Since \<phi> (point t) \<psi>) \<Longrightarrow> mem t I \<Longrightarrow> sat \<sigma> v i (Since \<phi> I \<psi>)"
+lemma sat_Since_pointD: "sat \<sigma> V v i (Since \<phi> (point t) \<psi>) \<Longrightarrow> mem t I \<Longrightarrow> sat \<sigma> V v i (Since \<phi> I \<psi>)"
   by auto
 
-lemma sat_MatchP_pointD: "sat \<sigma> v i (MatchP (point t) r) \<Longrightarrow> mem t I \<Longrightarrow> sat \<sigma> v i (MatchP I r)"
+lemma sat_MatchP_pointD: "sat \<sigma> V v i (MatchP (point t) r) \<Longrightarrow> mem t I \<Longrightarrow> sat \<sigma> V v i (MatchP I r)"
   by auto
 
-lemma sat_fv_cong: "\<forall>x\<in>fv \<phi>. v!x = v'!x \<Longrightarrow> sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>"
-proof (induct \<phi> arbitrary: v v' i rule: formula.induct)
+lemma sat_fv_cong: "\<forall>x\<in>fv \<phi>. v!x = v'!x \<Longrightarrow> sat \<sigma> V v i \<phi> = sat \<sigma> V v' i \<phi>"
+proof (induct \<phi> arbitrary: V v v' i rule: formula.induct)
   case (Pred n ts)
-  show ?case by (simp cong: map_cong eval_trm_fv_cong[OF Pred[simplified, THEN bspec]])
+  show ?case by (simp cong: map_cong eval_trm_fv_cong[OF Pred[simplified, THEN bspec]] split: option.splits)
+next
+  case (Let p b \<phi> \<psi>)
+  then show ?case
+    by auto
 next
   case (Eq x1 x2)
   then show ?case unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
@@ -433,12 +445,12 @@ next
   then show ?case unfolding fvi.simps sat.simps by (metis UnCI eval_trm_fv_cong)
 next
   case (Ands l)
-  have "\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>"
+  have "\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> V v i \<phi> = sat \<sigma> V v' i \<phi>"
   proof -
     fix \<phi> assume "\<phi> \<in> set l"
     then have "fv \<phi> \<subseteq> fv (Ands l)" using fv_subset_Ands by blast
     then have "\<forall>x\<in>fv \<phi>. v!x = v'!x" using Ands.prems by blast
-    then show "sat \<sigma> v i \<phi> = sat \<sigma> v' i \<phi>" using Ands.hyps \<open>\<phi> \<in> set l\<close> by blast
+    then show "sat \<sigma> V v i \<phi> = sat \<sigma> V v' i \<phi>" using Ands.hyps \<open>\<phi> \<in> set l\<close> by blast
   qed
   then show ?case using sat_Ands by blast
 next
@@ -448,7 +460,7 @@ next
   case (Agg y \<omega> b f \<phi>)
   have "v ! y = v' ! y"
     using Agg.prems by simp
-  moreover have "sat \<sigma> (zs @ v) i \<phi> = sat \<sigma> (zs @ v') i \<phi>" if "length zs = b" for zs
+  moreover have "sat \<sigma> V (zs @ v) i \<phi> = sat \<sigma> V (zs @ v') i \<phi>" if "length zs = b" for zs
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
         nth_append fvi_iff_fv(1)[where b=b])
   moreover have "eval_trm (zs @ v) f = eval_trm (zs @ v') f" if "length zs = b" for zs
@@ -458,24 +470,24 @@ next
     by (simp cong: conj_cong)
 next
   case (MatchF I r)
-  then have "Regex.match (sat \<sigma> v) r = Regex.match (sat \<sigma> v') r"
+  then have "Regex.match (sat \<sigma> V v) r = Regex.match (sat \<sigma> V v') r"
     by (intro match_fv_cong) (auto simp: fv_regex_alt)
   then show ?case
     by auto
 next
   case (MatchP I r)
-  then have "Regex.match (sat \<sigma> v) r = Regex.match (sat \<sigma> v') r"
+  then have "Regex.match (sat \<sigma> V v) r = Regex.match (sat \<sigma> V v') r"
     by (intro match_fv_cong) (auto simp: fv_regex_alt)
   then show ?case
     by auto
-qed (auto 8 0 split: nat.splits intro!: iff_exI)
+qed (auto 10 0 split: nat.splits intro!: iff_exI)
 
 lemma match_fv_cong:
-  "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.match (sat \<sigma> v) r = Regex.match (sat \<sigma> v') r"
+  "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.match (sat \<sigma> V v) r = Regex.match (sat \<sigma> V v') r"
   by (rule match_fv_cong, rule sat_fv_cong) (auto simp: fv_regex_alt)
 
 lemma eps_fv_cong:
-  "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.eps (sat \<sigma> v) i r = Regex.eps (sat \<sigma> v') i r"
+  "\<forall>x\<in>fv_regex r. v!x = v'!x \<Longrightarrow> Regex.eps (sat \<sigma> V v) i r = Regex.eps (sat \<sigma> V v') i r"
   unfolding eps_match by (erule match_fv_cong[THEN fun_cong, THEN fun_cong])
 
 
@@ -515,6 +527,7 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (Less t1 t2) = False"
 | "safe_formula (LessEq t1 t2) = False"
 | "safe_formula (Pred e ts) = (\<forall>t\<in>set ts. is_Var t \<or> is_Const t)"
+| "safe_formula (Let p b \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> b \<le> nfv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (Neg \<phi>) = (fv \<phi> = {} \<and> safe_formula \<phi>)"
 | "safe_formula (Or \<phi> \<psi>) = (fv \<psi> = fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (And \<phi> \<psi>) = (safe_formula \<phi> \<and>
@@ -567,7 +580,7 @@ lemma finite_atms[simp]: "finite (atms r)"
 lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
   by blast
 
-lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred
+lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
     Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
   assumes "safe_formula \<phi>"
@@ -576,6 +589,7 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
     and Eq_Var2: "\<And>c x. P (Eq (Var x) (Const c))"
     and neq_Var: "\<And>x. P (Neg (Eq (Var x) (Var x)))"
     and Pred: "\<And>e ts. \<forall>t\<in>set ts. is_Var t \<or> is_Const t \<Longrightarrow> P (Pred e ts)"
+    and Let: "\<And>p b \<phi> \<psi>. {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> b \<le> nfv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Let p b \<phi> \<psi>)"
     and And_assign: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (And \<phi> \<psi>)"
     and And_safe: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> \<not> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow>
       P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And \<phi> \<psi>)"
@@ -607,7 +621,7 @@ using assms(1) proof (induction \<phi> rule: safe_formula.induct)
   case (1 t1 t2)
   then show ?case using Eq_Const Eq_Var1 Eq_Var2 by (auto simp: trm.is_Const_def trm.is_Var_def)
 next
-  case (8 \<phi> \<psi>)
+  case (9 \<phi> \<psi>)
   from \<open>safe_formula (And \<phi> \<psi>)\<close> have "safe_formula \<phi>" by simp
   from \<open>safe_formula (And \<phi> \<psi>)\<close> consider
     (a) "safe_assignment (fv \<phi>) \<psi>"
@@ -618,48 +632,48 @@ next
     by (cases \<psi>) auto
   then show ?case proof cases
     case a
-    then show ?thesis using "8.IH" \<open>safe_formula \<phi>\<close> by (intro And_assign)
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (intro And_assign)
   next
     case b
-    then show ?thesis using "8.IH" \<open>safe_formula \<phi>\<close> by (intro And_safe)
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (intro And_safe)
   next
     case c
-    then show ?thesis using "8.IH" \<open>safe_formula \<phi>\<close> by (intro And_constraint)
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (intro And_constraint)
   next
     case d
-    then show ?thesis using "8.IH" \<open>safe_formula \<phi>\<close> by (blast intro!: And_Not)
+    then show ?thesis using "9.IH" \<open>safe_formula \<phi>\<close> by (blast intro!: And_Not)
   qed
 next
-  case (9 l)
+  case (10 l)
   obtain pos neg where posneg: "(pos, neg) = partition safe_formula l" by simp
-  have "pos \<noteq> []" using "9.prems" posneg by simp
+  have "pos \<noteq> []" using "10.prems" posneg by simp
   moreover have "list_all safe_formula pos" using posneg by (simp add: list.pred_set)
-  moreover have safe_remove_neg: "list_all safe_formula (map remove_neg neg)" using "9.prems" posneg by auto
+  moreover have safe_remove_neg: "list_all safe_formula (map remove_neg neg)" using "10.prems" posneg by auto
   moreover have "list_all P pos"
-    using posneg "9.IH"(1) by (simp add: list_all_iff)
+    using posneg "10.IH"(1) by (simp add: list_all_iff)
   moreover have "list_all P (map remove_neg neg)"
-    using "9.IH"(2)[OF posneg] safe_remove_neg by (simp add: list_all_iff)
-  ultimately show ?case using "9.IH"(1) "9.prems" Ands posneg by simp
-next
-  case (14 \<phi> I \<psi>)
-  then show ?case
-  proof (cases \<phi>)
-    case (Ands l)
-    then show ?thesis using "14.IH"(1) "14.IH"(3) "14.prems" Since by auto
-  qed (auto 0 3 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
+    using "10.IH"(2)[OF posneg] safe_remove_neg by (simp add: list_all_iff)
+  ultimately show ?case using "10.IH"(1) "10.prems" Ands posneg by simp
 next
   case (15 \<phi> I \<psi>)
   then show ?case
   proof (cases \<phi>)
     case (Ands l)
-    then show ?thesis using "15.IH"(1) "15.IH"(3) "15.prems" Until by auto
+    then show ?thesis using "15.IH"(1) "15.IH"(3) "15.prems" Since by auto
+  qed (auto 0 3 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
+next
+  case (16 \<phi> I \<psi>)
+  then show ?case
+  proof (cases \<phi>)
+    case (Ands l)
+    then show ?thesis using "16.IH"(1) "16.IH"(3) "16.prems" Until by auto
   qed (auto 0 3 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
 next
-  case (16 I r)
+  case (17 I r)
   then show ?case
     by (intro MatchP) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 next
-  case (17 I r)
+  case (18 I r)
   then show ?case
     by (intro MatchF) (auto simp: atms_def dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp: assms)
@@ -671,15 +685,19 @@ lemma safe_formula_NegD:
 
 subsection \<open>Slicing Traces\<close>
 
-qualified fun matches :: "env \<Rightarrow> formula \<Rightarrow> name \<times> event_data list \<Rightarrow> bool" where
-  "matches v (Pred r ts) e = (r = fst e \<and> map (eval_trm v) ts = snd e)"
+qualified fun matches ::
+  "env \<Rightarrow> formula \<Rightarrow> name \<times> event_data list \<Rightarrow> bool" where
+  "matches v (Pred r ts) e = (fst e = r \<and> map (eval_trm v) ts = snd e)"
+| "matches v (Let p b \<phi> \<psi>) e =
+    ((\<exists>zs v'. length zs = b \<and> matches (zs @ v') \<phi> e \<and> matches v \<psi> (p, v')) \<or>
+    fst e \<noteq> p \<and> matches v \<psi> e)"
 | "matches v (Eq _ _) e = False"
 | "matches v (Less _ _) e = False"
 | "matches v (LessEq _ _) e = False"
 | "matches v (Neg \<phi>) e = matches v \<phi> e"
 | "matches v (Or \<phi> \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
 | "matches v (And \<phi> \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
-| "matches v (Ands l) e = list_ex id (map (\<lambda>\<phi>. matches v \<phi> e) l)"
+| "matches v (Ands l) e = (\<exists>\<phi>\<in>set l. matches v \<phi> e)"
 | "matches v (Exists \<phi>) e = (\<exists>z. matches (z # v) \<phi> e)"
 | "matches v (Agg y \<omega> b f \<phi>) e = (\<exists>zs. length zs = b \<and> matches (zs @ v) \<phi> e)"
 | "matches v (Prev I \<phi>) e = matches v \<phi> e"
@@ -689,14 +707,16 @@ qualified fun matches :: "env \<Rightarrow> formula \<Rightarrow> name \<times> 
 | "matches v (MatchP I r) e = (\<exists>\<phi> \<in> Regex.atms r. matches v \<phi> e)"
 | "matches v (MatchF I r) e = (\<exists>\<phi> \<in> Regex.atms r. matches v \<phi> e)"
 
-lemma matches_Ands: "matches v (Ands l) e \<longleftrightarrow> (\<exists>\<phi>\<in>set l. matches v \<phi> e)"
-  by (simp add: list_ex_iff)
-
 lemma matches_cong:
   "\<forall>x\<in>fv \<phi>. v!x = v'!x \<Longrightarrow> matches v \<phi> e = matches v' \<phi> e"
-proof (induct \<phi> arbitrary: v v')
+proof (induct \<phi> arbitrary: v v' e)
   case (Pred n ts)
-  show ?case by (simp cong: map_cong eval_trm_fv_cong[OF Pred[simplified, THEN bspec]])
+  show ?case
+    by (simp cong: map_cong eval_trm_fv_cong[OF Pred(1)[simplified, THEN bspec]])
+next
+  case (Let p b \<phi> \<psi>)
+  then show ?case
+    by (cases e) (auto 11 0)
 next
   case (Ands l)
   have "\<And>\<phi>. \<phi> \<in> (set l) \<Longrightarrow> matches v \<phi> e = matches v' \<phi> e"
@@ -706,7 +726,7 @@ next
     then have "\<forall>x\<in>fv \<phi>. v!x = v'!x" using Ands.prems by blast
     then show "matches v \<phi> e = matches v' \<phi> e" using Ands.hyps \<open>\<phi> \<in> set l\<close> by blast
   qed
-  then show ?case using matches_Ands by blast
+  then show ?case by simp
 next
   case (Exists \<phi>)
   then show ?case unfolding matches.simps by (intro iff_exI) (simp add: fvi_Suc nth_Cons')
@@ -716,7 +736,7 @@ next
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
         nth_append fvi_iff_fv(1)[where b=b])
   then show ?case by auto
-qed (auto 8 0 simp add: nth_Cons' fv_regex_alt)
+qed (auto 9 0 simp add: nth_Cons' fv_regex_alt)
 
 abbreviation relevant_events where
   "relevant_events \<phi> S \<equiv> {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}"
@@ -728,25 +748,62 @@ lemma \<tau>_slice[simp]: "\<tau> (slice \<phi> S \<sigma>) = \<tau> \<sigma>"
   unfolding slice_def by (simp add: fun_eq_iff)
 
 lemma sat_slice_strong:
-  assumes "v \<in> S"
-  shows "relevant_events \<phi> S \<subseteq> E \<Longrightarrow> sat \<sigma> v i \<phi> \<longleftrightarrow> sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v i \<phi>"
+  assumes "v \<in> S" "dom V = dom V'"
+    "\<And>p v i. p \<in> dom V \<Longrightarrow> (p, v) \<in> relevant_events \<phi> S \<Longrightarrow> v \<in> the (V p) i \<longleftrightarrow> v \<in> the (V' p) i"
+  shows "relevant_events \<phi> S - {e. fst e \<in> dom V} \<subseteq> E \<Longrightarrow>
+    sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v i \<phi>"
   using assms
-proof (induction \<phi> arbitrary: v S i)
+proof (induction \<phi> arbitrary: V V' v S i)
   case (Pred r ts)
-  then show ?case by (auto simp: subset_eq)
+  then show ?case apply (auto simp: subset_eq domIff split: option.splits)
+    subgoal by fastforce
+    subgoal apply (metis domIff domI) done
+    subgoal apply (metis domIff domI) done
+    subgoal apply (metis domIff domI) done
+    subgoal by fastforce
+    subgoal by fastforce
+    done
+next
+  case (Let p b \<phi> \<psi>)
+  from Let.prems show ?case unfolding sat.simps
+  proof (intro Let(2)[of S], goal_cases relevant v dom V)
+    case (V p' v' i)
+    then show ?case
+    proof (cases "p' = p")
+      case [simp]: True
+      with V show ?thesis
+        unfolding fun_upd_apply eqTrueI[OF True] if_True option.sel mem_Collect_eq
+      proof (intro ex_cong conj_cong refl Let(1)[where
+        S="{zs @ v' | zs v'. length zs = b \<and> (\<exists>v \<in> S. matches v \<psi> (p, v'))}" and V=V],
+        goal_cases relevant' v' dom' V')
+        case (relevant' zs)
+        then show ?case
+          by (elim subset_trans[rotated]) (auto simp: set_eq_iff)
+      next
+        case (V' zs p' v' i)
+        then show ?case
+          by (intro V(4)) (auto simp: set_eq_iff)
+      qed auto
+    next
+      case False
+      with V(2,3,5,6) show ?thesis
+        unfolding fun_upd_apply eq_False[THEN iffD2, OF False] if_False
+        by (intro V(4)) (auto simp: False)
+    qed
+  qed (auto simp: dom_def)
 next
   case (Or \<phi> \<psi>)
-  show ?case using Or.IH[of S] Or.prems
+  show ?case using Or.IH[of S V v V'] Or.prems
     by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
 next
   case (And \<phi> \<psi>)
-  show ?case using And.IH[of S] And.prems
+  show ?case using And.IH[of S V v V'] And.prems
     by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
 next
   case (Ands l)
-  obtain "relevant_events (Ands l) S \<subseteq> E" "v \<in> S" using Ands.prems(1) Ands.prems(2) by blast
-  then have "{e. S \<inter> {v. matches v (Ands l) e} \<noteq> {}} \<subseteq> E" by simp
-  have "\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> v i \<phi> \<longleftrightarrow> sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v i \<phi>"
+  obtain "relevant_events (Ands l) S - {e. fst e \<in> dom V} \<subseteq> E" "v \<in> S" using Ands.prems(1) Ands.prems(2) by blast
+  then have "{e. S \<inter> {v. matches v (Ands l) e} \<noteq> {}} - {e. fst e \<in> dom V} \<subseteq> E" by simp
+  have "\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v i \<phi>"
   proof -
     fix \<phi> assume "\<phi> \<in> set l"
     have "relevant_events \<phi> S = {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}" by simp
@@ -757,24 +814,25 @@ next
       moreover have "S \<inter> {v. matches v (Ands l) e} \<noteq> {}"
       proof -
         obtain v where "v \<in> S" "matches v \<phi> e" using calculation by blast
-        then show ?thesis using \<open>\<phi> \<in> set l\<close> by (auto simp add: matches_Ands list_ex_iff)
+        then show ?thesis using \<open>\<phi> \<in> set l\<close> by auto
       qed
       then show "e \<in> ?B" by blast
     qed
-    then have "relevant_events \<phi> S \<subseteq> E" using Ands.prems(1) by auto
-    then show "sat \<sigma> v i \<phi> \<longleftrightarrow> sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v i \<phi>" using Ands.IH[of \<phi> S v i]
-      using Ands.prems(2) \<open>\<phi> \<in> set l\<close> by blast
+    then have "relevant_events \<phi> S - {e. fst e \<in> dom V} \<subseteq> E" using Ands.prems(1) by auto
+    then show "sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v i \<phi>"
+      using Ands.prems(2,3) \<open>\<phi> \<in> set l\<close>
+      by (intro Ands.IH[of \<phi> S V v V' i] Ands.prems(4)) auto
   qed
-  show ?case using \<open>\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> v i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v i \<phi>\<close> sat_Ands by blast
+  show ?case using \<open>\<And>\<phi>. \<phi> \<in> set l \<Longrightarrow> sat \<sigma> V v i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v i \<phi>\<close> sat_Ands by blast
 next
   case (Exists \<phi>)
-  have "sat \<sigma> (z # v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (z # v) i \<phi>" for z
-    using Exists.prems by (auto intro!: Exists.IH[of "{z # v | v. v \<in> S}"])
+  have "sat \<sigma> V (z # v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' (z # v) i \<phi>" for z
+    using Exists.prems(1-3) by (intro Exists.IH[where S="{z # v | v. v \<in> S}"] Exists.prems(4)) auto
   then show ?case by simp
 next
   case (Agg y \<omega> b f \<phi>)
-  have "sat \<sigma> (zs @ v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (zs @ v) i \<phi>" if "length zs = b" for zs
-    using that Agg.prems by (auto intro!: Agg.IH[where S="{zs @ v | v. v \<in> S}"])
+  have "sat \<sigma> V (zs @ v) i \<phi> = sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' (zs @ v) i \<phi>" if "length zs = b" for zs
+    using that Agg.prems(1-3) by (intro Agg.IH[where S="{zs @ v | v. v \<in> S}"] Agg.prems(4)) auto
   then show ?case by (simp cong: conj_cong)
 next
   case (Prev I \<phi>)
@@ -784,31 +842,31 @@ next
   then show ?case by simp
 next
   case (Since \<phi> I \<psi>)
-  show ?case using Since.IH[of S] Since.prems
+  show ?case using Since.IH[of S V] Since.prems
    by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
 next
   case (Until \<phi> I \<psi>)
-  show ?case using Until.IH[of S] Until.prems
+  show ?case using Until.IH[of S V] Until.prems
     by (auto simp: Collect_disj_eq Int_Un_distrib subset_iff)
 next
   case (MatchP I r)
-  from MatchP(2,3) have "Regex.match (sat \<sigma> v) r = Regex.match (sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v) r"
-    by (intro Regex.match_fv_cong) (auto dest!: MatchP(1)[of _ S v, rotated 2])
+  from MatchP.prems(1-3) have "Regex.match (sat \<sigma> V v) r = Regex.match (sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v) r"
+    by (intro Regex.match_fv_cong MatchP(1)[of _ S V v] MatchP.prems(4)) auto
   then show ?case
     by auto
 next
   case (MatchF I r)
-  from MatchF(2,3) have "Regex.match (sat \<sigma> v) r = Regex.match (sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) v) r"
-    by (intro Regex.match_fv_cong) (auto dest!: MatchF(1)[of _ S v, rotated 2])
+  from MatchF.prems(1-3) have "Regex.match (sat \<sigma> V v) r = Regex.match (sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) V' v) r"
+    by (intro Regex.match_fv_cong MatchF(1)[of _ S V v] MatchF.prems(4)) auto
   then show ?case
     by auto
 qed simp_all
 
 lemma sat_slice_iff:
   assumes "v \<in> S"
-  shows "sat \<sigma> v i \<phi> \<longleftrightarrow> sat (slice \<phi> S \<sigma>) v i \<phi>"
+  shows "sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (slice \<phi> S \<sigma>) V v i \<phi>"
   unfolding slice_def
-  by (rule sat_slice_strong[OF assms subset_refl])
+  by (rule sat_slice_strong[OF assms]) auto
 
 qualified lift_definition pslice :: "formula \<Rightarrow> env set \<Rightarrow> prefix \<Rightarrow> prefix" is
   "\<lambda>\<phi> S \<pi>. map (\<lambda>(D, t). (D \<inter> relevant_events \<phi> S, t)) \<pi>"
@@ -879,7 +937,7 @@ lemma fv_get_and: "(\<Union>x\<in>(set (get_and_list \<phi>)). fvi b x) = fvi b 
 lemma safe_get_and: "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: safe_neg_def list_all_iff)
 
-lemma sat_get_and: "sat \<sigma> v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> v i) (get_and_list \<phi>)"
+lemma sat_get_and: "sat \<sigma> V v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> V v i) (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
 
 fun convert_multiway :: "formula \<Rightarrow> formula" where
@@ -938,35 +996,8 @@ lemma convert_multiway_remove_neg: "safe_formula (remove_neg \<phi>) \<Longright
 
 lemma fv_convert_multiway: "safe_formula \<phi> \<Longrightarrow> fvi b (convert_multiway \<phi>) = fvi b \<phi>"
 proof (induction \<phi> arbitrary: b rule: safe_formula.induct)
-  case (8 \<phi> \<psi>)
+  case (9 \<phi> \<psi>)
   then show ?case by (cases \<psi>) (auto simp: fv_get_and Un_commute)
-(*next
-  case (10 l)
-  obtain pos neg where posneg: "(pos, neg) = partition safe_formula l" by simp
-  have "fvi b (convert_multiway \<phi>) = fvi b \<phi>" if "\<phi> \<in> set l" for \<phi> proof -
-    consider "safe_formula \<phi>" | "\<phi> \<in> set neg" "safe_formula (remove_neg \<phi>)"
-      using "10.prems" posneg \<open>\<phi> \<in> set l\<close> by (auto simp: list.pred_set)
-    then show ?thesis proof cases
-      case 1
-      then show ?thesis by (rule "10.IH"(1)[OF \<open>\<phi> \<in> set l\<close>])
-    next
-      case 2
-      then show ?thesis
-        using "10.IH"(2)[OF refl posneg, of "remove_neg \<phi>"]
-        by (simp add: convert_multiway_remove_neg)
-    qed
-  qed
-  then show ?case by simp*)
-next
-  case (14 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 14 show ?thesis by simp
-  next
-    case False
-    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 14 show ?thesis by simp
-  qed
 next
   case (15 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
@@ -978,13 +1009,23 @@ next
     with False 15 show ?thesis by simp
   qed
 next
-  case (16 I r)
+  case (16 \<phi> I \<psi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 16 show ?thesis by simp
+  next
+    case False
+    with "16.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 16 show ?thesis by simp
+  qed
+next
+  case (17 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
 next
-  case (17 I r)
+  case (18 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
@@ -1204,35 +1245,35 @@ next
     done
 qed auto
 
-lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> v i \<phi>"
+lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"
 proof (induction \<phi> arbitrary: v i rule: safe_formula_induct)
   case (And_safe \<phi> \<psi>)
   let ?a = "And \<phi> \<psi>"
   let ?b = "convert_multiway ?a"
   let ?la = "get_and_list (convert_multiway \<phi>)"
   let ?lb = "get_and_list (convert_multiway \<psi>)"
-  let ?sat = "sat \<sigma> v i"
+  let ?sat = "sat \<sigma> V v i"
   have b_def: "?b = Ands (?la @ ?lb)" using And_safe by simp
   have "list_all ?sat ?la \<longleftrightarrow> ?sat \<phi>" using And_safe sat_get_and by blast
   moreover have "list_all ?sat ?lb \<longleftrightarrow> ?sat \<psi>" using And_safe sat_get_and by blast
-  ultimately show ?case using And_safe by (simp add: list.pred_map)
+  ultimately show ?case using And_safe by (auto simp: list.pred_set)
 next
   case (And_Not \<phi> \<psi>)
   let ?a = "And \<phi> (Neg \<psi>)"
   let ?b = "convert_multiway ?a"
   let ?la = "get_and_list (convert_multiway \<phi>)"
   let ?lb = "convert_multiway \<psi>"
-  let ?sat = "sat \<sigma> v i"
+  let ?sat = "sat \<sigma> V v i"
   have b_def: "?b = Ands (Neg ?lb # ?la)" using And_Not by simp
   have "list_all ?sat ?la \<longleftrightarrow> ?sat \<phi>" using And_Not sat_get_and by blast
-  then show ?case using And_Not by (auto simp: list.pred_map)
+  then show ?case using And_Not by (auto simp: list.pred_set)
 next
   case (Agg y \<omega> b f \<phi>)
   then show ?case
     by (simp add: nfv_def fv_convert_multiway cong: conj_cong)
 next
   case (MatchP I r)
-  then have "Regex.match (sat \<sigma> v) (convert_multiway_regex r) = Regex.match (sat \<sigma> v) r"
+  then have "Regex.match (sat \<sigma> V v) (convert_multiway_regex r) = Regex.match (sat \<sigma> V v) r"
     unfolding match_map_regex
     by (intro Regex.match_fv_cong)
       (auto 0 4 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
@@ -1240,7 +1281,7 @@ next
     by auto
 next
   case (MatchF I r)
-  then have "Regex.match (sat \<sigma> v) (convert_multiway_regex r) = Regex.match (sat \<sigma> v) r"
+  then have "Regex.match (sat \<sigma> V v) (convert_multiway_regex r) = Regex.match (sat \<sigma> V v) r"
     unfolding match_map_regex
     by (intro Regex.match_fv_cong)
       (auto 0 4 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
