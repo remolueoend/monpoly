@@ -47,7 +47,7 @@ function monitor_cmd() {
   fi
 
   if [ $monitor = "aerial" ]; then
-      echo "aerial -fmla ${fma}.mdl -log ${log}  -out /dev/null"
+      echo "aerial -fmla ${fma}.mdl -log ${log} -mode global -expr  -out /dev/null"
       return
   fi
 
@@ -71,7 +71,7 @@ for f in $FORMULAS; do
         info "       Generating log ..."
 
         if [ $fma = "regex" ]; then
-            name=$(make_log "$fma" "$e" "1" "1" "$r" "$LOG_LENGTH" "-sig ./fmas/regex.sig")
+            name=$(make_log "$fma" "$e" "$e" "1" "$r" "$LOG_LENGTH" "-sig ./fmas/regex.sig")
         else
             if [ $fma = "multiway" ]; then
                 name=$(make_log "$fma" "$e" "1" "1" "$r" "$LOG_LENGTH" "-S -z w=1")

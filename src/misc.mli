@@ -164,7 +164,10 @@ val get_positions: int list -> 'a list -> 'a list
       [posl] from the list [l]. The order of elements in [l] is
       preserved. *)
 
-
+val zip: 'a list -> 'b list -> ('a * 'b) list
+  (** [zip l1 l2] creates a list of pair of elements of l1 l2, positionwise.Algorithm
+      The length of the resulting list is the minimum of the lengths of lists l1 and l2
+  *)
 
 
 (** Pretty-printing functions: *)

@@ -9,6 +9,9 @@ echo "monpoly -no_rw -nonewlastts -nofilteremptytp -nofilterrel -sig fmas/$sig -
 
 echo "verimon -no_rw -nonewlastts -nofilteremptytp -nofilterrel -sig fmas/$sig -formula fmas/$fma -log logs/$log -verified"
 
-echo "dejavu-run fmas/$f logs/$log ./output"
+echo ""
 
-echo "verimon -no_rw -nonewlastts -nofilteremptytp -nofilterrel -sig fmas/$sigd -formula fmas/$fmad -log logs/$log -verified"
+echo "../dejavu-run fmas/${f} logs/${log}_dejavu ./dout.txt; cat ./dout.txt"
+
+echo "monpoly -no_rw -nonewlastts -nofilteremptytp -nofilterrel -sig fmas/${f}.sig -formula fmas/${f}.mfotl -log logs/${log}_oracle -verified"
+

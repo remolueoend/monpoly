@@ -1,13 +1,11 @@
 #!/bin/bash
 
 echo "================================================================================"
-echo "MonPoly's violations of NOT (P0(x1,x2) AND (NOT (P1(x1) SINCE[0,*] P0(x2,x1))))"
+echo "MonPoly's violations of  (x1 <- MAX x1; x2 (ONCE[1,1] (P0(y1,x1,x2) )))"
 echo "================================================================================"
-monpoly -sig ./ex.sig -formula ./ex.mfotl -log ./ex.log -no_rw -nonewlastts
+monpoly -sig bug.sig -formula bug.mfotl -log bug.log -no_rw -nonewlastts -nofilteremptytp -nofilterrel 
 
 echo "================================================================================"
-echo "Oracle's violations of NOT (P0(x1,x2) AND (NOT (P1(x1) SINCE[0,*] P0(x2,x1))))"
+echo "Verimon's violations of  (x1 <- MAX x1; x2 (ONCE[1,1] (P0(y1,x1,x2) )))"
 echo "================================================================================"
-monpoly -sig ./ex.sig -formula ./ex.mfotl -log ./ex.log -no_rw -nonewlastts -verified 
-
-
+verimon -sig bug.sig -formula bug.mfotl -log bug.log -no_rw -nonewlastts -nofilteremptytp -nofilterrel 
