@@ -184,33 +184,6 @@ module Monitor : sig
   val convert_multiway : formula -> formula
 end = struct
 
-let ceq_funa : (('a -> 'b) -> ('a -> 'b) -> bool) option = None;;
-
-type 'a ceq = {ceq : ('a -> 'a -> bool) option};;
-let ceq _A = _A.ceq;;
-
-let ceq_fun = ({ceq = ceq_funa} : ('a -> 'b) ceq);;
-
-type ('a, 'b) phantom = Phantom of 'b;;
-
-type set_impla = Set_Choose | Set_Collect | Set_DList | Set_RBT | Set_Monada;;
-
-let set_impl_funa : (('a -> 'b), set_impla) phantom = Phantom Set_Monada;;
-
-type 'a set_impl = {set_impl : ('a, set_impla) phantom};;
-let set_impl _A = _A.set_impl;;
-
-let set_impl_fun = ({set_impl = set_impl_funa} : ('a -> 'b) set_impl);;
-
-type ordera = Eqa | Lt | Gt;;
-
-let ccompare_funa : (('a -> 'b) -> ('a -> 'b) -> ordera) option = None;;
-
-type 'a ccompare = {ccompare : ('a -> 'a -> ordera) option};;
-let ccompare _A = _A.ccompare;;
-
-let ccompare_fun = ({ccompare = ccompare_funa} : ('a -> 'b) ccompare);;
-
 type nat = Nat of Z.t;;
 
 let rec integer_of_nat (Nat x) = x;;
@@ -630,9 +603,19 @@ let lattice_nat =
 
 let ceq_nata : (nat -> nat -> bool) option = Some equal_nata;;
 
+type 'a ceq = {ceq : ('a -> 'a -> bool) option};;
+let ceq _A = _A.ceq;;
+
 let ceq_nat = ({ceq = ceq_nata} : nat ceq);;
 
+type ('a, 'b) phantom = Phantom of 'b;;
+
+type set_impla = Set_Choose | Set_Collect | Set_DList | Set_RBT | Set_Monada;;
+
 let set_impl_nata : (nat, set_impla) phantom = Phantom Set_RBT;;
+
+type 'a set_impl = {set_impl : ('a, set_impla) phantom};;
+let set_impl _A = _A.set_impl;;
 
 let set_impl_nat = ({set_impl = set_impl_nata} : nat set_impl);;
 
@@ -713,6 +696,8 @@ let cEnum _A = _A.cEnum;;
 
 let cenum_nat = ({cEnum = cEnum_nat} : nat cenum);;
 
+type ordera = Eqa | Lt | Gt;;
+
 let rec eq _A a b = equal _A a b;;
 
 let rec comparator_of (_A1, _A2)
@@ -722,6 +707,9 @@ let rec comparator_of (_A1, _A2)
 let rec compare_nat x = comparator_of (equal_nat, linorder_nat) x;;
 
 let ccompare_nata : (nat -> nat -> ordera) option = Some compare_nat;;
+
+type 'a ccompare = {ccompare : ('a -> 'a -> ordera) option};;
+let ccompare _A = _A.ccompare;;
 
 let ccompare_nat = ({ccompare = ccompare_nata} : nat ccompare);;
 
@@ -2877,11 +2865,6 @@ let rec ceq_optiona _A
 
 let rec ceq_option _A = ({ceq = ceq_optiona _A} : ('a option) ceq);;
 
-let rec set_impl_optiona _A = Phantom (of_phantom (set_impl _A));;
-
-let rec set_impl_option _A =
-  ({set_impl = set_impl_optiona _A} : ('a option) set_impl);;
-
 let rec comparator_option
   comp_a x1 x2 = match comp_a, x1, x2 with comp_a, Some x, Some y -> comp_a x y
     | comp_a, Some x, None -> Gt
@@ -3982,11 +3965,6 @@ let rec rPDs
         (insert (ceq_mregex, ccompare_mregex) r
           (set_empty (ceq_mregex, ccompare_mregex)
             (of_phantom set_impl_mregexa)));;
-
-let rec these (_A1, _A2, _A3)
-  a = image ((ceq_option _A1), (ccompare_option _A2)) (_A1, _A2, _A3) the
-        (filter ((ceq_option _A1), (ccompare_option _A2))
-          (fun x -> not (is_none x)) a);;
 
 let rec lookup _A xa = map_of _A (impl_of xa);;
 
@@ -6988,29 +6966,163 @@ let rec eval_matchF
           else ([], (t, (rels, rel)) :: aux));;
 
 let rec meval
-  n t db x3 = match n, t, db, x3 with n, t, db, MRel rel -> ([rel], MRel rel)
-    | n, t, db, MPred (e, ts) ->
-        (mapa (fun x ->
-                image (ceq_fun, ccompare_fun)
+  n t db x3 = match n, t, db, x3 with
+    n, t, db, MMatchF (i, mr, mrs, phi_s, bufa, nts, auxa) ->
+      (let (xss, phi_sa) = map_split id (mapa (meval n t db) phi_s) in
+       let (aux, (buf, ntsa)) =
+         mbufnt_take (update_matchF n i mr mrs) auxa (mbufn_add xss bufa)
+           (nts @ [t])
+         in
+       let (zs, auxb) =
+         eval_matchF i mr (match ntsa with [] -> t | nt :: _ -> nt) aux in
+        (zs, MMatchF (i, mr, mrs, phi_sa, buf, ntsa, auxb)))
+    | n, t, db, MMatchP (i, mr, mrs, phi_s, bufa, nts, aux) ->
+        (let (xss, phi_sa) = map_split id (mapa (meval n t db) phi_s) in
+         let a =
+           mbufnt_take
+             (fun rels ta (zs, auxa) ->
+               (let a = update_matchP n i mr mrs rels ta auxa in
+                let (z, aa) = a in
+                 (zs @ [z], aa)))
+             ([], aux) (mbufn_add xss bufa) (nts @ [t])
+           in
+         let (aa, b) = a in
+          (let (zs, auxa) = aa in
+            (fun (buf, ntsa) ->
+              (zs, MMatchP (i, mr, mrs, phi_sa, buf, ntsa, auxa))))
+            b)
+    | n, t, db, MUntil (args, phi, psi, bufb, nts, auxc) ->
+        (let (xs, phia) = meval n t db phi in
+         let (ys, psia) = meval n t db psi in
+         let (aux, (buf, ntsa)) =
+           mbuf2t_take (add_new_mmuaux args) auxc (mbuf2_add xs ys bufb)
+             (nts @ [t])
+           in
+         let (zs, auxa) =
+           eval_mmuaux (ceq_event_data, ccompare_event_data) args
+             (match ntsa with [] -> t | nt :: _ -> nt) aux
+           in
+          (zs, MUntil (args, phia, psia, buf, ntsa, auxa)))
+    | n, t, db, MSince (args, phi, psi, bufb, nts, auxb) ->
+        (let (xs, phia) = meval n t db phi in
+         let (ys, psia) = meval n t db psi in
+         let a =
+           mbuf2t_take
+             (fun r1 r2 ta (zs, aux) ->
+               (let a = update_since args r1 r2 ta aux in
+                let (z, aa) = a in
+                 (zs @ [z], aa)))
+             ([], auxb) (mbuf2_add xs ys bufb) (nts @ [t])
+           in
+         let (aa, b) = a in
+          (let (zs, aux) = aa in
+            (fun (buf, ntsa) ->
+              (zs, MSince (args, phia, psia, buf, ntsa, aux))))
+            b)
+    | n, t, db, MNext (i, phi, first, nts) ->
+        (let (xs, phia) = meval n t db phi in
+         let (xsa, firsta) =
+           (match (xs, first) with ([], b) -> ([], b)
+             | (_ :: xsa, true) -> (xsa, false)
+             | (x :: xsa, false) -> (x :: xsa, false))
+           in
+         let (zs, (_, ntsa)) = mprev_next i xsa (nts @ [t]) in
+          (zs, MNext (i, phia, firsta, ntsa)))
+    | n, t, db, MPrev (i, phi, first, buf, nts) ->
+        (let (xs, phia) = meval n t db phi in
+         let (zs, (bufa, ntsa)) = mprev_next i (buf @ xs) (nts @ [t]) in
+          ((if first
+             then empty_table
+                    ((ceq_list (ceq_option ceq_event_data)),
+                      (ccompare_list (ccompare_option ccompare_event_data)),
+                      set_impl_list) ::
+                    zs
+             else zs),
+            MPrev (i, phia, false, bufa, ntsa)))
+    | n, t, db, MAgg (g0, y, omega, b, f, phi) ->
+        (let (xs, phia) = meval (plus_nata b n) t db phi in
+          (mapa (eval_agg n g0 y omega b f) xs,
+            MAgg (g0, y, omega, b, f, phia)))
+    | n, t, db, MExists phi ->
+        (let (xs, phia) = meval (suc n) t db phi in
+          (mapa (image
+                  ((ceq_list (ceq_option ceq_event_data)),
+                    (ccompare_list (ccompare_option ccompare_event_data)))
                   ((ceq_list (ceq_option ceq_event_data)),
                     (ccompare_list (ccompare_option ccompare_event_data)),
                     set_impl_list)
-                  (fun f -> tabulate f zero_nata n)
-                  (these (ceq_fun, ccompare_fun, set_impl_fun)
-                    (image
-                      ((ceq_list ceq_event_data),
-                        (ccompare_list ccompare_event_data))
-                      ((ceq_option ceq_fun), (ccompare_option ccompare_fun),
-                        (set_impl_option set_impl_fun))
-                      (matcha ts) x)))
-           (match db e
-             with None ->
-               [set_empty
-                  ((ceq_list ceq_event_data),
-                    (ccompare_list ccompare_event_data))
-                  (of_phantom set_impl_lista)]
-             | Some xs -> xs),
-          MPred (e, ts))
+                  tla)
+             xs,
+            MExists phia))
+    | n, t, db, MNeg phi ->
+        (let (xs, phia) = meval n t db phi in
+          (mapa (fun r ->
+                  (if is_empty
+                        (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                          (cproper_interval_list
+                            (ccompare_option ccompare_event_data)))
+                        r
+                    then unit_table (ceq_event_data, ccompare_event_data) n
+                    else empty_table
+                           ((ceq_list (ceq_option ceq_event_data)),
+                             (ccompare_list
+                               (ccompare_option ccompare_event_data)),
+                             set_impl_list)))
+             xs,
+            MNeg phia))
+    | n, t, db, MOr (phi, psi, bufb) ->
+        (let (xs, phia) = meval n t db phi in
+         let (ys, psia) = meval n t db psi in
+         let (zs, buf) =
+           mbuf2_take
+             (sup_seta
+               ((ceq_list (ceq_option ceq_event_data)),
+                 (ccompare_list (ccompare_option ccompare_event_data))))
+             (mbuf2_add xs ys bufb)
+           in
+          (zs, MOr (phia, psia, buf)))
+    | n, t, db, MAnds (a_pos, a_neg, l, bufa) ->
+        (let r = mapa (meval n t db) l in
+         let buf = mbufn_add (mapa fst r) bufa in
+         let (zs, bufb) =
+           mbufn_take
+             (fun xs zs ->
+               zs @ [mmulti_join
+                       (ceq_event_data, ccompare_event_data, equal_event_data) n
+                       a_pos a_neg xs])
+             [] buf
+           in
+          (zs, MAnds (a_pos, a_neg, mapa snd r, bufb)))
+    | n, t, db, MAndRel (phi, confa) ->
+        (let (xs, phia) = meval n t db phi in
+          (mapa (filter
+                  ((ceq_list (ceq_option ceq_event_data)),
+                    (ccompare_list (ccompare_option ccompare_event_data)))
+                  (eval_constraint confa))
+             xs,
+            MAndRel (phia, confa)))
+    | n, t, db, MAndAssign (phi, conf) ->
+        (let (xs, phia) = meval n t db phi in
+          (mapa (image
+                  ((ceq_list (ceq_option ceq_event_data)),
+                    (ccompare_list (ccompare_option ccompare_event_data)))
+                  ((ceq_list (ceq_option ceq_event_data)),
+                    (ccompare_list (ccompare_option ccompare_event_data)),
+                    set_impl_list)
+                  (eval_assignment conf))
+             xs,
+            MAndAssign (phia, conf)))
+    | n, t, db, MAnd (a_phi, phi, pos, a_psi, psi, bufb) ->
+        (let (xs, phia) = meval n t db phi in
+         let (ys, psia) = meval n t db psi in
+         let (zs, buf) =
+           mbuf2_take
+             (fun r1 ->
+               bin_join (ceq_event_data, ccompare_event_data, equal_event_data)
+                 n a_phi r1 pos a_psi)
+             (mbuf2_add xs ys bufb)
+           in
+          (zs, MAnd (a_phi, phia, pos, a_psi, psia, buf)))
     | n, t, db, MLet (p, m, b, phi, psi) ->
         (let (xs, phia) = meval m t db phi in
          let (ys, psia) =
@@ -7028,162 +7140,48 @@ let rec meval
              psi
            in
           (ys, MLet (p, m, b, phia, psia)))
-    | n, t, db, MAnd (a_phi, phi, pos, a_psi, psi, buf) ->
-        (let (xs, phia) = meval n t db phi in
-         let (ys, psia) = meval n t db psi in
-         let (zs, bufa) =
-           mbuf2_take
-             (fun r1 ->
-               bin_join (ceq_event_data, ccompare_event_data, equal_event_data)
-                 n a_phi r1 pos a_psi)
-             (mbuf2_add xs ys buf)
-           in
-          (zs, MAnd (a_phi, phia, pos, a_psi, psia, bufa)))
-    | n, t, db, MAndAssign (phi, conf) ->
-        (let (xs, phia) = meval n t db phi in
-          (mapa (image
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)))
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)),
-                    set_impl_list)
-                  (eval_assignment conf))
-             xs,
-            MAndAssign (phia, conf)))
-    | n, t, db, MAndRel (phi, conf) ->
-        (let (xs, phia) = meval n t db phi in
-          (mapa (filter
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)))
-                  (eval_constraint conf))
-             xs,
-            MAndRel (phia, conf)))
-    | n, t, db, MAnds (a_pos, a_neg, l, buf) ->
-        (let r = mapa (meval n t db) l in
-         let bufa = mbufn_add (mapa fst r) buf in
-         let (zs, bufb) =
-           mbufn_take
-             (fun xs zs ->
-               zs @ [mmulti_join
-                       (ceq_event_data, ccompare_event_data, equal_event_data) n
-                       a_pos a_neg xs])
-             [] bufa
-           in
-          (zs, MAnds (a_pos, a_neg, mapa snd r, bufb)))
-    | n, t, db, MOr (phi, psi, buf) ->
-        (let (xs, phia) = meval n t db phi in
-         let (ys, psia) = meval n t db psi in
-         let (zs, bufa) =
-           mbuf2_take
-             (sup_seta
-               ((ceq_list (ceq_option ceq_event_data)),
-                 (ccompare_list (ccompare_option ccompare_event_data))))
-             (mbuf2_add xs ys buf)
-           in
-          (zs, MOr (phia, psia, bufa)))
-    | n, t, db, MNeg phi ->
-        (let (xs, phia) = meval n t db phi in
-          (mapa (fun r ->
-                  (if is_empty
-                        (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
-                          (cproper_interval_list
-                            (ccompare_option ccompare_event_data)))
-                        r
-                    then unit_table (ceq_event_data, ccompare_event_data) n
-                    else empty_table
-                           ((ceq_list (ceq_option ceq_event_data)),
-                             (ccompare_list
-                               (ccompare_option ccompare_event_data)),
-                             set_impl_list)))
-             xs,
-            MNeg phia))
-    | n, t, db, MExists phi ->
-        (let (xs, phia) = meval (suc n) t db phi in
-          (mapa (image
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)))
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)),
-                    set_impl_list)
-                  tla)
-             xs,
-            MExists phia))
-    | n, t, db, MAgg (g0, y, omega, b, f, phi) ->
-        (let (xs, phia) = meval (plus_nata b n) t db phi in
-          (mapa (eval_agg n g0 y omega b f) xs,
-            MAgg (g0, y, omega, b, f, phia)))
-    | n, t, db, MPrev (i, phi, first, buf, nts) ->
-        (let (xs, phia) = meval n t db phi in
-         let (zs, (bufa, ntsa)) = mprev_next i (buf @ xs) (nts @ [t]) in
-          ((if first
-             then empty_table
-                    ((ceq_list (ceq_option ceq_event_data)),
-                      (ccompare_list (ccompare_option ccompare_event_data)),
-                      set_impl_list) ::
-                    zs
-             else zs),
-            MPrev (i, phia, false, bufa, ntsa)))
-    | n, t, db, MNext (i, phi, first, nts) ->
-        (let (xs, phia) = meval n t db phi in
-         let (xsa, firsta) =
-           (match (xs, first) with ([], b) -> ([], b)
-             | (_ :: xsa, true) -> (xsa, false)
-             | (x :: xsa, false) -> (x :: xsa, false))
-           in
-         let (zs, (_, ntsa)) = mprev_next i xsa (nts @ [t]) in
-          (zs, MNext (i, phia, firsta, ntsa)))
-    | n, t, db, MSince (args, phi, psi, buf, nts, aux) ->
-        (let (xs, phia) = meval n t db phi in
-         let (ys, psia) = meval n t db psi in
-         let a =
-           mbuf2t_take
-             (fun r1 r2 ta (zs, auxa) ->
-               (let a = update_since args r1 r2 ta auxa in
-                let (z, aa) = a in
-                 (zs @ [z], aa)))
-             ([], aux) (mbuf2_add xs ys buf) (nts @ [t])
-           in
-         let (aa, b) = a in
-          (let (zs, auxa) = aa in
-            (fun (bufa, ntsa) ->
-              (zs, MSince (args, phia, psia, bufa, ntsa, auxa))))
-            b)
-    | n, t, db, MUntil (args, phi, psi, buf, nts, aux) ->
-        (let (xs, phia) = meval n t db phi in
-         let (ys, psia) = meval n t db psi in
-         let (auxa, (bufa, ntsa)) =
-           mbuf2t_take (add_new_mmuaux args) aux (mbuf2_add xs ys buf)
-             (nts @ [t])
-           in
-         let (zs, auxb) =
-           eval_mmuaux (ceq_event_data, ccompare_event_data) args
-             (match ntsa with [] -> t | nt :: _ -> nt) auxa
-           in
-          (zs, MUntil (args, phia, psia, bufa, ntsa, auxb)))
-    | n, t, db, MMatchP (i, mr, mrs, phi_s, buf, nts, aux) ->
-        (let (xss, phi_sa) = map_split id (mapa (meval n t db) phi_s) in
-         let a =
-           mbufnt_take
-             (fun rels ta (zs, auxa) ->
-               (let a = update_matchP n i mr mrs rels ta auxa in
-                let (z, aa) = a in
-                 (zs @ [z], aa)))
-             ([], aux) (mbufn_add xss buf) (nts @ [t])
-           in
-         let (aa, b) = a in
-          (let (zs, auxa) = aa in
-            (fun (bufa, ntsa) ->
-              (zs, MMatchP (i, mr, mrs, phi_sa, bufa, ntsa, auxa))))
-            b)
-    | n, t, db, MMatchF (i, mr, mrs, phi_s, buf, nts, aux) ->
-        (let (xss, phi_sa) = map_split id (mapa (meval n t db) phi_s) in
-         let (auxa, (bufa, ntsa)) =
-           mbufnt_take (update_matchF n i mr mrs) aux (mbufn_add xss buf)
-             (nts @ [t])
-           in
-         let (zs, auxb) =
-           eval_matchF i mr (match ntsa with [] -> t | nt :: _ -> nt) auxa in
-          (zs, MMatchF (i, mr, mrs, phi_sa, bufa, ntsa, auxb)));;
+    | n, t, db, MPred (e, ts) ->
+        ((match db e
+           with None ->
+             [set_empty
+                ((ceq_list (ceq_option ceq_event_data)),
+                  (ccompare_list (ccompare_option ccompare_event_data)))
+                (of_phantom set_impl_lista)]
+           | Some a ->
+             mapa (fun x ->
+                    sup_setb
+                      (finite_UNIV_list, cenum_list,
+                        (ceq_list (ceq_option ceq_event_data)),
+                        (cproper_interval_list
+                          (ccompare_option ccompare_event_data)),
+                        set_impl_list)
+                      (image
+                        ((ceq_list ceq_event_data),
+                          (ccompare_list ccompare_event_data))
+                        ((ceq_set
+                           (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                             (cproper_interval_list
+                               (ccompare_option
+                                 ccompare_event_data)).ccompare_cproper_interval)),
+                          (ccompare_set
+                            (finite_UNIV_list,
+                              (ceq_list (ceq_option ceq_event_data)),
+                              (cproper_interval_list
+                                (ccompare_option ccompare_event_data)),
+                              set_impl_list)),
+                          set_impl_set)
+                        (fun v ->
+                          set_option
+                            ((ceq_list (ceq_option ceq_event_data)),
+                              (ccompare_list
+                                (ccompare_option ccompare_event_data)),
+                              set_impl_list)
+                            (map_option (fun f -> tabulate f zero_nata n)
+                              (matcha ts v)))
+                        x))
+               a),
+          MPred (e, ts))
+    | n, t, db, MRel rel -> ([rel], MRel rel);;
 
 let mapping_impl_nat : (nat, mapping_impla) phantom = Phantom Mapping_RBT;;
 
