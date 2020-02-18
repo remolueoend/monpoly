@@ -147,7 +147,7 @@ let median l len f =
         if len mod 2 = 0 then
           f h (List.hd l)
         else
-          h
+          f h h
       else median_aux l (n+1)
   in
   median_aux l 0
