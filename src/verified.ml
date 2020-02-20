@@ -4538,144 +4538,149 @@ let rec r_delta (_A1, _A2, _A3)
 let rec subset (_A1, _A2, _A3, _A4) = subset_eq (_A2, _A3, _A4);;
 
 let rec safe_assignment
-  xa x1 = match xa, x1 with
-    xa, Eq (Var x, t) ->
-      not (member (ceq_nat, ccompare_nat) x xa) &&
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi_trm zero_nata t) xa
-    | xa, Eq (Const v, Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+  x phi =
+    (match phi with Pred (_, _) -> false | Let (_, _, _, _) -> false
+      | Eq (Var xa, Var y) ->
+        equal_boola (not (member (ceq_nat, ccompare_nat) xa x))
+          (member (ceq_nat, ccompare_nat) y x)
+      | Eq (Var xa, Const event_data) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (Const v)) xa
-    | xa, Eq (Plus (v, va), Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (Const event_data)) x
+      | Eq (Var xa, Plus (trm1, trm2)) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (Plus (v, va))) xa
-    | xa, Eq (Minus (v, va), Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (Plus (trm1, trm2))) x
+      | Eq (Var xa, Minus (trm1, trm2)) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (Minus (v, va))) xa
-    | xa, Eq (UMinus v, Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (Minus (trm1, trm2))) x
+      | Eq (Var xa, UMinus trm) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (UMinus v)) xa
-    | xa, Eq (Mult (v, va), Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (UMinus trm)) x
+      | Eq (Var xa, Mult (trm1, trm2)) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (Mult (v, va))) xa
-    | xa, Eq (Div (v, va), Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (Mult (trm1, trm2))) x
+      | Eq (Var xa, Div (trm1, trm2)) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (Div (v, va))) xa
-    | xa, Eq (Mod (v, va), Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (Div (trm1, trm2))) x
+      | Eq (Var xa, Mod (trm1, trm2)) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (Mod (v, va))) xa
-    | xa, Eq (F2i v, Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (Mod (trm1, trm2))) x
+      | Eq (Var xa, F2i trm) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (F2i v)) xa
-    | xa, Eq (I2f v, Var x) ->
-        not (member (ceq_nat, ccompare_nat) x xa) &&
+            (fvi_trm zero_nata (F2i trm)) x
+      | Eq (Var xa, I2f trm) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
           subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-            (fvi_trm zero_nata (I2f v)) xa
-    | x, Pred (v, va) -> false
-    | x, Let (v, va, vb, vc) -> false
-    | x, Eq (Const vb, Const v) -> false
-    | x, Eq (Const vb, Plus (v, vc)) -> false
-    | x, Eq (Const vb, Minus (v, vc)) -> false
-    | x, Eq (Const vb, UMinus v) -> false
-    | x, Eq (Const vb, Mult (v, vc)) -> false
-    | x, Eq (Const vb, Div (v, vc)) -> false
-    | x, Eq (Const vb, Mod (v, vc)) -> false
-    | x, Eq (Const vb, F2i v) -> false
-    | x, Eq (Const vb, I2f v) -> false
-    | x, Eq (Plus (vb, vc), Const v) -> false
-    | x, Eq (Plus (vb, vc), Plus (v, vd)) -> false
-    | x, Eq (Plus (vb, vc), Minus (v, vd)) -> false
-    | x, Eq (Plus (vb, vc), UMinus v) -> false
-    | x, Eq (Plus (vb, vc), Mult (v, vd)) -> false
-    | x, Eq (Plus (vb, vc), Div (v, vd)) -> false
-    | x, Eq (Plus (vb, vc), Mod (v, vd)) -> false
-    | x, Eq (Plus (vb, vc), F2i v) -> false
-    | x, Eq (Plus (vb, vc), I2f v) -> false
-    | x, Eq (Minus (vb, vc), Const v) -> false
-    | x, Eq (Minus (vb, vc), Plus (v, vd)) -> false
-    | x, Eq (Minus (vb, vc), Minus (v, vd)) -> false
-    | x, Eq (Minus (vb, vc), UMinus v) -> false
-    | x, Eq (Minus (vb, vc), Mult (v, vd)) -> false
-    | x, Eq (Minus (vb, vc), Div (v, vd)) -> false
-    | x, Eq (Minus (vb, vc), Mod (v, vd)) -> false
-    | x, Eq (Minus (vb, vc), F2i v) -> false
-    | x, Eq (Minus (vb, vc), I2f v) -> false
-    | x, Eq (UMinus vb, Const v) -> false
-    | x, Eq (UMinus vb, Plus (v, vc)) -> false
-    | x, Eq (UMinus vb, Minus (v, vc)) -> false
-    | x, Eq (UMinus vb, UMinus v) -> false
-    | x, Eq (UMinus vb, Mult (v, vc)) -> false
-    | x, Eq (UMinus vb, Div (v, vc)) -> false
-    | x, Eq (UMinus vb, Mod (v, vc)) -> false
-    | x, Eq (UMinus vb, F2i v) -> false
-    | x, Eq (UMinus vb, I2f v) -> false
-    | x, Eq (Mult (vb, vc), Const v) -> false
-    | x, Eq (Mult (vb, vc), Plus (v, vd)) -> false
-    | x, Eq (Mult (vb, vc), Minus (v, vd)) -> false
-    | x, Eq (Mult (vb, vc), UMinus v) -> false
-    | x, Eq (Mult (vb, vc), Mult (v, vd)) -> false
-    | x, Eq (Mult (vb, vc), Div (v, vd)) -> false
-    | x, Eq (Mult (vb, vc), Mod (v, vd)) -> false
-    | x, Eq (Mult (vb, vc), F2i v) -> false
-    | x, Eq (Mult (vb, vc), I2f v) -> false
-    | x, Eq (Div (vb, vc), Const v) -> false
-    | x, Eq (Div (vb, vc), Plus (v, vd)) -> false
-    | x, Eq (Div (vb, vc), Minus (v, vd)) -> false
-    | x, Eq (Div (vb, vc), UMinus v) -> false
-    | x, Eq (Div (vb, vc), Mult (v, vd)) -> false
-    | x, Eq (Div (vb, vc), Div (v, vd)) -> false
-    | x, Eq (Div (vb, vc), Mod (v, vd)) -> false
-    | x, Eq (Div (vb, vc), F2i v) -> false
-    | x, Eq (Div (vb, vc), I2f v) -> false
-    | x, Eq (Mod (vb, vc), Const v) -> false
-    | x, Eq (Mod (vb, vc), Plus (v, vd)) -> false
-    | x, Eq (Mod (vb, vc), Minus (v, vd)) -> false
-    | x, Eq (Mod (vb, vc), UMinus v) -> false
-    | x, Eq (Mod (vb, vc), Mult (v, vd)) -> false
-    | x, Eq (Mod (vb, vc), Div (v, vd)) -> false
-    | x, Eq (Mod (vb, vc), Mod (v, vd)) -> false
-    | x, Eq (Mod (vb, vc), F2i v) -> false
-    | x, Eq (Mod (vb, vc), I2f v) -> false
-    | x, Eq (F2i vb, Const v) -> false
-    | x, Eq (F2i vb, Plus (v, vc)) -> false
-    | x, Eq (F2i vb, Minus (v, vc)) -> false
-    | x, Eq (F2i vb, UMinus v) -> false
-    | x, Eq (F2i vb, Mult (v, vc)) -> false
-    | x, Eq (F2i vb, Div (v, vc)) -> false
-    | x, Eq (F2i vb, Mod (v, vc)) -> false
-    | x, Eq (F2i vb, F2i v) -> false
-    | x, Eq (F2i vb, I2f v) -> false
-    | x, Eq (I2f vb, Const v) -> false
-    | x, Eq (I2f vb, Plus (v, vc)) -> false
-    | x, Eq (I2f vb, Minus (v, vc)) -> false
-    | x, Eq (I2f vb, UMinus v) -> false
-    | x, Eq (I2f vb, Mult (v, vc)) -> false
-    | x, Eq (I2f vb, Div (v, vc)) -> false
-    | x, Eq (I2f vb, Mod (v, vc)) -> false
-    | x, Eq (I2f vb, F2i v) -> false
-    | x, Eq (I2f vb, I2f v) -> false
-    | x, Less (v, va) -> false
-    | x, LessEq (v, va) -> false
-    | x, Neg v -> false
-    | x, Or (v, va) -> false
-    | x, And (v, va) -> false
-    | x, Ands v -> false
-    | x, Exists v -> false
-    | x, Agg (v, va, vb, vc, vd) -> false
-    | x, Prev (v, va) -> false
-    | x, Next (v, va) -> false
-    | x, Since (v, va, vb) -> false
-    | x, Until (v, va, vb) -> false
-    | x, MatchF (v, va) -> false
-    | x, MatchP (v, va) -> false;;
+            (fvi_trm zero_nata (I2f trm)) x
+      | Eq (Const event_data, Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (Const event_data)) x
+      | Eq (Const _, Const _) -> false | Eq (Const _, Plus (_, _)) -> false
+      | Eq (Const _, Minus (_, _)) -> false | Eq (Const _, UMinus _) -> false
+      | Eq (Const _, Mult (_, _)) -> false | Eq (Const _, Div (_, _)) -> false
+      | Eq (Const _, Mod (_, _)) -> false | Eq (Const _, F2i _) -> false
+      | Eq (Const _, I2f _) -> false
+      | Eq (Plus (trm1, trm2), Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (Plus (trm1, trm2))) x
+      | Eq (Plus (_, _), Const _) -> false
+      | Eq (Plus (_, _), Plus (_, _)) -> false
+      | Eq (Plus (_, _), Minus (_, _)) -> false
+      | Eq (Plus (_, _), UMinus _) -> false
+      | Eq (Plus (_, _), Mult (_, _)) -> false
+      | Eq (Plus (_, _), Div (_, _)) -> false
+      | Eq (Plus (_, _), Mod (_, _)) -> false | Eq (Plus (_, _), F2i _) -> false
+      | Eq (Plus (_, _), I2f _) -> false
+      | Eq (Minus (trm1, trm2), Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (Minus (trm1, trm2))) x
+      | Eq (Minus (_, _), Const _) -> false
+      | Eq (Minus (_, _), Plus (_, _)) -> false
+      | Eq (Minus (_, _), Minus (_, _)) -> false
+      | Eq (Minus (_, _), UMinus _) -> false
+      | Eq (Minus (_, _), Mult (_, _)) -> false
+      | Eq (Minus (_, _), Div (_, _)) -> false
+      | Eq (Minus (_, _), Mod (_, _)) -> false
+      | Eq (Minus (_, _), F2i _) -> false | Eq (Minus (_, _), I2f _) -> false
+      | Eq (UMinus trm, Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (UMinus trm)) x
+      | Eq (UMinus _, Const _) -> false | Eq (UMinus _, Plus (_, _)) -> false
+      | Eq (UMinus _, Minus (_, _)) -> false | Eq (UMinus _, UMinus _) -> false
+      | Eq (UMinus _, Mult (_, _)) -> false | Eq (UMinus _, Div (_, _)) -> false
+      | Eq (UMinus _, Mod (_, _)) -> false | Eq (UMinus _, F2i _) -> false
+      | Eq (UMinus _, I2f _) -> false
+      | Eq (Mult (trm1, trm2), Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (Mult (trm1, trm2))) x
+      | Eq (Mult (_, _), Const _) -> false
+      | Eq (Mult (_, _), Plus (_, _)) -> false
+      | Eq (Mult (_, _), Minus (_, _)) -> false
+      | Eq (Mult (_, _), UMinus _) -> false
+      | Eq (Mult (_, _), Mult (_, _)) -> false
+      | Eq (Mult (_, _), Div (_, _)) -> false
+      | Eq (Mult (_, _), Mod (_, _)) -> false | Eq (Mult (_, _), F2i _) -> false
+      | Eq (Mult (_, _), I2f _) -> false
+      | Eq (Div (trm1, trm2), Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (Div (trm1, trm2))) x
+      | Eq (Div (_, _), Const _) -> false
+      | Eq (Div (_, _), Plus (_, _)) -> false
+      | Eq (Div (_, _), Minus (_, _)) -> false
+      | Eq (Div (_, _), UMinus _) -> false
+      | Eq (Div (_, _), Mult (_, _)) -> false
+      | Eq (Div (_, _), Div (_, _)) -> false
+      | Eq (Div (_, _), Mod (_, _)) -> false | Eq (Div (_, _), F2i _) -> false
+      | Eq (Div (_, _), I2f _) -> false
+      | Eq (Mod (trm1, trm2), Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (Mod (trm1, trm2))) x
+      | Eq (Mod (_, _), Const _) -> false
+      | Eq (Mod (_, _), Plus (_, _)) -> false
+      | Eq (Mod (_, _), Minus (_, _)) -> false
+      | Eq (Mod (_, _), UMinus _) -> false
+      | Eq (Mod (_, _), Mult (_, _)) -> false
+      | Eq (Mod (_, _), Div (_, _)) -> false
+      | Eq (Mod (_, _), Mod (_, _)) -> false | Eq (Mod (_, _), F2i _) -> false
+      | Eq (Mod (_, _), I2f _) -> false
+      | Eq (F2i trm, Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (F2i trm)) x
+      | Eq (F2i _, Const _) -> false | Eq (F2i _, Plus (_, _)) -> false
+      | Eq (F2i _, Minus (_, _)) -> false | Eq (F2i _, UMinus _) -> false
+      | Eq (F2i _, Mult (_, _)) -> false | Eq (F2i _, Div (_, _)) -> false
+      | Eq (F2i _, Mod (_, _)) -> false | Eq (F2i _, F2i _) -> false
+      | Eq (F2i _, I2f _) -> false
+      | Eq (I2f trm, Var xa) ->
+        not (member (ceq_nat, ccompare_nat) xa x) &&
+          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (fvi_trm zero_nata (I2f trm)) x
+      | Eq (I2f _, Const _) -> false | Eq (I2f _, Plus (_, _)) -> false
+      | Eq (I2f _, Minus (_, _)) -> false | Eq (I2f _, UMinus _) -> false
+      | Eq (I2f _, Mult (_, _)) -> false | Eq (I2f _, Div (_, _)) -> false
+      | Eq (I2f _, Mod (_, _)) -> false | Eq (I2f _, F2i _) -> false
+      | Eq (I2f _, I2f _) -> false | Less (_, _) -> false
+      | LessEq (_, _) -> false | Neg _ -> false | Or (_, _) -> false
+      | And (_, _) -> false | Ands _ -> false | Exists _ -> false
+      | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
+      | Next (_, _) -> false | Since (_, _, _) -> false
+      | Until (_, _, _) -> false | MatchF (_, _) -> false
+      | MatchP (_, _) -> false);;
 
 let rec is_constraint = function Eq (t1, t2) -> true
                         | Less (t1, t2) -> true
@@ -7258,33 +7263,45 @@ let rec split_constraint
     | MatchP (v, va) -> failwith "undefined";;
 
 let rec split_assignment
-  = function
-    Eq (t1, t2) ->
-      (match t1 with Var x -> (x, t2) | Const _ -> (let Var x = t2 in (x, t1))
-        | Plus (_, _) -> (let Var x = t2 in (x, t1))
-        | Minus (_, _) -> (let Var x = t2 in (x, t1))
-        | UMinus _ -> (let Var x = t2 in (x, t1))
-        | Mult (_, _) -> (let Var x = t2 in (x, t1))
-        | Div (_, _) -> (let Var x = t2 in (x, t1))
-        | Mod (_, _) -> (let Var x = t2 in (x, t1))
-        | F2i _ -> (let Var x = t2 in (x, t1))
-        | I2f _ -> (let Var x = t2 in (x, t1)))
-    | Pred (v, va) -> failwith "undefined"
-    | Let (v, va, vb, vc) -> failwith "undefined"
-    | Less (v, va) -> failwith "undefined"
-    | LessEq (v, va) -> failwith "undefined"
-    | Neg v -> failwith "undefined"
-    | Or (v, va) -> failwith "undefined"
-    | And (v, va) -> failwith "undefined"
-    | Ands v -> failwith "undefined"
-    | Exists v -> failwith "undefined"
-    | Agg (v, va, vb, vc, vd) -> failwith "undefined"
-    | Prev (v, va) -> failwith "undefined"
-    | Next (v, va) -> failwith "undefined"
-    | Since (v, va, vb) -> failwith "undefined"
-    | Until (v, va, vb) -> failwith "undefined"
-    | MatchF (v, va) -> failwith "undefined"
-    | MatchP (v, va) -> failwith "undefined";;
+  x xa1 = match x, xa1 with
+    x, Eq (t1, t2) ->
+      (let (xa, xaa) = (t1, t2) in
+        (match xa
+          with Var xab ->
+            (match xaa
+              with Var y ->
+                (if member (ceq_nat, ccompare_nat) xab x then (y, t1)
+                  else (xab, t2))
+              | Const _ -> (xab, t2) | Plus (_, _) -> (xab, t2)
+              | Minus (_, _) -> (xab, t2) | UMinus _ -> (xab, t2)
+              | Mult (_, _) -> (xab, t2) | Div (_, _) -> (xab, t2)
+              | Mod (_, _) -> (xab, t2) | F2i _ -> (xab, t2)
+              | I2f _ -> (xab, t2))
+          | Const _ -> (let Var y = xaa in (y, t1))
+          | Plus (_, _) -> (let Var y = xaa in (y, t1))
+          | Minus (_, _) -> (let Var y = xaa in (y, t1))
+          | UMinus _ -> (let Var y = xaa in (y, t1))
+          | Mult (_, _) -> (let Var y = xaa in (y, t1))
+          | Div (_, _) -> (let Var y = xaa in (y, t1))
+          | Mod (_, _) -> (let Var y = xaa in (y, t1))
+          | F2i _ -> (let Var y = xaa in (y, t1))
+          | I2f _ -> (let Var y = xaa in (y, t1))))
+    | uu, Pred (v, va) -> failwith "undefined"
+    | uu, Let (v, va, vb, vc) -> failwith "undefined"
+    | uu, Less (v, va) -> failwith "undefined"
+    | uu, LessEq (v, va) -> failwith "undefined"
+    | uu, Neg v -> failwith "undefined"
+    | uu, Or (v, va) -> failwith "undefined"
+    | uu, And (v, va) -> failwith "undefined"
+    | uu, Ands v -> failwith "undefined"
+    | uu, Exists v -> failwith "undefined"
+    | uu, Agg (v, va, vb, vc, vd) -> failwith "undefined"
+    | uu, Prev (v, va) -> failwith "undefined"
+    | uu, Next (v, va) -> failwith "undefined"
+    | uu, Since (v, va, vb) -> failwith "undefined"
+    | uu, Until (v, va, vb) -> failwith "undefined"
+    | uu, MatchF (v, va) -> failwith "undefined"
+    | uu, MatchP (v, va) -> failwith "undefined";;
 
 let rec minit0
   n x1 = match n, x1 with
@@ -7303,7 +7320,8 @@ let rec minit0
     | n, Or (phi, psi) -> MOr (minit0 n phi, minit0 n psi, ([], []))
     | n, And (phi, psi) ->
         (if safe_assignment (fvi zero_nata phi) psi
-          then MAndAssign (minit0 n phi, split_assignment psi)
+          then MAndAssign
+                 (minit0 n phi, split_assignment (fvi zero_nata phi) psi)
           else (if safe_formula psi
                  then MAnd (fvi zero_nata phi, minit0 n phi, true,
                              fvi zero_nata psi, minit0 n psi, ([], []))
