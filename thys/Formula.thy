@@ -516,10 +516,12 @@ fun is_constraint :: "formula \<Rightarrow> bool" where
 | "is_constraint (Neg (LessEq t1 t2)) = True"
 | "is_constraint _ = False"
 
-fun safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool" where
-  "safe_assignment X (Eq (Var x) t) = (x \<notin> X \<and> fv_trm t \<subseteq> X)"
-| "safe_assignment X (Eq t (Var x)) = (x \<notin> X \<and> fv_trm t \<subseteq> X)"
-| "safe_assignment X \<phi> = False"
+definition safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool" where
+  "safe_assignment X \<phi> = (case \<phi> of
+       Eq (Var x) (Var y) \<Rightarrow> (x \<notin> X \<longleftrightarrow> y \<in> X)
+     | Eq (Var x) t \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
+     | Eq t (Var x) \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
+     | _ \<Rightarrow> False)"
 
 fun safe_formula :: "formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"

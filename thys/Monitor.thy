@@ -133,7 +133,7 @@ next
 qed (auto simp add: is_simple_eq_def list.pred_set)
 
 lemma safe_assignment_future_bounded: "safe_assignment X \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
-  by (induction rule: safe_assignment.induct) simp_all
+  unfolding safe_assignment_def by (auto split: formula.splits)
 
 lemma is_constraint_future_bounded: "is_constraint \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
   by (induction rule: is_constraint.induct) simp_all
@@ -776,11 +776,12 @@ locale maux = msaux valid_msaux init_msaux add_new_ts_msaux join_msaux add_new_t
     and length_muaux :: "args \<Rightarrow> 'muaux \<Rightarrow> nat"
     and eval_muaux :: "args \<Rightarrow> nat \<Rightarrow> 'muaux \<Rightarrow> event_data table list \<times> 'muaux"
 
-fun split_assignment :: "Formula.formula \<Rightarrow> nat \<times> Formula.trm" where
-  "split_assignment (Formula.Eq t1 t2) = (case t1 of
-      Formula.Var x \<Rightarrow> (x, t2)
-    | _ \<Rightarrow> case t2 of Formula.Var x \<Rightarrow> (x, t1))"
-| "split_assignment _ = undefined"
+fun split_assignment :: "nat set \<Rightarrow> Formula.formula \<Rightarrow> nat \<times> Formula.trm" where
+  "split_assignment X (Formula.Eq t1 t2) = (case (t1, t2) of
+      (Formula.Var x, Formula.Var y) \<Rightarrow> if x \<in> X then (y, t1) else (x, t2)
+    | (Formula.Var x, _) \<Rightarrow> (x, t2)
+    | (_, Formula.Var y) \<Rightarrow> (y, t1))"
+| "split_assignment _ _ = undefined"
 
 fun split_constraint :: "Formula.formula \<Rightarrow> Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm" where
   "split_constraint (Formula.Eq t1 t2) = (t1, True, MEq, t2)"
@@ -798,7 +799,7 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.Let p b \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) b (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
 | "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
 | "minit0 n (Formula.And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
-      MAndAssign (minit0 n \<phi>) (split_assignment \<psi>)
+      MAndAssign (minit0 n \<phi>) (split_assignment (fv \<phi>) \<psi>)
     else if safe_formula \<psi> then
       MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) ([], [])
     else if is_constraint \<psi> then
@@ -2192,8 +2193,8 @@ next
   from 1 \<open>safe_assignment (fv \<phi>) \<psi>\<close>
   obtain x t where
     "x < n" "x \<notin> fv \<phi>" "fv_trm t \<subseteq> fv \<phi>"
-    "\<psi> = Formula.Eq (Formula.Var x) t \<or> \<not> Formula.is_Var t \<and> \<psi> = Formula.Eq t (Formula.Var x)"
-    by (induction rule: safe_assignment.induct) (auto simp del: fvi_trm.simps(2-))
+    "\<psi> = Formula.Eq (Formula.Var x) t \<or> \<psi> = Formula.Eq t (Formula.Var x)"
+    unfolding safe_assignment_def by (force split: formula.splits trm.splits)
   with And_assign show ?case
     by (auto intro!: wf_mformula.AndAssign split: trm.splits)
 next
