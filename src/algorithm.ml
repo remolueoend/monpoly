@@ -1485,7 +1485,7 @@ let rec add_ext dbschema f =
       if attr1 = attr2 then
         Relation.union
       else
-        let matches = Table.get_matches attr1 attr2 in
+        let matches = Table.get_matches attr2 attr1 in
         let new_pos = List.map snd matches in
         (* first reorder rel2 *)
         (fun rel1 rel2 ->
