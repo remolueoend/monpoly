@@ -1004,89 +1004,90 @@ let rec eval f neval crt discard =
     inf.last1 <- eval_subf f1 inf.listrel1 inf.last1;
     inf.last2 <- eval_subf f2 inf.listrel2 inf.last2;
 
-    if inf.last1 == NEval.void || inf.last2 == NEval.void then
-      None
+    (* checks whether the position to be evaluated is beyond the interval *)
+    let has_lookahead last =
+      let ncrt =
+        if neval_is_last neval last then
+          last
+        else
+          neval_get_crt neval last crt q
+      in
+      let _, tsi = NEval.get_data ncrt in
+      not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv)
+    in
+
+    if has_lookahead inf.last1 && has_lookahead inf.last2 then
+      (* we have the lookahead for both f1 and f2 (to be consistent with Until),
+        we can compute the result
+
+        NOTE: we could evaluate earlier with respect to f1, also in Until *)
+      begin
+        (* we iteratively compute the union of the relations [f1]_j
+          with q <= j <= j0-1, where j0 is the first index which
+          satisfies the temporal constraint relative to q *)
+        let f1union = ref Relation.empty in
+        let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
+        let rec iter1 () =
+          let j,tsj,relj = Dllist.get_data !crt1_j in
+          if j < q then
+            begin (* clean up from previous evaluation *)
+              assert (j = q-1);
+              ignore(Dllist.pop_first inf.listrel1);
+              crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
+              iter1 ()
+            end
+          else if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
+            begin
+              f1union := Relation.union !f1union relj;
+              if not (Dllist.is_last inf.listrel1 !crt1_j) then
+                begin
+                  crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
+                  iter1 ()
+                end
+            end
+        in
+        iter1 ();
+
+        (* we now iterate through the remaining indexes, updating the
+          union, and also computing the result *)
+        let res = ref Relation.empty in
+        let crt2_j = ref (Dllist.get_first_cell inf.listrel2) in
+        let rec iter2 () =
+          let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
+          if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
+            begin (* clean up from previous evaluation *)
+              ignore(Dllist.pop_first inf.listrel2);
+              if not (Dllist.is_last inf.listrel2 !crt2_j) then
+                begin
+                  crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
+                  iter2 ()
+                end
+            end
+          else
+            begin
+              let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
+              assert(j1 = j2);
+              if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
+                begin
+                  let resj = comp rel2 !f1union in
+                  res := Relation.union !res resj;
+                  f1union := Relation.union !f1union rel1;
+                  let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
+                  let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
+                  if (not is_last1) && (not is_last2) then
+                    begin
+                      crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
+                      crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
+                      iter2 ()
+                    end
+                end
+            end
+        in
+        iter2();
+        Some !res
+      end
     else
-      let (i1,tsi1) = NEval.get_data inf.last1 in
-      let (i2,tsi2) = NEval.get_data inf.last2 in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi2 tsq) intv) && i1 >= i2-2 then
-        (* we have the lookahead, we can compute the result; note that
-           that i2-1 is the last time point in the relevant interval,
-           and thus the last time point for which we need f1's
-           evaluation is i2-2 *)
-        begin
-          (* we iteratively compute the union of the relations [f1]_j
-             with q <= j <= j0-1, where j0 is the first index which
-             satisfies the temporal constraint relative to q *)
-          let f1union = ref Relation.empty in
-          let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
-          let rec iter1 () =
-            let j,tsj,relj = Dllist.get_data !crt1_j in
-            if j < q then
-              begin (* clean up from previous evaluation *)
-                assert (j = q-1);
-                ignore(Dllist.pop_first inf.listrel1);
-                if not (Dllist.is_empty inf.listrel1) && not (Dllist.is_last inf.listrel1 !crt1_j) then
-                  begin
-                    crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                    iter1 ()
-                  end
-              end
-            else if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-              begin
-                f1union := Relation.union !f1union relj;
-                if not (Dllist.is_last inf.listrel1 !crt1_j) then
-                  begin
-                    crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                    iter1 ()
-                  end
-              end
-          in
-          iter1 ();
-
-          (* we now iterate through the remaining indexes, updating the
-             union, and also computing the result *)
-          let res = ref Relation.empty in
-          let crt2_j = ref (Dllist.get_first_cell inf.listrel2) in
-          let rec iter2 () =
-            let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
-            if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
-              begin (* clean up from previous evaluation *)
-                ignore(Dllist.pop_first inf.listrel2);
-                if not (Dllist.is_last inf.listrel2 !crt2_j) then
-                  begin
-                    crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                    iter2 ()
-                  end
-              end
-            else
-              begin
-                let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
-                assert(j1 = j2);
-                if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
-                  begin
-                    let resj = comp rel2 !f1union in
-                    res := Relation.union !res resj;
-                    f1union := Relation.union !f1union rel1;
-                    let is_last1 = Dllist.is_empty inf.listrel1 ||
-                                   Dllist.is_last inf.listrel1 !crt1_j in
-                    let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
-                    assert (not (is_last1 && is_last2));
-                    if (not is_last1) && (not is_last2) then
-                      begin
-                        crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                        crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                        iter2 ()
-                      end
-                  end
-              end
-          in
-          iter2();
-          Some !res
-        end
-      else
-        None
-
+      None
 
 
 
