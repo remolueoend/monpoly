@@ -1262,7 +1262,7 @@ let check_formula check_mon s f =
         else print_reason "The formula is NOT monitorable" reason
       end
     else if not is_mon then
-      print_reason "The formula is NOT monitorable" reason;
+      print_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
     (is_mon, f, fv)
   else
     let nf = normalize f in
@@ -1295,9 +1295,9 @@ let check_formula check_mon s f =
     let is_mon = if not (fst is_mon) then check_mon rf else is_mon in
     if (not (fst is_mon)) then
       begin
-        print_reason "The analyzed formula is NOT monitorable" (snd is_mon);
-        if !Misc.verbose then
+        if !Misc.verbose || !Misc.checkf then
           begin
+            print_reason "The analyzed formula is NOT monitorable" (snd is_mon);
             let is_sr = is_saferange nf in
             (* assert(is_sr = is_saferange rf); *)
             if is_sr then
@@ -1311,6 +1311,8 @@ let check_formula check_mon s f =
             else
               print_endline "By the way, the analyzed formula is not TSF safe-range.";
           end
+          else 
+            print_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
       end
     else if !Misc.checkf then
       print_string "The analyzed formula is monitorable.\n";
