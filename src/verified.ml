@@ -111,10 +111,11 @@ module Monitor : sig
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
   val mk_db :
-    (char list * event_data list) list ->
-      char list -> ((event_data list) set list) option
+    ('a -> (char list) list) ->
+      ('a -> char list -> (event_data list) set) ->
+        'a -> ((char list), ((event_data list) set list)) mapping
   val mstep :
-    (char list -> ((event_data list) set list) option) * nat ->
+    ((char list), ((event_data list) set list)) mapping * nat ->
       ((nat *
          (nat *
            (bool list *
@@ -158,6 +159,7 @@ module Monitor : sig
   val rbt_fold :
     ((event_data option) list -> 'a -> 'a) ->
       (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
+  val rbt_empty : ((event_data list), unit) mapping_rbt
   val explode : string -> char list
   val mmonitorable_exec : formula -> bool
   val minit_safe :
@@ -181,6 +183,10 @@ module Monitor : sig
                       (((event_data option) list) set list * nat)))))))),
         unit)
         mstate_ext
+  val rbt_insert :
+    event_data list ->
+      ((event_data list), unit) mapping_rbt ->
+        ((event_data list), unit) mapping_rbt
   val convert_multiway : formula -> formula
 end = struct
 
@@ -2851,6 +2857,12 @@ let ccompare_trma : (trm -> trm -> ordera) option = Some comparator_trm;;
 
 let ccompare_trm = ({ccompare = ccompare_trma} : trm ccompare);;
 
+let rec compare_char x = comparator_of (equal_char, linorder_char) x;;
+
+let ccompare_chara : (char -> char -> ordera) option = Some compare_char;;
+
+let ccompare_char = ({ccompare = ccompare_chara} : char ccompare);;
+
 let rec equal_option _A = ({equal = equal_optiona _A} : ('a option) equal);;
 
 let rec equality_option
@@ -4163,6 +4175,9 @@ let rec list_update
     | x :: xs, i, y ->
         (if equal_nata i zero_nata then y :: xs
           else x :: list_update xs (minus_nata i one_nata) y);;
+
+let rec of_alist (_A1, _A2, _A3)
+  xs = foldr (fun (a, b) -> updateb (_A1, _A2) a b) xs (emptya (_A1, _A3));;
 
 let rec plus_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.add x y)
@@ -7132,21 +7147,21 @@ let rec meval
         (let (xs, phia) = meval m t db phi in
          let (ys, psia) =
            meval n t
-             (fun_upd (equal_list equal_char) db p
-               (Some (mapa (image
-                             ((ceq_list (ceq_option ceq_event_data)),
-                               (ccompare_list
-                                 (ccompare_option ccompare_event_data)))
-                             ((ceq_list ceq_event_data),
-                               (ccompare_list ccompare_event_data),
-                               set_impl_list)
-                             (comp (drop b) (mapa the)))
-                       xs)))
+             (updateb ((ccompare_list ccompare_char), (equal_list equal_char)) p
+               (mapa (image
+                       ((ceq_list (ceq_option ceq_event_data)),
+                         (ccompare_list (ccompare_option ccompare_event_data)))
+                       ((ceq_list ceq_event_data),
+                         (ccompare_list ccompare_event_data), set_impl_list)
+                       (comp (drop b) (mapa the)))
+                 xs)
+               db)
              psi
            in
           (ys, MLet (p, m, b, phia, psia)))
     | n, t, db, MPred (e, ts) ->
-        ((match db e
+        ((match
+           lookupa ((ccompare_list ccompare_char), (equal_list equal_char)) db e
            with None ->
              [set_empty
                 ((ceq_list (ceq_option ceq_event_data)),
@@ -7401,17 +7416,19 @@ let rec minit
   phi = (let n = nfv phi in Mstate_ext (zero_nata, minit0 n phi, n, ()));;
 
 let rec mk_db
-  xs p =
-    (match
-      map_filter
-        (fun (pa, ts) ->
-          (if equal_lista equal_char p pa then Some ts else None))
-        xs
-      with [] -> None
-      | a :: lista ->
-        Some [set ((ceq_list ceq_event_data),
-                    (ccompare_list ccompare_event_data), set_impl_list)
-                (a :: lista)]);;
+  get_names get_table t =
+    of_alist
+      ((ccompare_list ccompare_char), (equal_list equal_char),
+        mapping_impl_list)
+      (map_filter
+        (fun n ->
+          (let x = get_table t n in
+            (if is_empty
+                  (card_UNIV_list, (ceq_list ceq_event_data),
+                    (cproper_interval_list ccompare_event_data))
+                  x
+              then None else Some (n, [x]))))
+        (get_names t));;
 
 let rec mstate_n (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_n;;
 
@@ -7457,6 +7474,9 @@ let rec map_regex
     | f, Plusa (x31, x32) -> Plusa (map_regex f x31, map_regex f x32)
     | f, Times (x41, x42) -> Times (map_regex f x41, map_regex f x42)
     | f, Star x5 -> Star (map_regex f x5);;
+
+let rbt_empty : ((event_data list), unit) mapping_rbt
+  = emptyc (ccompare_list ccompare_event_data);;
 
 let rec bit_cut_integer
   k = (if Z.equal k Z.zero then (Z.zero, false)
@@ -7757,6 +7777,9 @@ let rec mmonitorable_exec
 
 let rec minit_safe
   phi = (if mmonitorable_exec phi then minit phi else failwith "undefined");;
+
+let rec rbt_insert
+  x = (fun k -> insertb (ccompare_list ccompare_event_data) k ()) x;;
 
 let rec convert_multiway
   = function Neg phi -> Neg (convert_multiway phi)

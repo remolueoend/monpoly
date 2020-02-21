@@ -131,17 +131,18 @@ let unorderedFlatMap m =
   flatmap_rec []
 
 let convert_db md =
-  let add_builtin xs (name, tup) = (explode name, List.map convert_cst tup) :: xs in
+  let rbt_single x = RBT_set (rbt_insert x rbt_empty) in
+  let add_builtin xs (name, tup) =
+    (explode name, rbt_single (List.map convert_cst tup)) :: xs in
   let convert_table t =
     let (name,_) = (Table.get_schema t) in
-    List.map (fun tup -> (explode name, List.map convert_cst tup))
-      (Relation.elements (Table.get_relation t))
-  in
-  let db_events = unorderedFlatMap convert_table (Db.get_tables md.db) in
+    (explode name, RBT_set (Relation.fold (fun v -> rbt_insert (List.map convert_cst v))
+      (Table.get_relation t) rbt_empty)) in
+  let db_events = List.map convert_table (Db.get_tables md.db) in
   let all_events = List.fold_left add_builtin db_events
     ["tp", [Int md.tp]; "ts", [Float md.ts]; "tpts", [Int md.tp; Float md.ts]]
   in
-  (mk_db all_events, nat_of_float md.ts)
+  (mk_db (List.map fst) (fun xs x -> List.assoc x xs) all_events, nat_of_float md.ts)
 
 let cst_of_event_data = function
   | EInt x -> Int (Z.to_int x)  (* PARTIAL *)
