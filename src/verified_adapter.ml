@@ -142,7 +142,7 @@ let convert_db md =
   let all_events = List.fold_left add_builtin db_events
     ["tp", [Int md.tp]; "ts", [Float md.ts]; "tpts", [Int md.tp; Float md.ts]]
   in
-  (mk_db (List.map fst) (fun xs x -> List.assoc x xs) all_events, nat_of_float md.ts)
+  (mk_db all_events, nat_of_float md.ts)
 
 let cst_of_event_data = function
   | EInt x -> Int (Z.to_int x)  (* PARTIAL *)

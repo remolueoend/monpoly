@@ -76,8 +76,8 @@ lemma meval_MPred: "meval n t db (MPred e ts) =
 
 lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred default_maux.meval.simps(3-)
 
-definition mk_db :: "('t \<Rightarrow> Formula.name list) \<Rightarrow> ('t \<Rightarrow> Formula.name \<Rightarrow> event_data list set) \<Rightarrow> 't \<Rightarrow> _" where
-  "mk_db get_names get_table t = Monitor.mk_db (\<Union>n \<in> set (get_names t). (\<lambda>v. (n, v)) ` get_table t n)"
+definition mk_db :: "(Formula.name \<times> event_data list set) list \<Rightarrow> _" where
+  "mk_db t = Monitor.mk_db (\<Union>n \<in> set (map fst t). (\<lambda>v. (n, v)) ` the (map_of t n))"
 
 definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"
@@ -252,10 +252,9 @@ lemma upd_nested_max_tstp_fold:
   shows "upd_nested_max_tstp m d X = Finite_Set.fold (upd_nested_step d (max_tstp d)) m X"
 proof -
   interpret comp_fun_idem "upd_nested_step d (max_tstp d)"
-    apply (unfold_locales; rule ext)
-    using max_tstp_d_d max_tstp_idem max_tstp_idem'
-    by (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
-        intro!: mapping_eqI split: option.splits) (*VERY SLOW*)
+    by (unfold_locales; rule ext)
+      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+       update_update max_tstp_d_d max_tstp_idem' split: option.splits)
   note upd_nested_insert' = upd_nested_insert[of d "max_tstp d",
     OF max_tstp_d_d[symmetric] max_tstp_idem']
   show ?thesis
@@ -267,10 +266,9 @@ qed
 lift_definition upd_nested_max_tstp_cfi ::
   "ts + tp \<Rightarrow> ('a \<times> 'b, ('a, ('b, ts + tp) mapping) mapping) comp_fun_idem"
   is "\<lambda>d. upd_nested_step d (max_tstp d)"
-  apply (unfold_locales; rule ext)
-  using max_tstp_d_d max_tstp_idem max_tstp_idem'
-  by (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
-      intro!: mapping_eqI split: option.splits)
+  by (unfold_locales; rule ext)
+    (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+      update_update max_tstp_d_d max_tstp_idem' split: option.splits)
 
 lemma upd_nested_max_tstp_code[code]:
   "upd_nested_max_tstp m d X = (if finite X then set_fold_cfi (upd_nested_max_tstp_cfi d) m X
@@ -412,14 +410,35 @@ lemma remove_Union_code[code]: "remove_Union A X B =
   apply (transfer fixing: A X B)
   using remove_Union_finite[of X A B] by (auto simp add: remove_Union_def)
 
+lemma tabulate_remdups: "Mapping.tabulate xs f = Mapping.tabulate (remdups xs) f"
+  by (transfer fixing: xs f) (auto simp: map_of_map_restrict)
+
+lift_definition clearjunk :: "(char list \<times> event_data list set) list \<Rightarrow> (char list, event_data list set list) alist" is
+  "\<lambda>t. List.map_filter (\<lambda>(p, X). if X = {} then None else Some (p, [X])) (AList.clearjunk t)"
+  unfolding map_filter_def o_def list.map_comp
+  by (subst map_cong[OF refl, of _ _ fst]) (auto simp: map_filter_def distinct_map_fst_filter split: if_splits)
+
+lemma mk_db_code_alist:
+  "mk_db t = Assoc_List_Mapping (clearjunk t)"
+  unfolding mk_db_def Assoc_List_Mapping_def
+  apply (transfer' fixing: t)
+  apply (unfold map_filter_def)
+  apply (subst map_cong[OF refl, of _ _ "\<lambda>(p, X). (p, [X])"])
+   apply (auto simp: fun_eq_iff map_of_map image_iff map_of_clearjunk
+     map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
+     split: if_splits option.splits)
+  done
+
 lemma mk_db_code[code]:
-  "mk_db get_names get_table t =
-    Mapping.of_alist (List.map_filter
-      (\<lambda>n. let X = get_table t n in if X = {} then None else Some (n, [X])) (get_names t))"
-  unfolding mk_db_def map_filter_def Let_def
-  by (transfer fixing: get_names get_table t, subst list.map_cong[OF refl, of _ _ "\<lambda>n. (n, [get_table t n])"])
-    (auto simp: fun_eq_iff map_of_map_restrict image_iff restrict_map_def)
- 
+  "mk_db t = Mapping.of_alist (List.map_filter (\<lambda>(p, X). if X = {} then None else Some (p, [X])) (AList.clearjunk t))"
+  unfolding mk_db_def
+  apply (transfer' fixing: t)
+  apply (unfold map_filter_def)
+  apply (subst map_cong[OF refl, of _ _ "\<lambda>(p, X). (p, [X])"])
+   apply (auto simp: fun_eq_iff map_of_map image_iff map_of_clearjunk
+     map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
+     split: if_splits option.splits)
+  done
 
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin.simps[folded remove_Union_def, code]
