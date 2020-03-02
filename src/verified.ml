@@ -111,10 +111,10 @@ module Monitor : sig
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
   val mk_db :
-    (char list * event_data list) list ->
-      char list -> ((event_data list) set list) option
+    (char list * (event_data list) set) list ->
+      ((char list), ((event_data list) set list)) mapping
   val mstep :
-    (char list -> ((event_data list) set list) option) * nat ->
+    ((char list), ((event_data list) set list)) mapping * nat ->
       ((nat *
          (nat *
            (bool list *
@@ -158,6 +158,7 @@ module Monitor : sig
   val rbt_fold :
     ((event_data option) list -> 'a -> 'a) ->
       (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
+  val rbt_empty : ((event_data list), unit) mapping_rbt
   val explode : string -> char list
   val mmonitorable_exec : formula -> bool
   val minit_safe :
@@ -181,6 +182,10 @@ module Monitor : sig
                       (((event_data option) list) set list * nat)))))))),
         unit)
         mstate_ext
+  val rbt_insert :
+    event_data list ->
+      ((event_data list), unit) mapping_rbt ->
+        ((event_data list), unit) mapping_rbt
   val convert_multiway : formula -> formula
 end = struct
 
@@ -2851,6 +2856,12 @@ let ccompare_trma : (trm -> trm -> ordera) option = Some comparator_trm;;
 
 let ccompare_trm = ({ccompare = ccompare_trma} : trm ccompare);;
 
+let rec compare_char x = comparator_of (equal_char, linorder_char) x;;
+
+let ccompare_chara : (char -> char -> ordera) option = Some compare_char;;
+
+let ccompare_char = ({ccompare = ccompare_chara} : char ccompare);;
+
 let rec equal_option _A = ({equal = equal_optiona _A} : ('a option) equal);;
 
 let rec equality_option
@@ -3446,7 +3457,7 @@ and rbt_comp_del_from_right
 
 let rec rbt_comp_delete c k t = paint B (rbt_comp_del c k t);;
 
-let rec deleteb _A
+let rec deletec _A
   xb xc =
     Mapping_RBTa (rbt_comp_delete (the (ccompare _A)) xb (impl_ofa _A xc));;
 
@@ -3489,7 +3500,7 @@ and remove (_A1, _A2)
           with None ->
             failwith "remove RBT_set: ccompare = None"
               (fun _ -> remove (_A1, _A2) x (RBT_set rbt))
-          | Some _ -> RBT_set (deleteb _A2 x rbt))
+          | Some _ -> RBT_set (deletec _A2 x rbt))
     | x, DList_set dxs ->
         (match ceq _A1
           with None ->
@@ -3895,6 +3906,8 @@ let rec rpd
         sup_seta (ceq_mregex, ccompare_mregex) (mTimesL r (rpd s)) (rpd r)
     | MStar r -> mTimesL (MStar r) (rpd r);;
 
+let rec delete _A k = filtera (fun (ka, _) -> not (eq _A k ka));;
+
 let rec update _A
   k v x2 = match k, v, x2 with k, v, [] -> [(k, v)]
     | k, v, p :: ps ->
@@ -4031,17 +4044,17 @@ let rec delete_aux _A
     | ka, (k, v) :: xs ->
         (if eq _A ka k then xs else (k, v) :: delete_aux _A ka xs);;
 
-let rec deletea _A xb xc = Alist (delete_aux _A xb (impl_of xc));;
+let rec deleteb _A xb xc = Alist (delete_aux _A xb (impl_of xc));;
 
-let rec delete (_A1, _A2)
+let rec deletea (_A1, _A2)
   k x1 = match k, x1 with
     k, RBT_Mapping t ->
       (match ccompare _A1
         with None ->
           failwith "delete RBT_Mapping: ccompare = None"
-            (fun _ -> delete (_A1, _A2) k (RBT_Mapping t))
-        | Some _ -> RBT_Mapping (deleteb _A1 k t))
-    | k, Assoc_List_Mapping al -> Assoc_List_Mapping (deletea _A2 k al)
+            (fun _ -> deletea (_A1, _A2) k (RBT_Mapping t))
+        | Some _ -> RBT_Mapping (deletec _A1 k t))
+    | k, Assoc_List_Mapping al -> Assoc_List_Mapping (deleteb _A2 k al)
     | k, Mapping m -> Mapping (fun_upd _A2 m k None);;
 
 let rec filterb _A
@@ -4150,6 +4163,9 @@ let rec restrict
                (if member (ceq_nat, ccompare_nat) i a then nth v i else None))
           (upt zero_nata (size_list v));;
 
+let rec clearjunk _A = function [] -> []
+                       | p :: ps -> p :: clearjunk _A (delete _A (fst p) ps);;
+
 let rec combine _B
   f (RBT_Mapping t) (RBT_Mapping u) =
     (match ccompare _B
@@ -4163,6 +4179,9 @@ let rec list_update
     | x :: xs, i, y ->
         (if equal_nata i zero_nata then y :: xs
           else x :: list_update xs (minus_nata i one_nata) y);;
+
+let rec of_alist (_A1, _A2, _A3)
+  xs = foldr (fun (a, b) -> updateb (_A1, _A2) a b) xs (emptya (_A1, _A3));;
 
 let rec plus_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.add x y)
@@ -5311,7 +5330,7 @@ let rec eval_step_mmuaux (_A1, _A2)
            a2_map
          in
        let a2_mapb =
-         delete (ccompare_nat, equal_nat) (minus_nata tp len) a2_mapa in
+         deletea (ccompare_nat, equal_nat) (minus_nata tp len) a2_mapa in
         (tp, (tl_queue tssa,
                (minus_nata len one_nata,
                  (maskL,
@@ -6537,7 +6556,7 @@ let rec filter_cfi _B (_A1, _A2)
   xa = Abs_comp_fun_idem
          (fun a m ->
            (match lookupa (_A1, _A2) m a with None -> m
-             | Some u -> (if eq _B xa u then delete (_A1, _A2) a m else m)));;
+             | Some u -> (if eq _B xa u then deletea (_A1, _A2) a m else m)));;
 
 let rec filter_set (_A1, _A2, _A3, _A4) _B
   m a t =
@@ -6578,7 +6597,7 @@ let rec add_new_ts_mmsaux (_A1, _A2, _A3)
     add_new_ts_mmsauxa (_A1, _A2, _A3) args nt
       (shift_end (_A1, _A2, _A3) args nt aux);;
 
-let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (delete (_A1, _A2));;
+let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (deletea (_A1, _A2));;
 
 let rec filter_join (_A1, _A2, _A3, _A4)
   pos a m =
@@ -7132,21 +7151,21 @@ let rec meval
         (let (xs, phia) = meval m t db phi in
          let (ys, psia) =
            meval n t
-             (fun_upd (equal_list equal_char) db p
-               (Some (mapa (image
-                             ((ceq_list (ceq_option ceq_event_data)),
-                               (ccompare_list
-                                 (ccompare_option ccompare_event_data)))
-                             ((ceq_list ceq_event_data),
-                               (ccompare_list ccompare_event_data),
-                               set_impl_list)
-                             (comp (drop b) (mapa the)))
-                       xs)))
+             (updateb ((ccompare_list ccompare_char), (equal_list equal_char)) p
+               (mapa (image
+                       ((ceq_list (ceq_option ceq_event_data)),
+                         (ccompare_list (ccompare_option ccompare_event_data)))
+                       ((ceq_list ceq_event_data),
+                         (ccompare_list ccompare_event_data), set_impl_list)
+                       (comp (drop b) (mapa the)))
+                 xs)
+               db)
              psi
            in
           (ys, MLet (p, m, b, phia, psia)))
     | n, t, db, MPred (e, ts) ->
-        ((match db e
+        ((match
+           lookupa ((ccompare_list ccompare_char), (equal_list equal_char)) db e
            with None ->
              [set_empty
                 ((ceq_list (ceq_option ceq_event_data)),
@@ -7401,17 +7420,17 @@ let rec minit
   phi = (let n = nfv phi in Mstate_ext (zero_nata, minit0 n phi, n, ()));;
 
 let rec mk_db
-  xs p =
-    (match
-      map_filter
-        (fun (pa, ts) ->
-          (if equal_lista equal_char p pa then Some ts else None))
-        xs
-      with [] -> None
-      | a :: lista ->
-        Some [set ((ceq_list ceq_event_data),
-                    (ccompare_list ccompare_event_data), set_impl_list)
-                (a :: lista)]);;
+  t = of_alist
+        ((ccompare_list ccompare_char), (equal_list equal_char),
+          mapping_impl_list)
+        (map_filter
+          (fun (p, x) ->
+            (if is_empty
+                  (card_UNIV_list, (ceq_list ceq_event_data),
+                    (cproper_interval_list ccompare_event_data))
+                  x
+              then None else Some (p, [x])))
+          (clearjunk (equal_list equal_char) t));;
 
 let rec mstate_n (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_n;;
 
@@ -7457,6 +7476,9 @@ let rec map_regex
     | f, Plusa (x31, x32) -> Plusa (map_regex f x31, map_regex f x32)
     | f, Times (x41, x42) -> Times (map_regex f x41, map_regex f x42)
     | f, Star x5 -> Star (map_regex f x5);;
+
+let rbt_empty : ((event_data list), unit) mapping_rbt
+  = emptyc (ccompare_list ccompare_event_data);;
 
 let rec bit_cut_integer
   k = (if Z.equal k Z.zero then (Z.zero, false)
@@ -7757,6 +7779,9 @@ let rec mmonitorable_exec
 
 let rec minit_safe
   phi = (if mmonitorable_exec phi then minit phi else failwith "undefined");;
+
+let rec rbt_insert
+  x = (fun k -> insertb (ccompare_list ccompare_event_data) k ()) x;;
 
 let rec convert_multiway
   = function Neg phi -> Neg (convert_multiway phi)

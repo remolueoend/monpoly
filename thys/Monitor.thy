@@ -1025,9 +1025,9 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts \<Rightarrow> Formula.database 
     event_data table list \<times> ('msaux, 'muaux) mformula" where
   "meval n t db (MRel rel) = ([rel], MRel rel)"
 | "meval n t db (MPred e ts) = (map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these
-    (match ts ` X)) (case db e of None \<Rightarrow> [{}] | Some xs \<Rightarrow> xs), MPred e ts)"
+    (match ts ` X)) (case Mapping.lookup db e of None \<Rightarrow> [{}] | Some xs \<Rightarrow> xs), MPred e ts)"
 | "meval n t db (MLet p m b \<phi> \<psi>) =
-    (let (xs, \<phi>) = meval m t db \<phi>; (ys, \<psi>) = meval n t (db(p \<mapsto> map (image (drop b o map the)) xs)) \<psi>
+    (let (xs, \<phi>) = meval m t db \<phi>; (ys, \<psi>) = meval n t (Mapping.update p (map (image (drop b o map the)) xs) db) \<psi>
     in (ys, MLet p m b \<phi> \<psi>))"
 | "meval n t db (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf) =
     (let (xs, \<phi>) = meval n t db \<phi>; (ys, \<psi>) = meval n t db \<psi>;
@@ -4466,19 +4466,20 @@ declare progress_le_gen[simp]
 
 definition "wf_envs \<sigma> j P P' V db =
   (dom V = dom P \<and>
-   dom db = dom P \<union> {p. p \<in> fst ` \<Gamma> \<sigma> j} \<and>
+   Mapping.keys db = dom P \<union> {p. p \<in> fst ` \<Gamma> \<sigma> j} \<and>
    rel_mapping (\<le>) P P' \<and>
    pred_mapping (\<lambda>i. i \<le> j) P \<and>
    pred_mapping (\<lambda>i. i \<le> Suc j) P' \<and>
-   (\<forall>p \<in> dom db - dom P. the (db p) = [{ts. (p, ts) \<in> \<Gamma> \<sigma> j}]) \<and>
-   (\<forall>p \<in> dom P. list_all2 (\<lambda>i X. X = the (V p) i) [the (P p)..<the (P' p)] (the (db p))))"
+   (\<forall>p \<in> Mapping.keys db - dom P. the (Mapping.lookup db p) = [{ts. (p, ts) \<in> \<Gamma> \<sigma> j}]) \<and>
+   (\<forall>p \<in> dom P. list_all2 (\<lambda>i X. X = the (V p) i) [the (P p)..<the (P' p)] (the (Mapping.lookup db p))))"
 
-definition mk_db where
-  "mk_db X p = (if p \<in> fst ` X then Some [{ts. (p, ts) \<in> X}] else None)"
+
+lift_definition mk_db :: "(Formula.name \<times> event_data list) set \<Rightarrow> Formula.database" is
+  "\<lambda>X p. (if p \<in> fst ` X then Some [{ts. (p, ts) \<in> X}] else None)" .
 
 lemma wf_envs_mk_db: "wf_envs \<sigma> j Map.empty Map.empty Map.empty (mk_db (\<Gamma> \<sigma> j))"
   unfolding wf_envs_def mk_db_def
-  by (force split: if_splits simp: image_iff rel_mapping_alt)
+  by transfer (force split: if_splits simp: image_iff rel_mapping_alt)
 
 lemma wf_envs_update:
   "wf_envs \<sigma> j P P' V db \<Longrightarrow> m = Formula.nfv \<phi> \<Longrightarrow> {0 ..< m} \<subseteq> fv \<phi> \<Longrightarrow> b \<le> m \<Longrightarrow>
@@ -4486,7 +4487,7 @@ lemma wf_envs_update:
     [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (Suc j)] xs \<Longrightarrow>
    wf_envs \<sigma> j (P(p \<mapsto> progress \<sigma> P \<phi> j)) (P'(p \<mapsto> progress \<sigma> P' \<phi> (Suc j)))
     (V(p \<mapsto> \<lambda>i. {v. length v = m - b \<and> (\<exists>zs. length zs = b \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>)}))
-    (db(p \<mapsto> map (image (drop b o map the)) xs))"
+    (Mapping.update p (map (image (drop b o map the)) xs) db)"
   unfolding wf_envs_def
   apply (intro conjI ballI)
   subgoal by auto
@@ -4494,9 +4495,9 @@ lemma wf_envs_update:
   subgoal by (auto simp: pred_mapping_alt progress_le progress_mono_gen intro!: rel_mapping_map_upd)
   subgoal by auto
   subgoal by auto
-  subgoal for p'  by (cases "p' \<in> dom P") auto
+  subgoal for p'  by (cases "p' \<in> dom P") (auto simp: lookup_update')
   subgoal for p'
-    apply (auto simp: list.rel_map image_iff
+    apply (auto simp: list.rel_map image_iff lookup_update'
         elim!: list.rel_mono_strong)
     subgoal for i X v
       apply (erule (1) in_qtableE)
@@ -4574,14 +4575,15 @@ next
   then show ?case
   proof (cases "e \<in> dom P")
     case True
-    with MPred(2) have "e \<in> dom db" "e \<in> dom P'" "e \<in> dom V"
+    with MPred(2) have "e \<in> Mapping.keys db" "e \<in> dom P'" "e \<in> dom V"
       "list_all2 (\<lambda>i X. X = the (V e) i) [the (P e)..<the (P' e)]
-         (the (db e))" unfolding wf_envs_def rel_mapping_alt by blast+
+         (the (Mapping.lookup db e))" unfolding wf_envs_def rel_mapping_alt by blast+
     with MPred(1) True show ?thesis
       by (cases rule: wf_mformula.cases)
         (fastforce intro!: wf_mformula.Pred qtableI bexI[where P="\<lambda>x. _ = tabulate x 0 n", OF refl]
         elim!: list.rel_mono_strong bexI[rotated] dest: ex_match
-        simp: list.rel_map table_def match_wf_tuple in_these_eq match_eval_trm image_iff list.map_comp)
+        simp: list.rel_map table_def match_wf_tuple in_these_eq match_eval_trm image_iff
+          list.map_comp keys_dom_lookup)
   next
     note MPred(1)
     moreover
@@ -4590,13 +4592,13 @@ next
     from False MPred(2) have "e \<notin> dom P'" "e \<notin> dom V"
       unfolding wf_envs_def rel_mapping_alt by auto
     moreover
-    from False MPred(2) have *: "e \<in> fst ` \<Gamma> \<sigma> j \<longleftrightarrow> e \<in> dom db"
+    from False MPred(2) have *: "e \<in> fst ` \<Gamma> \<sigma> j \<longleftrightarrow> e \<in> Mapping.keys db"
       unfolding wf_envs_def by auto
     from False MPred(2) have
-      "e \<in> dom db \<Longrightarrow> db e = Some [{ts. (e, ts) \<in> \<Gamma> \<sigma> j}]"
-      unfolding wf_envs_def by (metis Diff_iff domD option.sel)
-    with * have "(case db e of None \<Rightarrow> [{}] | Some xs \<Rightarrow> xs) = [{ts. (e, ts) \<in> \<Gamma> \<sigma> j}]"
-      by (cases "e \<in> fst ` \<Gamma> \<sigma> j") (auto simp: image_iff split: option.splits)
+      "e \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db e = Some [{ts. (e, ts) \<in> \<Gamma> \<sigma> j}]"
+      unfolding wf_envs_def keys_dom_lookup by (metis Diff_iff domD option.sel)
+    with * have "(case Mapping.lookup db e of None \<Rightarrow> [{}] | Some xs \<Rightarrow> xs) = [{ts. (e, ts) \<in> \<Gamma> \<sigma> j}]"
+      by (cases "e \<in> fst ` \<Gamma> \<sigma> j") (auto simp: image_iff keys_dom_lookup split: option.splits)
     ultimately show ?thesis
       by (cases rule: wf_mformula.cases)
         (fastforce intro!: wf_mformula.Pred qtableI bexI[where P="\<lambda>x. _ = tabulate x 0 n", OF refl]
@@ -5398,7 +5400,7 @@ lemma msteps0_snoc: "msteps0 (\<pi> @ [tdb]) st =
 
 lemma msteps_psnoc: "last_ts \<pi> \<le> snd tdb \<Longrightarrow> msteps (psnoc \<pi> tdb) st =
    (let (V', st') = msteps \<pi> st; (V'', st'') = mstep (map_prod mk_db id tdb) st' in (V' @ V'', st''))"
-  by transfer (auto simp: msteps0_snoc split: list.splits prod.splits if_splits)
+  by transfer' (auto simp: msteps0_snoc split: list.splits prod.splits if_splits)
 
 definition monitor where
   "monitor \<phi> \<pi> = msteps_stateless \<pi> (minit_safe \<phi>)"

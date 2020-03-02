@@ -26,7 +26,7 @@ subsection \<open>Formulas and Satisfiability\<close>
 
 qualified type_synonym name = string
 qualified type_synonym event = "(name \<times> event_data list)"
-qualified type_synonym database = "name \<rightharpoonup> event_data list set list"
+qualified type_synonym database = "(name, event_data list set list) mapping"
 qualified type_synonym prefix = "(name \<times> event_data list) prefix"
 qualified type_synonym trace = "(name \<times> event_data list) trace"
 
