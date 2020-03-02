@@ -75,6 +75,7 @@ type formula =
   | Less of (term * term)
   | LessEq of (term * term)
   | Pred of predicate
+  | Let of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -136,6 +137,8 @@ val is_mfodl: formula -> bool
 val free_vars: formula -> var list
   (** [free_vars f] returns the list of free variables of [f]. *)
 
+val substitute_vars: (Predicate.var * Predicate.var Predicate.eterm) list -> formula -> formula
+ (** [substitute_vars m f] is a capture avoiding substitution f[m]  *)
 
 (** Conversion functions: *)
 

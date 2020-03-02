@@ -122,6 +122,21 @@ let rec tvars = function
   | Mod (t1, t2)
     -> (tvars t1) @ (tvars t2)
 
+let substitute_vars m = 
+  let subst v = if List.mem_assoc v m then List.assoc v m else Var v in
+  let rec substitute_vars_rec = function 
+  | Var v -> subst v
+  | Cst c as t -> t
+  | F2i t -> F2i (substitute_vars_rec t)
+  | I2f t -> I2f (substitute_vars_rec t)
+  | UMinus t -> UMinus (substitute_vars_rec t)
+  | Plus (t1, t2) -> Plus (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Minus (t1, t2) -> Minus (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Mult (t1, t2) -> Mult (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Div (t1, t2) -> Div (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Mod (t1, t2) -> Mod (substitute_vars_rec t1, substitute_vars_rec t2) 
+  in
+  substitute_vars_rec 
 
 let eval_eterm f t =
   let rec eval = function

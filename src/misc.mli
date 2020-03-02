@@ -169,6 +169,7 @@ val zip: 'a list -> 'b list -> ('a * 'b) list
       The length of the resulting list is the minimum of the lengths of lists l1 and l2
   *)
 
+val replace: ('a * 'a) list -> 'a list -> 'a list
 
 (** Pretty-printing functions: *)
 

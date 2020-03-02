@@ -100,6 +100,8 @@ rule
   | "i2f"                       { f "I2F" lexbuf; I2F }
   | "FALSE"                     { f "FALSE" lexbuf; FALSE }
   | "TRUE"                      { f "TRUE" lexbuf; TRUE }
+  | "LET"                       { f "LET" lexbuf; LET }
+  | "IN"                        { f "IN" lexbuf; IN }
   | "NOT"                       { f "NOT" lexbuf; NOT }
   | "AND"                       { f "AND" lexbuf; AND }
   | "OR"                        { f "OR" lexbuf; OR }

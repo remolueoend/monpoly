@@ -1,1 +1,1 @@
-monpoly -no_rw -verified "$@"
+monpoly -verified "$@"

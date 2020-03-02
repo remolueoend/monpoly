@@ -69,6 +69,8 @@ type 'a eterm =
 
 type term = var eterm
 
+val substitute_vars: ('a * 'a eterm) list -> 'a eterm -> 'a eterm
+
 val eval_eterm: ('a -> cst) -> 'a eterm -> cst
 val eval_term: (var * cst) list -> term -> cst
 val eval_gterm: term -> cst

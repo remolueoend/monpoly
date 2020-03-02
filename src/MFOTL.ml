@@ -55,6 +55,7 @@ type formula =
   | Less of (term * term)
   | LessEq of (term * term)
   | Pred of predicate
+  | Let of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -162,12 +163,15 @@ let aggreg_default_value op t = match op, t with
   | _, TStr -> Str ""
 
 
+
+
 (** returns the list of all direct subformulas of f, ignoring the regexes *)
 let rec direct_subformulas = function
   | Equal (t1,t2) -> []
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
   | Pred p -> []
+  | Let (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
   | And (f1,f2) -> [f1;f2]
   | Or (f1,f2) -> [f1;f2]
@@ -247,6 +251,7 @@ let rec is_mfodl = function
   | Less (t1,t2) 
   | LessEq (t1,t2) -> false
   | Pred p -> false
+  | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -274,6 +279,7 @@ let rec free_vars = function
   | LessEq (t1,t2) ->
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
   | Pred p -> Predicate.pvars p
+  | Let (_,_,f) -> free_vars f
   | Neg f -> free_vars f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -298,6 +304,84 @@ and free_re_vars = function
   | Concat (r1,r2) 
   | Plus (r1,r2) -> Misc.union (free_re_vars r1) (free_re_vars r2)
   | Star r -> (free_re_vars r)
+
+let fresh_var fv =
+  let rec fresh_var_rec v = 
+    let var = "__f" ^ (string_of_int v) in
+    if List.exists (fun x -> x=var) fv
+    then
+      fresh_var_rec (v+1)
+    else var
+  in
+  fresh_var_rec 1
+
+let fresh_var_mapping fv vs = 
+    List.fold_left 
+      (fun (fvs, m) rn -> 
+        let fv = fresh_var fvs 
+        in (fv::fvs, (rn, fv)::m)
+      ) 
+      (fv,[]) 
+    vs
+
+
+let rec substitute_vars m = 
+  let m = List.filter (fun (v,t) -> match t with | Var a -> a!=v | _ -> true ) m in
+  function 
+  | Equal (t1, t2) -> Equal (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Less  (t1, t2) -> Less (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | LessEq (t1, t2) -> LessEq (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+
+  | Pred (p) -> 
+    let (n,a,ts) = Predicate.get_info p in
+    Pred (Predicate.make_predicate (n,List.map (Predicate.substitute_vars m) ts))
+    
+  | Let (p, f1, f2) -> Let (p, f1, substitute_vars m f2)
+
+  | Neg f -> Neg (substitute_vars m f)
+  | Exists (v, f) -> 
+      let fv = free_vars f in
+      let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
+      let bv_rename = List.filter (fun x -> List.mem x tvars) v in
+      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      Exists (
+        Misc.replace fresh_var_map v,
+        let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
+        let fresh_var_map = List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
+        substitute_vars (no_bv@fresh_var_map) f)
+  | ForAll (v, f) -> 
+      let fv = free_vars f in
+      let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
+      let bv_rename = List.filter (fun x -> List.mem x tvars) v in
+      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      ForAll (
+        Misc.replace fresh_var_map v,
+        let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
+        let fresh_var_map = List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
+        substitute_vars (no_bv@fresh_var_map) f) 
+  | Aggreg (y, op, x, g, f) -> Aggreg (y,op,x,g, substitute_vars m f)
+  | Prev (i, f) -> Prev (i,substitute_vars m f)
+  | Next (i, f) -> Next (i,substitute_vars m f)
+  | Once (i, f) -> Once (i, substitute_vars m f)
+  | PastAlways (i, f) -> PastAlways (i, substitute_vars m f)
+  | Eventually (i, f) -> Eventually (i, substitute_vars m f)
+  | Always (i, f) -> Always (i, substitute_vars m f)
+
+  | Prex (i, r) -> Prex (i, substitute_re_vars m r)
+  | Frex (i, r) -> Frex (i, substitute_re_vars m r)
+
+  | And (f1, f2) -> And (substitute_vars m f1, substitute_vars m f2)
+  | Or (f1, f2) -> Or (substitute_vars m f1, substitute_vars m f2)
+  | Implies (f1, f2) -> Implies (substitute_vars m f1, substitute_vars m f2)
+  | Equiv (f1, f2) ->  Equiv (substitute_vars m f1, substitute_vars m f2)
+  | Since (i, f1, f2) -> Since (i, substitute_vars m f1, substitute_vars m f2)
+  | Until (i, f1, f2) -> Until (i, substitute_vars m f1, substitute_vars m f2)
+and substitute_re_vars m = function
+  | Wild -> Wild 
+  | Test f -> Test (substitute_vars m f)
+  | Concat (r1,r2) -> Concat ((substitute_re_vars m r1), (substitute_re_vars m r2))
+  | Plus (r1,r2) -> Plus (substitute_re_vars m r1, (substitute_re_vars m r2))
+  | Star r -> Star (substitute_re_vars m r) 
 
 
 let string_of_ts ts =
@@ -343,6 +427,7 @@ let rec type_of_fma = function
   | Less (t1,t2) -> "Less"
   | LessEq (t1,t2) -> "LessEq"
   | Pred p -> "Pred"
+  | Let (p,f1,f2) -> "Let"
   | Neg f -> "Neg"
   | And (f1,f2) -> "And"
   | Or (f1,f2) -> "Or"
@@ -519,6 +604,25 @@ let string_of_formula str g =
               " EQUIV "
               ^
               (string_f_rec false false f2)
+
+            | Let (p,f1,f2) ->
+              "LET"
+              ^
+              " "
+              ^
+              (string_f_rec false true (Pred p))
+              ^
+              " = "
+              ^
+              (string_f_rec false true f1)
+              ^
+              "\n"
+              ^ 
+              "IN"
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)  
 
             | Since (intv,f1,f2) ->
               (string_f_rec false true f1)
@@ -780,7 +884,29 @@ let string_of_formula str g =
                 ^
                 (string_f_rec false false f2)
                 ^ ")"
-  
+
+                | Let (p,f1,f2) ->
+                "("
+                ^
+                "LET"
+                ^
+                " "
+                ^
+                (string_f_rec false true (Pred p))
+                ^
+                " = "
+                ^
+                (string_f_rec false true f1)
+                ^
+                "\n"
+                ^ 
+                "IN"
+                ^
+                " "
+                ^
+                (string_f_rec false false f2)
+                ^ ")"
+
               | Since (intv,f1,f2) ->
                 "(" ^
                 (string_f_rec false true f1)

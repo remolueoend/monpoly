@@ -773,6 +773,7 @@ function
   | Or (f1, f2)
   | Implies (f1, f2)
   | Equiv (f1, f2)
+  | Let (_,f1,f2)
     -> (check_intervals f1) && (check_intervals f2)
 
   | Eventually (intv, f)
@@ -832,6 +833,7 @@ function
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Let (_,f1,f2)
     -> (check_bounds f1) && (check_bounds f2)
 
   | Eventually (intv, f)
@@ -875,6 +877,7 @@ let rec is_future = function
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Let (_,f1,f2)
     -> (is_future f1) || (is_future f2)
 
   | Next (_, _)
@@ -890,6 +893,115 @@ and is_re_future = function
   | Plus (r1,r2) -> (is_re_future r1) || (is_re_future r2)
   | Star r -> (is_re_future r)
 
+  let rec check_let = function
+  | Let (p,f1,f2) -> 
+    let (n,a,ts) = get_info p in
+    let check_params = List.for_all (fun t -> match t with Var _ -> true | _ -> false) ts in
+    if not check_params
+    then 
+      let string_of_terms = List.fold_left (fun s v -> s ^ " " ^ string_of_term v) "" in
+      let str = Printf.sprintf "[Rewriting.check_let] LET %s's parameters %s must be variables" n (string_of_terms ts) 
+      in failwith str
+    else ();
+    let prms = List.flatten (List.map tvars ts) in 
+    let fv1 = free_vars f1 in
+    if (List.length fv1) != a
+    then 
+      let str = Printf.sprintf "[Rewriting.check_let] LET %s's arity %n must match the number \
+      of free variables of %s " n a (string_of_formula "" f1)
+      in failwith str
+    else ();
+    if not (Misc.subset fv1 prms && Misc.subset prms fv1)
+    then 
+      let string_of_vars = List.fold_left (fun s v -> s ^ " " ^ string_of_var v) "" in
+      let str = Printf.sprintf "[Rewriting.check_let] LET %s's parameters %s do not coincide with \
+      free variables %s of %s" n (string_of_vars prms) (string_of_vars fv1) (string_of_formula "" f1)
+      in failwith str
+    else ();
+    check_let f2
+
+  | Equal _
+  | Less _
+  | LessEq _
+  | Pred _
+    -> true
+
+  | Neg f
+  | Exists (_, f)
+  | ForAll (_, f)
+  | Aggreg (_, _, _, _, f)
+  | Prev (_, f)
+  | Once (_, f)
+  | PastAlways (_, f)
+  | Next (_, f)
+  | Always (_, f)
+  | Eventually (_, f)
+    -> check_let f
+
+  | Prex (_,r) 
+  | Frex (_,r) -> check_re_let r
+
+  | And (f1, f2)
+  | Or (f1, f2)
+  | Implies (f1, f2)
+  | Equiv (f1, f2)
+  | Since (_, f1, f2)
+  | Until (_, f1, f2)
+    -> (check_let f1) && (check_let f2)
+and check_re_let = function 
+  | Wild -> true
+  | Test f -> (check_let f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) -> (check_re_let r1) && (check_re_let r2)
+  | Star r -> (check_re_let r)
+
+
+let expand_let f = 
+  let _ = check_let f in
+  let rec expand_let_rec m = function
+  | Equal _
+  | Less _
+  | LessEq _ as f -> f
+
+  | Pred (p)  -> 
+    let (n,_,ts) = get_info p in
+    if List.mem_assoc n m
+    then 
+      let (args,f) = List.assoc n m  in
+      let args = List.map (fun (Var t) -> t) args in (* We allow only variables here with check_let *)
+      let subm = Misc.zip args ts in
+      expand_let_rec (List.remove_assoc n m) (substitute_vars subm f)
+    else Pred (p)
+
+  | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
+
+  | Neg f -> Neg (expand_let_rec m f)
+  | Exists (v, f) -> Exists (v,expand_let_rec m f)
+  | ForAll (v, f) -> ForAll (v,expand_let_rec m f)
+  | Aggreg (y, op, x, g, f) -> Aggreg (y,op,x,g, expand_let_rec m f)
+  | Prev (i, f) -> Prev (i,expand_let_rec m f)
+  | Next (i, f) -> Next (i,expand_let_rec m f)
+  | Once (i, f) -> Once (i, expand_let_rec m f)
+  | PastAlways (i, f) -> PastAlways (i, expand_let_rec m f)
+  | Eventually (i, f) -> Eventually (i, expand_let_rec m f)
+  | Always (i, f) -> Always (i, expand_let_rec m f)
+
+  | Prex (i, r) -> Prex (i, expand_let_re_rec m r)
+  | Frex (i, r) -> Frex (i, expand_let_re_rec m r)
+
+  | And (f1, f2) -> And (expand_let_rec m f1, expand_let_rec m f2)
+  | Or (f1, f2) -> Or (expand_let_rec m f1, expand_let_rec m f2)
+  | Implies (f1, f2) -> Implies (expand_let_rec m f1, expand_let_rec m f2)
+  | Equiv (f1, f2) ->  Equiv (expand_let_rec m f1, expand_let_rec m f2)
+  | Since (i, f1, f2) -> Since (i, expand_let_rec m f1, expand_let_rec m f2)
+  | Until (i, f1, f2) -> Until (i, expand_let_rec m f1, expand_let_rec m f2)
+and expand_let_re_rec m = function
+  | Wild -> Wild 
+  | Test f -> Test (expand_let_rec m f)
+  | Concat (r1,r2) -> Concat ((expand_let_re_rec m r1), (expand_let_re_rec m r2))
+  | Plus (r1,r2) -> Plus (expand_let_re_rec m r1, (expand_let_re_rec m r2))
+  | Star r -> Star (expand_let_re_rec m r) in
+expand_let_rec [] f
 
 
 (* We check that
@@ -1139,6 +1251,20 @@ let rec type_check_formula (sch, vars) f =
     else 
       failwith ("[Rewriting.check_syntax] wrong arity for predicate " ^ name ^
                 " in input formula")
+  | Let (p, f1, f2) -> 
+    let (n,_,ts) = get_info p in
+    let new_vars = List.map (fun (Var t) -> t) ts in (* We allow only variables here with check_let *)
+    let new_typed_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] new_vars in
+    let (s1,v1) = type_check_formula (sch, new_typed_vars) f1 in
+    assert((List.length v1) = (List.length new_typed_vars));
+    let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
+    let new_sig = List.map (fun (_,t) -> t) new_sig in
+    let (shadowed_pred,rest) = List.partition (fun (p,_) -> n=p) s1 in
+    let delta = (n,new_sig)::rest in
+    let (s2, v2) = type_check_formula (delta,vars) f2 in
+    let new_delta = List.filter (fun (p,_) -> not (n=p)) s2 in
+    (shadowed_pred@new_delta, v2)
+
   | Neg f
   | Prev (_,f)
   | Next (_,f)

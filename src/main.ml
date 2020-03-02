@@ -143,7 +143,8 @@ let main () =
         let sign = Log.get_signature !sigfile in
 
         let check_mon = if !verified then Verified_adapter.is_monitorable sign
-          else is_monitorable in
+                        else is_monitorable in
+        let f = if !verified then f else expand_let f in
         let is_mon, pf, vartypes = check_formula check_mon sign f in
         if !sigout then
           Predicate.print_vartypes_list vartypes

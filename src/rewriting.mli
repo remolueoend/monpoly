@@ -69,3 +69,5 @@ val check_formula: (formula -> bool * (formula * string) option) -> schema -> fo
     together with their types *)
 
 val check_syntax: schema -> formula -> (var * tcst) list
+
+val expand_let: formula -> formula

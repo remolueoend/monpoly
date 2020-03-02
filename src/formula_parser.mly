@@ -149,7 +149,7 @@
 %token <string> STR STR_CST
 %token <float> INT RAT
 %token <int*char> TU
-%token NOT AND OR IMPL EQUIV EX FA
+%token LET IN NOT AND OR IMPL EQUIV EX FA
 %token PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS SINCE UNTIL BAR FREX PREX
 %token CNT MIN MAX SUM AVG MED
 %token END
@@ -186,6 +186,8 @@ formula:
   | FALSE                           { f "FALSE"; Less (Cst (Int 0), Cst (Int 0)) }
   | TRUE                            { f "TRUE"; Equal (Cst (Int 0), Cst (Int 0)) }
   | predicate                       { f "f(pred)"; $1 }
+  | LET predicate EQ formula IN formula  
+                                    { f "f(let)"; let Pred p = $2 in Let (p,$4,$6) }
   | term EQ term                    { f "f(eq)"; check (Equal ($1,$3)) }
   | term LESSEQ term                { f "f(leq)"; check (LessEq ($1,$3)) }
   | term LESS term                  { f "f(less)"; check (Less ($1,$3)) }

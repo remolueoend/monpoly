@@ -399,7 +399,16 @@ let rec zip l1 l2 = match l1, l2 with
   | x::xs , y::ys -> (x,y):: zip xs ys
   | _ -> []
 
+let replace m = 
+  let rec replace_acc a = function
+    | [] -> List.rev a
+    | x::xs -> 
+      let n = if List.mem_assoc x m then (List.assoc x m) else x in
+      replace_acc (n::a) xs
+  in
+  replace_acc []
 
+    
 
 
 
