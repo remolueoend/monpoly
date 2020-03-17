@@ -1557,7 +1557,8 @@ let rec add_ext dbschema f =
     let init_agg_val op cst =
       match op with
       | Med -> Med_aux (1, Intmap.singleton cst 1)
-      | _ -> CSA_aux (1, cst)
+      | Cnt -> C_aux (1)
+      | _ -> SA_aux (1, cst)
     in
 
     let init_agg_values = init_agg_val op in
@@ -1579,10 +1580,14 @@ let rec add_ext dbschema f =
 
     let update_agg_values add_flag prev_values cst =
       match prev_values with
-      | CSA_aux (c, s) ->
+      | C_aux (c) -> 
         if add_flag
-        then true, CSA_aux (c + 1, Predicate.plus s cst)
-        else c = 1, CSA_aux (c - 1, Predicate.minus s cst)
+        then true, C_aux (c+1)
+        else c = 1, C_aux (c-1)
+      | SA_aux (c, s) ->
+        if add_flag
+        then true, SA_aux (c + 1, Predicate.plus s cst)
+        else c = 1, SA_aux (c - 1, Predicate.minus s cst)
       | Med_aux (len, xlist) ->
         if add_flag
         then true, Med_aux (len + 1, add cst xlist)
@@ -1635,26 +1640,26 @@ let rec add_ext dbschema f =
     let get_val_func = function
       | Cnt ->
         (fun x -> match x with
-           | CSA_aux (c, _) -> Int c
-           | Med_aux _ -> failwith "internal error"
+           | C_aux c -> Int c
+           | _ -> failwith "internal error"
         )
       | Sum ->
         (fun x -> match x with
-           | CSA_aux (_, s) -> s
-           | Med_aux _ -> failwith "internal error"
+           | SA_aux (_, s) -> s
+           | _ -> failwith "internal error"
         )
       | Avg ->
         (fun x -> match x with
-           | CSA_aux (c,s) -> (match s with
+           | SA_aux (c,s) -> (match s with
                | Int s -> Float ((float_of_int s) /. (float_of_int c))
                | Float s -> Float (s /. (float_of_int c))
                | _ -> failwith "internal error")
-           | Med_aux _ -> failwith "internal error"
+           | _ -> failwith "internal error"
         )
       | Med ->
         (fun x -> match x with
            | Med_aux (len, xlist) -> median xlist len Predicate.avg
-           | CSA_aux _ -> failwith "internal error"
+           | _ -> failwith "internal error"
         )
 
       | _ -> failwith "[add_ext, AggOnce] internal error"

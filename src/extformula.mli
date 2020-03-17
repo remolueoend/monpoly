@@ -15,7 +15,8 @@ type oainfo = {mutable ores: relation;
          oaauxrels: (timestamp * relation) Mqueue.t}
 
 type t_agg =
-  | CSA_aux of int * cst
+  | C_aux of int 
+  | SA_aux of int * cst
   | Med_aux of (int * Intmap.int_map)
 
 type agg_once_state = {
