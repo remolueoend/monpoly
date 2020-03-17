@@ -1324,6 +1324,11 @@ let rec type_check_formula (sch, vars) f =
     let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars zs in
     let type_check_aggregation exp_typ1 exp_typ2 =
         let (s1,v1,t1) = type_check_term_debug d (sch,new_vars) exp_typ1 (Var r) in
+        let shadowed_vars = 
+          if (List.mem_assoc r shadowed_vars) 
+          then propagate_constraints (List.assoc r shadowed_vars) (List.assoc r v1) shadowed_vars 
+          else shadowed_vars
+          in
         let (s2,v2,t2) = type_check_term_debug d (s1,v1) exp_typ2 (Var x) in
         let (s3,v3,f) = type_check_formula (s2,v2) f in
         let shadowed_vars = 
