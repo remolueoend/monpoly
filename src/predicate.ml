@@ -50,6 +50,8 @@ type cst =
   | Float of float
 
 type tcst = TInt | TStr | TFloat
+type tcl = TNum | TAny 
+type tsymb = TSymb of (tcl * int) | TCst of tcst
 
 (* type term =  *)
 (*   | Var of var *)

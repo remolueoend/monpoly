@@ -50,8 +50,13 @@ type cst =
   | Str of string
   | Float of float
 
-(** Two types of constants are supported: integers and strings *)
+(** Three (constant) types are supported: integers, strings and floats *)
 type tcst = TInt | TStr | TFloat
+
+(** Two type classes exists: Numeric and Any*) 
+type tcl = TNum | TAny 
+(** Type can be a symbolic type (from one of the two supported classes) or a constant type *) 
+type tsymb = TSymb of (tcl * int) | TCst of tcst
 
 
 (** A term is either a variable or a constant. *)

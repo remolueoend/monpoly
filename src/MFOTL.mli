@@ -83,7 +83,7 @@ type formula =
   | Equiv of (formula * formula)
   | Exists of (var list * formula)
   | ForAll of (var list * formula)
-  | Aggreg of (var * agg_op * var * var list * formula)
+  | Aggreg of (tsymb * var * agg_op * var * var list * formula)
   | Prev of (interval * formula)
   | Next of (interval * formula)
   | Eventually of (interval * formula)
@@ -122,6 +122,8 @@ val aggreg_default_value: agg_op -> tcst -> cst
 
 
 (** Operations on formulas: *)
+
+val map: (formula -> formula) -> (regex -> regex) -> formula -> formula
 
 val direct_subformulas: formula -> formula list
   (** [direct_subformulas f] returns the list of all direct subformulas of [f]; hence not 

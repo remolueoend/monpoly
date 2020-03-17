@@ -63,7 +63,7 @@ type formula =
   | Equiv of (formula * formula)
   | Exists of (var list * formula)
   | ForAll of (var list * formula)
-  | Aggreg of (var * agg_op * var * var list * formula)
+  | Aggreg of (tsymb * var * agg_op * var * var list * formula)
   | Prev of (interval * formula)
   | Next of (interval * formula)
   | Eventually of (interval * formula)
@@ -163,6 +163,66 @@ let aggreg_default_value op t = match op, t with
   | _, TStr -> Str ""
 
 
+let map mapf mapr =
+let rec formula_map = function
+  | Equal (_,_)
+  | Less (_,_)
+  | LessEq (_,_) 
+  | Pred _ as f -> mapf f
+  | Let (p,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Let (p,f1,f2))
+  | Neg f -> mapf (Neg (formula_map f))
+  | And (f1,f2) ->
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (And (f1,f2))
+  | Or (f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Or (f1,f2))
+  | Implies (f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Implies (f1,f2))
+  | Equiv (f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Equiv (f1,f2))
+  | Exists (v,f) -> mapf (Exists (v,formula_map f))
+  | ForAll (v,f) -> mapf (ForAll (v,formula_map f))
+  | Aggreg (rty,r,op,x,gs,f) -> mapf (Aggreg (rty,r,op,x,gs,formula_map f))
+  | Prev (intv,f) -> mapf (Prev (intv,formula_map f))
+  | Next (intv,f) -> mapf (Next (intv,formula_map f))
+  | Eventually (intv,f) -> mapf (Eventually (intv,formula_map f))
+  | Once (intv,f) -> mapf (Once (intv,formula_map f))
+  | Always (intv,f)     -> mapf (Always (intv,formula_map f))
+  | PastAlways (intv,f) -> mapf (PastAlways (intv,formula_map f))
+  | Since (intv,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Since (intv,f1,f2))
+  | Until (intv,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (Until (intv,f1,f2))
+  | Frex (intv,r) -> mapf (Frex (intv,(formula_re_map r)))
+  | Prex (intv,r) -> mapf (Prex (intv,(formula_re_map r)))
+and formula_re_map = function 
+  | Wild -> mapr Wild
+  | Test f -> mapr (Test (formula_map f))
+  | Concat (r1,r2) ->
+    let r1 = formula_re_map r1 in
+    let r2 = formula_re_map r2 in
+    mapr (Concat (r1,r2))
+  | Plus (r1,r2) -> 
+    let r1 = formula_re_map r1 in
+    let r2 = formula_re_map r2 in
+    mapr (Plus (r1,r2))
+  | Star r -> mapr (Star (formula_re_map r)) 
+in
+formula_map
 
 
 (** returns the list of all direct subformulas of f, ignoring the regexes *)
@@ -179,7 +239,7 @@ let rec direct_subformulas = function
   | Equiv (f1,f2) -> [f1;f2]
   | Exists (v,f) -> [f]
   | ForAll (v,f) -> [f]
-  | Aggreg (_,_,_,_,f) -> [f]
+  | Aggreg (_,_,_,_,_,f) -> [f]
   | Prev (intv,f) -> [f]
   | Next (intv,f) -> [f]
   | Eventually (intv,f) -> [f]
@@ -259,7 +319,7 @@ let rec is_mfodl = function
   | Equiv (f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Exists (v,f) 
   | ForAll (v,f) -> is_mfodl f
-  | Aggreg (_,_,_,_,f) -> is_mfodl f
+  | Aggreg (_,_,_,_,_,f) -> is_mfodl f
   | Prev (intv,f) 
   | Next (intv,f) 
   | Eventually (intv,f) 
@@ -287,7 +347,7 @@ let rec free_vars = function
   | Equiv (f1,f2) -> Misc.union (free_vars f1) (free_vars f2)
   | Exists (vl,f) 
   | ForAll (vl,f) -> List.filter (fun x -> not (List.mem x vl)) (free_vars f)
-  | Aggreg (y,op,x,glist,f) -> y :: glist
+  | Aggreg (rty,y,op,x,glist,f) -> y :: glist
   | Prev (intv,f) 
   | Next (intv,f) 
   | Eventually (intv,f) 
@@ -359,7 +419,7 @@ let rec substitute_vars m =
         let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
         let fresh_var_map = List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
         substitute_vars (no_bv@fresh_var_map) f) 
-  | Aggreg (y, op, x, g, f) -> Aggreg (y,op,x,g, substitute_vars m f)
+  | Aggreg (rty, y, op, x, g, f) -> Aggreg (rty, y,op,x,g, substitute_vars m f)
   | Prev (i, f) -> Prev (i,substitute_vars m f)
   | Next (i, f) -> Next (i,substitute_vars m f)
   | Once (i, f) -> Once (i, substitute_vars m f)
@@ -435,7 +495,7 @@ let rec type_of_fma = function
   | Equiv (f1,f2) -> "Equiv"
   | Exists (vl,f) -> "Exists"
   | ForAll (vl,f) -> "Forall"
-  | Aggreg (y,op,x,glist,f) -> "Agggreg"
+  | Aggreg (rty,y,op,x,glist,f) -> "Agggreg"
   | Prev (intv,f) -> "Prev"
   | Next (intv,f) -> "Next"
   | Eventually (intv,f) -> "Eventually"
@@ -450,6 +510,8 @@ let rec type_of_fma = function
 (* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
 ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
 let string_of_formula str g =
+  let pps = String.split_on_char '\n' str in
+  let padding = if pps==[] then "" else String.map (fun s -> ' ') (List.nth pps ((List.length pps)-1)) in
   let rec string_f_rec top par h =
     (match h with
       | Equal (t1,t2) ->
@@ -484,7 +546,7 @@ let string_of_formula str g =
           ^
           (string_f_rec false false f)
 
-        | Aggreg (y,op,x,glist,f) ->
+        | Aggreg (rty,y,op,x,glist,f) ->
           (Predicate.string_of_term (Var y))
           ^
           " <- "
@@ -618,6 +680,8 @@ let string_of_formula str g =
               ^
               "\n"
               ^ 
+              padding
+              ^
               "IN"
               ^
               " "
@@ -700,6 +764,8 @@ let string_of_formula str g =
 
   (* Fully parenthesize an MFOTL formula *)
   let string_of_parenthesized_formula str g =
+    let pps = String.split_on_char '\n' str in
+    let padding = if pps==[] then "" else String.map (fun s -> ' ') (List.nth pps ((List.length pps)-1)) in
     let rec string_f_rec top par h =
       (match h with
         | Equal (t1,t2) ->
@@ -739,7 +805,7 @@ let string_of_formula str g =
             (string_f_rec false false f)
             ^ ")"
   
-          | Aggreg (y,op,x,glist,f) ->
+          | Aggreg (rty,y,op,x,glist,f) ->
             "(" ^
             (Predicate.string_of_term (Var y))
             ^
@@ -899,6 +965,8 @@ let string_of_formula str g =
                 (string_f_rec false true f1)
                 ^
                 "\n"
+                ^
+                padding
                 ^ 
                 "IN"
                 ^

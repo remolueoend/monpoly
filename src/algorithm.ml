@@ -1544,12 +1544,12 @@ let rec add_ext dbschema f =
     in
     EAnd (comp, ff1, ff2, {arel = None})
 
-  | Aggreg (y, (Avg as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Sum as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Cnt as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Med as op), x, glist, Once (intv, f)) as ff ->
+  | Aggreg (t_y, y, (Avg as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Sum as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Cnt as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Med as op), x, glist, Once (intv, f)) ->
 
-    let t_y = List.assoc y (Rewriting.check_syntax dbschema ff) in
+    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1691,8 +1691,8 @@ let rec add_ext dbschema f =
     EAggOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
-  | Aggreg (y, (Min as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Max as op), x, glist, Once (intv, f)) as ff ->
+  | Aggreg (t_y, y, (Min as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Max as op), x, glist, Once (intv, f)) ->
 
     let get_comp_func = function
       | Min -> (fun x y -> - (Pervasives.compare x y))
@@ -1705,7 +1705,7 @@ let rec add_ext dbschema f =
     (* for Max: x is better than y iff x > y *)
     let is_better = get_comp_func op in
 
-    let t_y = List.assoc y (Rewriting.check_syntax dbschema ff) in
+    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1800,7 +1800,7 @@ let rec add_ext dbschema f =
 
 
 
-  | Aggreg (y, Avg, x, glist, f) ->
+  | Aggreg (t_y, y, Avg, x, glist, f) ->
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1832,7 +1832,7 @@ let rec add_ext dbschema f =
     in
     EAggreg (comp, add_ext dbschema f)
 
-  | Aggreg (y, Med, x, glist, f) ->
+  | Aggreg (t_y, y, Med, x, glist, f) ->
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1860,8 +1860,8 @@ let rec add_ext dbschema f =
     in
     EAggreg (comp, add_ext dbschema f)
 
-  | Aggreg (y, op, x, glist, f) as ff ->
-    let t_y = List.assoc y (Rewriting.check_syntax dbschema ff) in
+  | Aggreg (t_y, y, op, x, glist, f)  ->
+    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in

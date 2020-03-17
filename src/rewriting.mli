@@ -51,6 +51,7 @@ open MFOTL
 open Db
 
 
+
 val normalize: formula -> formula
   (** This function normalizes a formula by eliminating synactic
       sugar, pushing down negations, and eliminating double
@@ -68,6 +69,6 @@ val check_formula: (formula -> bool * (formula * string) option) -> schema -> fo
     formula and [vtypes] is the list of free variables of [pf]
     together with their types *)
 
-val check_syntax: schema -> formula -> (var * tcst) list
+val check_syntax: schema -> formula -> ((var * tcst) list  * formula)
 
 val expand_let: formula -> formula

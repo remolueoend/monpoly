@@ -138,7 +138,7 @@
           if not (List.mem gby_var free_vars) then
             failwith (msg false gby_var)
         ) groupby_vars;
-        Aggreg (res_var, op, agg_var, groupby_vars, f)
+        Aggreg ((TSymb (TAny, 0)),res_var, op, agg_var, groupby_vars, f)
       end
 
 %}

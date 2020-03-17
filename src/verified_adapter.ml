@@ -78,26 +78,29 @@ let convert_agg_op = function
   | Med -> Agg_Med
 
 let convert_formula dbschema f =
-  let fvl = MFOTL.free_vars f in
+  let free_vars = MFOTL.free_vars f in
   let truth = Equal (Cst (Int 0), Cst (Int 0)) in
   let rec createExists n f = match n with
   | 0 -> f
   | n -> createExists (n-1) (Exists f)
   in
-  let rec convert_formula_vars bvl = function
+  let rec convert_formula_vars fvl bvl = function
   | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Less (t1,t2) -> Less (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | LessEq (t1,t2) -> LessEq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Pred (p,_,tl) -> Pred (explode p, List.map (fun t -> convert_term fvl bvl t) tl)
-  | Neg f -> Neg (convert_formula_vars bvl f)
-  | And (f1,f2) -> And (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
-  | Or (f1,f2) -> Or (convert_formula_vars bvl f1, convert_formula_vars bvl f2)
-  | Implies (f1,f2) -> convert_formula_vars bvl (Or ((Neg f1), f2))
-  | Equiv (f1,f2) -> convert_formula_vars bvl (And (Implies (f1,f2),Implies(f2,f2)))
-  | Exists (v,f) -> createExists (List.length v) (convert_formula_vars (v@bvl) f)
-  | ForAll (v,f) -> convert_formula_vars bvl (Neg (Exists (v,(Neg f))))
-  | Aggreg (y,op,x,glist,f) as ff ->
-      let t_y = List.assoc y (Rewriting.check_syntax dbschema ff) in
+  | Let (p,f1,f2) -> let (n,a,ts) = Predicate.get_info p in
+                     (* TODO: pass correct fvl for f1 *)
+                     Let (explode n, nat_of_int 0, convert_formula_vars fvl [] f1, convert_formula_vars fvl bvl f2)
+  | Neg f -> Neg (convert_formula_vars fvl bvl f)
+  | And (f1,f2) -> And (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
+  | Or (f1,f2) -> Or (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
+  | Implies (f1,f2) -> convert_formula_vars fvl bvl (Or ((Neg f1), f2))
+  | Equiv (f1,f2) -> convert_formula_vars fvl bvl (And (Implies (f1,f2),Implies(f2,f2)))
+  | Exists (v,f) -> createExists (List.length v) (convert_formula_vars fvl (v@bvl) f)
+  | ForAll (v,f) -> convert_formula_vars fvl bvl (Neg (Exists (v,(Neg f))))
+  | Aggreg (t_y, y,op,x,glist,f) ->
+      let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
       let attr = MFOTL.free_vars f in
       let bound = Misc.diff attr glist in
       let bvl_f = bound @ bvl in
@@ -105,24 +108,24 @@ let convert_formula dbschema f =
         (convert_agg_op op, convert_cst (aggreg_default_value op t_y)),
         nat_of_int (List.length bound),
         convert_term fvl bvl_f (Var x),
-        convert_formula_vars bvl_f f)
-  | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars bvl f))
-  | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars bvl f))
-  | Since (intv,f1,f2) -> Since (convert_formula_vars bvl f1,convert_interval intv,convert_formula_vars bvl f2)
-  | Until (intv,f1,f2) -> Until (convert_formula_vars bvl f1,convert_interval intv,convert_formula_vars bvl f2)
-  | Eventually (intv,f) -> convert_formula_vars bvl (Until (intv,truth,f))
-  | Once (intv,f) -> convert_formula_vars bvl (Since (intv,truth,f))
-  | Always (intv,f) -> convert_formula_vars bvl (Neg (Eventually (intv,(Neg f))))
-  | PastAlways (intv,f) -> convert_formula_vars bvl (Neg (Once (intv,(Neg f))))
-  | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars bvl r)
-  | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars bvl r)
-  and convert_re_vars bvl = function
+        convert_formula_vars fvl bvl_f f)
+  | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars fvl bvl f))
+  | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars fvl bvl f))
+  | Since (intv,f1,f2) -> Since (convert_formula_vars fvl bvl f1,convert_interval intv,convert_formula_vars fvl bvl f2)
+  | Until (intv,f1,f2) -> Until (convert_formula_vars fvl bvl f1,convert_interval intv,convert_formula_vars fvl bvl f2)
+  | Eventually (intv,f) -> convert_formula_vars fvl bvl (Until (intv,truth,f))
+  | Once (intv,f) -> convert_formula_vars fvl bvl (Since (intv,truth,f))
+  | Always (intv,f) -> convert_formula_vars fvl bvl (Neg (Eventually (intv,(Neg f))))
+  | PastAlways (intv,f) -> convert_formula_vars fvl bvl (Neg (Once (intv,(Neg f))))
+  | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars fvl bvl r)
+  | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars fvl bvl r)
+  and convert_re_vars fvl bvl = function
   | Wild -> wild
-  | Test f -> Test (convert_formula_vars bvl f)
-  | Concat (r1,r2) -> Times (convert_re_vars bvl r1, convert_re_vars bvl r2)
-  | Plus (r1,r2) -> Plusa (convert_re_vars bvl r1, convert_re_vars bvl r2)
-  | Star r -> Star (convert_re_vars bvl r)
-  in convert_formula_vars [] f
+  | Test f -> Test (convert_formula_vars fvl bvl f)
+  | Concat (r1,r2) -> Times (convert_re_vars fvl bvl r1, convert_re_vars fvl bvl r2)
+  | Plus (r1,r2) -> Plusa (convert_re_vars fvl bvl r1, convert_re_vars fvl bvl r2)
+  | Star r -> Star (convert_re_vars fvl bvl r)
+  in convert_formula_vars free_vars [] f
 
 let unorderedFlatMap m =
   let rec flatmap_rec acc = function
