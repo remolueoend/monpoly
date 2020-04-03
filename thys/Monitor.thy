@@ -295,25 +295,61 @@ lemma ok_mono: "ok m mr \<Longrightarrow> m \<le> n \<Longrightarrow> ok n mr"
 lemma from_mregex_cong: "ok m mr \<Longrightarrow> (\<forall>i < m. xs ! i = ys ! i) \<Longrightarrow> from_mregex mr xs = from_mregex mr ys"
   by (induct mr) auto
 
+lemma not_Neg_cases:
+  "(\<forall>\<psi>. \<phi> \<noteq> Formula.Neg \<psi>) \<Longrightarrow> (case \<phi> of formula.Neg \<psi> \<Rightarrow> f \<psi> | _ \<Rightarrow> x) = x"
+  by (cases \<phi>) auto
+
 lemma to_mregex_exec_ok:
   "to_mregex_exec r xs = (mr, ys) \<Longrightarrow> \<exists>zs. ys = xs @ zs \<and> set zs = atms r \<and> ok (length ys) mr"
-  apply (induct r arbitrary: xs mr ys)
-      apply (auto split: if_splits prod.splits simp: atms_def elim: ok_mono)
-    apply (split formula.splits; fastforce elim: ok_mono)+
-   apply (fastforce split: if_splits prod.splits formula.splits simp: atms_def elim: ok_mono)
-  apply (fastforce split: if_splits prod.splits formula.splits simp: atms_def elim: ok_mono)
-  done
+proof (induct r arbitrary: xs mr ys)
+  case (Skip x)
+  then show ?case by (auto split: if_splits prod.splits simp: atms_def elim: ok_mono)
+next
+  case (Test x)
+  show ?case proof (cases "\<exists>x'. x = Formula.Neg x'")
+    case True
+    with Test show ?thesis by (auto split: if_splits prod.splits simp: atms_def elim: ok_mono)
+  next
+    case False
+    with Test show ?thesis by (auto split: if_splits prod.splits simp: atms_def not_Neg_cases elim: ok_mono)
+  qed
+next
+  case (Plus r1 r2)
+  then show ?case by (fastforce split: if_splits prod.splits formula.splits simp: atms_def elim: ok_mono)
+next
+  case (Times r1 r2)
+  then show ?case by (fastforce split: if_splits prod.splits formula.splits simp: atms_def elim: ok_mono)
+next
+  case (Star r)
+  then show ?case by (auto split: if_splits prod.splits simp: atms_def elim: ok_mono)
+qed
 
 lemma ok_shift: "ok (i + m) (Monitor.shift r i) \<longleftrightarrow> ok m r"
   by (induct r) auto
 
 lemma to_mregex_ok: "to_mregex r = (mr, ys) \<Longrightarrow> set ys = atms r \<and> ok (length ys) mr"
-  apply (induct r arbitrary: mr ys)
-      apply (auto simp: ok_shift atms_def elim: ok_mono split: if_splits prod.splits)
-      apply (split formula.splits; fastforce simp: ok_shift elim: ok_mono)+
-  using ok_mono apply fastforce
-  using ok_mono apply fastforce
-  done
+proof (induct r arbitrary: mr ys)
+  case (Skip x)
+  then show ?case by (auto simp: atms_def elim: ok_mono split: if_splits prod.splits)
+next
+  case (Test x)
+  show ?case proof (cases "\<exists>x'. x = Formula.Neg x'")
+    case True
+    with Test show ?thesis by (auto split: if_splits prod.splits simp: atms_def elim: ok_mono)
+  next
+    case False
+    with Test show ?thesis by (auto split: if_splits prod.splits simp: atms_def not_Neg_cases elim: ok_mono)
+  qed
+next
+  case (Plus r1 r2)
+  then show ?case by (fastforce simp: ok_shift atms_def elim: ok_mono split: if_splits prod.splits)
+next
+  case (Times r1 r2)
+  then show ?case by (fastforce simp: ok_shift atms_def elim: ok_mono split: if_splits prod.splits)
+next
+  case (Star r)
+  then show ?case by (auto simp: atms_def elim: ok_mono split: if_splits prod.splits)
+qed
 
 lemma from_mregex_shift: "from_mregex (shift r (length xs)) (xs @ ys) = from_mregex r ys"
   by (induct r) (auto simp: nth_append)
@@ -719,9 +755,14 @@ definition update_until :: "args \<Rightarrow> event_data table \<Rightarrow> ev
 
 lemma map_proj_thd_update_until: "map proj_thd (takeWhile (check_before (args_ivl args) nt) auxlist) =
   map proj_thd (takeWhile (check_before (args_ivl args) nt) (update_until args rel1 rel2 nt auxlist))"
-  apply (induction auxlist)
-   apply (auto simp add: update_until_def split: if_splits)
-  by (smt ab_semigroup_add_class.add_ac(1) leD le_cases le_iff_add ordered_cancel_comm_monoid_diff_class.add_diff_inverse plus_enat_simps(1))+
+proof (induction auxlist)
+  case Nil
+  then show ?case by (simp add: update_until_def)
+next
+  case (Cons a auxlist)
+  then show ?case
+    by (cases "right (args_ivl args)") (auto simp add: update_until_def split: if_splits prod.splits)
+qed
 
 fun eval_until :: "\<I> \<Rightarrow> ts \<Rightarrow> event_data muaux \<Rightarrow> event_data table list \<times> event_data muaux" where
   "eval_until I nt [] = ([], [])"
@@ -1225,13 +1266,18 @@ lemma dom_Max_mapping[simp]: "dom (Max_mapping X) = (\<Inter>P \<in> X. dom P)"
   unfolding Max_mapping_def by (auto split: if_splits)
 
 lemma Max_mapping_coboundedI:
-  "finite X \<Longrightarrow> \<forall>Q \<in> X. dom Q = dom P \<Longrightarrow> P \<in> X \<Longrightarrow> rel_mapping (\<le>) P (Max_mapping X)"
-  unfolding rel_mapping_alt dom_Max_mapping unfolding Max_mapping_def
-  apply safe
-    apply force
-   apply fastforce
-  apply (force simp: image_iff intro!: Max.coboundedI)
-  done
+  assumes "finite X" "\<forall>Q \<in> X. dom Q = dom P" "P \<in> X"
+  shows "rel_mapping (\<le>) P (Max_mapping X)"
+  unfolding rel_mapping_alt
+proof (intro conjI ballI)
+  from assms(3) have "X \<noteq> {}" by auto
+  then show "dom P = dom (Max_mapping X)" using assms(2) by auto
+next
+  fix p
+  assume "p \<in> dom P"
+  with assms show "the (P p) \<le> the (Max_mapping X p)"
+    by (force simp add: Max_mapping_def intro!: Max.coboundedI imageI)
+qed
 
 lemma rel_mapping_trans: "P OO Q \<le> R \<Longrightarrow> 
   rel_mapping P P1 P2 \<Longrightarrow> rel_mapping Q P2 P3 \<Longrightarrow> rel_mapping R P1 P3"
@@ -1287,30 +1333,30 @@ next
   from Let.prems obtain P2 j2 where P2: "dom P2 = insert p S" "range_mapping i j2 P2"
     "i \<le> progress \<sigma> P2 \<psi> j2"
     by (atomize_elim, intro Let(2)) (force simp: pred_mapping_alt rel_mapping_alt dom_def)+
-  moreover
-  from Let.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (the (P2 p)) j1 P1" "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
+  from Let.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (the (P2 p)) j1 P1"
+    "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
     by (atomize_elim, intro Let(1)) auto
-  moreover from P1 P2 have
-    "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> ((max_mapping P1 P2)(p := P1 p)) \<phi> (max j1 j2)"
+  let ?P12 = "max_mapping P1 P2"
+  from P1 P2 have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2)"
     by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
-  moreover from P1 P2 have
-    "progress \<sigma> P2 \<psi> j2 \<le>progress \<sigma> (max_mapping P1 P2(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
+  from P1 P2 have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
     by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
-  ultimately show ?case
+  show ?case
     unfolding progress.simps
-    apply (intro exI[of _ "(max_mapping P1 P2)(p := P1 p)"] exI[of _ "max j1 j2"] conjI)
-      apply (auto simp: pred_mapping_alt dom_def max_mapping_def split: if_splits option.splits) [2]
-           apply auto[7]
-    apply simp
-    apply (erule order_trans)
-    apply (erule order_trans)
-    apply (rule progress_mono_gen)
-     apply simp
-    apply auto
-    apply (erule rel_mapping_map_upd)
-    apply (rule rel_mapping_reflp)
-    apply (simp add: reflp_def)
-    done
+  proof (intro exI[of _ "?P12(p := P1 p)"] exI[of _ "max j1 j2"] conjI)
+    show "dom (?P12(p := P1 p)) = S"
+      using P1 P2 by (auto simp: dom_def max_mapping_def)
+  next
+    show "range_mapping i (max j1 j2) (?P12(p := P1 p))"
+      using P1 P2 by (force simp add: pred_mapping_alt dom_def max_mapping_def split: option.splits)
+  next
+    have "i \<le> progress \<sigma> P2 \<psi> j2" by fact
+    also have "... \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
+      using le2 by blast
+    also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p\<mapsto>progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2))) \<psi> (max j1 j2)"
+      by (auto intro!: progress_mono_gen simp: le1 rel_mapping_alt)
+    finally show "i \<le> ..." .            
+  qed
 next
   case (Eq _ _)
   then show ?case 
@@ -1388,12 +1434,11 @@ next
   case (Prev I \<phi>)
   then obtain P j where "dom P = S" "range_mapping i j P" "i \<le> progress \<sigma> P \<phi> j"
     by (atomize_elim, intro Prev(1)) (auto simp: pred_mapping_alt dom_def)
-  with Prev(2) show ?case
-    unfolding progress.simps
-    apply (auto intro!: exI[of _ P] exI[of _"max i j"] simp: le_Suc_eq max_def
-        split: if_splits elim: order.trans[OF _ progress_mono])
-    apply (auto simp: pred_mapping_alt)
-    done
+  with Prev(2) have
+    "dom P = S \<and> range_mapping i (max i j) P \<and> i \<le> progress \<sigma> P (formula.Prev I \<phi>) (max i j)"
+    by (auto simp: le_Suc_eq max_def pred_mapping_alt split: if_splits
+        elim: order.trans[OF _ progress_mono])
+  then show ?case by blast
 next
   case (Next I \<phi>)
   then obtain P j where "dom P = S" "range_mapping (Suc i) j P" "Suc i \<le> progress \<sigma> P \<phi> j"
@@ -1420,10 +1465,10 @@ next
   then have 1: "\<tau> \<sigma> i + b < \<tau> \<sigma> i'" by simp
   from Until.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (Suc i') j1 P1" "Suc i' \<le> progress \<sigma> P1 \<phi>1 j1"
     by (atomize_elim, intro Until(1)) (auto simp: pred_mapping_alt dom_def)
-  moreover
   from Until.prems obtain P2 j2 where P2: "dom P2 = S" "range_mapping (Suc i') j2 P2" "Suc i' \<le> progress \<sigma> P2 \<phi>2 j2"
     by (atomize_elim, intro Until(2)) (auto simp: pred_mapping_alt dom_def)
-  ultimately have "i \<le> progress \<sigma> (max_mapping P1 P2) (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
+  let ?P12 = "max_mapping P1 P2"
+  have "i \<le> progress \<sigma> ?P12 (Formula.Until \<phi>1 I \<phi>2) (max j1 j2)"
     unfolding progress.simps
   proof (intro cInf_greatest, goal_cases nonempty greatest)
     case nonempty
@@ -1431,23 +1476,19 @@ next
       by (auto simp: trans_le_add1[OF \<tau>_mono] intro!: exI[of _ "max j1 j2"])
   next
     case (greatest x)
-    with \<open>i < i'\<close> 1 show ?case
-      apply (auto dest!: spec[of _ i'] simp: max_absorb1 max_absorb2 less_eq_Suc_le
-          elim: order.trans[OF _ progress_le_gen] order.trans[OF _ progress_mono_gen, rotated]
-          dest!: not_le_imp_less[THEN less_imp_le] intro!: less_\<tau>D[THEN less_imp_le, of \<sigma> i x])
-      subgoal
-        by (auto simp: max_def elim!: order.trans[OF _ progress_le_gen] pred_mapping_mono_strong)
-      subgoal
-        apply (rule order_trans[OF le_SucI[OF order_refl]])
-        apply (erule order_trans[OF _ progress_mono_gen])
-         apply (auto simp: max_mapping_cobounded1)
-        done
-      subgoal
-        apply (rule order_trans[OF le_SucI[OF order_refl]])
-        apply (erule order_trans[OF _ progress_mono_gen])
-         apply (auto simp: max_mapping_cobounded2)
-        done
-      done
+    from P1(2,3) have "i' < j1"
+      by (auto simp: less_eq_Suc_le intro!: progress_le_gen elim!: order.trans pred_mapping_mono_strong)
+    then have "i' < max j1 j2" by simp
+    have "progress \<sigma> P1 \<phi>1 j1 \<le> progress \<sigma> ?P12 \<phi>1 (max j1 j2)"
+      using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded1)
+    moreover have "progress \<sigma> P2 \<phi>2 j2 \<le> progress \<sigma> ?P12 \<phi>2 (max j1 j2)"
+      using P1(1) P2(1) by (auto intro!: progress_mono_gen max_mapping_cobounded2)
+    ultimately have "i' \<le> min (progress \<sigma> ?P12 \<phi>1 (max j1 j2)) (progress \<sigma> ?P12 \<phi>2 (max j1 j2))"
+      using P1(3) P2(3) by simp
+    with greatest \<open>i' < max j1 j2\<close> have "\<tau> \<sigma> i' \<le> \<tau> \<sigma> x + b"
+      by simp
+    with 1 have "\<tau> \<sigma> i < \<tau> \<sigma> x" by simp
+    then show ?case by (auto dest!: less_\<tau>D)
   qed
   with P1 P2 \<open>i < i'\<close> show ?case
     by (intro exI[of _ "max_mapping P1 P2"] exI[of _ "max j1 j2"]) (auto simp: range_mapping_relax)
@@ -1590,29 +1631,47 @@ lemma sat_prefix_conv_gen:
     Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat \<sigma>' V' v i \<phi>"
 proof (induction \<phi> arbitrary: P V V' v i)
   case (Pred e ts)
-  with \<Gamma>_prefix_conv[OF assms(1,2)] show ?case
-    apply (auto 10 0 simp: set_eq_iff image_iff split: option.splits)
-     apply (metis domI option.sel)
-    apply (metis domI option.sel)
-    done
+  from Pred.prems(1,4) have "i < plen \<pi>"
+    by (blast intro!: order.strict_trans2 progress_le_gen)
+  show ?case proof (cases "V e")
+    case None
+    then have "V' e = None" using \<open>dom V = dom V'\<close> by auto
+    with None \<Gamma>_prefix_conv[OF assms(1,2) \<open>i < plen \<pi>\<close>] show ?thesis by simp
+  next
+    case (Some a)
+    obtain a' where "V' e = Some a'" using Some \<open>dom V = dom V'\<close> by auto
+    then have "i < the (P e)"
+      using Pred.prems(1-3) by (auto split: option.splits)
+    then have "the (V e) i = the (V' e) i"
+      using Some by (intro Pred.prems(5)) (simp_all add: domI)
+    with Some \<open>V' e = Some a'\<close> show ?thesis by simp
+  qed
 next
   case (Let p b \<phi> \<psi>)
-  from Let.prems show ?case
-    unfolding sat.simps progress.simps
-    apply (intro allI impI Let(2)[rule_format])
-        apply assumption
-       apply (simp_all add: dom_def)
-       apply (auto) []
-      apply fastforce
-     apply (auto simp: pred_mapping_alt dom_def intro!: progress_le_gen) []
-     apply (metis Let.prems(4) domIff option.sel option.simps(3) pred_mapping_alt)
-    apply (intro conjI impI Collect_cong conj_cong ex_cong)
-     prefer 2
-     apply simp
-    apply (rule Let(1)[rule_format, rotated -1])
-          apply (simp_all add: dom_def)
-    apply blast
-    done
+  let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto>
+      \<lambda>i. {v. length v = Formula.nfv \<phi> - b \<and>
+              (\<exists>zs. length zs = b \<and>
+                    Formula.sat \<sigma> V (zs @ v) i \<phi>)}))"
+  show ?case unfolding sat.simps proof (rule Let.IH(2))
+    from Let.prems show "i < progress \<sigma> (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) \<psi> (plen \<pi>)"
+      by simp
+    from Let.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
+      by simp
+    from Let.prems show "dom (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) = dom (?V V \<sigma>)"
+      by simp
+    from Let.prems show "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>)))"
+      by (auto intro!: pred_mapping_map_upd elim!: progress_le_gen)
+  next
+    fix p' i \<phi>'
+    assume 1: "p' \<in> dom (?V V \<sigma>)" and 2: "i < the ((P(p \<mapsto> progress \<sigma> P \<phi> (plen \<pi>))) p')"
+    show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
+      case True
+      with Let 2 show ?thesis by auto
+    next
+      case False
+      with 1 2 show ?thesis by (auto intro!: Let.prems(5))
+    qed
+  qed
 next
   case (Eq t1 t2)
   show ?case by simp
@@ -2564,17 +2623,12 @@ proof -
         have "ecard ?A = ecard ((\<lambda>zs. map Some zs @ drop b x) ` ?A)"
           by (auto intro!: ecard_image[symmetric] inj_onI)
         also have "(\<lambda>zs. map Some zs @ drop b x) ` ?A = ?B"
-          apply (auto simp: image_iff)
-          apply (metis append_take_drop_id)
-          apply (metis append_take_drop_id drop_append drop_drop length_map)
-          apply (metis append_take_drop_id)
-          by (metis "2" append_take_drop_id)
+          by (subst (1 2) eq_commute) (auto simp: image_iff, metis "2" append_take_drop_id)
         finally show ?thesis .
       qed
       show ?thesis
         unfolding M_def M'_def
-        apply (auto simp: False Let_def image_def Set.filter_def 1 3)
-        by (metis "2")
+        by (auto simp: False Let_def image_def Set.filter_def 1 3, metis "2")
     qed
     then have alt: "v \<in> eval_agg n g0 y \<omega> b f rel \<longleftrightarrow>
         v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> (M (map the k)))]) ` drop b ` rel"
