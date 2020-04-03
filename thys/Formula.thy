@@ -757,14 +757,17 @@ lemma sat_slice_strong:
   using assms
 proof (induction \<phi> arbitrary: V V' v S i)
   case (Pred r ts)
-  then show ?case apply (auto simp: subset_eq domIff split: option.splits)
-    subgoal by fastforce
-    subgoal apply (metis domIff domI) done
-    subgoal apply (metis domIff domI) done
-    subgoal apply (metis domIff domI) done
-    subgoal by fastforce
-    subgoal by fastforce
-    done
+  show ?case proof (cases "V r")
+    case None
+    then have "V' r = None" using \<open>dom V = dom V'\<close> by auto
+    with None Pred(1,2) show ?thesis by (auto simp: domIff dest!: subsetD)
+  next
+    case (Some a)
+    moreover obtain a' where "V' r = Some a'" using Some \<open>dom V = dom V'\<close> by auto
+    moreover have "(map (eval_trm v) ts \<in> the (V r) i) = (map (eval_trm v) ts \<in> the (V' r) i)"
+      using Some Pred(2,4) by (fastforce intro: domI)
+    ultimately show ?thesis by simp
+  qed
 next
   case (Let p b \<phi> \<psi>)
   from Let.prems show ?case unfolding sat.simps
@@ -1222,29 +1225,13 @@ next
 next
   case (MatchP I r)
   then show ?case
-    apply (auto simp: atms_def regex.pred_set regex.set_map ball_Un)
-     apply (erule safe_regex_safe_formula[THEN disjE_Not2])
-       apply assumption
-      apply simp
-     apply force
-    apply (erule safe_regex_safe_formula[THEN disjE_Not2])
-      apply assumption
-     apply simp
-    apply force
-    done
+    by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
+        elim: safe_regex_safe_formula[THEN disjE_Not2])
 next
   case (MatchF I r)
   then show ?case
-    apply (auto simp: atms_def regex.pred_set regex.set_map ball_Un)
-     apply (erule safe_regex_safe_formula[THEN disjE_Not2])
-       apply assumption
-      apply simp
-     apply force
-    apply (erule safe_regex_safe_formula[THEN disjE_Not2])
-      apply assumption
-     apply simp
-    apply force
-    done
+    by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
+        elim: safe_regex_safe_formula[THEN disjE_Not2])
 qed auto
 
 lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"

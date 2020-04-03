@@ -170,22 +170,39 @@ lemma past_only_sat:
      past_only \<phi> \<Longrightarrow> Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>"
 proof (induction \<phi> arbitrary: V V' v i)
   case (Pred e ts)
-  with \<Gamma>_prefix_conv[OF assms(1,2)] show ?case
-    apply (auto 10 0 split: option.splits)
-    apply force
-    apply force
-    done
+  show ?case proof (cases "V e")
+    case None
+    then have "V' e = None" using \<open>dom V = dom V'\<close> by auto
+    with None \<Gamma>_prefix_conv[OF assms(1,2) Pred(1)] show ?thesis by simp
+  next
+    case (Some a)
+    moreover obtain a' where "V' e = Some a'" using Some \<open>dom V = dom V'\<close> by auto
+    moreover have "the (V e) i = the (V' e) i"
+      using Some Pred(1,3) by (fastforce intro: domI)
+    ultimately show ?thesis by simp
+  qed
 next
   case (Let p b \<phi> \<psi>)
-  from Let.prems Let.IH(1)[of _ V V'] show ?case unfolding sat.simps
-    apply -
-    apply (intro Let.IH(2))
-       apply auto
-       apply blast
-      apply blast
-     apply fastforce
-    apply fastforce
-    done
+  let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto>
+      \<lambda>i. {v. length v = Formula.nfv \<phi> - b \<and>
+              (\<exists>zs. length zs = b \<and>
+                    Formula.sat \<sigma> V (zs @ v) i \<phi>)}))"
+  show ?case unfolding sat.simps proof (rule Let.IH(2))
+    show "i < plen \<pi>" by fact
+    from Let.prems show "past_only \<psi>" by simp
+    from Let.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
+      by (simp del: fun_upd_apply)
+  next
+    fix p' i
+    assume *: "p' \<in> dom (?V V \<sigma>)" "i < plen \<pi>"
+    show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
+      case True
+      with Let \<open>i < plen \<pi>\<close> show ?thesis by auto
+    next
+      case False
+      with * show ?thesis by (auto intro!: Let.prems(3))
+    qed
+  qed
 next
   case (Ands l)
   with \<Gamma>_prefix_conv[OF assms] show ?case by simp

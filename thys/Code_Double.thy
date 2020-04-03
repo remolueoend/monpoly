@@ -376,13 +376,24 @@ lemma lcompare_double_gt_0: "lcompare_double x y > 0 \<longleftrightarrow> lless
   using compare_double_swap by auto
 
 lemma lcompare_double_eq_0: "lcompare_double x y = 0 \<longleftrightarrow> x = y"
-  unfolding lcompare_double_def
-  apply (auto simp: compare_double_refl)
-    apply (metis (no_types, hide_lams) compare_double_antisym copysign_1_0 eq_iff
-      is_zero_double_cases is_zero_uminus_double lcompare_double_def lcompare_double_ge_0
-      lle_double_def not_is_zero_one_double uminus_one_neq_one_double)
-   apply (metis compare_double_antisym compare_double_swap not_le order.strict_iff_order)+
-  done
+proof
+  assume *: "lcompare_double x y = 0"
+  show "x = y" proof (cases "is_zero x \<and> is_zero y")
+    case True
+    with * show ?thesis
+      by (fastforce simp: lcompare_double_def compare_double_simps is_nan_conv
+          elim: is_zero_double_cases dest!: fcompare_double_eq[rotated])
+  next
+    case False
+    with * show ?thesis
+      by (auto simp: lcompare_double_def linorder_not_less[symmetric] compare_double_swap
+          intro!: compare_double_antisym)
+  qed
+next
+  assume "x = y"
+  then show "lcompare_double x y = 0"
+    by (simp add: lcompare_double_def compare_double_refl)
+qed
 
 lemmas lcompare_double_0_folds = lle_double_def[symmetric] lless_double_def[symmetric]
   lcompare_double_ge_0 lcompare_double_gt_0 lcompare_double_eq_0
@@ -397,17 +408,21 @@ proof
     unfolding lle_double_def lcompare_double_def
     by (auto simp: compare_double_refl)
   show "lle_double x z" if "lle_double x y" and "lle_double y z"
-    using that unfolding lle_double_def lcompare_double_def
-    apply (auto split: if_splits elim: compare_double_trans dest: zero_compare_double_copysign)
-    apply (metis (mono_tags, hide_lams) compare_double_antisym compare_double_swap compare_double_trans le_cases not_less zero_compare_double_copysign)
-    done
+    using that
+    by (auto 0 3 simp: lle_double_def lcompare_double_def not_le compare_double_swap
+        split: if_splits dest: compare_double_trans zero_compare_double_copysign
+        zero_compare_double_copysign[OF less_imp_le] compare_double_antisym)
   show "x = y" if "lle_double x y" and "lle_double y x"
-    using that unfolding lle_double_def lcompare_double_def
-    apply (auto split: if_splits elim: compare_double_antisym)
-    subgoal
-      apply (rule is_zero_double_cases[of x], assumption; rule is_zero_double_cases[of y], assumption)
-      by (auto dest!: compare_double_antisym)
-    done
+  proof (cases "is_zero x \<and> is_zero y")
+    case True
+    with that show ?thesis
+      by (auto 0 3 simp: lle_double_def lcompare_double_def elim: is_zero_double_cases
+          dest!: compare_double_antisym)
+  next
+    case False
+    with that show ?thesis
+      by (auto simp: lle_double_def lcompare_double_def elim!: compare_double_antisym)
+  qed
   show "lle_double x y \<or> lle_double y x"
     unfolding lle_double_def lcompare_double_def
     by (auto simp: compare_double_swap not_le)

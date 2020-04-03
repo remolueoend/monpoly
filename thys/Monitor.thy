@@ -7,7 +7,7 @@ theory Monitor
     "Deriving.Derive"
     "Generic_Join.Generic_Join_Correctness"
 begin
-  (*>*)
+(*>*)
 
 section \<open>Concrete Monitor\<close>
 
