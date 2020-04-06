@@ -1279,7 +1279,7 @@ next
     by (force simp add: Max_mapping_def intro!: Max.coboundedI imageI)
 qed
 
-lemma rel_mapping_trans: "P OO Q \<le> R \<Longrightarrow> 
+lemma rel_mapping_trans: "P OO Q \<le> R \<Longrightarrow>
   rel_mapping P P1 P2 \<Longrightarrow> rel_mapping Q P2 P3 \<Longrightarrow> rel_mapping R P1 P3"
   by (force simp: rel_mapping_alt dom_def set_eq_iff)
 
@@ -1355,11 +1355,11 @@ next
       using le2 by blast
     also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p\<mapsto>progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2))) \<psi> (max j1 j2)"
       by (auto intro!: progress_mono_gen simp: le1 rel_mapping_alt)
-    finally show "i \<le> ..." .            
+    finally show "i \<le> ..." .
   qed
 next
   case (Eq _ _)
-  then show ?case 
+  then show ?case
     by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 next
   case (Less _ _)
@@ -1511,7 +1511,7 @@ next
       unfolding pick_def o_def future_bounded.simps regex.pred_set
       by (intro someI_ex[where P = "\<lambda>Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and>
          i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"]) auto
-    with False show ?thesis 
+    with False show ?thesis
       unfolding progress.simps
       by (intro exI[of _ "Max_mapping (?pickP ` regex.atms r)"] exI[of _ "Max (?pickj ` regex.atms r)"])
         (auto simp: Max_mapping_coboundedI
@@ -1803,7 +1803,7 @@ next
       using that using progress_prefix_conv[OF assms(1,2)]
       by (auto 0 3 elim!: order.strict_trans2[rotated] intro: less_\<tau>D[of \<sigma>'])
     have 21: "k < plen \<pi>" if "\<tau> \<sigma>' k \<le> \<tau> \<sigma>' i + b" for k
-      using 11[OF that(1)] False by (fastforce intro: order.strict_trans2[OF _ progress_le_gen[OF MatchF(5), of \<sigma>], of k]) 
+      using 11[OF that(1)] False by (fastforce intro: order.strict_trans2[OF _ progress_le_gen[OF MatchF(5), of \<sigma>], of k])
     show ?thesis unfolding sat.simps conj_commute[of "left I \<le> _" "_ \<le> _"]
     proof ((intro ex_cong conj_cong match_cong_strong MatchF(1)[OF _ _ MatchF(3-6)]; assumption?), goal_cases right left progress)
       case (right j)
@@ -2575,7 +2575,7 @@ proof -
     define M' where "M' = (\<lambda>k. let group = Set.filter (\<lambda>x. drop b x = k) rel;
         images = meval_trm f ` group
       in (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` images)"
-    have "M' (drop b x) = M (map the (drop b x))" if "x \<in> rel" "mem_restr (lift_envs' b R) x" for x
+    have M'_M: "M' (drop b x) = M (map the (drop b x))" if "x \<in> rel" "mem_restr (lift_envs' b R) x" for x
     proof -
       from that have wf_x: "wf_tuple (b + n) (fv \<phi>) x"
         by (auto elim!: in_qtableE[OF inner])
@@ -2630,113 +2630,110 @@ proof -
         unfolding M_def M'_def
         by (auto simp: False Let_def image_def Set.filter_def 1 3, metis "2")
     qed
-    then have alt: "v \<in> eval_agg n g0 y \<omega> b f rel \<longleftrightarrow>
-        v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> (M (map the k)))]) ` drop b ` rel"
-      if "mem_restr R v" for v
-      using that unfolding eval_agg_def M'_def
-      apply (simp add: False Let_def)
-      apply safe
-      apply (thin_tac "v = _")
-      apply (drule meta_spec)
-      apply (drule (1) meta_mp)
-      apply (drule meta_mp)
-      apply (drule mem_restr_upd_None[where i=y])
-      apply simp
-      apply (rule mem_restr_dropD)
-      using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
-      apply simp
-      apply (subst list_update_id[where i=y and xs="drop b _", symmetric])
-      subgoal foo premises p for xa proof -
-        from p(1) have "drop b xa ! y = None"
+    have drop_lift: "mem_restr (lift_envs' b R) x" if "x \<in> rel" "mem_restr R ((drop b x)[y:=z])" for x z
+    proof -
+      have "(drop b x)[y:=None] = (drop b x)[y:=drop b x ! y]" proof -
+        from \<open>x \<in> rel\<close> have "drop b x ! y = None"
           using fresh n inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
           by (simp add: add.commute)
-        with p(2) show ?thesis by simp
+        then show ?thesis by simp
       qed
-      apply simp
-      apply (drule meta_spec)
-      apply (drule (1) meta_mp)
-      apply (drule meta_mp)
-      apply (drule mem_restr_upd_None[where i=y])
-      apply simp
-      apply (rule mem_restr_dropD)
-      using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
-      apply simp
-      apply (subst list_update_id[where i=y and xs="drop b _", symmetric])
-      apply (rule foo; assumption)
-      apply (rule rev_image_eqI)
-      apply (erule imageI)
-      apply simp
-      done
+      then have "(drop b x)[y:=None] = drop b x" by simp
+      moreover from \<open>x \<in> rel\<close> have "length x = b + n"
+        using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
+        by simp
+      moreover from that(2) have "mem_restr R ((drop b x)[y:=z, y:=None])"
+        by (rule mem_restr_upd_None)
+      ultimately show ?thesis
+        by (auto intro!: mem_restr_dropD)
+    qed
+
+    {
+      fix v
+      assume "mem_restr R v"
+      have "v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> (M' k))]) ` drop b ` rel \<longleftrightarrow>
+          v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> (M (map the k)))]) ` drop b ` rel"
+        (is "v \<in> ?A \<longleftrightarrow> v \<in> ?B")
+      proof
+        assume "v \<in> ?A"
+        then obtain v' where *: "v' \<in> rel" "v = (drop b v')[y:=Some (eval_agg_op \<omega> (M' (drop b v')))]"
+          by auto
+        then have "M' (drop b v') = M (map the (drop b v'))"
+          using \<open>mem_restr R v\<close> by (auto intro!: M'_M drop_lift)
+        with * show "v \<in> ?B" by simp
+      next
+        assume "v \<in> ?B"
+        then obtain v' where *: "v' \<in> rel" "v = (drop b v')[y:=Some (eval_agg_op \<omega> (M (map the (drop b v'))))]"
+          by auto
+        then have "M (map the (drop b v')) = M' (drop b v')"
+          using \<open>mem_restr R v\<close> by (auto intro!: M'_M[symmetric] drop_lift)
+        with * show "v \<in> ?A" by simp
+      qed
+      then have "v \<in> eval_agg n g0 y \<omega> b f rel \<longleftrightarrow> v \<in> (\<lambda>k. k[y:=Some (eval_agg_op \<omega> (M (map the k)))]) ` drop b ` rel"
+        by (simp add: False eval_agg_def M'_def Let_def)
+    }
+    note alt = this
 
     show ?thesis proof (rule qtableI)
       show "table n ?fv ?rel'"
-        using inner[unfolded qtable_def, THEN conjunct1] n
-        apply (clarsimp simp: eval_agg_def False table_def wf_tuple_def Let_def nth_list_update)
-        by (metis add.commute f_fv fvi_iff_fv fvi_trm_iff_fv_trm subsetD)
+        using inner[unfolded qtable_def, THEN conjunct1] n f_fvi
+        by (auto simp: eval_agg_def False table_def wf_tuple_def Let_def nth_list_update
+            fvi_iff_fv[where b=b] add.commute)
     next
       fix v
       assume "wf_tuple n ?fv v" "mem_restr R v"
       show "Formula.sat \<sigma> V (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
         if "v \<in> eval_agg n g0 y \<omega> b f rel"
-        using that unfolding alt[OF \<open>mem_restr R v\<close>]
-        apply simp
-        apply (intro conjI impI)
-        apply (erule notE[of "All _", rotated])
-        apply clarsimp
-        subgoal for a
-          apply (rule exI[where x="map the (take b a)"])
-          using inner apply (clarsimp simp: qtable_def)
-          apply (intro conjI)
-          apply (simp add: table_def[unfolded wf_tuple_def])
-          apply (subst sat_fv_cong[where v'="map the a"])
-          apply (smt \<open>wf_tuple n (fv (formula.Agg y \<omega> b f \<phi>)) v\<close> add.commute add_diff_inverse_nat add_right_imp_eq append_take_drop_id drop_map fresh length_append length_list_update length_map map_update nth_append nth_list_update_neq table_def take_map wf_tuple_length)
-          apply (drule spec[where x=a])
-          apply (drule conjunct1)
-          apply simp
-          apply (erule mp)
-          apply (rule mem_restr_dropD)
-          apply (simp add: table_def wf_tuple_def)
-          using \<open>mem_restr R v\<close> apply simp
-          apply (drule mem_restr_upd_None[where i=y])
-          apply simp
-          apply (subst list_update_id[where i=y and xs="drop b _", symmetric])
-          subgoal premises p proof -
-            from p(2) have "drop b a ! y = None"
-              using fresh n inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
-              by (simp add: add.commute)
-            with p(4) show ?thesis by simp
-          qed
-          done
-        apply (elim imageE)
-        subgoal premises p for u w
-          apply (subst conj_cong[OF refl, of "length zs = b" "_ zs \<and> _ zs = x" "_ zs x" for zs x])
-          apply (rule conj_cong)
-          apply (rule sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
-          subgoal foo for zs
-            using p fresh apply (clarsimp simp: nth_append)
-            by (metis add.commute add_diff_inverse_nat map_update nth_list_update_neq)
-          apply (rule arg_cong[where f="\<lambda>x. x = _"])
-          apply (rule eval_trm_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
-          apply (rule ballI)
-          apply (drule subsetD[OF f_fv])
-          apply (erule (1) bspec[OF foo])
-          apply (subst (4) conj_commute)
-          apply (subst conj_assoc)
-          apply (subst conj_cong[OF refl, of "length zs = b" "_ zs = x \<and> _ zs" "_ zs x" for zs x])
-          apply (rule conj_cong)
-          apply (rule arg_cong[where f="\<lambda>x. x = _"])
-          apply (rule eval_trm_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
-          apply (rule ballI)
-          apply (drule subsetD[OF f_fv])
-          apply (erule (1) bspec[OF foo])
-          apply (rule sat_fv_cong[where v="zs @ map the v" and v'="zs @ map the u" for zs])
-          apply (erule foo)
-          apply (subst p(1))
-          apply (subgoal_tac "y < length u")
-          apply (simp add: M_def)
-          apply meson
-          using \<open>wf_tuple n (fv (formula.Agg y \<omega> b f \<phi>)) v\<close> p n wf_tuple_length by force
-        done
+      proof -
+        from that obtain v' where "v' \<in> rel"
+          "v = (drop b v')[y:=Some (eval_agg_op \<omega> (M (map the (drop b v'))))]"
+          using alt[OF \<open>mem_restr R v\<close>] by blast
+        then have length_v': "length v' = b + n"
+          using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
+          by simp
+        have "Formula.sat \<sigma> V (map the v') i \<phi>"
+          using \<open>v' \<in> rel\<close> \<open>mem_restr R v\<close>
+          by (auto simp: \<open>v = _\<close> elim!: in_qtableE[OF inner] intro!: drop_lift \<open>v' \<in> rel\<close>)
+        then have "Formula.sat \<sigma> V (map the (take b v') @ map the v) i \<phi>"
+        proof (rule sat_fv_cong[THEN iffD1, rotated], intro ballI)
+          fix x
+          assume "x \<in> fv \<phi>"
+          then have "x \<noteq> y + b" using fresh by blast
+          moreover have "x < length v'"
+            using \<open>x \<in> fv \<phi>\<close> b_n by (simp add: length_v')
+          ultimately show "map the v' ! x = (map the (take b v') @ map the v) ! x"
+            by (auto simp: \<open>v = _\<close> nth_append)
+        qed
+        then have 1: "M (map the v) \<noteq> {}" by (force simp: M_def length_v')
+
+        have "y < length (drop b v')" using n by (simp add: length_v')
+        moreover have "Formula.sat \<sigma> V (zs @ map the v) i \<phi> \<longleftrightarrow>
+          Formula.sat \<sigma> V (zs @ map the (drop b v')) i \<phi>" if "length zs = b" for zs
+        proof (intro sat_fv_cong ballI)
+          fix x
+          assume "x \<in> fv \<phi>"
+          then have "x \<noteq> y + b" using fresh by blast
+          moreover have "x < length v'"
+            using \<open>x \<in> fv \<phi>\<close> b_n by (simp add: length_v')
+          ultimately show "(zs @ map the v) ! x = (zs @ map the (drop b v')) ! x"
+            by (auto simp: \<open>v = _\<close> that nth_append)
+        qed
+        moreover have "Formula.eval_trm (zs @ map the v) f =
+          Formula.eval_trm (zs @ map the (drop b v')) f" if "length zs = b" for zs
+        proof (intro eval_trm_fv_cong ballI)
+          fix x
+          assume "x \<in> fv_trm f"
+          then have "x \<noteq> y + b" using f_fv fresh by blast
+          moreover have "x < length v'"
+            using \<open>x \<in> fv_trm f\<close> f_fv b_n by (auto simp: length_v')
+          ultimately show "(zs @ map the v) ! x = (zs @ map the (drop b v')) ! x"
+            by (auto simp: \<open>v = _\<close> that nth_append)
+        qed
+        ultimately have "map the v ! y = eval_agg_op \<omega> (M (map the v))"
+          by (simp add: M_def \<open>v = _\<close> conj_commute cong: conj_cong)
+        with 1 show ?thesis by (auto simp: M_def)
+      qed
+
       show "v \<in> eval_agg n g0 y \<omega> b f rel"
         if "Formula.sat \<sigma> V (map the v) i (Formula.Agg y \<omega> b f \<phi>)"
         using that unfolding alt[OF \<open>mem_restr R v\<close>]
@@ -4924,7 +4921,7 @@ next
        list_all2 ?P [Suc ?min..<progress \<sigma> P' \<psi> (Suc j)] ?rs \<and>
        list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [?min..<Suc j] ?ts" if "progress \<sigma> P \<psi> j < progress \<sigma> P' \<psi> (Suc j)"
       using that wf_envs_progress_le[OF MNext.prems(2), of \<psi>]
-      by (intro mnext) (auto simp: list_all2_Cons2 upt_eq_Cons_conv 
+      by (intro mnext) (auto simp: list_all2_Cons2 upt_eq_Cons_conv
           intro!: list_all2_upt_append list_all2_appendI split: list.splits)
     then show ?thesis using wf_envs_progress_le[OF MNext.prems(2), of \<psi>]
       wf_envs_progress_mono[OF MNext.prems(2), of j "Suc j" \<psi>, simplified] Next IH
