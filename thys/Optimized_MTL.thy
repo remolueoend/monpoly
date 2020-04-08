@@ -11,16 +11,18 @@ lemma less_enat_iff: "a < enat i \<longleftrightarrow> (\<exists>j. a = enat j \
 
 type_synonym 'a queue_t = "'a list \<times> 'a list"
 
-typedef 'a queue = "{q :: 'a queue_t. case q of ([], []) \<Rightarrow> True | (fs, l # ls) \<Rightarrow> True
-  | _ \<Rightarrow> False}"
-  by (auto split: list.splits)
+definition queue_invariant :: "'a queue_t \<Rightarrow> bool" where
+  "queue_invariant q = (case q of ([], []) \<Rightarrow> True | (fs, l # ls) \<Rightarrow> True | _ \<Rightarrow> False)"
+
+typedef 'a queue = "{q :: 'a queue_t. queue_invariant q}"
+  by (auto simp: queue_invariant_def split: list.splits)
 
 setup_lifting type_definition_queue
 
 lift_definition linearize :: "'a queue \<Rightarrow> 'a list" is "(\<lambda>q. case q of (fs, ls) \<Rightarrow> fs @ rev ls)" .
 
 lift_definition empty_queue :: "'a queue" is "([], [])"
-  by (auto split: list.splits)
+  by (auto simp: queue_invariant_def split: list.splits)
 
 lemma empty_queue_rep: "linearize empty_queue = []"
   by transfer (simp add: empty_queue_def linearize_def)
@@ -31,9 +33,7 @@ lemma linearize_t_Nil: "(case q of (fs, ls) \<Rightarrow> fs @ rev ls) = [] \<lo
   by (auto split: prod.splits)
 
 lemma is_empty_alt: "is_empty q \<longleftrightarrow> linearize q = []"
-  apply transfer
-  unfolding linearize_t_Nil
-  by (metis (no_types, lifting) case_prodE case_prod_unfold list.case_eq_if snd_conv)
+  by transfer (auto simp: linearize_t_Nil list.case_eq_if)
 
 fun prepend_queue_t :: "'a \<Rightarrow> 'a queue_t \<Rightarrow> 'a queue_t" where
   "prepend_queue_t a ([], []) = ([], [a])"
@@ -41,14 +41,15 @@ fun prepend_queue_t :: "'a \<Rightarrow> 'a queue_t \<Rightarrow> 'a queue_t" wh
 | "prepend_queue_t a (f # fs, []) = undefined"
 
 lift_definition prepend_queue :: "'a \<Rightarrow> 'a queue \<Rightarrow> 'a queue" is prepend_queue_t
-  by (auto split: list.splits elim: prepend_queue_t.elims)
+  by (auto simp: queue_invariant_def split: list.splits elim: prepend_queue_t.elims)
 
 lemma prepend_queue_rep: "linearize (prepend_queue a q) = a # linearize q"
-  by transfer (auto simp add: linearize_def elim: prepend_queue_t.elims split: prod.splits)
+  by transfer
+    (auto simp add: queue_invariant_def linearize_def elim: prepend_queue_t.elims split: prod.splits)
 
 lift_definition append_queue :: "'a \<Rightarrow> 'a queue \<Rightarrow> 'a queue" is
   "(\<lambda>a q. case q of (fs, ls) \<Rightarrow> (fs, a # ls))"
-  by (auto split: list.splits)
+  by (auto simp: queue_invariant_def split: list.splits)
 
 lemma append_queue_rep: "linearize (append_queue a q) = linearize q @ [a]"
   by transfer (auto simp add: linearize_def split: prod.splits)
@@ -59,11 +60,11 @@ fun safe_last_t :: "'a queue_t \<Rightarrow> 'a option \<times> 'a queue_t" wher
 | "safe_last_t (f # fs, []) = undefined"
 
 lift_definition safe_last :: "'a queue \<Rightarrow> 'a option \<times> 'a queue" is safe_last_t
-  by (auto split: prod.splits list.splits)
+  by (auto simp: queue_invariant_def split: prod.splits list.splits)
 
 lemma safe_last_rep: "safe_last q = (\<alpha>, q') \<Longrightarrow> linearize q = linearize q' \<and>
   (case \<alpha> of None \<Rightarrow> linearize q = [] | Some a \<Rightarrow> linearize q \<noteq> [] \<and> a = last (linearize q))"
-  by transfer (auto split: list.splits elim: safe_last_t.elims)
+  by transfer (auto simp: queue_invariant_def split: list.splits elim: safe_last_t.elims)
 
 fun safe_hd_t :: "'a queue_t \<Rightarrow> 'a option \<times> 'a queue_t" where
   "safe_hd_t ([], []) = (None, ([], []))"
@@ -73,14 +74,17 @@ fun safe_hd_t :: "'a queue_t \<Rightarrow> 'a option \<times> 'a queue_t" where
 | "safe_hd_t (f # fs, []) = undefined"
 
 lift_definition(code_dt) safe_hd :: "'a queue \<Rightarrow> 'a option \<times> 'a queue" is safe_hd_t
-  apply (auto split: prod.splits list.splits)
-  subgoal for l ls
-    by (cases ls) (auto simp add: Let_def)
-  done
+proof -
+  fix q :: "'a queue_t"
+  assume "queue_invariant q"
+  then show "pred_prod \<top> queue_invariant (safe_hd_t q)"
+    by (cases q rule: safe_hd_t.cases) (auto simp: queue_invariant_def Let_def split: list.split)
+qed
 
 lemma safe_hd_rep: "safe_hd q = (\<alpha>, q') \<Longrightarrow> linearize q = linearize q' \<and>
   (case \<alpha> of None \<Rightarrow> linearize q = [] | Some a \<Rightarrow> linearize q \<noteq> [] \<and> a = hd (linearize q))"
-  by transfer (auto simp add: Let_def hd_append split: list.splits elim: safe_hd_t.elims)
+  by transfer
+    (auto simp add: queue_invariant_def Let_def hd_append split: list.splits elim: safe_hd_t.elims)
 
 fun replace_hd_t :: "'a \<Rightarrow> 'a queue_t \<Rightarrow> 'a queue_t" where
   "replace_hd_t a ([], []) = ([], [])"
@@ -90,13 +94,18 @@ fun replace_hd_t :: "'a \<Rightarrow> 'a queue_t \<Rightarrow> 'a queue_t" where
 | "replace_hd_t a (f # fs, []) = undefined"
 
 lift_definition replace_hd :: "'a \<Rightarrow> 'a queue \<Rightarrow> 'a queue" is replace_hd_t
-  by (auto split: list.splits elim: replace_hd_t.elims)
+  by (auto simp: queue_invariant_def split: list.splits elim: replace_hd_t.elims)
+
+lemma tl_append: "xs \<noteq> [] \<Longrightarrow> tl xs @ ys = tl (xs @ ys)"
+  by simp
 
 lemma replace_hd_rep: "linearize q = f # fs \<Longrightarrow> linearize (replace_hd a q) = a # fs"
-  apply transfer
-  apply (auto split: list.splits prod.splits elim!: replace_hd_t.elims)
-  by (metis butlast.simps(2) butlast_append last_ConsR last_appendR list.distinct(1) list.sel(3)
-      snoc_eq_iff_butlast)+
+proof (transfer fixing: f fs a)
+  fix q
+  assume "queue_invariant q" and "(case q of (fs, ls) \<Rightarrow> fs @ rev ls) = f # fs"
+  then show "(case replace_hd_t a q of (fs, ls) \<Rightarrow> fs @ rev ls) = a # fs"
+    by (cases "(a, q)" rule: replace_hd_t.cases) (auto simp: queue_invariant_def tl_append)
+qed
 
 fun replace_last_t :: "'a \<Rightarrow> 'a queue_t \<Rightarrow> 'a queue_t" where
   "replace_last_t a ([], []) = ([], [])"
@@ -104,10 +113,10 @@ fun replace_last_t :: "'a \<Rightarrow> 'a queue_t \<Rightarrow> 'a queue_t" whe
 | "replace_last_t a (fs, []) = undefined"
 
 lift_definition replace_last :: "'a \<Rightarrow> 'a queue \<Rightarrow> 'a queue" is replace_last_t
-  by (auto split: list.splits elim: replace_last_t.elims)
+  by (auto simp: queue_invariant_def split: list.splits elim: replace_last_t.elims)
 
 lemma replace_last_rep: "linearize q = fs @ [f] \<Longrightarrow> linearize (replace_last a q) = fs @ [a]"
-  by transfer (auto split: list.splits prod.splits elim!: replace_last_t.elims)
+  by transfer (auto simp: queue_invariant_def split: list.splits prod.splits elim!: replace_last_t.elims)
 
 fun tl_queue_t :: "'a queue_t \<Rightarrow> 'a queue_t" where
   "tl_queue_t ([], []) = ([], [])"
@@ -116,12 +125,10 @@ fun tl_queue_t :: "'a queue_t \<Rightarrow> 'a queue_t" where
 | "tl_queue_t (a # as, fs) = (as, fs)"
 
 lift_definition tl_queue :: "'a queue \<Rightarrow> 'a queue" is tl_queue_t
-  by (auto split: list.splits elim!: tl_queue_t.elims)
+  by (auto simp: queue_invariant_def split: list.splits elim!: tl_queue_t.elims)
 
 lemma tl_queue_rep: "\<not>is_empty q \<Longrightarrow> linearize (tl_queue q) = tl (linearize q)"
-  apply transfer
-  apply (auto split: prod.splits list.splits elim!: tl_queue_t.elims)
-  by (metis append.assoc append_Cons append_Nil list.sel(3) tl_append2)
+  by transfer (auto simp: tl_append split: prod.splits list.splits elim!: tl_queue_t.elims)
 
 lemma length_tl_queue_rep: "\<not>is_empty q \<Longrightarrow>
   length (linearize (tl_queue q)) < length (linearize q)"
@@ -180,14 +187,20 @@ termination
   by (relation "measure (\<lambda>(f, q). length (linearize q))") (fastforce split: prod.splits)+
 
 lemma takedropWhile_queue_fst: "fst (takedropWhile_queue f q) = dropWhile_queue f q"
-  apply (induction f q rule: takedropWhile_queue.induct)
-  by (auto split: prod.splits) (auto simp add: case_prod_unfold split: option.splits)
+proof (induction f q rule: takedropWhile_queue.induct)
+  case (1 f q)
+  then show ?case
+    by (simp split: prod.splits) (auto simp add: case_prod_unfold split: option.splits)
+qed
 
 lemma takedropWhile_queue_snd: "snd (takedropWhile_queue f q) = takeWhile f (linearize q)"
-  apply (induction f q rule: takedropWhile_queue.induct)
-  by (auto split: prod.splits)
-     (auto simp add: case_prod_unfold tl_queue_rep takeWhile_hd_tl is_empty_alt
-      split: option.splits dest: safe_hd_rep)
+proof (induction f q rule: takedropWhile_queue.induct)
+  case (1 f q)
+  then show ?case
+    by (simp split: prod.splits)
+      (auto simp add: case_prod_unfold tl_queue_rep takeWhile_hd_tl is_empty_alt
+        split: option.splits dest: safe_hd_rep)
+qed
 
 (* Optimized since data structure *)
 
@@ -238,8 +251,7 @@ proof -
     by auto
   then show "tas \<in> ts_tuple_rel (set ((nt, Y \<union> X) # tass))"
     unfolding tas_def(1)
-    apply (rule ts_tuple_rel_intro)
-    by auto
+    by (rule ts_tuple_rel_intro) auto
 qed
 
 lemma ts_tuple_rel_ext': "tas \<in> ts_tuple_rel (set ((nt, X) # tass)) \<Longrightarrow>
@@ -249,9 +261,16 @@ proof -
   then have "tas \<in> ts_tuple_rel {(nt, X)} \<union> ts_tuple_rel (set tass)"
     using ts_tuple_rel_Un by force
   then show "tas \<in> ts_tuple_rel (set ((nt, X \<union> Y) # tass))"
-    apply (rule UnE)
-    using ts_tuple_rel_ext Un_commute apply metis
-    using ts_tuple_rel_ext_Cons' by fastforce
+  proof
+    assume "tas \<in> ts_tuple_rel {(nt, X)}"
+    then show ?thesis
+      by (auto simp: Un_commute dest!: ts_tuple_rel_ext)
+  next
+    assume "tas \<in> ts_tuple_rel (set tass)"
+    then have "tas \<in> ts_tuple_rel (set ((nt, X \<union> Y) # tass))"
+      by (rule ts_tuple_rel_ext_Cons')
+    then show ?thesis by simp
+  qed
 qed
 
 lemma ts_tuple_rel_mono: "ys \<subseteq> zs \<Longrightarrow> ts_tuple_rel ys \<subseteq> ts_tuple_rel zs"
@@ -347,49 +366,34 @@ abbreviation "filter_cond X' ts t' \<equiv> (\<lambda>as _. \<not> (as \<in> X' 
 lemma dropWhile_filter:
   "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
   dropWhile (\<lambda>(t, X). enat (nt - t) > c) xs = filter (\<lambda>(t, X). enat (nt - t) \<le> c) xs"
-  apply (induction xs)
-  using iffD1[OF filter_id_conv[symmetric], symmetric, of _ "\<lambda>(t, X). enat (nt - t) \<le> c"]
-  dual_order.trans by auto fastforce
+  by (induction xs) (auto 0 3 intro!: filter_id_conv[THEN iffD2, symmetric] elim: order.trans[rotated])
 
 lemma dropWhile_filter':
   fixes nt :: nat
   shows "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
   dropWhile (\<lambda>(t, X). nt - t \<ge> c) xs = filter (\<lambda>(t, X). nt - t < c) xs"
-  apply (induction xs)
-  using iffD1[OF filter_id_conv[symmetric], symmetric, of _ "\<lambda>(t, X). nt - t < c"]
-  dual_order.trans by auto fastforce
+  by (induction xs) (auto 0 3 intro!: filter_id_conv[THEN iffD2, symmetric] elim: order.trans[rotated])
 
 lemma dropWhile_filter'':
   "sorted xs \<Longrightarrow> \<forall>t \<in> set xs. t \<le> nt \<Longrightarrow>
   dropWhile (\<lambda>t. enat (nt - t) > c) xs = filter (\<lambda>t. enat (nt - t) \<le> c) xs"
-  apply (induction xs)
-   apply auto
-  apply (rule iffD1[OF filter_id_conv[symmetric], symmetric, of _ "\<lambda>t. enat (nt - t) \<le> c"])
-  using dual_order.trans by fastforce
+  by (induction xs) (auto 0 3 intro!: filter_id_conv[THEN iffD2, symmetric] elim: order.trans[rotated])
 
 lemma takeWhile_filter:
   "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
   takeWhile (\<lambda>(t, X). enat (nt - t) > c) xs = filter (\<lambda>(t, X). enat (nt - t) > c) xs"
-  apply (induction xs)
-   apply auto
-  apply (rule iffD1[OF filter_empty_conv[symmetric], symmetric, of _ "\<lambda>(t, X). enat (nt - t) > c"])
-  by (auto simp add: less_enat_iff)
+  by (induction xs) (auto 0 3 simp: less_enat_iff intro!: filter_empty_conv[THEN iffD2, symmetric])
 
 lemma takeWhile_filter':
   fixes nt :: nat
   shows "sorted (map fst xs) \<Longrightarrow> \<forall>t \<in> fst ` set xs. t \<le> nt \<Longrightarrow>
   takeWhile (\<lambda>(t, X). nt - t \<ge> c) xs = filter (\<lambda>(t, X). nt - t \<ge> c) xs"
-  apply (induction xs)
-  using iffD1[OF filter_empty_conv[symmetric], symmetric, of _ "\<lambda>(t, X). nt - t \<ge> c"]
-  less_enat_iff by auto fastforce
+  by (induction xs) (auto 0 3 simp: less_enat_iff intro!: filter_empty_conv[THEN iffD2, symmetric])
 
 lemma takeWhile_filter'':
   "sorted xs \<Longrightarrow> \<forall>t \<in> set xs. t \<le> nt \<Longrightarrow>
   takeWhile (\<lambda>t. enat (nt - t) > c) xs = filter (\<lambda>t. enat (nt - t) > c) xs"
-  apply (induction xs)
-   apply auto
-  apply (rule iffD1[OF filter_empty_conv[symmetric], symmetric, of _ "\<lambda>t. enat (nt - t) > c"])
-  by (auto simp add: less_enat_iff)
+  by (induction xs) (auto 0 3 simp: less_enat_iff intro!: filter_empty_conv[THEN iffD2, symmetric])
 
 lemma fold_Mapping_filter_None: "Mapping.lookup ts as = None \<Longrightarrow>
   Mapping.lookup (fold (\<lambda>(t, X) ts. Mapping.filter
@@ -637,8 +641,19 @@ qed
 
 lemma Mapping_lookup_fold_upd_set_idle: "{(t, X) \<in> set xs. as \<in> Z X t} = {} \<Longrightarrow>
   Mapping.lookup (fold (\<lambda>(t, X) m. upd_set m (\<lambda>_. t) (Z X t)) xs m) as = Mapping.lookup m as"
-  apply (induction xs arbitrary: m)
-  by auto (metis (no_types, lifting) Mapping_lookup_upd_set)
+proof (induction xs arbitrary: m)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons x xs)
+  obtain x1 x2 where "x = (x1, x2)" by (cases x)
+  have "Mapping.lookup (fold (\<lambda>(t, X) m. upd_set m (\<lambda>_. t) (Z X t)) xs (upd_set m (\<lambda>_. x1) (Z x2 x1))) as =
+    Mapping.lookup (upd_set m (\<lambda>_. x1) (Z x2 x1)) as"
+    using Cons by auto
+  also have "Mapping.lookup (upd_set m (\<lambda>_. x1) (Z x2 x1)) as = Mapping.lookup m as"
+    using Cons.prems by (auto simp: \<open>x = (x1, x2)\<close> Mapping_lookup_upd_set)
+  finally show ?case by (simp add: \<open>x = (x1, x2)\<close>)
+qed
 
 lemma Mapping_lookup_fold_upd_set_max: "{(t, X) \<in> set xs. as \<in> Z X t} \<noteq> {} \<Longrightarrow>
   sorted (map fst xs) \<Longrightarrow>
@@ -783,9 +798,9 @@ proof -
         valid_tuple tuple_since tas \<and> as = snd tas}) =
         Max (fst ` {tas \<in> ts_tuple_rel (set (linearize data_in')).
         valid_tuple tuple_since tas \<and> as = snd tas})"
-        unfolding split
-        apply (rule Max_Un_absorb[OF finite_fst_ts_tuple_rel _ finite_fst_ts_tuple_rel, symmetric])
-        using False fst_ts_tuple_rel_before by (fastforce simp add: ts_tuple_rel_def)+
+        unfolding split using False fst_ts_tuple_rel_before
+        by (fastforce simp add: ts_tuple_rel_def
+            intro!: Max_Un_absorb[OF finite_fst_ts_tuple_rel _ finite_fst_ts_tuple_rel, symmetric])
       have "fst ` {(t, X). (t, X) \<in> set move \<and> as \<in> {as \<in> X. valid_tuple tuple_since (t, as)}} =
         fst ` {tas \<in> ts_tuple_rel (set move). valid_tuple tuple_since tas \<and> as = snd tas}"
         by (auto simp add: ts_tuple_rel_def image_iff)
@@ -1256,9 +1271,7 @@ proof -
     ts_tuple_rel (set auxlist) \<union> ts_tuple_rel {(nt, X)}"
     unfolding auxlist'_def
     using ts_tuple_rel_ext ts_tuple_rel_ext' ts_tuple_rel_ext_Cons ts_tuple_rel_ext_Cons'
-    apply (auto simp only: split: list.splits if_splits)
-         apply (auto simp add: ts_tuple_rel_def)[5]
-    by fastforce
+    by (fastforce simp: ts_tuple_rel_def split: list.splits if_splits)
   have valid_tuple_nt_X: "\<And>tas. tas \<in> ts_tuple_rel {(nt, X)} \<Longrightarrow> valid_tuple tuple_since' tas"
     using valid_before by (auto simp add: ts_tuple_rel_def valid_tuple_def tuple_since'_def
         Mapping_lookup_upd_set dest: Mapping_keys_dest split: option.splits)
@@ -1535,11 +1548,12 @@ lemma max_tstp_idem': "max_tstp x (max_tstp x y) = max_tstp x y"
 lemma max_tstp_d_d: "max_tstp d d = d"
   by (cases d) auto
 
+lemma max_cases: "(max a b = a \<Longrightarrow> P) \<Longrightarrow> (max a b = b \<Longrightarrow> P) \<Longrightarrow> P"
+  by (metis max_def)
+
 lemma max_tstpE: "isl tstp \<longleftrightarrow> isl tstp' \<Longrightarrow> (max_tstp tstp tstp' = tstp \<Longrightarrow> P) \<Longrightarrow>
   (max_tstp tstp tstp' = tstp' \<Longrightarrow> P) \<Longrightarrow> P"
-  apply (cases tstp; cases tstp')
-     apply auto
-  by linarith+
+  by (cases tstp; cases tstp') (auto elim: max_cases)
 
 lemma max_tstp_intro: "tstp_lt tstp ts tp \<Longrightarrow> tstp_lt tstp' ts tp \<Longrightarrow> isl tstp \<longleftrightarrow> isl tstp' \<Longrightarrow>
   tstp_lt (max_tstp tstp tstp') ts tp"
@@ -1623,8 +1637,13 @@ lemma Mapping_update_keys: "Mapping.keys (Mapping.update a b m) = Mapping.keys m
   by transfer auto
 
 lemma drop_is_Cons_take: "drop n xs = y # ys \<Longrightarrow> take (Suc n) xs = take n xs @ [y]"
-  apply (induction n arbitrary: xs y ys)
-  by auto (metis One_nat_def Suc_eq_plus1 take0 take_Suc_Cons take_add)
+proof (induction xs arbitrary: n)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons x xs)
+  then show ?case by (cases n) simp_all
+qed
 
 lemma list_all2_weaken: "list_all2 f xs ys \<Longrightarrow>
   (\<And>x y. (x, y) \<in> set (zip xs ys) \<Longrightarrow> f x y \<Longrightarrow> f' x y) \<Longrightarrow> list_all2 f' xs ys"
@@ -1722,7 +1741,7 @@ proof -
     tstp_lt tstp (cur - (left I - 1)) tp \<and> (isl tstp \<longleftrightarrow> left I > 0)"
     using Mapping_keys_intro by fastforce+
   have m'_inst_isl: "\<And>xs tstp. Mapping.lookup m' xs = Some tstp \<Longrightarrow> isl tstp \<longleftrightarrow> left I > 0"
-    using m'_inst(2) by fastforce  
+    using m'_inst(2) by fastforce
   define m_upd where "m_upd = Mapping.filter (\<lambda>_ tstp. ts_tp_lt' ts (tp - len) tstp) m"
   define T where "T = Mapping.keys m_upd"
   define mc where "mc = Mapping.combine (\<lambda>tstp tstp'. max_tstp tstp tstp') m_upd m'"
@@ -1910,8 +1929,8 @@ proof -
   have list_all2'': "list_all2 (\<lambda>x y. triple_eq_pair x y (\<lambda>tp'. filter_a1_map pos tp' a1_map)
       (\<lambda>ts' tp'. filter_a2_map I ts' tp' a2_map'')) tl_aux
       (zip (linearize (tl_queue tss')) [tp - (len - 1)..<tp])"
-    apply (rule list_all2_weaken[OF list_all2'])
-    using filter_a2_map_cong set_tl_tss' by (auto elim!: in_set_zipE split: prod.splits)
+    using filter_a2_map_cong set_tl_tss'
+    by (intro list_all2_weaken[OF list_all2']) (auto elim!: in_set_zipE split: prod.splits)
   have lookup'': "\<forall>tp' \<in> Mapping.keys a2_map''. case Mapping.lookup a2_map'' tp' of Some m \<Rightarrow>
     table n R (Mapping.keys m) \<and> (\<forall>xs \<in> Mapping.keys m. case Mapping.lookup m xs of Some tstp \<Rightarrow>
     tstp_lt tstp (cur - (left I - 1)) tp \<and> isl tstp = (0 < left I))"
@@ -2162,26 +2181,28 @@ fun add_new_mmuaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a table \<Righ
 lemma fst_case: "(\<lambda>x. fst (case x of (t, a1, a2) \<Rightarrow> (t, y t a1 a2, z t a1 a2))) = fst"
   by auto
 
+lemma list_all2_in_setE: "list_all2 P xs ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> (\<And>y. y \<in> set ys \<Longrightarrow> P x y \<Longrightarrow> Q) \<Longrightarrow> Q"
+  by (fastforce simp: list_all2_iff set_zip in_set_conv_nth)
+
 lemma list_all2_zip: "list_all2 (\<lambda>x y. triple_eq_pair x y f g) xs (zip ys zs) \<Longrightarrow>
   (\<And>y. y \<in> set ys \<Longrightarrow> Q y) \<Longrightarrow> x \<in> set xs \<Longrightarrow> Q (fst x)"
-  apply (induction xs "zip ys zs" arbitrary: ys zs rule: list_all2_induct)
-   apply auto
-   apply (metis in_set_zipE list.set_intros(1))
-  by (metis in_mono set_subset_Cons zip_eq_ConsE)
+  by (auto simp: in_set_zip elim!: list_all2_in_setE triple_eq_pair.elims)
 
 lemma list_appendE: "xs = ys @ zs \<Longrightarrow> x \<in> set xs \<Longrightarrow>
   (x \<in> set ys \<Longrightarrow> P) \<Longrightarrow> (x \<in> set zs \<Longrightarrow> P) \<Longrightarrow> P"
   by auto
 
-lemma take_length_takeWhile: "length xs \<le> length ys \<Longrightarrow>
-  (\<And>y. y \<in> set (take (length xs) ys) \<Longrightarrow> P y) \<Longrightarrow>
-  (\<And>y. y \<in> set (drop (length xs) ys) \<Longrightarrow> \<not>P y) \<Longrightarrow>
-  take (length xs) ys = takeWhile P ys"
-  apply (induction xs arbitrary: ys)
-   apply auto
-   apply (metis list.set_sel(1) takeWhile.simps(1) takeWhile_hd_tl)
-  by (metis Suc_le_eq drop_eq_Nil hd_drop_conv_nth id_take_nth_drop list.set_sel(1)
-      not_less_eq_eq takeWhile_eq_all_conv takeWhile_tail take_Suc_conv_app_nth)
+lemma take_takeWhile: "n \<le> length ys \<Longrightarrow>
+  (\<And>y. y \<in> set (take n ys) \<Longrightarrow> P y) \<Longrightarrow>
+  (\<And>y. y \<in> set (drop n ys) \<Longrightarrow> \<not>P y) \<Longrightarrow>
+  take n ys = takeWhile P ys"
+proof (induction ys arbitrary: n)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons y ys)
+  then show ?case by (cases n) simp_all
+qed
 
 lemma valid_add_new_mmuaux:
   assumes valid_before: "valid_mmuaux args cur aux auxlist"
@@ -2281,7 +2302,7 @@ proof -
   have length_done_auxlist: "length done \<le> length auxlist"
     using valid_shift_aux by auto
   have take_auxlist_takeWhile: "take (length done) auxlist = takeWhile (check_before I nt) auxlist"
-    using take_length_takeWhile[OF length_done_auxlist set_take_auxlist set_drop_auxlist] .
+    using take_takeWhile[OF length_done_auxlist set_take_auxlist set_drop_auxlist] .
   have "length done = length (takeWhile (check_before I nt) auxlist)"
     by (metis (no_types) add_diff_cancel_right' auxlist_split diff_diff_cancel
         length_append length_done_auxlist length_drop take_auxlist_takeWhile)
@@ -2311,18 +2332,15 @@ proof -
       using set_drop_auxlist not_less
       by auto blast
     then have "right I \<ge> enat (nt - t)"
-      apply (induction t arbitrary: nt)
-      using zero_enat_def apply auto
-      by (metis add_diff_cancel_left' diff_le_mono leD leI less_enat_iff plus_enat_simps(1))
+      by (cases "right I") auto
     then show "mem (nt - t) I \<longleftrightarrow> left I \<le> nt - t"
       by auto
   qed
   have sorted_fst_auxlist: "sorted (map fst auxlist)"
     using valid_shift_aux by auto
   have set_map_fst_auxlist: "\<And>t. t \<in> set (map fst auxlist) \<Longrightarrow> t \<le> nt"
-    using arg_cong[OF auxlist_split, of "map fst", unfolded map_append]
-    apply (rule list_appendE)
-    using map_fst_auxlist_take map_fst_auxlist_drop by auto
+    using arg_cong[OF auxlist_split, of "map fst", unfolded map_append] map_fst_auxlist_take
+      map_fst_auxlist_drop by auto
   have lookup_a1_map_keys: "\<And>xs tp'. Mapping.lookup a1_map xs = Some tp' \<Longrightarrow> tp' < tp"
     using valid_shift_aux Mapping_keys_intro by force
   have lookup_a1_map_keys': "\<forall>xs \<in> Mapping.keys a1_map'.
@@ -2394,9 +2412,8 @@ proof -
               using tstp_def[unfolded m'_alt upd_set'_lookup] Some
               by auto
             show ?thesis
-              apply (rule max_tstpE[of new_tstp tstp'])
-              using lookup_a2_map'[OF m_def Some] new_tstp_lt_isl unfolding tstp_eq
-              by (auto simp add: tstp_lt_def split: sum.splits)
+              using lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
+              by (auto simp add: tstp_lt_def tstp_eq split: sum.splits)
           next
             case False
             then show ?thesis
@@ -2514,9 +2531,9 @@ proof -
             then have tstp_eq: "tstp = max_tstp new_tstp tstp'"
               using m'_def(3)[unfolded m'_alt upd_set'_lookup Some] by auto
             show ?thesis
-              apply (rule max_tstpE[of new_tstp tstp'])
               using lookup_a2_map'[OF lookup_m Some] new_tstp_lt_isl(2)
-                tstp_eq new_tstp_False tstp_ok by auto
+                tstp_eq new_tstp_False tstp_ok
+              by (auto intro: max_tstpE[of new_tstp tstp'])
           next
             case False
             then have "tstp = tstp'"
@@ -2551,8 +2568,8 @@ proof -
         then have "Mapping.lookup m' xs = Some (max_tstp new_tstp tstp)"
           unfolding m'_alt upd_set'_lookup m_def(3) by auto
         moreover have "ts_tp_lt' ts' tp' (max_tstp new_tstp tstp)"
-          apply (rule max_tstp_intro''''[OF _ m_def(4)])
-          using new_tstp_lt_isl(2) lookup_a2_map'[OF m_def(2,3)] by auto
+          using new_tstp_lt_isl(2) lookup_a2_map'[OF m_def(2,3)]
+          by (auto intro: max_tstp_intro''''[OF _ m_def(4)])
         ultimately show ?thesis
           unfolding filter_a2_map_def using m_def(1) m'_def m_def(4) by auto
       next
@@ -2571,9 +2588,8 @@ proof -
         using join_eq[OF tabL a1_tab] by auto
       show "filter_a1_map pos tp' a1_map' = join a1 True rel1"
         using eqs(2) pos tp'_lt_tp unfolding filter_a1_map_def a1_map'_def join_eq
-        apply (auto simp add: Mapping.lookup_filter Mapping_lookup_upd_set
-            intro: Mapping_keys_intro dest: Mapping_keys_dest split: if_splits option.splits)
-        using Mapping_keys_filterD by fastforce+
+        by (auto simp add: Mapping.lookup_filter Mapping_lookup_upd_set split: if_splits option.splits
+            intro: Mapping_keys_intro dest: Mapping_keys_dest Mapping_keys_filterD)
     qed
     moreover have "\<not>pos \<Longrightarrow> filter_a1_map pos tp' a1_map' = a1 \<union> rel1"
       using eqs(2) tp'_lt_tp unfolding filter_a1_map_def a1_map'_def
@@ -2709,8 +2725,7 @@ proof -
             have "Mapping.lookup m' xs = Some (max_tstp new_tstp tstp')"
               using wtp_xs_in unfolding m'_alt upd_set'_lookup Some by auto
             moreover have "ts_tp_lt' ts' tp' (max_tstp new_tstp tstp')"
-              apply (rule max_tstp_intro''')
-              using ts_tp_lt'_new_tstp lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
+              using max_tstp_intro''' ts_tp_lt'_new_tstp lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
               by auto
             ultimately show ?thesis
               using lookup_a2_map'[OF m_def Some] wtp_le m'_def
@@ -2721,7 +2736,7 @@ proof -
           show ?thesis
           proof (cases "Mapping.lookup a1_map (proj_tuple maskL xs)")
             case None
-            then have in_tmp: "(tp - len, xs) \<in> tmp" 
+            then have in_tmp: "(tp - len, xs) \<in> tmp"
               using tmp_def False xs_props(1) by fastforce
             obtain m where m_def: "Mapping.lookup a2_map (tp - len) = Some m"
               using a2_map_keys by (fastforce dest: Mapping_keys_dest)
@@ -2744,8 +2759,7 @@ proof -
               have "Mapping.lookup m' xs = Some (max_tstp new_tstp tstp')"
                 unfolding m'_alt upd_set'_lookup Some using in_tmp by auto
               moreover have "ts_tp_lt' ts' tp' (max_tstp new_tstp tstp')"
-                apply (rule max_tstp_intro''')
-                using ts_tp_lt'_new_tstp lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
+                using max_tstp_intro''' ts_tp_lt'_new_tstp lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
                 by auto
               ultimately show ?thesis
                 unfolding filter_a2_map_def using tp'_ge m'_def by auto
@@ -2783,8 +2797,7 @@ proof -
               have "Mapping.lookup m' xs = Some (max_tstp new_tstp tstp')"
                 using wtp_xs_in unfolding m'_alt upd_set'_lookup Some by auto
               moreover have "ts_tp_lt' ts' tp' (max_tstp new_tstp tstp')"
-                apply (rule max_tstp_intro''')
-                using ts_tp_lt'_new_tstp lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
+                using max_tstp_intro''' ts_tp_lt'_new_tstp lookup_a2_map'[OF m_def Some] new_tstp_lt_isl
                 by auto
               ultimately show ?thesis
                 using lookup_a2_map'[OF m_def Some] wtp_le m'_def
@@ -2820,11 +2833,10 @@ proof -
       using eqs unfolding tri_def pair_def by auto
   qed
   have filter_a1_map_rel1: "filter_a1_map pos tp a1_map' = rel1"
-    unfolding filter_a1_map_def a1_map'_def
-    apply (auto simp add: a1_map_lookup less_imp_le_nat Mapping.lookup_filter
+    unfolding filter_a1_map_def a1_map'_def using leD lookup_a1_map_keys
+    by (force simp add: a1_map_lookup less_imp_le_nat Mapping.lookup_filter
         Mapping_lookup_upd_set keys_is_none_rep dest: Mapping_keys_filterD
         intro: Mapping_keys_intro split: option.splits)
-    using leD lookup_a1_map_keys by auto
   have filter_a1_map_rel2: "filter_a2_map I nt tp a2_map' =
     (if left I = 0 then rel2 else empty_table)"
   proof (cases "left I = 0")
@@ -2891,8 +2903,7 @@ proof -
         moreover have "Mapping.lookup m' xs = Some (max_tstp new_tstp tstp')"
           using xs_in_tmp unfolding m_def(2) upd_set'_lookup Some by auto
         moreover have "ts_tp_lt' nt tp (max_tstp new_tstp tstp')"
-          apply (rule max_tstpE[of new_tstp tstp'])
-          using lookup_a2_map'[OF m_def(1) Some] new_tstp_lt_isl left_I_zero
+          using max_tstpE[of new_tstp tstp'] lookup_a2_map'[OF m_def(1) Some] new_tstp_lt_isl left_I_zero
           by (auto simp add: sum.discI(1) new_tstp_def ts_tp_lt'_def tstp_lt_def split: sum.splits)
         ultimately show ?thesis
           using xs_in_tmp m_def
@@ -2946,8 +2957,7 @@ proof -
               using lassms(3)
               unfolding m'_alt upd_set'_lookup Some by auto
             show ?thesis
-              apply (rule max_tstpE[of new_tstp tstp'])
-              using lookup_a2_map'[OF lookup_a2_map_tp' Some] new_tstp_lt_isl left_I_pos
+              using max_tstpE[of new_tstp tstp'] lookup_a2_map'[OF lookup_a2_map_tp' Some] new_tstp_lt_isl left_I_pos
               by (auto simp add: tstp_eq tstp_lt_def ts_tp_lt'_def split: sum.splits)
           next
             case False
@@ -2982,10 +2992,7 @@ qed
 
 lemma list_all2_check_before: "list_all2 (\<lambda>x y. triple_eq_pair x y f g) xs (zip ys zs) \<Longrightarrow>
   (\<And>y. y \<in> set ys \<Longrightarrow> \<not>enat y + right I < nt) \<Longrightarrow> x \<in> set xs \<Longrightarrow> \<not>check_before I nt x"
-  apply (induction xs "zip ys zs" arbitrary: ys zs rule: list_all2_induct)
-   apply auto
-   apply (metis in_set_zipE list.set_intros(1))
-  by (metis set_subset_Cons subsetD zip_eq_ConsE)
+  by (auto simp: in_set_zip elim!: list_all2_in_setE triple_eq_pair.elims)
 
 fun eval_mmuaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmuaux \<Rightarrow> 'a table list \<times> 'a mmuaux" where
   "eval_mmuaux args nt aux =
@@ -3019,7 +3026,7 @@ proof -
       list_all2_check_before[OF _ valid_shift_aux(2)] unfolding I_def by fast
   have take_auxlist_takeWhile: "take (length done) auxlist = takeWhile (check_before I nt) auxlist"
     using len_done_auxlist list_all set_drop_auxlist
-    by (rule take_length_takeWhile) assumption+
+    by (rule take_takeWhile) assumption+
   have rev_done: "rev done = map proj_thd (take (length done) auxlist)"
     using valid_shift_aux by auto
   then have res'_def: "res' = rev done"
