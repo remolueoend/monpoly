@@ -204,23 +204,19 @@ lemma upd_set'_insert: "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Lon
 
 lemma upd_set'_aux1: "upd_set' Mapping.empty d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k d (upd_set' Mapping.empty d f {b. (a, b) \<in> A})"
-  apply (rule mapping_eqI)
-  by (auto simp add: Let_def upd_set'_lookup Mapping.lookup_update' Mapping.lookup_empty
-      split: option.splits)
+  by (rule mapping_eqI) (auto simp add: Let_def upd_set'_lookup Mapping.lookup_update'
+      Mapping.lookup_empty split: option.splits)
 
 lemma upd_set'_aux2: "Mapping.lookup m k = None \<Longrightarrow> upd_set' m d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k d (upd_set' m d f {b. (a, b) \<in> A})"
-  apply (rule mapping_eqI)
-  by (auto simp add: upd_set'_lookup Mapping.lookup_update' split: option.splits)
+  by (rule mapping_eqI) (auto simp add: upd_set'_lookup Mapping.lookup_update' split: option.splits)
 
 lemma upd_set'_aux3: "Mapping.lookup m k = Some v \<Longrightarrow> upd_set' m d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k (f v) (upd_set' m d f {b. (a, b) \<in> A})"
-  apply (rule mapping_eqI)
-  by (auto simp add: upd_set'_lookup Mapping.lookup_update' split: option.splits)
+  by (rule mapping_eqI) (auto simp add: upd_set'_lookup Mapping.lookup_update' split: option.splits)
 
 lemma upd_set'_aux4: "k \<notin> fst ` A \<Longrightarrow> upd_set' Mapping.empty d f {b. (k, b) \<in> A} = Mapping.empty"
-  apply (rule mapping_eqI)
-  by (auto simp add: upd_set'_lookup Mapping.lookup_update' Domain.DomainI fst_eq_Domain
+  by (rule mapping_eqI) (auto simp add: upd_set'_lookup Mapping.lookup_update' Domain.DomainI fst_eq_Domain
       split: option.splits)
 
 lemma upd_nested_empty[simp]: "upd_nested m d f {} = m"
@@ -238,11 +234,10 @@ lemma upd_nested_insert:
   "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Longrightarrow> upd_nested m d f (insert x A) =
   upd_nested_step d f x (upd_nested m d f A)"
   unfolding upd_nested_step_def
-  apply (rule mapping_eqI)
   using upd_set'_aux1[of d f _ _ A] upd_set'_aux2[of _ _ d f _ A] upd_set'_aux3[of _ _ _ d f _ A]
     upd_set'_aux4[of _ A d f]
   by (auto simp add: Let_def upd_nested_lookup upd_set'_lookup Mapping.lookup_update'
-      Mapping.lookup_empty split: option.splits prod.splits if_splits)
+      Mapping.lookup_empty split: option.splits prod.splits if_splits intro!: mapping_eqI)
 
 definition upd_nested_max_tstp where
   "upd_nested_max_tstp m d X = upd_nested m d (max_tstp d) X"
@@ -324,9 +319,7 @@ declare join_mmsaux.simps[folded filter_join_def, code]
 
 lemma filter_join_False_empty: "filter_join False {} m = m"
   unfolding filter_join_def
-  apply transfer
-  apply (rule ext)
-  by (auto split: option.splits)
+  by transfer (auto split: option.splits)
 
 lemma filter_join_False_insert: "filter_join False (insert a A) m =
   filter_join False A (Mapping.delete a m)"
@@ -361,8 +354,7 @@ lemma filter_join_code[code]:
     (if \<not>pos \<and> finite A \<and> card A < Mapping.size m then set_fold_cfi filter_not_in_cfi m A
     else Mapping.filter (join_filter_cond pos A) m)"
   unfolding filter_join_def
-  apply (transfer fixing: m)
-  using filter_join_False by (auto simp add: filter_join_def)
+  by (transfer fixing: m) (use filter_join_False in \<open>auto simp add: filter_join_def\<close>)
 
 definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
   "set_minus X Y = X - Y"
@@ -383,8 +375,7 @@ qed
 
 lemma set_minus_code[code]: "set_minus X Y =
   (if finite Y \<and> card Y < card X then set_fold_cfi remove_cfi X Y else X - Y)"
-  apply transfer
-  using set_minus_finite by (auto simp add: set_minus_def)
+  by transfer (use set_minus_finite in \<open>auto simp add: set_minus_def\<close>)
 
 declare [[code drop: bin_join]]
 declare bin_join.simps[folded set_minus_def, code]
@@ -407,8 +398,7 @@ lift_definition remove_Union_cfi :: "('a \<Rightarrow> 'b set) \<Rightarrow> ('a
 
 lemma remove_Union_code[code]: "remove_Union A X B =
   (if finite X then set_fold_cfi (remove_Union_cfi B) A X else A - (\<Union>x \<in> X. B x))"
-  apply (transfer fixing: A X B)
-  using remove_Union_finite[of X A B] by (auto simp add: remove_Union_def)
+  by (transfer fixing: A X B) (use remove_Union_finite[of X A B] in \<open>auto simp add: remove_Union_def\<close>)
 
 lemma tabulate_remdups: "Mapping.tabulate xs f = Mapping.tabulate (remdups xs) f"
   by (transfer fixing: xs f) (auto simp: map_of_map_restrict)
@@ -418,27 +408,24 @@ lift_definition clearjunk :: "(char list \<times> event_data list set) list \<Ri
   unfolding map_filter_def o_def list.map_comp
   by (subst map_cong[OF refl, of _ _ fst]) (auto simp: map_filter_def distinct_map_fst_filter split: if_splits)
 
+lemma map_filter_snd_map_filter: "List.map_filter (\<lambda>(a, b). if P b then None else Some (f a b)) xs =
+    map (\<lambda>(a, b). f a b) (filter (\<lambda>x. \<not> P (snd x)) xs)"
+  by (simp add: map_filter_def prod.case_eq_if)
+
 lemma mk_db_code_alist:
   "mk_db t = Assoc_List_Mapping (clearjunk t)"
   unfolding mk_db_def Assoc_List_Mapping_def
-  apply (transfer' fixing: t)
-  apply (unfold map_filter_def)
-  apply (subst map_cong[OF refl, of _ _ "\<lambda>(p, X). (p, [X])"])
-   apply (auto simp: fun_eq_iff map_of_map image_iff map_of_clearjunk
-     map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
-     split: if_splits option.splits)
-  done
+  by (transfer' fixing: t)
+    (auto simp: map_filter_snd_map_filter fun_eq_iff map_of_map image_iff map_of_clearjunk
+      map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
+      split: if_splits option.splits)
 
 lemma mk_db_code[code]:
   "mk_db t = Mapping.of_alist (List.map_filter (\<lambda>(p, X). if X = {} then None else Some (p, [X])) (AList.clearjunk t))"
   unfolding mk_db_def
-  apply (transfer' fixing: t)
-  apply (unfold map_filter_def)
-  apply (subst map_cong[OF refl, of _ _ "\<lambda>(p, X). (p, [X])"])
-   apply (auto simp: fun_eq_iff map_of_map image_iff map_of_clearjunk
-     map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
-     split: if_splits option.splits)
-  done
+  by (transfer' fixing: t) (auto simp: map_filter_snd_map_filter fun_eq_iff map_of_map image_iff
+      map_of_clearjunk map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
+      split: if_splits option.splits)
 
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin.simps[folded remove_Union_def, code]
