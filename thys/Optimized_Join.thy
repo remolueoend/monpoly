@@ -392,8 +392,16 @@ lemma proj_list_5_same:
   assumes "proj_list_5 xs (ys, w, ws, z, zs) = (ys', w', ws', z', zs')"
     "length xs = length ys + 1 + length ws + 1 + length zs"
   shows "xs = ys' @ w' # ws' @ z' # zs'"
-  using assms
-  by auto (smt Cons_nth_drop_Suc add.assoc add.commute append_take_drop_id drop_drop less_add_Suc1 plus_1_eq_Suc)
+proof -
+  have "xs ! length ys # take (length ws) (drop (Suc (length ys)) xs) = take (Suc (length ws)) (drop (length ys) xs)"
+    using assms(2) by (simp add: list_eq_iff_nth_eq nth_Cons split: nat.split)
+  moreover have "take (Suc (length ws)) (drop (length ys) xs) @ drop (Suc (length ys + length ws)) xs =
+      drop (length ys) xs"
+    unfolding Suc_eq_plus1 add.assoc[of _ _ 1] add.commute[of _ "length ws + 1"]
+      drop_drop[symmetric, of "length ws + 1"] append_take_drop_id ..
+  ultimately show ?thesis
+    using assms by (auto simp: Cons_nth_drop_Suc append_Cons[symmetric])
+qed
 
 lemma proj_list_5_length:
   assumes "proj_list_5 xs (ys, w, ws, z, zs) = (ys', w', ws', z', zs')"
