@@ -503,8 +503,8 @@ function mmulti_join :: "(nat \<Rightarrow> nat set list \<Rightarrow> nat set l
       ((zs @ bin_join n A_x x True A_y y # xs @ ys) @ L_neg)))"
   by pat_completeness auto
 termination
-  apply (relation "measure (\<lambda>(n, A_pos, A_neg, L). length A_pos + length A_neg)")
-  using find_sub_True_sound find_sub_False_sound by (fastforce split: option.splits)+
+  by (relation "measure (\<lambda>(n, A_pos, A_neg, L). length A_pos + length A_neg)")
+    (use find_sub_True_sound find_sub_False_sound in \<open>fastforce split: option.splits\<close>)+
 
 lemma mmulti_join_link:
   assumes "A_pos \<noteq> []"

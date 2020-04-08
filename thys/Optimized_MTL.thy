@@ -1,6 +1,6 @@
 (*<*)
 theory Optimized_MTL
-  imports Monitor Optimized_Join
+  imports Monitor
 begin
 (*>*)
 
