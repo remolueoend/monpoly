@@ -4518,57 +4518,58 @@ lemma wf_envs_mk_db: "wf_envs \<sigma> j Map.empty Map.empty Map.empty (mk_db (\
   by transfer (force split: if_splits simp: image_iff rel_mapping_alt)
 
 lemma wf_envs_update:
-  "wf_envs \<sigma> j P P' V db \<Longrightarrow> m = Formula.nfv \<phi> \<Longrightarrow> {0 ..< m} \<subseteq> fv \<phi> \<Longrightarrow> b \<le> m \<Longrightarrow>
-   list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>) (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
-    [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (Suc j)] xs \<Longrightarrow>
-   wf_envs \<sigma> j (P(p \<mapsto> progress \<sigma> P \<phi> j)) (P'(p \<mapsto> progress \<sigma> P' \<phi> (Suc j)))
+  assumes wf_envs: "wf_envs \<sigma> j P P' V db"
+    and m_eq: "m = Formula.nfv \<phi>"
+    and in_fv: "{0 ..< m} \<subseteq> fv \<phi>"
+    and b_le_m: "b \<le> m"
+    and xs: "list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>) (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (Suc j)] xs"
+  shows "wf_envs \<sigma> j (P(p \<mapsto> progress \<sigma> P \<phi> j)) (P'(p \<mapsto> progress \<sigma> P' \<phi> (Suc j)))
     (V(p \<mapsto> \<lambda>i. {v. length v = m - b \<and> (\<exists>zs. length zs = b \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>)}))
     (Mapping.update p (map (image (drop b o map the)) xs) db)"
   unfolding wf_envs_def
-  apply (intro conjI ballI)
-  subgoal by auto
-  subgoal by auto
-  subgoal by (auto simp: pred_mapping_alt progress_le progress_mono_gen intro!: rel_mapping_map_upd)
-  subgoal by auto
-  subgoal by auto
-  subgoal for p'  by (cases "p' \<in> dom P") (auto simp: lookup_update')
-  subgoal for p'
-    apply (auto simp: list.rel_map image_iff lookup_update'
-        elim!: list.rel_mono_strong)
-    subgoal for i X v
-      apply (erule (1) in_qtableE)
-       apply (auto simp: wf_tuple_def)
-      done
-    subgoal for i X v
-      apply (erule (1) in_qtableE)
-       apply simp
-      apply (intro exI[of _ "take b (map the v)"])
-      apply (auto simp: wf_tuple_def)
-      done
-    subgoal for i X v zs
-      apply (rule bexI[of _ "map Some (zs @ v)"])
-       apply simp
-      apply (erule in_qtableI)
-        apply (auto simp: wf_tuple_def nth_append)
-      done
-    subgoal for i X v
-      apply (erule (1) in_qtableE)
-       apply (auto simp: wf_tuple_def)
-      done
-    subgoal for _ i X v
-      apply (erule (1) in_qtableE)
-       apply simp
-      apply (intro exI[of _ "take b (map the v)"])
-      apply (auto simp: wf_tuple_def)
-      done
-    subgoal for _ i X v zs
-      apply (rule bexI[of _ "map Some (zs @ v)"])
-       apply simp
-      apply (erule in_qtableI)
-        apply (auto simp: wf_tuple_def nth_append)
-      done
-    done
-  done
+proof (intro conjI ballI, goal_cases)
+  case 3
+  from assms show ?case
+    by (auto simp: wf_envs_def pred_mapping_alt progress_le progress_mono_gen
+        intro!: rel_mapping_map_upd)
+next
+  case (6 p')
+  with assms show ?case by (cases "p' \<in> dom P") (auto simp: wf_envs_def lookup_update')
+next
+  case (7 p')
+  from xs have "list_all2 (\<lambda>x y. (\<lambda>x. drop b (map the x)) ` y =
+          {v. length v = m - b \<and> (\<exists>zs. length zs = b \<and> Formula.sat \<sigma> V (zs @ v) x \<phi>)})
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (Suc j)] xs"
+  proof (rule list.rel_mono_strong, safe)
+    fix i X
+    assume qtable: "qtable m (fv \<phi>) (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) X"
+    {
+      fix v
+      assume "v \<in> X"
+      then show "length (drop b (map the v)) = m - b" and
+        "\<exists>zs. length zs = b \<and> Formula.sat \<sigma> V (zs @ drop b (map the v)) i \<phi>"
+        using qtable b_le_m
+        by (auto simp: wf_tuple_def elim!: in_qtableE intro!: exI[of _ "take b (map the v)"])
+    }
+    {
+      fix zs v
+      assume "length v = m - length zs" and "Formula.sat \<sigma> V (zs @ v) i \<phi>" and "b = length zs"
+      then show "v \<in> (\<lambda>x. drop (length zs) (map the x)) ` X"
+        using in_fv b_le_m
+        by (auto 0 3 simp: wf_tuple_def nth_append
+            intro!: image_eqI[where x="map Some (zs @ v)"] in_qtableI[OF qtable])
+    }
+  qed
+  moreover have "list_all2 (\<lambda>i X. X = the (V p') i) [the (P p')..<the (P' p')] (the (Mapping.lookup db p'))"
+    if "p \<noteq> p'"
+  proof -
+    from that 7 have "p' \<in> dom P" by simp
+    with wf_envs show ?thesis by (simp add: wf_envs_def)
+  qed
+  ultimately show ?case
+    by (simp add: list.rel_map image_iff lookup_update')
+qed (use assms in \<open>auto simp: wf_envs_def\<close>)
 
 lemma wf_envs_P_simps[simp]:
    "wf_envs \<sigma> j P P' V db \<Longrightarrow> pred_mapping (\<lambda>i. i \<le> j) P"
@@ -4667,76 +4668,92 @@ next
         elim: mbuf2_take_add'(1) list.rel_mono_strong[OF mbuf2_take_add'(2)])
 next
   case (MAndAssign \<phi> conf)
-  from MAndAssign.prems show ?case
-    apply (cases rule: wf_mformula.cases)
-    apply (drule MAndAssign.IH[where db=db and P=P and P'=P'])
-    apply (clarsimp split: prod.splits)+
-    apply (intro conjI)
-    apply (rule wf_mformula.AndAssign; simp)
-    apply (erule disjE)
-    apply (simp add: list.rel_map)
-    apply (erule list.rel_mono_strong)
-    apply (erule (1) qtable_assign)
-    apply auto[3]
-    apply (intro conjI)
-    apply (simp add: sat_the_update)
-    apply (simp add: nth_list_update wf_tuple_length)
-    apply (subst meval_trm_eval_trm)
-    apply assumption+
-    apply (erule wf_mformula_wf_set[unfolded wf_set_def])
-    apply (rule eval_trm_fv_cong)
-    apply (metis map_update nth_list_update_neq subsetD)
-    apply (intro conjI)
-    apply (simp add: sat_the_restrict)
-    apply (subst meval_trm_eval_trm)
-    apply (rule wf_tuple_restrict_simple)
-    apply auto[3]
-    apply (erule wf_mformula_wf_set[unfolded wf_set_def])
-    apply (subst eval_trm_fv_cong)
-    apply (rule ballI)
-    apply (rule map_the_restrict)
-    apply (erule (1) subsetD)
-    apply (auto simp add: wf_tuple_def)[]
-    apply (simp add: progress_le list.rel_map)
-    apply (erule list.rel_mono_strong)
-    apply (erule (1) qtable_assign)
-    apply auto[3]
-    apply (intro conjI)
-    apply (simp add: sat_the_update)
-    apply (simp add: nth_list_update wf_tuple_length)
-    apply (subst (2) meval_trm_eval_trm)
-    apply assumption+
-    apply (erule wf_mformula_wf_set[unfolded wf_set_def])
-    apply (rule eval_trm_fv_cong)
-    apply (metis map_update nth_list_update_neq subsetD)
-    apply (intro conjI)
-    apply (simp add: sat_the_restrict)
-    apply (subst meval_trm_eval_trm)
-    apply (rule wf_tuple_restrict_simple)
-    apply auto[3]
-    apply (erule wf_mformula_wf_set[unfolded wf_set_def])
-    apply (subst eval_trm_fv_cong)
-    apply (rule ballI)
-    apply (rule map_the_restrict)
-    apply (erule (1) subsetD)
-    apply (auto simp add: wf_tuple_def)[]
-    done
+  from MAndAssign.prems obtain \<phi>'' x t \<psi>'' where
+    wf_envs: "wf_envs \<sigma> j P P' V db" and
+    \<phi>'_eq: "\<phi>' = formula.And \<phi>'' \<psi>''" and
+    wf_\<phi>: "wf_mformula \<sigma> j P V n R \<phi> \<phi>''" and
+    "x < n" and
+    "x \<notin> fv \<phi>''" and
+    fv_t_subset: "fv_trm t \<subseteq> fv \<phi>''" and
+    conf: "(x, t) = conf" and
+    \<psi>''_eqs: "\<psi>'' = formula.Eq (trm.Var x) t \<or> \<psi>'' = formula.Eq t (trm.Var x)"
+    by (cases rule: wf_mformula.cases)
+  from wf_\<phi> wf_envs obtain xs \<phi>\<^sub>n where
+    meval_eq: "meval n (\<tau> \<sigma> j) db \<phi> = (xs, \<phi>\<^sub>n)" and
+    wf_\<phi>\<^sub>n: "wf_mformula \<sigma> (Suc j) P' V n R \<phi>\<^sub>n \<phi>''" and
+    xs: "list_all2 (\<lambda>i. qtable n (fv \<phi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>''))
+        [progress \<sigma> P \<phi>'' j..<progress \<sigma> P' \<phi>'' (Suc j)] xs"
+    by (auto dest!: MAndAssign.IH)
+  have progress_eqs:
+      "progress \<sigma> P \<phi>' j = progress \<sigma> P \<phi>'' j"
+      "progress \<sigma> P' \<phi>' (Suc j) = progress \<sigma> P' \<phi>'' (Suc j)"
+    using \<psi>''_eqs wf_envs_progress_le[OF wf_envs] by (auto simp: \<phi>'_eq)
+
+  show ?case proof (simp add: meval_eq, intro conjI)
+    show "wf_mformula \<sigma> (Suc j) P' V n R (MAndAssign \<phi>\<^sub>n conf) \<phi>'"
+      unfolding \<phi>'_eq
+      by (rule wf_mformula.AndAssign) fact+
+  next
+    show "list_all2 (\<lambda>i. qtable n (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'))
+        [progress \<sigma> P \<phi>' j..<progress \<sigma> P' \<phi>' (Suc j)] (map ((`) (eval_assignment conf)) xs)"
+      unfolding list.rel_map progress_eqs conf[symmetric] eval_assignment.simps
+      using xs
+    proof (rule list.rel_mono_strong)
+      fix i X
+      assume qtable: "qtable n (fv \<phi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'') X"
+      then show "qtable n (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>')
+          ((\<lambda>y. y[x := Some (meval_trm t y)]) ` X)"
+      proof (rule qtable_assign)
+        show "x < n" by fact
+        show "insert x (fv \<phi>'') = fv \<phi>'"
+          using \<psi>''_eqs fv_t_subset by (auto simp: \<phi>'_eq)
+        show "x \<notin> fv \<phi>''" by fact
+      next
+        fix v
+        assume wf_v: "wf_tuple n (fv \<phi>') v" and "mem_restr R v"
+        then show "mem_restr R (restrict (fv \<phi>'') v)" by simp
+
+        assume sat: "Formula.sat \<sigma> V (map the v) i \<phi>'"
+        then have A: "Formula.sat \<sigma> V (map the (restrict (fv \<phi>'') v)) i \<phi>''" (is ?A)
+          by (simp add: \<phi>'_eq sat_the_restrict)
+        have "map the v ! x = Formula.eval_trm (map the v) t"
+          using sat \<psi>''_eqs by (auto simp: \<phi>'_eq)
+        also have "... = Formula.eval_trm (map the (restrict (fv \<phi>'') v)) t"
+          using fv_t_subset by (auto simp: map_the_restrict intro!: eval_trm_fv_cong)
+        finally have "map the v ! x = meval_trm t (restrict (fv \<phi>'') v)"
+          using meval_trm_eval_trm[of n "fv \<phi>''" "restrict (fv \<phi>'') v" t]
+            fv_t_subset wf_v wf_mformula_wf_set[unfolded wf_set_def, OF wf_\<phi>]
+          by (fastforce simp: \<phi>'_eq intro!: wf_tuple_restrict)
+        then have B: "v ! x = Some (meval_trm t (restrict (fv \<phi>'') v))" (is ?B)
+          using \<psi>''_eqs wf_v \<open>x < n\<close> by (auto simp: wf_tuple_def \<phi>'_eq)
+        from A B show "?A \<and> ?B" ..
+      next
+        fix v
+        assume wf_v: "wf_tuple n (fv \<phi>'') v" and "mem_restr R v"
+          and sat: "Formula.sat \<sigma> V (map the v) i \<phi>''"
+        let ?v = "v[x := Some (meval_trm t v)]"
+        from sat have A: "Formula.sat \<sigma> V (map the ?v) i \<phi>''"
+          using \<open>x \<notin> fv \<phi>''\<close> by (simp add: sat_the_update)
+        have "y \<in> fv_trm t \<Longrightarrow> x \<noteq> y" for y
+          using fv_t_subset \<open>x \<notin> fv \<phi>''\<close> by auto
+        then have B: "Formula.sat \<sigma> V (map the ?v) i \<psi>''"
+          using \<psi>''_eqs meval_trm_eval_trm[of n "fv \<phi>''" v t] \<open>x < n\<close>
+            fv_t_subset wf_v wf_mformula_wf_set[unfolded wf_set_def, OF wf_\<phi>]
+          by (auto simp: wf_tuple_def map_update intro!: eval_trm_fv_cong)
+        from A B show "Formula.sat \<sigma> V (map the ?v) i \<phi>'"
+          by (simp add: \<phi>'_eq)
+      qed
+    qed
+  qed
 next
   case (MAndRel \<phi> conf)
   from MAndRel.prems show ?case
-    apply (cases rule: wf_mformula.cases)
-    apply (drule MAndRel.IH[where db=db and P=P and P'=P'])
-    apply (clarsimp split: prod.splits)+
-    apply (intro conjI)
-    apply (rule wf_mformula.AndRel; simp)
-    apply (simp add: progress_constraint progress_le list.rel_map fv_formula_of_constraint Un_absorb2)
-    apply (erule list.rel_mono_strong)
-    apply (erule qtable_filter)
-    apply (subst eval_constraint_sat_eq)
-    apply assumption+
-    apply (erule wf_mformula_wf_set[unfolded wf_set_def])
-    apply (rule refl)
-    done
+    by (cases rule: wf_mformula.cases)
+      (auto simp: progress_constraint progress_le list.rel_map fv_formula_of_constraint
+        Un_absorb2 wf_mformula_wf_set[unfolded wf_set_def] split: prod.splits
+        dest!: MAndRel.IH[where db=db and P=P and P'=P'] eval_constraint_sat_eq[THEN iffD2]
+        intro!: wf_mformula.AndRel
+        elim!: list.rel_mono_strong qtable_filter eval_constraint_sat_eq[THEN iffD1])
 next
   case (MAnds A_pos A_neg l buf)
   note mbufn_take.simps[simp del] mbufn_add.simps[simp del] mmulti_join.simps[simp del]
@@ -5049,8 +5066,7 @@ next
         unfolding list_all2_Cons2 upt_eq_Cons_conv by auto
       then show ?thesis
         unfolding cur conjunct2[OF update1, unfolded length_aux'] Cons progress_\<phi>'''
-        apply (auto split: if_splits list.splits)
-        using \<tau>_mono diff_le_self by blast
+        by (auto split: if_splits list.splits intro!: \<tau>_mono)
     qed
     have valid_aux'': "valid_muaux args cur aux'' auxlist''"
       using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
