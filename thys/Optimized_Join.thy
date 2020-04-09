@@ -4,7 +4,9 @@ theory Optimized_Join
 begin
 (*>*)
 
-(* Binary join *)
+section \<open>Optimized relational join\<close>
+
+subsection \<open>Binary join\<close>
 
 definition join_mask :: "nat \<Rightarrow> nat set \<Rightarrow> bool list" where
   "join_mask n X = map (\<lambda>i. i \<in> X) [0..<n]"
@@ -108,7 +110,7 @@ lemma bin_join_table:
     join_sub'[OF _ assms(2,1)]
   by auto+
 
-(* Multi-way join *)
+subsection \<open>Multi-way join\<close>
 
 fun mmulti_join' :: "(nat set list \<Rightarrow> nat set list \<Rightarrow> 'a table list \<Rightarrow> 'a table)" where
   "mmulti_join' A_pos A_neg L = (

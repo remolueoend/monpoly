@@ -7,6 +7,8 @@ theory Formula
 begin
 (*>*)
 
+section \<open>Metric First-order Temporal Logic\<close>
+
 derive (eq) ceq enat
 
 instantiation enat :: ccompare begin
@@ -17,12 +19,9 @@ instance by intro_classes
     (auto simp: ccompare_enat_def split: if_splits intro!: comparator.intro)
 end
 
-
-section \<open>Metric First-order Temporal Logic\<close>
-
 context begin
 
-subsection \<open>Formulas and Satisfiability\<close>
+subsection \<open>Formulas and satisfiability\<close>
 
 qualified type_synonym name = string
 qualified type_synonym event = "(name \<times> event_data list)"
@@ -233,7 +232,7 @@ lemma fvi_less_nfv_regex: "\<forall>i\<in>fv_regex \<phi>. i < nfv_regex \<phi>"
   unfolding Regex.nfv_regex_def
   by (auto simp add: Max_gr_iff intro: max.strict_coboundedI2)
 
-subsubsection \<open>Future Reach\<close>
+subsubsection \<open>Future reach\<close>
 
 qualified fun future_bounded :: "formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
@@ -491,7 +490,7 @@ lemma eps_fv_cong:
   unfolding eps_match by (erule match_fv_cong[THEN fun_cong, THEN fun_cong])
 
 
-subsection \<open>Safe Formulas\<close>
+subsection \<open>Safe formulas\<close>
 
 fun remove_neg :: "formula \<Rightarrow> formula" where
   "remove_neg (Neg \<phi>) = \<phi>"
@@ -685,7 +684,7 @@ lemma safe_formula_NegD:
   by (induct "Formula.Neg \<phi>" rule: safe_formula_induct) auto
 
 
-subsection \<open>Slicing Traces\<close>
+subsection \<open>Slicing traces\<close>
 
 qualified fun matches ::
   "env \<Rightarrow> formula \<Rightarrow> name \<times> event_data list \<Rightarrow> bool" where
@@ -930,7 +929,7 @@ lemma prefix_of_sliceD:
   by transfer (auto intro!: exI[of _ "stake (length _) _"] elim: sym dest: sorted_stake)
 
 
-subsection \<open>Translation to n-ary Conjunction\<close>
+subsection \<open>Translation to n-ary conjunction\<close>
 
 fun get_and_list :: "formula \<Rightarrow> formula list" where
   "get_and_list (Ands l) = l"

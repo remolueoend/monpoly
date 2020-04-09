@@ -1,6 +1,10 @@
+(*<*)
 theory Regex
   imports Trace "HOL-Library.Lattice_Syntax" "HOL-Library.Extended_Nat"
 begin
+(*>*)
+
+section \<open>Regular expressions\<close>
 
 context begin
 
@@ -360,4 +364,6 @@ qed auto
 
 end
 
+(*<*)
 end
+(*>*)

@@ -8,6 +8,8 @@ theory Monitor_Impl
 begin
 (*>*)
 
+section \<open>Instantiation of the generic algorithm and code setup\<close>
+
 lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Cardinality.card'" by simp
 declare [[code drop: card]] Set_Impl.card_code[code]
 
@@ -430,20 +432,6 @@ lemma mk_db_code[code]:
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin.simps[folded remove_Union_def, code]
 declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
-
-export_code convert_multiway minit_safe mstep mmonitorable_exec
-   checking OCaml?
-
-export_code
-  (*basic types*)
-  nat_of_integer integer_of_nat int_of_integer integer_of_int enat
-  String.explode String.implode interval mk_db
-  RBT_set rbt_empty rbt_insert rbt_fold
-  (*term, formula, and regex constructors*)
-  EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild
-  (*main functions*)
-  convert_multiway minit_safe mstep mmonitorable_exec
-  in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)
 end

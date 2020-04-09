@@ -4,7 +4,7 @@ theory Abstract_Monitor
 begin
 (*>*)
 
-section \<open>Abstract Specification of a Monitor\<close>
+section \<open>Abstract monitor specification\<close>
 
 locale monitorable =
   fixes monitorable :: "Formula.formula \<Rightarrow> bool"

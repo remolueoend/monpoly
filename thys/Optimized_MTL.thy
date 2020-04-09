@@ -4,10 +4,12 @@ theory Optimized_MTL
 begin
 (*>*)
 
+section \<open>Efficient implementation of temporal operators\<close>
+
+subsection \<open>Optimized queue data structure\<close>
+
 lemma less_enat_iff: "a < enat i \<longleftrightarrow> (\<exists>j. a = enat j \<and> j < i)"
   by (cases a) auto
-
-(* Optimized queue data structure *)
 
 type_synonym 'a queue_t = "'a list \<times> 'a list"
 
@@ -202,7 +204,7 @@ proof (induction f q rule: takedropWhile_queue.induct)
         split: option.splits dest: safe_hd_rep)
 qed
 
-(* Optimized since data structure *)
+subsection \<open>Optimized data structure for Since\<close>
 
 type_synonym 'a mmsaux = "ts \<times> ts \<times> bool list \<times> bool list \<times>
   (ts \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times>
@@ -1511,7 +1513,7 @@ interpretation default_msaux: msaux valid_mmsaux init_mmsaux add_new_ts_mmsaux g
     valid_result_mmsaux
   by unfold_locales assumption+
 
-(* optimized until data structure *)
+subsection \<open>Optimized data structure for Until\<close>
 
 type_synonym tp = nat
 

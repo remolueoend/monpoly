@@ -7,6 +7,8 @@ theory Event_Data
 begin
 (*>*)
 
+section \<open>Event parameters\<close>
+
 definition div_to_zero :: "integer \<Rightarrow> integer \<Rightarrow> integer" where
   "div_to_zero x y = (let z = fst (Code_Numeral.divmod_abs x y) in
     if (x < 0) \<noteq> (y < 0) then - z else z)"

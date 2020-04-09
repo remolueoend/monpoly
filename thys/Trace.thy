@@ -4,7 +4,9 @@ theory Trace
 begin
 (*>*)
 
-section \<open>Infinite Traces\<close>
+section \<open>Traces and trace prefixes\<close>
+
+subsection \<open>Infinite traces\<close>
 
 coinductive ssorted :: "'a :: linorder stream \<Rightarrow> bool" where
   "shd s \<le> shd (stl s) \<Longrightarrow> ssorted (stl s) \<Longrightarrow> ssorted s"
@@ -110,7 +112,7 @@ lemma map_\<Gamma>_cong: "\<sigma>\<^sub>1 = \<sigma>\<^sub>2 \<Longrightarrow> 
   by transfer (auto intro!: stream.map_cong)
 
 
-section \<open>Finite Trace Prefixes\<close>
+subsection \<open>Finite trace prefixes\<close>
 
 typedef 'a prefix = "{p :: ('a set \<times> nat) list. sorted (map snd p)}"
   by (auto intro!: exI[of _ "[]"])

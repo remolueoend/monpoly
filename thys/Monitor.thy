@@ -9,9 +9,11 @@ theory Monitor
 begin
 (*>*)
 
-section \<open>Concrete Monitor\<close>
+section \<open>Generic monitoring algorithm\<close>
 
-subsection \<open>Monitorable Formulas\<close>
+text \<open>The algorithm defined here abstracts over the implementation of the temporal operators.\<close>
+
+subsection \<open>Monitorable formulas\<close>
 
 definition "mmonitorable \<phi> \<longleftrightarrow> safe_formula \<phi> \<and> Formula.future_bounded \<phi>"
 definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Regex.pred_regex Formula.future_bounded r"
@@ -213,7 +215,7 @@ lemma monitorable_formula_code[code]: "mmonitorable \<phi> = mmonitorable_exec \
   using mmonitorable_exec_mmonitorable safe_formula_mmonitorable_exec mmonitorable_def
   by blast
 
-subsection \<open>Handling Regular Expressions\<close>
+subsection \<open>Handling regular expressions\<close>
 
 datatype mregex =
   MSkip nat
@@ -387,7 +389,7 @@ qed (auto split: prod.splits simp: cases_Neg_iff)
 
 derive linorder mregex
 
-section \<open>LPD\<close>
+subsubsection \<open>LPD\<close>
 
 definition saturate where
   "saturate f = while (\<lambda>S. f S \<noteq> S) f"
@@ -520,7 +522,7 @@ lemma LPDs_code[code]:
 
 end
 
-section \<open>RPD\<close>
+subsubsection \<open>RPD\<close>
 
 primrec RPD where
   "RPD (MSkip n) = (case n of 0 \<Rightarrow> {} | Suc m \<Rightarrow> {MSkip m})"
@@ -647,7 +649,7 @@ lemma RPDs_code[code]:
 
 end
 
-subsection \<open>The Executable Monitor\<close>
+subsection \<open>The executable monitor\<close>
 
 type_synonym ts = nat
 
@@ -1131,7 +1133,7 @@ definition (in maux) mstep :: "Formula.database \<times> ts \<Rightarrow> ('msau
      in (List.enumerate (mstate_i st) xs,
       \<lparr>mstate_i = mstate_i st + length xs, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
 
-subsection \<open>Verdict Delay\<close>
+subsection \<open>Verdict delay\<close>
 
 context fixes \<sigma> :: Formula.trace begin
 
@@ -2500,6 +2502,9 @@ lemma meval_trm_eval_trm: "wf_tuple n A x \<Longrightarrow> fv_trm t \<subseteq>
 lemma list_update_id: "xs ! i = z \<Longrightarrow> xs[i:=z] = xs"
   by (induction xs arbitrary: i) (auto split: nat.split)
 
+lemma qtable_wf_tupleD: "qtable n A P Q X \<Longrightarrow> \<forall>x\<in>X. wf_tuple n A x"
+  unfolding qtable_def table_def by blast
+
 lemma qtable_eval_agg:
   assumes inner: "qtable (b + n) (Formula.fv \<phi>) (mem_restr (lift_envs' b R))
       (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) rel"
@@ -2617,7 +2622,7 @@ proof -
           unfolding a_eq by simp
       qed
       have 2: "map Some (map the (take b a)) = take b a" if "a \<in> rel" for a
-        using that b_fv inner[unfolded qtable_def, THEN conjunct1]
+        using that b_fv inner[THEN qtable_wf_tupleD]
         unfolding table_def wf_tuple_def
         by (auto simp: list_eq_iff_nth_eq)
       have 3: "ecard {zs. \<exists>a. a \<in> rel \<and> take b a = map Some zs \<and> drop b a = drop b x \<and> P a} =
@@ -2637,14 +2642,14 @@ proof -
     proof -
       have "(drop b x)[y:=None] = (drop b x)[y:=drop b x ! y]" proof -
         from \<open>x \<in> rel\<close> have "drop b x ! y = None"
-          using fresh n inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
-          by (simp add: add.commute)
+          using fresh n inner[THEN qtable_wf_tupleD]
+          by (simp add: add.commute wf_tuple_def)
         then show ?thesis by simp
       qed
       then have "(drop b x)[y:=None] = drop b x" by simp
       moreover from \<open>x \<in> rel\<close> have "length x = b + n"
-        using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
-        by simp
+        using inner[THEN qtable_wf_tupleD]
+        by (simp add: wf_tuple_def)
       moreover from that(2) have "mem_restr R ((drop b x)[y:=z, y:=None])"
         by (rule mem_restr_upd_None)
       ultimately show ?thesis
@@ -2679,7 +2684,7 @@ proof -
 
     show ?thesis proof (rule qtableI)
       show "table n ?fv ?rel'"
-        using inner[unfolded qtable_def, THEN conjunct1] n f_fvi
+        using inner[THEN qtable_wf_tupleD] n f_fvi
         by (auto simp: eval_agg_def non_default_case table_def wf_tuple_def Let_def nth_list_update
             fvi_iff_fv[where b=b] add.commute)
     next
@@ -2694,8 +2699,8 @@ proof -
           "v = (drop b v')[y:=Some (eval_agg_op \<omega> (M (map the (drop b v'))))]"
           using alt[OF \<open>mem_restr R v\<close>] by blast
         then have length_v': "length v' = b + n"
-          using inner[unfolded qtable_def, THEN conjunct1, unfolded table_def wf_tuple_def]
-          by simp
+          using inner[THEN qtable_wf_tupleD]
+          by (simp add: wf_tuple_def)
         have "Formula.sat \<sigma> V (map the v') i \<phi>"
           using \<open>v' \<in> rel\<close> \<open>mem_restr R v\<close>
           by (auto simp: \<open>v = _\<close> elim!: in_qtableE[OF inner] intro!: drop_lift \<open>v' \<in> rel\<close>)
@@ -2751,13 +2756,13 @@ proof -
             using True \<open>wf_tuple n ?fv v\<close> f_fv
             by (fastforce simp: wf_tuple_def fvi_iff_fv[where b=b] fvi_trm_iff_fv_trm[where b=b])
           moreover have x: "(\<forall>i < n. drop b x ! i = None) \<and> length x = b + n"
-            using True \<open>x \<in> rel\<close> inner[unfolded qtable_def table_def, THEN conjunct1] f_fv
+            using True \<open>x \<in> rel\<close> inner[THEN qtable_wf_tupleD] f_fv
             by (auto simp: wf_tuple_def)
           ultimately have "v[y:=None] = drop b x"
             unfolding list_eq_iff_nth_eq by (auto simp: length_v)
           with \<open>x \<in> rel\<close> have "take b x @ v[y:=None] \<in> rel" by simp
           moreover have "map (Some \<circ> the) (take b x) = take b x"
-            using True \<open>x \<in> rel\<close> inner[unfolded qtable_def table_def, THEN conjunct1] b_fv
+            using True \<open>x \<in> rel\<close> inner[THEN qtable_wf_tupleD] b_fv
             by (subst map_cong[where g=id, OF refl]) (auto simp: wf_tuple_def in_set_conv_nth)
           ultimately have "map Some (map the (take b x)) @ v[y:=None] \<in> rel" by simp
           then show thesis using x[THEN conjunct2] by (fastforce intro!: that[rotated])
@@ -5354,7 +5359,7 @@ next
 qed
 
 
-subsubsection \<open>Monitor Step\<close>
+subsubsection \<open>Monitor step\<close>
 
 lemma (in maux) wf_mstate_mstep: "wf_mstate \<phi> \<pi> R st \<Longrightarrow> last_ts \<pi> \<le> snd tdb \<Longrightarrow>
   wf_mstate \<phi> (psnoc \<pi> tdb) R (snd (mstep (map_prod mk_db id tdb) st))"
@@ -5396,7 +5401,7 @@ proof -
 qed
 
 
-subsubsection \<open>Monitor Function\<close>
+subsubsection \<open>Monitor function\<close>
 
 context maux
 begin
@@ -5511,9 +5516,7 @@ lemma monitor_mverdicts: "mmonitorable \<phi> \<Longrightarrow> flatten_verdicts
   by (subst wf_mstate_msteps_stateless_UNIV[OF wf_mstate_minit_safe, simplified])
     (auto simp: mmonitorable_def mverdicts_Nil)
 
-subsection \<open>Collected Correctness Results\<close>
-
-thm mstep_mverdicts
+subsection \<open>Collected correctness results\<close>
 
 text \<open>We summarize the main results proved above.
 \begin{enumerate}
@@ -5539,7 +5542,7 @@ text \<open>We summarize the main results proved above.
 \end{enumerate}
 \<close>
 
-end \<comment> \<open>@{typ "event_data msaux"}\<close>
+end \<comment> \<open>context @{locale maux}\<close>
 
 (*<*)
 end
