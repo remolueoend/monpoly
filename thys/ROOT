@@ -6,6 +6,16 @@ session Optimized_MFODL_Monitor (AFP) = Containers +
     IEEE_Floating_Point
     Generic_Join
   theories
+    Code_Double
+    Event_Data
+    Trace
+    Regex
+    Interval
+    Formula
+    Abstract_Monitor
+    Optimized_Join
+    Monitor
+    Optimized_MTL
     Monitor_Impl
   theories [condition=ISABELLE_OCAMLFIND, document=false]
     Monitor_Code

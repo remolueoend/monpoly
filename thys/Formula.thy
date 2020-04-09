@@ -7,7 +7,7 @@ theory Formula
 begin
 (*>*)
 
-section \<open>Metric First-order Temporal Logic\<close>
+section \<open>Metric first-order temporal logic\<close>
 
 derive (eq) ceq enat
 
