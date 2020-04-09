@@ -17,7 +17,7 @@
 \begin{document}
 
 \title{Formalization of a Monitoring Algorithm for\\ Metric First-Order Dynamic Logic}
-\author{Thibault Dardinier \and Lukas Heimes \and Martin Raszyk \and Joshua Schneider \and Dmitriy Traytel}
+\author{Thibault Dardinier \and Lukas Heimes \and Martin Raszyk \\ Joshua Schneider \and Dmitriy Traytel}
 
 \maketitle
 
@@ -29,12 +29,14 @@ of an executable monitor for specifications given as formulas in metric first-or
 dynamic logic (MFODL), which combines the features of metric first-order temporal logic
 (MFOTL)~\cite{BasinKMZ-JACM15} and metric dynamic logic~\cite{BasinKT-RV17}. Thus, MFODL
 supports real-time constraints, first-order parameters, and regular expressions.
-Additionally, the monitor supports aggregation operations such as count and sum.
-This formalization extends previous work on a verified monitor for
-MFOTL~\cite{SchneiderBKT2019RV}, which was based on the efficient MonPoly
-tool~\cite{monpoly}. Apart from the addition of regular expressions and aggregations, we
-implemented multi-way joins~\cite{Dardinier2019AFP} and a specialized sliding window
-algorithm to further optimize the monitor.
+Additionally, the monitor supports aggregation operations such as count and sum. This
+formalization, which is described in a forthcoming paper at IJCAR
+2020~\cite{BasinDHKRST2020IJCAR}, significantly extends
+\href{https://www.isa-afp.org/entries/MFOTL_Monitor.html}{previous work on a verified
+monitor} for MFOTL~\cite{SchneiderBKT2019RV}. Apart from the addition of regular
+expressions and aggregations, we implemented
+\href{https://www.isa-afp.org/entries/Generic_Join.html}{multi-way joins} and
+a specialized sliding window algorithm to further optimize the monitor.
 \end{abstract}
 
 \tableofcontents
