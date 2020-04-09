@@ -8,7 +8,7 @@ session MFOTL_Monitor2 (AFP) = Containers +
   theories
     Monitor
   theories [condition=ISABELLE_OCAMLFIND, document=false]
-    Monitor_Code
+    Monitor_Impl
     (*Examples*)
   document_files
     "root.tex"

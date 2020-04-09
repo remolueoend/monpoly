@@ -1,5 +1,5 @@
 (*<*)
-theory Monitor_Code
+theory Monitor_Impl
   imports Monitor
     Optimized_MTL
     Event_Data
