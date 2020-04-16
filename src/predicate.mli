@@ -49,6 +49,7 @@ type cst =
   | Int of int
   | Str of string
   | Float of float
+  | ZInt of Z.t
 
 (** Three (constant) types are supported: integers, strings and floats *)
 type tcst = TInt | TStr | TFloat

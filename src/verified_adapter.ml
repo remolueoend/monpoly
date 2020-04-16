@@ -32,6 +32,7 @@ let convert_cst = function
   | Int x -> EInt (Z.of_int x)
   | Str x -> EString (explode x)
   | Float x -> EFloat x
+  | ZInt x -> EInt x
 
 let convert_var fvl bvl a = nat_of_int (try (index_of a bvl)
     with Failure s -> (List.length bvl) + (try index_of a fvl
@@ -147,7 +148,7 @@ let convert_db md =
   (mk_db all_events, nat_of_float md.ts)
 
 let cst_of_event_data = function
-  | EInt x -> Int (Z.to_int x)  (* PARTIAL *)
+  | EInt x -> (try Int (Z.to_int x) with Z.Overflow -> ZInt x)
   | EFloat x -> Float x
   | EString x -> Str (implode x)
 

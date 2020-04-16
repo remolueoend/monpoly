@@ -102,6 +102,7 @@ let hash value seed = match value with
   | Str   x -> Int32.to_int (Murmur_hash3.string_hash x (Int32.of_int seed))
     (*TODO*)
   | Float x -> handle_hash (int_of_float x) seed
+  | ZInt x  -> handle_hash (Z.to_int x) seed
 
 let string_of_some_cst cst =
   match cst with 

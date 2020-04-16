@@ -48,6 +48,7 @@ type cst =
   | Int of int
   | Str of string
   | Float of float
+  | ZInt of Z.t
 
 type tcst = TInt | TStr | TFloat
 type tcl = TNum | TAny 
@@ -96,6 +97,7 @@ let type_of_cst = function
   | Int _ -> TInt
   | Str _ -> TStr
   | Float _ -> TFloat
+  | ZInt _ -> TInt
 
 let cst_of_str t v = 
   match t with
@@ -262,6 +264,7 @@ let string_of_cst qm c =
       if s.[0] = '\"' && s.[(String.length s)-1] = '\"' then s
       else "\"" ^ s ^ "\""
     else s
+  | ZInt i -> Z.to_string i
 
 
 let print_cst qm c = print_string (string_of_cst qm c)

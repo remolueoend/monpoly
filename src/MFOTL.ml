@@ -94,6 +94,7 @@ let ts_of_string err_place str =
 
 let ts_of_cst c =
   match c with
+  | ZInt _
   | Int _ -> failwith "[MFOTL.ts_of_cst] conversion not possible"
   | Str s -> float_of_string s
   | Float f -> f

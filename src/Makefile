@@ -89,7 +89,7 @@ clean:
 
 # Dependencies
 %.cmi: %.mli
-	$(OCAMLC) -c $<
+	$(OCAMLC) $(FLAGS) -c $<
 
 %.cmo: %.ml
 	$(OCAMLC) $(FLAGS) -c $<
