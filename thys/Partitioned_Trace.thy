@@ -1,5 +1,5 @@
 theory Partitioned_Trace
-  imports Trace "HOL-Library.BNF_Corec" "HOL-Library.DAList" "HOL-Library.Extended_Nat"
+  imports Trace "HOL-Library.BNF_Corec" "HOL-Library.DAList"
 begin
 
 notation fcomp (infixl "\<circ>>" 60)
@@ -255,15 +255,15 @@ record 'a wtsdb = "'a itsdb" + wmark :: nat
 definition wtracep :: "('a, 'b) wtsdb_scheme stream \<Rightarrow> bool" where
   "wtracep s \<longleftrightarrow> ssorted (smap wmark s) \<and> sincreasing (smap ts s) \<and>
     (\<forall>i j. idx (s !! i) \<le> idx (s !! j) \<longrightarrow> ts (s !! i) \<le> ts (s !! j)) \<and>
-    (\<forall>i. \<forall>j\<ge>i. wmark (s !! i) \<le> idx (s !! j))"
+    (\<forall>i. \<forall>j>i. wmark (s !! i) \<le> idx (s !! j))"
 
-definition "dummy_wtrace = smap (\<lambda>x. \<lparr>db={}, ts=x, idx=x, wmark=x\<rparr>) nats"
+definition "dummy_raw_wtrace = smap (\<lambda>x. \<lparr>db={}, ts=x, idx=x, wmark=x\<rparr>) nats"
 
-lemma wtracep_dummy: "wtracep dummy_wtrace"
-  by (auto simp: wtracep_def dummy_wtrace_def stream.map_comp stream.map_ident cong: stream.map_cong)
+lemma wtracep_dummy: "wtracep dummy_raw_wtrace"
+  by (auto simp: wtracep_def dummy_raw_wtrace_def stream.map_comp stream.map_ident cong: stream.map_cong)
 
 typedef 'a wtrace = "{s :: 'a wtsdb stream. wtracep s}"
-  by (auto intro!: exI[where x=dummy_wtrace] wtracep_dummy)
+  by (auto intro!: exI[where x=dummy_raw_wtrace] wtracep_dummy)
 
 setup_lifting type_definition_wtrace
 
@@ -345,6 +345,9 @@ lemma infinitely_stl: "infinitely P (stl s) \<longleftrightarrow> infinitely P s
   apply (metis le_Suc_eq snth.simps(2))
   using Suc_le_D by fastforce
 
+lemma infinitely_sset_stl: "infinitely P s \<Longrightarrow> \<exists>x \<in> sset (stl s). P x"
+  by (fastforce simp: infinitely_def dest!: Suc_le_D)
+
 lemma sdrop_while_id_conv: "stream_all P s \<Longrightarrow> sdrop_while (Not \<circ> P) s = s"
   by (subst sdrop_while_sdrop_LEAST) simp_all
 
@@ -353,10 +356,10 @@ lemma sfilter_id_conv: "stream_all P s \<Longrightarrow> sfilter P s = s"
 
 record 'a mwtsdb = "'a wtsdb" + origin :: nat
 
-typedef 'a mwtrace = "{s :: 'a mwtsdb stream.
+typedef 'a mwtrace = "{s :: 'a mwtsdb stream. finite (origin ` sset s) \<and>
   (\<forall>k \<in> origin ` sset s. infinitely (\<lambda>x. origin x = k) s \<and> wtracep (sfilter (\<lambda>x. origin x = k) s))}"
   apply (rule exI[where x="smap (\<lambda>x. \<lparr>db={}, ts=x, idx=x, wmark=x, origin=0\<rparr>) nats"])
-  apply (auto simp: infinitely_def stream.set_map)
+  apply (auto simp: infinitely_def stream.set_map image_image)
   apply (subst sfilter_id_conv)
    apply (simp add: stream.set_map)
   apply (auto simp: wtracep_def stream.map_comp stream.map_ident cong: stream.map_cong)
@@ -368,7 +371,7 @@ lemma wtracep_stlI: "wtracep s \<Longrightarrow> wtracep (stl s)"
   apply (auto simp: wtracep_def sincreasing_def elim: ssorted.cases)
     apply (metis Suc_leI Suc_le_D Suc_le_lessD less_Suc_eq_le snth.simps(2))
    apply (metis snth.simps(2))
-  by force
+  by (metis Suc_mono snth.simps(2))
 
 lemma sfilter_stl_cases:
   obtains "P (shd s)" "sfilter P (stl s) = stl (sfilter P s)" |
@@ -378,41 +381,119 @@ lemma sfilter_stl_cases:
 lift_definition mwnth :: "'a mwtrace \<Rightarrow> nat \<Rightarrow> 'a mwtsdb" is snth .
 lift_definition mwhd :: "'a mwtrace \<Rightarrow> 'a mwtsdb" is shd .
 lift_definition mwtl :: "'a mwtrace \<Rightarrow> 'a mwtrace" is stl
-  apply (auto simp: infinitely_stl stl_sset)
+  apply (auto 0 3 simp: infinitely_stl intro: stl_sset elim: finite_subset[rotated])
   subgoal for s x
     by (rule sfilter_stl_cases[of "\<lambda>y. origin y = origin x" s])
-      (auto simp: stl_sset simp del: sfilter.simps intro!: wtracep_stlI)
+      (auto simp del: sfilter.simps intro!: wtracep_stlI stl_sset)
   done
+
+lemma mwnth_Suc: "mwnth \<sigma> (Suc i) = mwnth (mwtl \<sigma>) i"
+  by transfer simp
+
+lift_definition mworigins :: "'a mwtrace \<Rightarrow> nat set" is "\<lambda>s. origin ` sset s" .
+
+lemma mworigins_not_empty[simp]: "mworigins \<sigma> \<noteq> {}"
+  by transfer (simp add: sset_range)
+
+lemma finite_mworigins[simp]: "finite (mworigins \<sigma>)"
+  by transfer simp
+
+lemma origin_mwhd: "origin (mwhd \<sigma>) \<in> mworigins \<sigma>"
+  by transfer (simp add: shd_sset)
+
+lemma origin_mwnth: "origin (mwnth \<sigma> i) \<in> mworigins \<sigma>"
+  by transfer simp
+
+lemma mworigins_mwtl: "mworigins (mwtl \<sigma>) = mworigins \<sigma>"
+  apply transfer
+  apply (auto intro: stl_sset)
+  apply (drule (1) bspec)
+  apply clarify
+  apply (drule infinitely_sset_stl)
+  by (metis imageI)
+
+lift_definition dummy_mwtrace :: "'a mwtrace" is "smap (\<lambda>x. \<lparr>db={}, ts=x, idx=x, wmark=x, origin=0\<rparr>) nats"
+  by (auto simp: stream.set_map image_image infinitely_def sfilter_id_conv
+      wtracep_def stream.map_comp stream.map_ident cong: stream.map_cong)
+
+lemma mworigins_dummy: "mworigins dummy_mwtrace = {0}"
+  by transfer (simp add: stream.set_map image_image)
 
 lemma wtracep_smap_truncate: "wtracep (smap wtsdb.truncate s) \<longleftrightarrow> wtracep s"
   by (simp add: wtracep_def stream.map_comp wtsdb.truncate_def cong: stream.map_cong)
 
 lift_definition mwproject :: "nat \<Rightarrow> 'a mwtrace \<Rightarrow> 'a wtrace" is
   "\<lambda>k s. if k \<in> origin ` sset s then smap wtsdb.truncate (sfilter (\<lambda>x. origin x = k) s)
-    else dummy_wtrace"
-  by (simp add: wtracep_smap_truncate wtracep_dummy)
+    else dummy_raw_wtrace"
+  by (auto simp: wtracep_smap_truncate wtracep_dummy)
 
 definition linearize :: "'a wtrace list \<Rightarrow> 'a mwtrace set" where
-  "linearize \<sigma>s = {\<sigma>. \<sigma>s \<noteq> [] \<and> (\<forall>k < length \<sigma>s. mwproject k \<sigma> = \<sigma>s ! k)}"
+  "linearize \<sigma>s = {\<sigma>. mworigins \<sigma> = {..<length \<sigma>s} \<and> (\<forall>k < length \<sigma>s. mwproject k \<sigma> = \<sigma>s ! k)}"
+
+(* TODO(JS): Show that linearize \<sigma> is not empty. *)
 
 
-record 'a reorder_state =
+record 'a raw_reorder_state =
   wmarks :: "(nat, nat) alist"
-  buffer :: "(nat \<times> ('a set \<times> nat)) list"
+  buffer :: "(nat, ('a set \<times> nat)) alist"
 
-definition reorder_update :: "'a mwtsdb \<Rightarrow> 'a reorder_state \<Rightarrow> 'a reorder_state" where
+definition reorder_update :: "'a mwtsdb \<Rightarrow> 'a raw_reorder_state \<Rightarrow> 'a raw_reorder_state" where
   "reorder_update x st = \<lparr>wmarks = DAList.update (origin x) (wmark x) (wmarks st),
-    buffer = AList.map_default (idx x) (db x, ts x) (\<lambda>(d, t). (d \<union> db x, t)) (buffer st)\<rparr>"
+    buffer = DAList.map_default (idx x) (db x, ts x) (\<lambda>(d, t). (d \<union> db x, t)) (buffer st)\<rparr>"
 
-definition keys_of :: "('a, 'b) alist \<Rightarrow> 'a list" where
-  "keys_of al = map fst (DAList.impl_of al)"
+definition reorder_flush :: "'a raw_reorder_state \<Rightarrow> ('a set \<times> nat) list \<times> 'a raw_reorder_state" where
+  "reorder_flush st = (let w = Min (alist.set (wmarks st)) in
+    (map snd (sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st)))),
+      st\<lparr>buffer := DAList.filter (\<lambda>x. fst x \<ge> w) (buffer st)\<rparr>))"
 
-definition values_of :: "('a, 'b) alist \<Rightarrow> 'b list" where
-  "values_of al = map snd (DAList.impl_of al)"
+lift_definition keyset :: "('a, 'b) alist \<Rightarrow> 'a set" is "\<lambda>xs. fst ` set xs" .
 
-definition reorder_flush :: "'a reorder_state \<Rightarrow> ('a set \<times> nat) list \<times> 'a reorder_state" where
-  "reorder_flush st = (let w = fold min (values_of (wmarks st)) \<infinity> in
-    (map snd (takeWhile (\<lambda>x. fst x < w) (buffer st)), st\<lparr>buffer := dropWhile (\<lambda>x. fst x < w) (buffer st)\<rparr>))"
+lemma keyset_empty[simp]: "keyset DAList.empty = {}"
+  by transfer simp
+
+lemma keyset_update[simp]: "keyset (DAList.update k v al) = insert k (keyset al)"
+  by transfer (simp add: dom_update)
+
+typedef 'a reorder_state = "{(st :: 'a raw_reorder_state, \<sigma> :: 'a mwtrace).
+  keyset (wmarks st) = mworigins \<sigma> \<and> (\<forall>i \<in> keyset (buffer st). Min (alist.set (wmarks st)) \<le> i) \<and>
+  (\<forall>k \<in> mworigins \<sigma>. \<forall>i. the (DAList.lookup (wmarks st) k) \<le> w\<iota> (mwproject k \<sigma>) i)}"
+  by (rule exI[where x="(\<lparr>wmarks=DAList.update 0 0 DAList.empty, buffer=DAList.empty\<rparr>, dummy_mwtrace)"])
+    (simp add: mworigins_dummy)
+
+setup_lifting type_definition_reorder_state
+
+lemma mwproject_mwtl: "origin (mwhd \<sigma>) \<noteq> k \<Longrightarrow> mwproject k (mwtl \<sigma>) = mwproject k \<sigma>"
+  apply transfer
+  apply (auto dest: stl_sset)
+  subgoal for \<sigma> x x' by (cases \<sigma>) (simp add: sfilter_Stream)
+  by (metis image_eqI insert_iff stream.collapse stream.simps(8))
+
+lemma sfilter_stl_conv: "sfilter P (stl s) =
+  (if P (shd s) then stl (sfilter P s) else sfilter P s)"
+  by (cases s) (simp add: sfilter_Stream)
+
+lemma wmark_mwhd_le_w\<iota>: "wmark (mwhd \<sigma>) \<le> w\<iota> (mwproject (origin (mwhd \<sigma>)) (mwtl \<sigma>)) i"
+  apply (transfer fixing: i)
+  apply auto
+  subgoal for \<sigma> x
+    apply (subst sfilter_stl_conv)
+    apply (auto simp: wtracep_def dest!: stl_sset)
+    apply (drule (1) bspec)
+    apply clarify
+    apply (drule spec[of "\<lambda>i. \<forall>j. i < j \<longrightarrow> _ i j" 0])
+    apply (drule spec[of "\<lambda>j. 0 < j \<longrightarrow> _ j" "Suc i"])
+    apply (simp add: sdrop_while.simps wtsdb.defs)
+    done
+  subgoal using image_iff infinitely_sset_stl shd_sset by fastforce
+  done
+
+lemma keyset_filter_impl: "keyset (DAList.filter P al) = fst ` (set (filter P (DAList.impl_of al)))"
+  by transfer simp
+
+lift_definition reorder_step :: "'a reorder_state \<Rightarrow> ('a set \<times> nat) list \<times> 'a reorder_state" is
+  "\<lambda>(st, \<sigma>). let (xs, st') = reorder_flush (reorder_update (mwhd \<sigma>) st) in (xs, (st', mwtl \<sigma>))"
+  by (auto simp: split_beta Let_def reorder_update_def reorder_flush_def origin_mwhd mworigins_mwtl
+      lookup_update mwproject_mwtl wmark_mwhd_le_w\<iota> keyset_filter_impl)
 
 friend_of_corec shift :: "'a list \<Rightarrow> 'a stream \<Rightarrow> 'a stream" where
   "shift xs s = (case xs of [] \<Rightarrow> shd s | x # _ \<Rightarrow> x) ## (case xs of [] \<Rightarrow> stl s | _ # ys \<Rightarrow> shift ys s)"
@@ -420,25 +501,50 @@ friend_of_corec shift :: "'a list \<Rightarrow> 'a stream \<Rightarrow> 'a strea
   subgoal by transfer_prover
   done
 
-fun reorder_variant :: "'a reorder_state \<times> 'a mwtrace \<Rightarrow> nat" where
-  "reorder_variant (st, \<sigma>) = Inf {n. \<forall>k \<in> set (keys_of (wmarks st)). \<exists>i\<le>n.
-    origin (mwnth \<sigma> i) = k \<and> fold min (values_of (wmarks st)) \<infinity> < wmark (mwnth \<sigma> i)}"
+definition next_to_emit :: "'a raw_reorder_state \<Rightarrow> 'a mwtrace \<Rightarrow> nat" where
+  "next_to_emit st \<sigma> = (if buffer st = DAList.empty then idx (mwhd \<sigma>) else Min (keyset (buffer st)))"
 
-lemma wmarks_reorder: "wmarks (snd (reorder_flush (reorder_update x st))) =
-  DAList.update (origin x) (wmark x) (wmarks st)"
-  by (simp add: reorder_update_def reorder_flush_def Let_def)
+definition next_to_release :: "'a raw_reorder_state \<Rightarrow> 'a mwtrace \<Rightarrow> nat \<Rightarrow> nat" where
+  "next_to_release st \<sigma> k = (LEAST i. origin (mwnth \<sigma> i) = k \<and> next_to_emit st \<sigma> < wmark (mwnth \<sigma> i))"
 
-lemma alist_update_fresh: "k \<notin> fst ` set xs \<Longrightarrow> AList.update k v xs = xs @ [(k, v)]"
-  by (induction xs) auto
+lift_definition reorder_variant :: "'a reorder_state \<Rightarrow> nat" is
+  "\<lambda>(st, \<sigma>). Max (next_to_release st \<sigma> ` keyset (wmarks st))" .
 
-corecursive reorder :: "'a reorder_state \<Rightarrow> 'a mwtrace \<Rightarrow> ('a set \<times> nat) stream" where
-  "reorder st \<sigma> = (let (xs, st') = reorder_flush (reorder_update (mwhd \<sigma>) st) in
+lemma reorder_keyset_wmarks: "reorder_flush (reorder_update (mwhd \<sigma>) st) = (xs, st') \<Longrightarrow>
+  keyset (wmarks st) = mworigins \<sigma> \<Longrightarrow>
+  keyset (wmarks st') = mworigins \<sigma>"
+  by (clarsimp simp: reorder_flush_def reorder_update_def Let_def insert_absorb origin_mwhd)
+
+lemma Least_less_Least: "\<exists>x::'a::wellorder. Q x \<Longrightarrow> (\<And>x. Q x \<Longrightarrow> \<exists>y. P y \<and> y < x) \<Longrightarrow> Least P < Least Q"
+  by (metis LeastI2 less_le_trans not_le_imp_less not_less_Least)
+
+lemma reorder_termination: "fst (reorder_step st) = [] \<Longrightarrow>
+  reorder_variant (snd (reorder_step st)) < reorder_variant st"
+  apply transfer
+  apply (clarsimp simp: reorder_keyset_wmarks split: prod.splits)
+  subgoal for st \<sigma> st' k
+    apply (subgoal_tac "next_to_release st' (mwtl \<sigma>) k < next_to_release st \<sigma> k")
+     apply (auto simp add: Max_gr_iff)[]
+    apply (simp add: next_to_release_def)
+    apply (rule Least_less_Least)
+    subgoal sorry
+    subgoal sorry
+    done
+  done
+
+corecursive reorder' :: "'a reorder_state \<Rightarrow> ('a set \<times> nat) stream" where
+  "reorder' st = (let (xs, st') = reorder_step st in
     case xs of
-      [] \<Rightarrow> reorder st' (mwtl \<sigma>)
-    | x # xs' \<Rightarrow> x ## xs' @- reorder st' (mwtl \<sigma>))"
-  apply (relation "measure reorder_variant")
-   apply rule
-  apply (simp add: wmarks_reorder)
-  oops
+      [] \<Rightarrow> reorder' st'
+    | x # xs' \<Rightarrow> x ## xs' @- reorder' st')"
+  by (relation "measure reorder_variant") (simp_all add: reorder_termination)
+
+lift_definition init_reorder_state :: "'a mwtrace \<Rightarrow> 'a reorder_state" is
+  "\<lambda>\<sigma>. (\<lparr>wmarks = Finite_Set.fold (\<lambda>k. DAList.update k 0) DAList.empty (mworigins \<sigma>),
+    buffer = DAList.empty\<rparr>, \<sigma>)"
+  sorry
+
+lift_definition reorder :: "'a mwtrace \<Rightarrow> 'a trace" is "\<lambda>\<sigma>. reorder' (init_reorder_state \<sigma>)"
+  sorry
 
 end
