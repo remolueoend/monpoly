@@ -253,7 +253,7 @@ lemma round_robin_partition: "n > 0 \<Longrightarrow> round_robin n \<sigma> \<i
 record 'a wtsdb = "'a itsdb" + wmark :: nat
 
 definition wtracep :: "('a, 'b) wtsdb_scheme stream \<Rightarrow> bool" where
-  "wtracep s \<longleftrightarrow> ssorted (smap wmark s) \<and> sincreasing (smap ts s) \<and>
+  "wtracep s \<longleftrightarrow> ssorted (smap wmark s) \<and> sincreasing (smap wmark s) \<and> sincreasing (smap ts s) \<and>
     (\<forall>i j. idx (s !! i) \<le> idx (s !! j) \<longrightarrow> ts (s !! i) \<le> ts (s !! j)) \<and>
     (\<forall>i. \<forall>j>i. wmark (s !! i) \<le> idx (s !! j))"
 
@@ -296,7 +296,8 @@ definition relax_order :: "'a itrace \<Rightarrow> 'a wtrace set" where
 
 lift_definition id_wtrace :: "'a itrace \<Rightarrow> 'a wtrace" is
   "smap (\<lambda>x. \<lparr>db=db x, ts=ts x, idx=idx x, wmark=idx x\<rparr>)"
-  by (simp add: wtracep_def stream.map_comp ssorted_iff_mono cong: stream.map_cong)
+  by (simp add: wtracep_def stream.map_comp ssorted_iff_mono sincreasing_def cong: stream.map_cong)
+    (meson not_le)
 
 lemma id_wtrace_relax_order: "id_wtrace \<sigma> \<in> relax_order \<sigma>"
   by (simp add: relax_order_def relaxed_order_def) (transfer; auto)+
@@ -369,6 +370,7 @@ setup_lifting type_definition_mwtrace
 
 lemma wtracep_stlI: "wtracep s \<Longrightarrow> wtracep (stl s)"
   apply (auto simp: wtracep_def sincreasing_def elim: ssorted.cases)
+     apply (metis Suc_leI Suc_le_D Suc_le_lessD less_Suc_eq_le snth.simps(2))
     apply (metis Suc_leI Suc_le_D Suc_le_lessD less_Suc_eq_le snth.simps(2))
    apply (metis snth.simps(2))
   by (metis Suc_mono snth.simps(2))
@@ -386,6 +388,9 @@ lift_definition mwtl :: "'a mwtrace \<Rightarrow> 'a mwtrace" is stl
     by (rule sfilter_stl_cases[of "\<lambda>y. origin y = origin x" s])
       (auto simp del: sfilter.simps intro!: wtracep_stlI stl_sset)
   done
+
+lemma mwnth_zero: "mwnth \<sigma> 0 = mwhd \<sigma>"
+  by transfer simp
 
 lemma mwnth_Suc: "mwnth \<sigma> (Suc i) = mwnth (mwtl \<sigma>) i"
   by transfer simp
@@ -456,7 +461,8 @@ lemma keyset_update[simp]: "keyset (DAList.update k v al) = insert k (keyset al)
 
 typedef 'a reorder_state = "{(st :: 'a raw_reorder_state, \<sigma> :: 'a mwtrace).
   keyset (wmarks st) = mworigins \<sigma> \<and> (\<forall>i \<in> keyset (buffer st). Min (alist.set (wmarks st)) \<le> i) \<and>
-  (\<forall>k \<in> mworigins \<sigma>. \<forall>i. the (DAList.lookup (wmarks st) k) \<le> w\<iota> (mwproject k \<sigma>) i)}"
+  (\<forall>k \<in> mworigins \<sigma>. \<forall>i. the (DAList.lookup (wmarks st) k) \<le> w\<iota> (mwproject k \<sigma>) i) \<and>
+  (\<forall>k \<in> mworigins \<sigma>. \<forall>i. the (DAList.lookup (wmarks st) k) \<le> w\<beta> (mwproject k \<sigma>) i)}"
   by (rule exI[where x="(\<lparr>wmarks=DAList.update 0 0 DAList.empty, buffer=DAList.empty\<rparr>, dummy_mwtrace)"])
     (simp add: mworigins_dummy)
 
@@ -468,21 +474,29 @@ lemma mwproject_mwtl: "origin (mwhd \<sigma>) \<noteq> k \<Longrightarrow> mwpro
   subgoal for \<sigma> x x' by (cases \<sigma>) (simp add: sfilter_Stream)
   by (metis image_eqI insert_iff stream.collapse stream.simps(8))
 
-lemma sfilter_stl_conv: "sfilter P (stl s) =
-  (if P (shd s) then stl (sfilter P s) else sfilter P s)"
-  by (cases s) (simp add: sfilter_Stream)
-
 lemma wmark_mwhd_le_w\<iota>: "wmark (mwhd \<sigma>) \<le> w\<iota> (mwproject (origin (mwhd \<sigma>)) (mwtl \<sigma>)) i"
   apply (transfer fixing: i)
   apply auto
   subgoal for \<sigma> x
-    apply (subst sfilter_stl_conv)
-    apply (auto simp: wtracep_def dest!: stl_sset)
+    apply (auto simp: wtracep_def wtsdb.defs dest!: stl_sset)
     apply (drule (1) bspec)
     apply clarify
     apply (drule spec[of "\<lambda>i. \<forall>j. i < j \<longrightarrow> _ i j" 0])
     apply (drule spec[of "\<lambda>j. 0 < j \<longrightarrow> _ j" "Suc i"])
-    apply (simp add: sdrop_while.simps wtsdb.defs)
+    apply (simp add: sdrop_while.simps)
+    done
+  subgoal using image_iff infinitely_sset_stl shd_sset by fastforce
+  done
+
+lemma wmark_mwhd_le_w\<beta>: "wmark (mwhd \<sigma>) \<le> w\<beta> (mwproject (origin (mwhd \<sigma>)) (mwtl \<sigma>)) i"
+  apply (transfer fixing: i)
+  apply auto
+  subgoal for \<sigma> x
+    apply (auto simp: wtracep_def wtsdb.defs dest!: stl_sset)
+    apply (drule (1) bspec)
+    apply clarify
+    apply (drule ssorted_monoD[where i=0 and j="Suc i"])
+     apply (simp_all add: sdrop_while.simps)
     done
   subgoal using image_iff infinitely_sset_stl shd_sset by fastforce
   done
@@ -493,7 +507,7 @@ lemma keyset_filter_impl: "keyset (DAList.filter P al) = fst ` (set (filter P (D
 lift_definition reorder_step :: "'a reorder_state \<Rightarrow> ('a set \<times> nat) list \<times> 'a reorder_state" is
   "\<lambda>(st, \<sigma>). let (xs, st') = reorder_flush (reorder_update (mwhd \<sigma>) st) in (xs, (st', mwtl \<sigma>))"
   by (auto simp: split_beta Let_def reorder_update_def reorder_flush_def origin_mwhd mworigins_mwtl
-      lookup_update mwproject_mwtl wmark_mwhd_le_w\<iota> keyset_filter_impl)
+      lookup_update mwproject_mwtl wmark_mwhd_le_w\<iota> wmark_mwhd_le_w\<beta> keyset_filter_impl)
 
 friend_of_corec shift :: "'a list \<Rightarrow> 'a stream \<Rightarrow> 'a stream" where
   "shift xs s = (case xs of [] \<Rightarrow> shd s | x # _ \<Rightarrow> x) ## (case xs of [] \<Rightarrow> stl s | _ # ys \<Rightarrow> shift ys s)"
@@ -505,31 +519,221 @@ definition next_to_emit :: "'a raw_reorder_state \<Rightarrow> 'a mwtrace \<Righ
   "next_to_emit st \<sigma> = (if buffer st = DAList.empty then idx (mwhd \<sigma>) else Min (keyset (buffer st)))"
 
 definition next_to_release :: "'a raw_reorder_state \<Rightarrow> 'a mwtrace \<Rightarrow> nat \<Rightarrow> nat" where
-  "next_to_release st \<sigma> k = (LEAST i. origin (mwnth \<sigma> i) = k \<and> next_to_emit st \<sigma> < wmark (mwnth \<sigma> i))"
+  "next_to_release st \<sigma> k = (if next_to_emit st \<sigma> < the (DAList.lookup (wmarks st) k) then 0
+    else Suc (LEAST i. origin (mwnth \<sigma> i) = k \<and> next_to_emit st \<sigma> < wmark (mwnth \<sigma> i)))"
 
 lift_definition reorder_variant :: "'a reorder_state \<Rightarrow> nat" is
   "\<lambda>(st, \<sigma>). Max (next_to_release st \<sigma> ` keyset (wmarks st))" .
 
-lemma reorder_keyset_wmarks: "reorder_flush (reorder_update (mwhd \<sigma>) st) = (xs, st') \<Longrightarrow>
-  keyset (wmarks st) = mworigins \<sigma> \<Longrightarrow>
-  keyset (wmarks st') = mworigins \<sigma>"
-  by (clarsimp simp: reorder_flush_def reorder_update_def Let_def insert_absorb origin_mwhd)
+lemma sort_key_empty_conv: "sort_key f xs = [] \<longleftrightarrow> xs = []"
+  by (induction xs) simp_all
+
+lemma DAList_filter_id_conv: "DAList.filter P al = al \<longleftrightarrow> (\<forall>x \<in> set (DAList.impl_of al). P x)"
+  by (transfer fixing: P) (rule filter_id_conv)
+
+lemma alist_set_impl: "alist.set al = snd ` set (DAList.impl_of al)"
+  by transfer force
+
+lemma finite_keyset[simp]: "finite (keyset al)"
+  by (simp add: keyset.rep_eq)
+
+lemma finite_alist_set[simp]: "finite (alist.set al)"
+  by (simp add: alist_set_impl)
+
+lemma alist_set_empty_conv: "alist.set al = {} \<longleftrightarrow> keyset al = {}"
+  by (simp add: alist_set_impl keyset.rep_eq)
+
+lemma keyset_empty_eq_conv: "keyset al = {} \<longleftrightarrow> al = DAList.empty"
+  by transfer simp
+
+lemma in_alist_set_conv: "x \<in> alist.set al \<longleftrightarrow> (\<exists>k \<in> keyset al. DAList.lookup al k = Some x)"
+  by (transfer fixing: x) force
+
+lemma lookup_in_alist_set: "k \<in> keyset al \<Longrightarrow> the (DAList.lookup al k) \<in> alist.set al"
+  by (transfer fixing: k) force
+
+lemma keyset_map_default: "keyset (DAList.map_default k v f al) = insert k (keyset al)"
+  by (transfer fixing: k v f) (simp add: dom_map_default)
+
+lemma map_default_neq_empty[simp]: "DAList.map_default k v f al \<noteq> DAList.empty"
+  apply (transfer fixing: k v f)
+  subgoal for xs
+    by (induction xs) simp_all
+  done
+
+lemma w\<beta>_mwproject_mwhd: "w\<beta> (mwproject (origin (mwhd \<sigma>)) \<sigma>) 0 = wmark (mwhd \<sigma>)"
+  apply transfer
+  subgoal for \<sigma>
+    by (cases \<sigma>) (auto simp: wtsdb.defs sfilter_Stream)
+  done
 
 lemma Least_less_Least: "\<exists>x::'a::wellorder. Q x \<Longrightarrow> (\<And>x. Q x \<Longrightarrow> \<exists>y. P y \<and> y < x) \<Longrightarrow> Least P < Least Q"
   by (metis LeastI2 less_le_trans not_le_imp_less not_less_Least)
 
+lemma sincreasing_ex_greater: "sincreasing s \<Longrightarrow> \<exists>i. (x::nat) < s !! i"
+  unfolding sincreasing_def
+  apply (induction x)
+   apply simp_all
+  using gr_implies_not0 apply blast
+  using Suc_lessI by fastforce
+
+lemma infinitely_exists: "infinitely P s \<Longrightarrow> \<exists>i. P (s !! i)"
+  by (auto simp: infinitely_def)
+
+lemma infinitely_sdrop: "infinitely P s \<Longrightarrow> infinitely P (sdrop n s)"
+  apply (auto simp add: infinitely_def sdrop_snth)
+  subgoal for i
+    apply (drule spec[of _ "i + n"])
+    apply clarify
+    subgoal for j by (rule exI[of _ "j - n"]) simp
+    done
+  done
+
+lemma snth_sfilter: "infinitely P s \<Longrightarrow> \<exists>j. sfilter P s !! i = s !! j \<and> P (s !! j)"
+  apply (induction i arbitrary: s)
+   apply (simp add: sdrop_while_sdrop_LEAST infinitely_exists)
+  using LeastI_ex infinitely_exists apply force
+  apply (simp add: sdrop_while_sdrop_LEAST infinitely_exists)
+  subgoal for i s
+    apply (drule meta_spec)
+    apply (drule meta_mp)
+     apply (rule infinitely_sdrop[where n="LEAST n. P (s !! n)"])
+     apply (erule infinitely_stl[THEN iffD2])
+    apply (clarsimp simp add: sdrop_snth snth.simps(2)[symmetric] simp del: snth.simps(2))
+    apply (rule exI)
+    apply (rule conjI[OF refl])
+    apply assumption
+    done
+  done
+
+lemma ex_wmark_greater: "k \<in> mworigins \<sigma> \<Longrightarrow> \<exists>i. origin (mwnth \<sigma> i) = k \<and> w < wmark (mwnth \<sigma> i)"
+  apply (transfer fixing: k w)
+  apply (clarsimp simp: wtracep_def)
+  subgoal for \<sigma> x
+    apply (drule (1) bspec)
+    apply clarify
+    apply (drule sincreasing_ex_greater[where s="smap wmark _" and x=w])
+    apply clarify
+    subgoal for i
+      apply (frule snth_sfilter[where i=i])
+      apply auto
+      done
+    done
+  done
+
 lemma reorder_termination: "fst (reorder_step st) = [] \<Longrightarrow>
   reorder_variant (snd (reorder_step st)) < reorder_variant st"
   apply transfer
-  apply (clarsimp simp: reorder_keyset_wmarks split: prod.splits)
-  subgoal for st \<sigma> st' k
-    apply (subgoal_tac "next_to_release st' (mwtl \<sigma>) k < next_to_release st \<sigma> k")
-     apply (auto simp add: Max_gr_iff)[]
-    apply (simp add: next_to_release_def)
-    apply (rule Least_less_Least)
-    subgoal sorry
-    subgoal sorry
-    done
+  apply (clarsimp split: prod.splits)
+  subgoal premises assms for st \<sigma> st'
+  proof -
+    note step_eq = \<open>_ = ([], st')\<close>
+    note w\<beta>_inv = \<open>\<forall>k\<in>mworigins \<sigma>. \<forall>i. the (DAList.lookup (wmarks st) k) \<le> w\<beta> (mwproject k \<sigma>) i\<close>
+    let ?x = "mwhd \<sigma>"
+    let ?st1 = "reorder_update ?x st"
+
+    have [simp]: "keyset (wmarks st) \<noteq> {}"
+      using \<open>keyset (wmarks st) = mworigins \<sigma>\<close> by simp
+
+    have 1: "wmarks (reorder_update ?x st) = DAList.update (origin ?x) (wmark ?x) (wmarks st)"
+      by (simp add: reorder_update_def)
+    then have wmarks_st': "wmarks st' = ..."
+      using step_eq by (auto simp: reorder_flush_def Let_def)
+    then have "keyset (wmarks st') = mworigins \<sigma>"
+      using \<open>keyset (wmarks st) = mworigins \<sigma>\<close>
+      by (simp add: insert_absorb origin_mwhd)
+
+    from 1 have Min_wmarks_st1: "Min (alist.set (wmarks ?st1)) \<ge> Min (alist.set (wmarks st))"
+      apply (clarsimp simp: alist_set_empty_conv Min_le_iff in_alist_set_conv)
+      subgoal for w
+        apply (cases "w = wmark (mwhd \<sigma>)")
+        subgoal
+          apply simp
+          apply (rule bexI[where x="the (DAList.lookup (wmarks st) (origin (mwhd \<sigma>)))"])
+           apply (rule w\<beta>_inv[THEN bspec[of _ _ "origin (mwhd \<sigma>)"], OF origin_mwhd, THEN spec[of _ 0],
+                simplified w\<beta>_mwproject_mwhd])
+          apply (auto simp: \<open>keyset (wmarks st) = mworigins \<sigma>\<close> origin_mwhd intro!: lookup_in_alist_set)
+          done
+        apply (auto 0 3 simp: lookup_update in_alist_set_conv split: if_splits intro: bexI[where x=w])
+        done
+      done
+
+    have buffer_st'_eq: "buffer st' = buffer (reorder_update ?x st)"
+      using step_eq
+      by (auto simp: reorder_flush_def Let_def sort_key_empty_conv filter_empty_conv
+          DAList_filter_id_conv not_less)
+    have buffer_st1_eq: "buffer (reorder_update ?x st) =
+      DAList.map_default (idx ?x) (db ?x, ts ?x) (\<lambda>(d, t). (d \<union> db ?x, t)) (buffer st)"
+      by (simp add: reorder_update_def)
+
+    have "\<forall>i \<in> keyset (buffer ?st1). Min (alist.set (wmarks ?st1)) \<le> i"
+      using step_eq
+      by (simp add: reorder_flush_def Let_def sort_key_empty_conv filter_empty_conv
+          keyset.rep_eq not_less)
+    then have "\<forall>i \<in> keyset (buffer ?st1). Min (alist.set (wmarks st)) \<le> i"
+      using Min_wmarks_st1 by auto
+    then have "Min (alist.set (wmarks st)) \<le> next_to_emit st \<sigma>"
+      by (auto simp: buffer_st1_eq keyset_map_default next_to_emit_def keyset_empty_eq_conv)
+    then obtain k1 where
+      "k1 \<in> mworigins \<sigma>" and
+      "the (DAList.lookup (wmarks st) k1) \<le> next_to_emit st \<sigma>"
+      by (auto simp: Min_le_iff alist_set_empty_conv in_alist_set_conv
+          \<open>keyset (wmarks st) = mworigins \<sigma>\<close>)
+    then have next_k1: "next_to_release st \<sigma> k1 > 0"
+      by (simp add: next_to_release_def)
+
+    have next_st': "next_to_emit st' (mwtl \<sigma>) \<le> next_to_emit st \<sigma>"
+      by (auto simp: next_to_emit_def buffer_st'_eq buffer_st1_eq keyset_map_default
+          keyset_empty_eq_conv intro!: Min_antimono)
+
+    have "\<exists>k' \<in> mworigins \<sigma>. next_to_release st' (mwtl \<sigma>) k < next_to_release st \<sigma> k'"
+      if "k \<in> mworigins \<sigma>" for k
+    proof (cases "next_to_release st \<sigma> k")
+      case 0
+      note next_st'
+      also have "next_to_emit st \<sigma> < the (DAList.lookup (wmarks st) k)"
+        using 0 by (simp add: next_to_release_def split: if_splits)
+      also have "... \<le> the (DAList.lookup (wmarks st') k)"
+        by (clarsimp simp: wmarks_st' lookup_update
+            intro!: w\<beta>_inv[THEN bspec[of _ _ "origin (mwhd \<sigma>)"], OF origin_mwhd, THEN spec[of _ 0],
+              simplified w\<beta>_mwproject_mwhd])
+      finally have "next_to_release st' (mwtl \<sigma>) k = 0"
+        by (simp add: next_to_release_def)
+      then show ?thesis using next_k1 \<open>k1 \<in> mworigins \<sigma>\<close> by auto
+    next
+      let ?least = "\<lambda>st \<sigma>. (LEAST i. origin (mwnth \<sigma> i) = k \<and> next_to_emit st \<sigma> < wmark (mwnth \<sigma> i))"
+      case (Suc i)
+      then have i_eq: "i = ?least st \<sigma>"
+        by (simp add: next_to_release_def split: if_splits)
+      have 1: "?least st' (mwtl \<sigma>) < ?least st \<sigma>"
+        if *: "next_to_emit st' (mwtl \<sigma>) \<ge> the (DAList.lookup (wmarks st') k)"
+      proof (rule Least_less_Least[OF ex_wmark_greater, OF \<open>k \<in> mworigins \<sigma>\<close>], safe)
+        fix j
+        assume "next_to_emit st \<sigma> < wmark (mwnth \<sigma> j)" "k = origin (mwnth \<sigma> j)"
+        then have **: "next_to_emit st' (mwtl \<sigma>) < wmark (mwnth \<sigma> j)"
+          using next_st' by (elim order.strict_trans1)
+        have "j \<noteq> 0" proof
+          assume "j = 0"
+          then have "the (DAList.lookup (wmarks st') k) = wmark (mwnth \<sigma> 0)"
+            using \<open>k = origin (mwnth \<sigma> j)\<close>
+            by (simp add: wmarks_st' lookup_update mwnth_zero)
+          with * ** show False by (simp add: \<open>j = 0\<close>)
+        qed
+        then obtain i where "j = Suc i" by (cases j) simp_all
+        then show "\<exists>i. (origin (mwnth (mwtl \<sigma>) i) = origin (mwnth \<sigma> j) \<and>
+              next_to_emit st' (mwtl \<sigma>) < wmark (mwnth (mwtl \<sigma>) i)) \<and> i < j"
+          using ** by (auto simp: mwnth_Suc)
+      qed
+      show ?thesis
+        apply (rule bexI[OF _ \<open>k \<in> mworigins \<sigma>\<close>])
+        apply (simp add: Suc)
+        apply (simp add: next_to_release_def i_eq not_less 1)
+        done
+    qed
+    then show ?thesis
+      unfolding \<open>keyset (wmarks st') = mworigins \<sigma>\<close>
+      by simp (auto simp: Max_gr_iff \<open>keyset (wmarks st') = mworigins \<sigma>\<close>)
+  qed
   done
 
 corecursive reorder' :: "'a reorder_state \<Rightarrow> ('a set \<times> nat) stream" where
