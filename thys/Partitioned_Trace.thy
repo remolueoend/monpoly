@@ -4,6 +4,9 @@ begin
 
 notation fcomp (infixl "\<circ>>" 60)
 
+lemma fcomp_map_map: "map f \<circ>> map g = map (f \<circ>> g)"
+  by (simp add: fcomp_comp)
+
 definition determ :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b set" where
   "determ f = (\<lambda>x. {f x})"
 
@@ -20,6 +23,9 @@ lemma kleisli_set_assoc: "f \<circ>\<then> g \<circ>\<then> h = f \<circ>\<then>
 
 lemma determ_kleisli_set: "determ f \<circ>\<then> g = f \<circ>> g"
   by (auto simp: kleisli_set_def Set.bind_def determ_def)
+
+lemma fcomp_determ: "f \<circ>> determ g = determ (f \<circ>> g)"
+  by auto
 
 lemma kleisli_set_mono: "f \<le> f' \<Longrightarrow> g \<le> g' \<Longrightarrow> f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
   by (fastforce simp: le_fun_def kleisli_set_def Set.bind_def)
@@ -48,6 +54,10 @@ lemma kleisli_mapM_set: "mapM_set f \<circ>\<then> mapM_set g = mapM_set (f \<ci
   apply (drule spec)+
   apply (erule iffD1)
   by (simp add: list_all2_conv_all_nth)
+
+lemma eq_determI: "f \<le> determ g \<Longrightarrow> determ h \<le> f \<Longrightarrow> f = determ g"
+  apply (auto simp: le_fun_def fun_eq_iff determ_def)
+  using insert_ident by fastforce
 
 
 record 'a itsdb =
@@ -448,6 +458,52 @@ lift_definition mwproject :: "nat \<Rightarrow> 'a mwtrace \<Rightarrow> 'a wtra
 definition linearize :: "'a wtrace list \<Rightarrow> 'a mwtrace set" where
   "linearize \<sigma>s = {\<sigma>. mworigins \<sigma> = {..<length \<sigma>s} \<and> (\<forall>k < length \<sigma>s. mwproject k \<sigma> = \<sigma>s ! k)}"
 
+primcorec linearize_rr' :: "nat \<Rightarrow> 'a wtsdb stream list \<Rightarrow> 'a mwtsdb stream" where
+  "shd (linearize_rr' k xs) = wtsdb.extend (shd (xs ! k)) \<lparr>origin=k\<rparr>"
+| "stl (linearize_rr' k xs) = (if Suc k = length xs then linearize_rr' 0 (map stl xs)
+    else linearize_rr' (Suc k) xs)"
+
+lemma origin_snth_linearize_rr':"k < length xs \<Longrightarrow> origin (linearize_rr' k xs !! i) = (k + i) mod length xs"
+  apply (induction i arbitrary: k xs)
+   apply (auto simp: wtsdb.defs)
+  by (metis add.left_neutral add_Suc length_map mod_add_self1 zero_less_Suc)
+
+lemma origin_sset_linearize_rr': "k < length xs \<Longrightarrow> origin ` sset (linearize_rr' k xs) = {..<length xs}"
+  apply (auto simp: sset_range image_image origin_snth_linearize_rr')
+  subgoal by (metis length_greater_0_conv list.size(3) mod_less_divisor not_less_zero)
+  subgoal for x
+    by (rule rev_image_eqI[where x="length xs - k + x"]) auto
+  done
+
+lemma mod_nat_cancel: "0 < (b::nat) \<Longrightarrow> (a + (b - a mod b)) mod b = 0"
+  by (metis le_add_diff_inverse mod_add_left_eq mod_le_divisor mod_self)
+
+lemma infinitely_origin_linearize_rr': "k < length xs \<Longrightarrow> a < length xs \<Longrightarrow>
+  infinitely (\<lambda>x. origin x = a) (linearize_rr' k xs)"
+  apply (clarsimp simp: infinitely_def origin_snth_linearize_rr')
+  subgoal for i
+    apply (rule exI[where x="length xs - k + i + (length xs - (i mod length xs)) + a"])
+    apply (auto simp: add.assoc)
+    apply (subst add.assoc[symmetric])
+    apply (subst mod_add_eq[symmetric])
+    apply (subst mod_nat_cancel)
+     apply auto
+    done
+  done
+
+lift_definition linearize_rr :: "'a wtrace list \<Rightarrow> 'a mwtrace" is
+ "\<lambda>xs. if xs = [] then smap (\<lambda>x. \<lparr>db={}, ts=x, idx=x, wmark=x, origin=0\<rparr>) nats
+    else linearize_rr' 0 xs"
+  apply (auto simp: stream.set_map image_image sfilter_id_conv origin_sset_linearize_rr')
+      apply (auto simp add: infinitely_def)[]
+     apply (subst wtracep_smap_truncate[symmetric])
+     apply (simp add: stream.map_comp wtsdb.defs wtracep_dummy[unfolded dummy_raw_wtrace_def]
+      cong: stream.map_cong)
+   apply (rule infinitely_origin_linearize_rr')
+    apply simp
+  using origin_sset_linearize_rr' apply fastforce
+  oops
+
 (* TODO(JS): Show that linearize \<sigma> is not empty. *)
 
 
@@ -602,7 +658,7 @@ lemma infinitely_sdrop: "infinitely P s \<Longrightarrow> infinitely P (sdrop n 
     done
   done
 
-lemma snth_sfilter: "infinitely P s \<Longrightarrow> \<exists>j. sfilter P s !! i = s !! j \<and> P (s !! j)"
+lemma ex_snth_sfilter: "infinitely P s \<Longrightarrow> \<exists>j. sfilter P s !! i = s !! j \<and> P (s !! j)"
   apply (induction i arbitrary: s)
    apply (simp add: sdrop_while_sdrop_LEAST infinitely_exists)
   using LeastI_ex infinitely_exists apply force
@@ -628,7 +684,7 @@ lemma ex_wmark_greater: "k \<in> mworigins \<sigma> \<Longrightarrow> \<exists>i
     apply (drule sincreasing_ex_greater[where s="smap wmark _" and x=w])
     apply clarify
     subgoal for i
-      apply (frule snth_sfilter[where i=i])
+      apply (frule ex_snth_sfilter[where i=i])
       apply auto
       done
     done
@@ -812,7 +868,7 @@ lemma ex_idx_ge: "\<exists>x\<ge>y. \<exists>j. x = idx (mwnth \<sigma> j)"
       apply (drule mp)
        apply (rule lessI[of i])
       apply (drule (1) order.strict_trans2)
-      by (metis order.order_iff_strict snth_sfilter)
+      by (metis order.order_iff_strict ex_snth_sfilter)
     done
   done
 
@@ -1123,6 +1179,153 @@ lemma partition_islice_transpose:
     by (meson le_infI2)
   done
 
+
+locale mwtrace_partition =
+  fixes \<sigma> :: "'a itrace" and n :: nat and \<sigma>' :: "'a mwtrace"
+  assumes
+    n_greater_0: "n > 0" and
+    mworigins_eq_n: "mworigins \<sigma>' = {0..<n}" and
+    sound_partition: "\<forall>j. \<exists>i. idx (mwnth \<sigma>' j) = i\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = i\<tau> \<sigma> i \<and> db (mwnth \<sigma>' j) \<subseteq> i\<Gamma> \<sigma> i" and
+    complete_partition1: "\<forall>i. \<exists>j. idx (mwnth \<sigma>' j) = i\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = i\<tau> \<sigma> i" and
+    complete_partition2: "\<forall>i. \<forall>f \<in> i\<Gamma> \<sigma> i. \<exists>j. idx (mwnth \<sigma>' j) = i\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = i\<tau> \<sigma> i \<and> f \<in> db (mwnth \<sigma>' j)"
+
+definition mwpartition :: "nat \<Rightarrow> 'a itrace \<Rightarrow> 'a mwtrace set" where
+  "mwpartition n \<sigma> = {\<sigma>'. mwtrace_partition \<sigma> n \<sigma>'}"
+
+lemma ex_snth_sfilter_eq: "infinitely P s \<Longrightarrow> P (s !! i) \<Longrightarrow>
+  \<exists>j. sfilter P s !! j = s !! i"
+  apply (induction i arbitrary: s)
+  subgoal for s
+    by (cases s) (auto simp: sfilter_Stream intro!: exI[where x=0])
+  subgoal for i s
+    apply simp
+    apply (drule meta_spec[where x="stl s"])
+    apply (drule meta_mp)
+     apply (simp add: infinitely_stl)
+    apply (drule (1) meta_mp)
+    by (metis sfilter_stl_cases snth.simps(2))
+  done
+
+lemma mwproject_eqD: "mwproject k \<sigma>' = \<sigma> \<Longrightarrow> k \<in> mworigins \<sigma>' \<Longrightarrow>
+  (\<forall>j. origin (mwnth \<sigma>' j) = k \<longrightarrow> (\<exists>i. idx (mwnth \<sigma>' j) = w\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = w\<tau> \<sigma> i \<and> db (mwnth \<sigma>' j) = w\<Gamma> \<sigma> i)) \<and>
+  (\<forall>i. \<exists>j. origin (mwnth \<sigma>' j) = k \<and> idx (mwnth \<sigma>' j) = w\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = w\<tau> \<sigma> i \<and> db (mwnth \<sigma>' j) = w\<Gamma> \<sigma> i)"
+  apply (transfer fixing: k)
+  apply (auto simp: wtsdb.defs)
+  subgoal for \<sigma>' x j
+    apply (insert ex_snth_sfilter_eq[of "\<lambda>y. origin y = origin x" \<sigma>' j])
+    apply clarsimp
+    subgoal for i
+      apply (rule exI[where x=i])
+      apply simp
+      done
+    done
+  subgoal for \<sigma>' x i
+    apply (insert ex_snth_sfilter[of "\<lambda>y. origin y = origin x" \<sigma>' i])
+    apply clarsimp
+    subgoal for j
+      apply (rule exI[where x=j])
+      apply simp
+      done
+    done
+  done
+
+lemma partition_relax_linearize: "partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> linearize \<le> mwpartition n"
+  apply (clarsimp simp: le_fun_def kleisli_set_def linearize_def partition_def
+      itrace_partition_def in_mapM_set_iff list_all2_conv_all_nth relax_order_def relaxed_order_def
+      mwpartition_def mwtrace_partition_def)
+  apply (safe; simp?)
+  subgoal for \<sigma> \<sigma>' ps' ps j
+    apply (drule spec[where P="\<lambda>k. k < length ps' \<longrightarrow> _ k" and x="origin (mwnth \<sigma>' j)"])+
+    apply (subgoal_tac "origin (mwnth \<sigma>' j) < length ps'")
+     defer
+    using origin_mwnth apply fastforce
+    apply simp
+    apply (drule mwproject_eqD)
+     apply (simp add: origin_mwnth)
+    apply clarsimp
+    by metis
+  subgoal for \<sigma> \<sigma>' ps' ps i
+    apply (drule spec[where P="\<lambda>i. \<exists>k<length ps'. _ i k" and x=i])
+    apply clarify
+    subgoal for k j
+      apply (drule spec[where P="\<lambda>k. k < length ps' \<longrightarrow> _ k" and x=k])
+      apply clarsimp
+      apply (drule mwproject_eqD)
+       apply blast
+      by metis
+    done
+  subgoal for \<sigma> \<sigma>' ps' ps i f
+    apply (drule spec[where P="\<lambda>i. \<forall>f\<in>i\<Gamma> \<sigma> i. \<exists>k<length ps'. _ i f k" and x=i])
+    apply (drule (1) bspec)
+    apply clarify
+    subgoal for k j
+      apply (drule spec[where P="\<lambda>k. k < length ps' \<longrightarrow> _ k" and x=k])
+      apply clarsimp
+      apply (drule mwproject_eqD)
+       apply blast
+      by metis
+    done
+  done
+
+
+lemma mwpartition_least_idx: "\<sigma>' \<in> mwpartition n \<sigma> \<Longrightarrow> least_idx \<sigma>' 0 = i\<iota> \<sigma> 0"
+  apply (clarsimp simp: mwpartition_def mwtrace_partition_def least_idx_def)
+  apply (rule Least_equality)
+   apply metis
+  by (metis mono_i\<iota> zero_le)
+
+lemma i\<iota>_eq_imp_i\<tau>_eq: "i\<iota> \<sigma> i = i\<iota> \<sigma> j \<Longrightarrow> i\<tau> \<sigma> i = i\<tau> \<sigma> j"
+  by (transfer fixing: i j) (simp add: eq_iff)
+
+lift_definition mwnext :: "'a mwtrace \<Rightarrow> 'a mwtrace" is "\<lambda>s. sfilter (\<lambda>x. idx (shd s) < idx x) s"
+  oops
+
+lemma stl_reorder_alt: "stl (reorder_alt \<sigma>) = reorder_alt (mwnext \<sigma>)"
+  oops
+
+lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> determ (collapse \<circ>> Rep_trace)"
+  apply (clarsimp simp: le_fun_def kleisli_set_def collapse.rep_eq reorder'_eq_alt)
+  subgoal for \<sigma> \<sigma>'
+    apply (coinduction arbitrary: \<sigma> \<sigma>')
+    apply safe
+     apply (auto simp: reorder_alt_def collapse'_def
+        collapse_idx_def idx_stream_def mwpartition_least_idx)[]
+       apply (fastforce simp: mwpartition_def mwtrace_partition_def)
+      apply (clarsimp simp: mwpartition_def mwtrace_partition_def)
+      apply metis
+    subgoal for \<sigma> \<sigma>'
+      apply (clarsimp simp: mwpartition_def mwtrace_partition_def ts_of_idx_def)
+      apply (insert LeastI_ex[where P="\<lambda>j. i\<iota> \<sigma> 0 = idx (mwnth \<sigma>' j)"])
+      apply (drule meta_mp)
+       apply metis
+      apply (drule spec[where x="LEAST j. i\<iota> \<sigma> 0 = idx (mwnth \<sigma>' j)"])
+      apply (auto intro!: i\<iota>_eq_imp_i\<tau>_eq)
+      done
+    sorry (* TODO *)
+  done
+
+
+definition tslice :: "('a \<Rightarrow> 'b set \<Rightarrow> 'c set) \<Rightarrow> 'a list \<Rightarrow> 'b trace \<Rightarrow> 'c trace list" where
+  "tslice f xs \<sigma> = map2 (\<lambda>x. map_\<Gamma> (f x)) xs (replicate (length xs) \<sigma>)"
+
+lemma next_i\<iota>_map_i\<Gamma>: "next_i\<iota> (map_i\<Gamma> f \<sigma>) = next_i\<iota> \<sigma>"
+  by (transfer fixing: f) (simp add: fun_eq_iff next_i\<iota>_def)
+
+lemma map_\<Gamma>_inter_collapse: "map_\<Gamma> (\<lambda>Y. X \<inter> Y) (collapse \<sigma>) = collapse (map_i\<Gamma> (\<lambda>Y. X \<inter> Y) \<sigma>)"
+  apply (rule Rep_trace_inject[THEN iffD1])
+  apply (simp add: map_\<Gamma>.rep_eq collapse.rep_eq collapse'_def stream.map_comp
+      next_i\<iota>_map_i\<Gamma>)
+  apply (rule stream.map_cong[OF refl])
+  apply auto
+  using i\<iota>_map_i\<Gamma> apply blast
+  using i\<iota>_map_i\<Gamma> apply blast
+  done
+
+lemma islice_collapse_swap: "islice (\<inter>) xs \<circ>> map collapse = collapse \<circ>> tslice (\<inter>) xs"
+  by (clarsimp simp: fun_eq_iff islice_def tslice_def split_beta
+      map_\<Gamma>_inter_collapse zip_replicate2 cong: map_cong)
+
+
 notepad
 begin
   fix add_index :: "'a trace \<Rightarrow> 'a itrace"
@@ -1130,14 +1333,13 @@ begin
   fix f :: "'b \<Rightarrow> 'a set"
   fix xs :: "'a set list"
 
-  let ?p = "add_index \<circ>> wpartition n \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
+  let ?p = "determ add_index \<circ>\<then> wpartition n \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
     determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
 
-  have "?p \<le> add_index \<circ>> partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
+  have "?p \<le> determ add_index \<circ>\<then> partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
     determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
-    unfolding determ_kleisli_set[symmetric]
     by (subst (5) kleisli_set_assoc) (intro kleisli_set_mono order_refl wpartition_split)
-  also have "\<dots> \<le> add_index \<circ>> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order) \<circ>\<then>
+  also have "\<dots> \<le> determ add_index \<circ>\<then> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order) \<circ>\<then>
     determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
   proof -
     have "mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<le> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order)"
@@ -1146,19 +1348,32 @@ begin
     then show ?thesis
       by (subst (1 5) kleisli_set_assoc) (intro kleisli_set_mono order_refl)
   qed
-  also have "\<dots> \<le> add_index \<circ>> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
+  also have "\<dots> \<le> determ add_index \<circ>\<then> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
     mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
     by (subst (2 6) kleisli_set_assoc) (auto simp: determ_kleisli_set
       intro: kleisli_set_mono mapM_mapM_transpose)
-  also have "\<dots> \<le> add_index \<circ>> islice (\<inter>) xs \<circ>> mapM_set (partition n) \<circ>\<then>
+  also have "\<dots> \<le> determ add_index \<circ>\<then> determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (partition n) \<circ>\<then>
     mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
-    unfolding fcomp_assoc unfolding determ_kleisli_set[symmetric]
-    apply (subst (1 2) kleisli_set_assoc)
+    apply (subst (1 2 6) kleisli_set_assoc)
     apply (subst (2) kleisli_set_assoc[symmetric])
     apply (intro kleisli_set_mono order_refl)
     apply (simp add: determ_kleisli_set)
     apply (rule partition_islice_transpose)
     done
+  also have "\<dots> \<le> determ add_index \<circ>\<then> determ (islice (\<inter>) xs) \<circ>\<then>
+      mapM_set (mwpartition n) \<circ>\<then> determ (map reorder')"
+    by (subst kleisli_set_assoc, subst kleisli_mapM_set)+
+      (intro kleisli_set_mono order_refl mapM_set_mono partition_relax_linearize)
+  also have "\<dots> \<le> determ add_index \<circ>\<then> determ (islice (\<inter>) xs) \<circ>\<then> determ (map (collapse \<circ>> Rep_trace))"
+    by (auto simp: kleisli_set_assoc mapM_set_determ[symmetric] kleisli_mapM_set
+        intro!: kleisli_set_mono mapM_set_mono mwpartition_reorder')
+  also have "\<dots> \<le> determ (add_index \<circ>> islice (\<inter>) xs \<circ>> map (collapse \<circ>> Rep_trace))"
+    by (simp add: kleisli_set_assoc determ_kleisli_set fcomp_determ fcomp_assoc)
+  also have "\<dots> = determ (add_index \<circ>> collapse \<circ>> tslice (\<inter>) xs \<circ>> map Rep_trace)"
+    unfolding fcomp_map_map[symmetric] fcomp_assoc[symmetric]
+    by (subst (1 3) fcomp_assoc) (simp add: islice_collapse_swap)
+  finally have "?p \<le> \<dots>" .
+
 end
 
 end
