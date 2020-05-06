@@ -4,7 +4,7 @@ begin
 
 notation fcomp (infixl "\<circ>>" 60)
 
-lemma fcomp_map_map: "map f \<circ>> map g = map (f \<circ>> g)"
+lemma map_fcomp_map: "map f \<circ>> map g = map (f \<circ>> g)"
   by (simp add: fcomp_comp)
 
 definition determ :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b set" where
@@ -28,6 +28,10 @@ lemma fcomp_determ: "f \<circ>> determ g = determ (f \<circ>> g)"
   by auto
 
 lemma kleisli_set_mono: "f \<le> f' \<Longrightarrow> g \<le> g' \<Longrightarrow> f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
+  by (fastforce simp: le_fun_def kleisli_set_def Set.bind_def)
+
+lemma kleisli_set_mono_strong: "f \<le> f' \<Longrightarrow> (\<And>x y. y \<in> f' x \<Longrightarrow> g y \<subseteq> g' y) \<Longrightarrow>
+  f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
   by (fastforce simp: le_fun_def kleisli_set_def Set.bind_def)
 
 definition mapM_set :: "('a \<Rightarrow> 'b set) \<Rightarrow> 'a list \<Rightarrow> 'b list set" where
@@ -54,6 +58,9 @@ lemma kleisli_mapM_set: "mapM_set f \<circ>\<then> mapM_set g = mapM_set (f \<ci
   apply (drule spec)+
   apply (erule iffD1)
   by (simp add: list_all2_conv_all_nth)
+
+lemma map_in_mapM_setI: "(\<And>x. x \<in> set xs \<Longrightarrow> f x \<in> g x) \<Longrightarrow> map f xs \<in> mapM_set g xs"
+  by (auto simp: in_mapM_set_iff list.rel_map intro!: list.rel_refl_strong)
 
 lemma eq_determI: "f \<le> determ g \<Longrightarrow> determ h \<le> f \<Longrightarrow> f = determ g"
   apply (auto simp: le_fun_def fun_eq_iff determ_def)
@@ -458,53 +465,151 @@ lift_definition mwproject :: "nat \<Rightarrow> 'a mwtrace \<Rightarrow> 'a wtra
 definition linearize :: "'a wtrace list \<Rightarrow> 'a mwtrace set" where
   "linearize \<sigma>s = {\<sigma>. mworigins \<sigma> = {..<length \<sigma>s} \<and> (\<forall>k < length \<sigma>s. mwproject k \<sigma> = \<sigma>s ! k)}"
 
-primcorec linearize_rr' :: "nat \<Rightarrow> 'a wtsdb stream list \<Rightarrow> 'a mwtsdb stream" where
-  "shd (linearize_rr' k xs) = wtsdb.extend (shd (xs ! k)) \<lparr>origin=k\<rparr>"
-| "stl (linearize_rr' k xs) = (if Suc k = length xs then linearize_rr' 0 (map stl xs)
-    else linearize_rr' (Suc k) xs)"
+definition linearize_rr' :: "nat \<Rightarrow> 'a wtsdb stream list \<Rightarrow> 'a mwtsdb stream" where
+  "linearize_rr' i0 xs = smap (\<lambda>i. wtsdb.extend (xs ! (i mod length xs) !! (i div length xs))
+    \<lparr>origin = i mod length xs\<rparr>) (fromN i0)"
 
-lemma origin_snth_linearize_rr':"k < length xs \<Longrightarrow> origin (linearize_rr' k xs !! i) = (k + i) mod length xs"
-  apply (induction i arbitrary: k xs)
-   apply (auto simp: wtsdb.defs)
-  by (metis add.left_neutral add_Suc length_map mod_add_self1 zero_less_Suc)
+lemma origin_sset_linearize_rr': "xs \<noteq> [] \<Longrightarrow> origin ` sset (linearize_rr' 0 xs) = {..<length xs}"
+  by (auto simp: sset_range image_image linearize_rr'_def wtsdb.defs
+      intro: image_eqI[of x _ x for x])
 
-lemma origin_sset_linearize_rr': "k < length xs \<Longrightarrow> origin ` sset (linearize_rr' k xs) = {..<length xs}"
-  apply (auto simp: sset_range image_image origin_snth_linearize_rr')
-  subgoal by (metis length_greater_0_conv list.size(3) mod_less_divisor not_less_zero)
-  subgoal for x
-    by (rule rev_image_eqI[where x="length xs - k + x"]) auto
-  done
+lemma mod_nat_cancel_left: "0 < (b::nat) \<Longrightarrow> (b - a mod b + a) mod b = 0"
+  by (metis le_add_diff_inverse2 mod_add_right_eq mod_le_divisor mod_self)
 
-lemma mod_nat_cancel: "0 < (b::nat) \<Longrightarrow> (a + (b - a mod b)) mod b = 0"
-  by (metis le_add_diff_inverse mod_add_left_eq mod_le_divisor mod_self)
-
-lemma infinitely_origin_linearize_rr': "k < length xs \<Longrightarrow> a < length xs \<Longrightarrow>
-  infinitely (\<lambda>x. origin x = a) (linearize_rr' k xs)"
-  apply (clarsimp simp: infinitely_def origin_snth_linearize_rr')
+lemma infinitely_origin_linearize_rr': "k < length xs \<Longrightarrow>
+  infinitely (\<lambda>x. origin x = k) (linearize_rr' i0 xs)"
+  apply (clarsimp simp: infinitely_def linearize_rr'_def wtsdb.defs)
   subgoal for i
-    apply (rule exI[where x="length xs - k + i + (length xs - (i mod length xs)) + a"])
-    apply (auto simp: add.assoc)
-    apply (subst add.assoc[symmetric])
+    apply (rule exI[where x="k + (length xs - (i mod length xs)) + i + (length xs - (i0 mod length xs))"])
+    apply auto
+    apply (subst (3) add.assoc)
     apply (subst mod_add_eq[symmetric])
-    apply (subst mod_nat_cancel)
+    apply (subst mod_nat_cancel_left)
+     apply auto
+    apply (subst add.assoc)
+    apply (subst mod_add_eq[symmetric])
+    apply (subst mod_nat_cancel_left)
      apply auto
     done
   done
+
+lemma infinitely_exD: "infinitely P s \<Longrightarrow> \<exists>i. P (s !! i)"
+  by (auto simp: infinitely_def)
+
+lemma all_eq_snth_eqI: "(\<And>n. a !! n = b !! n) \<Longrightarrow> a = b"
+  by (coinduction arbitrary: a b) (simp del: snth.simps add: snth.simps[symmetric])
+
+lemma mod_nat_cancel_left_add:
+  assumes "0 < (c::nat)"
+  shows "(c - b mod c + (a + b) mod c) mod c = a mod c"
+proof -
+  have "(c - b mod c + (a + b) mod c) mod c = (c - b mod c + a mod c + b mod c) mod c"
+    by (metis (no_types, hide_lams) add.commute group_cancel.add2 mod_add_left_eq)
+  also have "\<dots> = ((c - b mod c + b mod c) mod c + a mod c) mod c"
+    by (metis (no_types, hide_lams) add.commute group_cancel.add2 mod_add_eq mod_add_right_eq)
+  finally show ?thesis
+    using assms by (simp add: mod_nat_cancel_left)
+qed
+
+lemma sdrop_while_linearize_rr': "k < length xs \<Longrightarrow>
+  sdrop_while (Not \<circ> (\<lambda>x. origin x = k)) (linearize_rr' i0 xs) =
+  linearize_rr' (i0 + (length xs - i0 mod length xs + k) mod length xs) xs"
+  apply (subgoal_tac "(LEAST n. origin (linearize_rr' i0 xs !! n) = k) =
+    (length xs - i0 mod length xs + k) mod length xs")
+  subgoal
+    apply (simp add: sdrop_while_sdrop_LEAST[OF infinitely_exD, OF infinitely_origin_linearize_rr'])
+    apply (rule all_eq_snth_eqI)
+    apply (simp add: sdrop_snth linearize_rr'_def ac_simps)
+    done
+  subgoal
+    apply (auto simp: linearize_rr'_def wtsdb.defs mod_add_left_eq intro!: Least_equality)
+     apply (subst add.assoc)
+     apply (subst add.commute)
+     apply (subst add.assoc)
+     apply (subst (2) add.commute)
+     apply (subst mod_add_eq[symmetric])
+     apply (subst mod_nat_cancel_left)
+      apply auto[]
+     apply simp
+    apply (subst mod_nat_cancel_left_add)
+     apply auto
+    done
+  done
+
+lemma sfilter_origin_linearize_rr': "k < length xs \<Longrightarrow>
+  sfilter (\<lambda>x. origin x = k) (linearize_rr' i xs) =
+  sdrop ((i + (length xs - i mod length xs + k) mod length xs) div length xs)
+    (smap (\<lambda>x. wtsdb.extend x \<lparr>origin=k\<rparr>) (xs ! k))"
+  apply (coinduction arbitrary: i)
+  subgoal for i
+    apply safe
+     apply (simp add: sdrop_while_linearize_rr')
+     apply (simp add: linearize_rr'_def)
+     apply (subgoal_tac "(i + (length xs - i mod length xs + k) mod length xs) mod length xs = k")
+      apply simp
+    subgoal 1
+      apply (subst mod_add_right_eq)
+      apply (subst add.assoc[symmetric])
+      apply (subst add.commute)
+      apply (subst mod_add_eq[symmetric])
+      apply (subst mod_nat_cancel_left)
+       apply auto
+      done
+    apply (rule exI[where x="Suc (i + (length xs - i mod length xs + k) mod length xs)"])
+    apply (rule conjI)
+     apply (simp add: sdrop_while_linearize_rr')
+     apply (simp add: linearize_rr'_def)
+    apply (frule 1)
+    apply (simp del: sdrop.simps add: sdrop.simps[symmetric])
+    apply (rule arg_cong[where f="\<lambda>x. smap _ (sdrop x _)"])
+    apply (subst (3) Suc_eq_plus1)
+    apply (subst (4) mod_add_eq[symmetric])
+    apply clarsimp
+    apply (subgoal_tac "(length xs - Suc k mod length xs + k) mod length xs = length xs - 1")
+     apply simp
+     apply (metis (no_types, lifting) Suc_pred add.commute add_gr_0
+        div_add_self1 length_0_conv length_greater_0_conv not_less_zero plus_1_eq_Suc)
+    by (smt Suc_lessI add.right_neutral add_Suc_right diff_Suc_1 diff_less
+        le_add_diff_inverse2 length_greater_0_conv list.size(3) mod_add_self1 mod_if mod_le_divisor
+        not_less_zero zero_less_one)
+  done
+
+lemma wtsdb_truncate_extend: "wtsdb.truncate (wtsdb.extend x y) = x"
+  by (simp add: wtsdb.defs)
 
 lift_definition linearize_rr :: "'a wtrace list \<Rightarrow> 'a mwtrace" is
  "\<lambda>xs. if xs = [] then smap (\<lambda>x. \<lparr>db={}, ts=x, idx=x, wmark=x, origin=0\<rparr>) nats
     else linearize_rr' 0 xs"
   apply (auto simp: stream.set_map image_image sfilter_id_conv origin_sset_linearize_rr')
-      apply (auto simp add: infinitely_def)[]
-     apply (subst wtracep_smap_truncate[symmetric])
-     apply (simp add: stream.map_comp wtsdb.defs wtracep_dummy[unfolded dummy_raw_wtrace_def]
+     apply (auto simp add: infinitely_def)[]
+    apply (subst wtracep_smap_truncate[symmetric])
+    apply (simp add: stream.map_comp wtsdb.defs wtracep_dummy[unfolded dummy_raw_wtrace_def]
       cong: stream.map_cong)
    apply (rule infinitely_origin_linearize_rr')
-    apply simp
-  using origin_sset_linearize_rr' apply fastforce
-  oops
+  using origin_sset_linearize_rr' apply auto[]
+  subgoal for xs x
+    apply (subgoal_tac "origin x < length xs")
+     apply (simp add: sfilter_origin_linearize_rr'[where i=0, simplified])
+     apply (subst wtracep_smap_truncate[symmetric])
+     apply (simp add: stream.map_comp wtsdb_truncate_extend stream.map_ident
+        list.pred_set cong: stream.map_cong)
+    using origin_sset_linearize_rr' apply auto[]
+    done
+  done
 
-(* TODO(JS): Show that linearize \<sigma> is not empty. *)
+lemma linearize_rr_linearize: "xs \<noteq> [] \<Longrightarrow> linearize_rr xs \<in> linearize xs"
+  apply (simp add: linearize_def)
+  apply (rule conjI)
+  subgoal by transfer (simp add: origin_sset_linearize_rr')
+  subgoal
+    apply clarify
+    apply (rule Rep_wtrace_inject[THEN iffD1])
+    apply (auto simp: mwproject.rep_eq linearize_rr.rep_eq
+        sfilter_origin_linearize_rr'[where i=0, simplified] stream.map_comp
+        wtsdb_truncate_extend stream.map_ident cong: stream.map_cong)[]
+    using origin_sset_linearize_rr'[of "map Rep_wtrace xs"] apply auto
+    done
+  done
 
 
 record 'a raw_reorder_state =
@@ -1142,6 +1247,14 @@ lemma wpartition_split: "wpartition n \<le> partition n \<circ>\<then> mapM_set 
     sorry (* TODO *)
   done
 
+lemma wpartition_split': "partition n \<circ>\<then> mapM_set relax_order \<le> wpartition n"
+  by (auto simp: le_fun_def kleisli_set_def partition_def itrace_partition_def
+      in_mapM_set_iff relax_order_def relaxed_order_def list_all2_conv_all_nth
+      wpartition_def wtrace_partition_def) metis+
+
+lemma wpartition_eq: "wpartition n = partition n \<circ>\<then> mapM_set relax_order"
+  using wpartition_split wpartition_split' by (rule antisym)
+
 
 lemma length_islice[simp]: "length (islice f xs \<sigma>) = length xs"
   by (simp add: islice_def)
@@ -1326,21 +1439,27 @@ lemma islice_collapse_swap: "islice (\<inter>) xs \<circ>> map collapse = collap
       map_\<Gamma>_inter_collapse zip_replicate2 cong: map_cong)
 
 
-notepad
-begin
-  fix add_index :: "'a trace \<Rightarrow> 'a itrace"
-  fix n :: nat
-  fix f :: "'b \<Rightarrow> 'a set"
-  fix xs :: "'a set list"
+lemma not_Nil_in_transpose: "[] \<notin> set (transpose xss)"
+  apply (clarsimp simp: in_set_conv_nth nth_transpose length_transpose filter_empty_conv)
+  apply (induction xss)
+   apply (auto simp: less_max_iff_disj)
+  done
 
-  let ?p = "determ add_index \<circ>\<then> wpartition n \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
-    determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
 
-  have "?p \<le> determ add_index \<circ>\<then> partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
-    determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
-    by (subst (5) kleisli_set_assoc) (intro kleisli_set_mono order_refl wpartition_split)
-  also have "\<dots> \<le> determ add_index \<circ>\<then> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order) \<circ>\<then>
-    determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
+definition multi_source_slicer :: "'a set list \<Rightarrow> 'a wtrace list \<Rightarrow> 'a trace list set" where
+  "multi_source_slicer xs = determ (map (wslice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
+    mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
+
+theorem multi_source_correctness:
+  assumes "0 < n"
+  shows "wpartition n \<circ>\<then> multi_source_slicer xs = determ (collapse \<circ>> tslice (\<inter>) xs)"
+proof -
+  have lhs_eq: "wpartition n \<circ>\<then> multi_source_slicer xs = partition n \<circ>\<then> mapM_set relax_order \<circ>\<then>
+    determ (map (wslice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then>
+    determ (map (reorder' \<circ>> Abs_trace))"
+    unfolding multi_source_slicer_def kleisli_set_assoc[symmetric] wpartition_eq ..
+  also have "\<dots> \<le> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order) \<circ>\<then>
+    determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
   proof -
     have "mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<le> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order)"
       by (auto simp: mapM_set_determ[symmetric] kleisli_mapM_set determ_kleisli_set
@@ -1348,32 +1467,67 @@ begin
     then show ?thesis
       by (subst (1 5) kleisli_set_assoc) (intro kleisli_set_mono order_refl)
   qed
-  also have "\<dots> \<le> determ add_index \<circ>\<then> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
-    mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
+  also have "\<dots> \<le> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
+    mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
     by (subst (2 6) kleisli_set_assoc) (auto simp: determ_kleisli_set
       intro: kleisli_set_mono mapM_mapM_transpose)
-  also have "\<dots> \<le> determ add_index \<circ>\<then> determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (partition n) \<circ>\<then>
-    mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map reorder')"
-    apply (subst (1 2 6) kleisli_set_assoc)
-    apply (subst (2) kleisli_set_assoc[symmetric])
-    apply (intro kleisli_set_mono order_refl)
-    apply (simp add: determ_kleisli_set)
-    apply (rule partition_islice_transpose)
-    done
-  also have "\<dots> \<le> determ add_index \<circ>\<then> determ (islice (\<inter>) xs) \<circ>\<then>
-      mapM_set (mwpartition n) \<circ>\<then> determ (map reorder')"
+  also have "\<dots> \<le> determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (partition n) \<circ>\<then>
+    mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
+    by (auto simp: determ_kleisli_set partition_islice_transpose intro!: kleisli_set_mono)
+  also have "\<dots> \<le> determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (mwpartition n) \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
     by (subst kleisli_set_assoc, subst kleisli_mapM_set)+
       (intro kleisli_set_mono order_refl mapM_set_mono partition_relax_linearize)
-  also have "\<dots> \<le> determ add_index \<circ>\<then> determ (islice (\<inter>) xs) \<circ>\<then> determ (map (collapse \<circ>> Rep_trace))"
-    by (auto simp: kleisli_set_assoc mapM_set_determ[symmetric] kleisli_mapM_set
-        intro!: kleisli_set_mono mapM_set_mono mwpartition_reorder')
-  also have "\<dots> \<le> determ (add_index \<circ>> islice (\<inter>) xs \<circ>> map (collapse \<circ>> Rep_trace))"
-    by (simp add: kleisli_set_assoc determ_kleisli_set fcomp_determ fcomp_assoc)
-  also have "\<dots> = determ (add_index \<circ>> collapse \<circ>> tslice (\<inter>) xs \<circ>> map Rep_trace)"
-    unfolding fcomp_map_map[symmetric] fcomp_assoc[symmetric]
-    by (subst (1 3) fcomp_assoc) (simp add: islice_collapse_swap)
-  finally have "?p \<le> \<dots>" .
+  also have "\<dots> \<le> determ (islice (\<inter>) xs) \<circ>\<then> determ (map collapse)"
+    unfolding kleisli_set_assoc
+    apply (rule kleisli_set_mono[OF order_refl])
+    apply (simp add: mapM_set_determ[symmetric] kleisli_mapM_set)
+    apply (rule mapM_set_mono)
+    apply (simp add: fcomp_determ[symmetric] determ_kleisli_set[symmetric] kleisli_set_assoc[symmetric])
+    apply (rule order_trans[OF kleisli_set_mono, OF mwpartition_reorder' order_refl])
+    apply (simp add: determ_kleisli_set fcomp_determ fcomp_assoc)
+    apply (simp add: fcomp_def trace.Rep_trace_inverse)
+    done
+  also have "\<dots> \<le> determ (collapse \<circ>> tslice (\<inter>) xs)"
+    by (simp add: determ_kleisli_set fcomp_determ islice_collapse_swap)
+  finally have refines: "wpartition n \<circ>\<then> multi_source_slicer xs \<le> determ (collapse \<circ>> tslice (\<inter>) xs)" .
 
-end
+  have "determ (round_robin n \<circ>> map id_wtrace \<circ>> map (wslice (\<inter>) xs) \<circ>>
+      transpose \<circ>> map linearize_rr \<circ>> map (reorder' \<circ>> Abs_trace)) \<le>
+    partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
+      determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
+    unfolding fcomp_determ[symmetric] determ_kleisli_set[symmetric]
+    apply (rule kleisli_set_mono[OF _ order_refl])
+    apply (rule kleisli_set_mono_strong)
+     apply (intro kleisli_set_mono order_refl)
+      apply (simp add: le_fun_def determ_def round_robin_partition \<open>0 < n\<close>)
+     apply (auto simp: le_fun_def determ_def id_wtrace_relax_order \<open>0 < n\<close>
+        intro!: map_in_mapM_setI)[]
+    apply (auto simp: determ_def kleisli_set_def not_Nil_in_transpose intro!: map_in_mapM_setI
+        linearize_rr_linearize)
+    done
+  also have "\<dots> = wpartition n \<circ>\<then> multi_source_slicer xs" by (simp add: lhs_eq)
+  finally show ?thesis using refines by (intro eq_determI)
+qed
+
+lemma id_wtrace_le_relax: "determ id_wtrace \<le> relax_order"
+  by (simp add: le_fun_def determ_def id_wtrace_relax_order)
+
+corollary totally_ordered_multi_source:
+  assumes "0 < n" and "itrace_partition (add_timepoints \<sigma>) n ps"
+  shows "multi_source_slicer xs (map id_wtrace ps) = {tslice (\<inter>) xs \<sigma>}"
+proof -
+  have "determ add_timepoints \<circ>\<then> partition n \<circ>\<then> determ (map id_wtrace) \<circ>\<then> multi_source_slicer xs \<le>
+    determ add_timepoints \<circ>\<then> partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> multi_source_slicer xs" (is "?impl \<le> _")
+    unfolding kleisli_set_assoc
+    by (subst (2 4) kleisli_set_assoc[symmetric])
+      (auto simp: mapM_set_determ[symmetric] id_wtrace_le_relax intro!: kleisli_set_mono mapM_set_mono)
+  also have "\<dots> = determ add_timepoints \<circ>\<then> wpartition n \<circ>\<then> multi_source_slicer xs"
+    unfolding kleisli_set_assoc
+    by (subst (2) kleisli_set_assoc[symmetric]) (simp add: wpartition_eq)
+  also have "\<dots> = determ add_timepoints \<circ>\<then> determ (collapse \<circ>> tslice (\<inter>) xs)"
+    unfolding kleisli_set_assoc multi_source_correctness[OF assms(1)] ..
+  finally have "?impl \<le> determ (tslice (\<inter>) xs)"
+    by (simp add: determ_kleisli_set fcomp_determ fcomp_assoc[symmetric] add_timepoints_collapse)
+  oops
 
 end
