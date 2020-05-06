@@ -1,4 +1,4 @@
-theory Partitioned_Trace
+theory Multi_Source
   imports Trace "HOL-Library.BNF_Corec" "HOL-Library.DAList"
 begin
 
