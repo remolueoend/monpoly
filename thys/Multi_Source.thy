@@ -2,7 +2,7 @@ theory Multi_Source
   imports Trace "HOL-Library.BNF_Corec" "HOL-Library.DAList"
 begin
 
-notation fcomp (infixl "\<circ>>" 60)
+notation fcomp (infixr "\<circ>>" 55)
 
 lemma map_fcomp_map: "map f \<circ>> map g = map (f \<circ>> g)"
   by (simp add: fcomp_comp)
@@ -14,25 +14,25 @@ lemma in_determ_iff_eq[simp]: "y \<in> determ f x \<longleftrightarrow> y = f x"
   by (simp add: determ_def)
 
 definition kleisli_set :: "('a \<Rightarrow> 'b set) \<Rightarrow> ('b \<Rightarrow> 'c set) \<Rightarrow> 'a \<Rightarrow> 'c set" where
-  "kleisli_set f g = (\<lambda>x. Set.bind (f x) g)"
+  "kleisli_set f g = (\<lambda>x. \<Union> (g ` f x))"
 
-notation kleisli_set (infixl "\<circ>\<then>" 55)
+notation kleisli_set (infixr "\<circ>\<then>" 55)
 
-lemma kleisli_set_assoc: "f \<circ>\<then> g \<circ>\<then> h = f \<circ>\<then> (g \<circ>\<then> h)"
-  by (auto simp: kleisli_set_def Set.bind_def)
+lemma kleisli_set_assoc: "f \<circ>\<then> (g \<circ>\<then> h) = (f \<circ>\<then> g) \<circ>\<then> h"
+  by (auto simp: kleisli_set_def)
 
-lemma determ_kleisli_set: "determ f \<circ>\<then> g = f \<circ>> g"
-  by (auto simp: kleisli_set_def Set.bind_def determ_def)
-
-lemma fcomp_determ: "f \<circ>> determ g = determ (f \<circ>> g)"
+lemma determ_fcomp: "determ (f \<circ>> g) = f \<circ>> determ g"
   by auto
 
+lemma fcomp_kleisli: "f \<circ>> g = determ f \<circ>\<then> g"
+  by (auto simp: kleisli_set_def)
+
 lemma kleisli_set_mono: "f \<le> f' \<Longrightarrow> g \<le> g' \<Longrightarrow> f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
-  by (fastforce simp: le_fun_def kleisli_set_def Set.bind_def)
+  by (fastforce simp: le_fun_def kleisli_set_def)
 
 lemma kleisli_set_mono_strong: "f \<le> f' \<Longrightarrow> (\<And>x y. y \<in> f' x \<Longrightarrow> g y \<subseteq> g' y) \<Longrightarrow>
   f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
-  by (fastforce simp: le_fun_def kleisli_set_def Set.bind_def)
+  by (fastforce simp: le_fun_def kleisli_set_def)
 
 definition mapM_set :: "('a \<Rightarrow> 'b set) \<Rightarrow> 'a list \<Rightarrow> 'b list set" where
   "mapM_set f xs = listset (map f xs)"
@@ -51,20 +51,41 @@ lemma mapM_set_determ: "mapM_set (determ f) = determ (map f)"
       list.rel_eq intro!: list.rel_refl)
 
 lemma kleisli_mapM_set: "mapM_set f \<circ>\<then> mapM_set g = mapM_set (f \<circ>\<then> g)"
-  apply (auto simp: fun_eq_iff kleisli_set_def in_mapM_set_iff elim!: list_all2_trans[rotated])
-  apply (simp add: Bex_def in_mapM_set_iff relcompp_apply)
-  apply (insert list.rel_compp[where R="(\<lambda>x y. x \<in> f y)\<inverse>\<inverse>" and S="(\<lambda>x y. x \<in> g y)\<inverse>\<inverse>"])
-  apply (simp add: relcompp_apply[abs_def] list.rel_flip fun_eq_iff)
-  apply (drule spec)+
-  apply (erule iffD1)
-  by (simp add: list_all2_conv_all_nth)
+  apply (auto simp: fun_eq_iff kleisli_set_def in_mapM_set_iff)
+   apply (auto elim: list_all2_trans[rotated])[]
+  apply (insert list.rel_compp[where R="\<lambda>x y. x \<in> g y" and S="\<lambda>x y. x \<in> f y"])
+  by (simp add: Bex_def relcompp_apply[abs_def] fun_eq_iff in_mapM_set_iff conj_commute)
 
 lemma map_in_mapM_setI: "(\<And>x. x \<in> set xs \<Longrightarrow> f x \<in> g x) \<Longrightarrow> map f xs \<in> mapM_set g xs"
   by (auto simp: in_mapM_set_iff list.rel_map intro!: list.rel_refl_strong)
 
-lemma eq_determI: "f \<le> determ g \<Longrightarrow> determ h \<le> f \<Longrightarrow> f = determ g"
-  apply (auto simp: le_fun_def fun_eq_iff determ_def)
-  using insert_ident by fastforce
+definition strong_kleisli :: "('a \<Rightarrow> 'b set) \<Rightarrow> ('b \<Rightarrow> 'c set) \<Rightarrow> 'a \<Rightarrow> 'c set" where
+  "strong_kleisli f g = (\<lambda>x. if {} \<in> g ` f x then {} else \<Union>(g ` f x))"
+
+notation strong_kleisli (infixr "!\<then>" 55)
+
+lemma strong_kleisli_assoc: "f !\<then> (g !\<then> h) = (f !\<then> g) !\<then> h"
+  by (auto 0 3 simp: fun_eq_iff strong_kleisli_def)
+
+lemma fcomp_strong_kleisli: "f \<circ>> g = determ f !\<then> g"
+  by (auto simp: fun_eq_iff strong_kleisli_def)
+
+lemma strong_kleisli_le_kleisli_set: "f !\<then> g \<le> f \<circ>\<then> g"
+  by (auto simp: le_fun_def strong_kleisli_def kleisli_set_def)
+
+lemma strong_kleisli_not_emptyI: "y \<in> f x \<Longrightarrow> (\<And>z. z \<in> f x \<Longrightarrow> g z \<noteq> {}) \<Longrightarrow> (f !\<then> g) x \<noteq> {}"
+  by (auto simp: strong_kleisli_def)
+
+lemma strong_kleisli_mono: "f x \<subseteq> f' x \<Longrightarrow> (\<And>y. y \<in> f' x \<Longrightarrow> g y \<subseteq> g' y) \<Longrightarrow>
+  (\<And>y. y \<in> f' x \<Longrightarrow> g' y \<noteq> {}) \<Longrightarrow> (f !\<then> g) x \<subseteq> (f' !\<then> g') x"
+  by (auto simp: strong_kleisli_def) blast
+
+lemma strong_kleisli_singleton_conv:
+  "(f !\<then> g) x = {z} \<longleftrightarrow> (\<exists>y. y \<in> f x) \<and> (\<forall>y. y \<in> f x \<longrightarrow> g y = {z})"
+  by (auto simp: strong_kleisli_def split: if_splits dest: equalityD1)
+
+lemma eq_determI: "f \<le> determ g \<Longrightarrow> (\<And>x. f x \<noteq> {}) \<Longrightarrow> f = determ g"
+  by (fastforce simp: le_fun_def fun_eq_iff determ_def)
 
 
 record 'a itsdb =
@@ -196,12 +217,11 @@ lemma next_i\<iota>_timepoints[simp]: "next_i\<iota> (add_timepoints \<sigma>) =
 lemma snth_Rep_trace: "Rep_trace \<sigma> !! i = (\<Gamma> \<sigma> i, \<tau> \<sigma> i)"
   by transfer simp
 
-lemma add_timepoints_collapse: "add_timepoints \<circ>> collapse = id"
-proof
-  fix \<sigma> :: "'a trace"
+lemma collapse_add_timepoints: "collapse (add_timepoints \<sigma>) = \<sigma>"
+proof -
   have "collapse' i (add_timepoints \<sigma>) = sdrop i (Rep_trace \<sigma>)" for i
     by (coinduction arbitrary: i) (auto simp: collapse'_def snth_Rep_trace)
-  then show "(add_timepoints \<circ>> collapse) \<sigma> = id \<sigma>"
+  then show ?thesis
     by (intro Rep_trace_inject[THEN iffD1]) (simp add: collapse.rep_eq)
 qed
 
@@ -343,7 +363,7 @@ lemma map_w\<Gamma>_relax_order: "\<sigma>' \<in> relax_order \<sigma> \<Longrig
   by (fastforce simp: relax_order_def relaxed_order_def)
 
 lemma relax_order_wslice:
-  "(relax_order \<circ>\<then> determ (wslice f xs)) \<le> (islice f xs \<circ>> mapM_set relax_order)"
+  "relax_order \<circ>\<then> determ (wslice f xs) \<le> determ (islice f xs) \<circ>\<then> mapM_set relax_order"
   by (auto simp: le_fun_def kleisli_set_def determ_def in_mapM_set_iff
       wslice_def islice_def in_set_zip intro!: list_all2I map_w\<Gamma>_relax_order)
 
@@ -364,7 +384,7 @@ lemma list_all2_transposeI: "list_all2 (list_all2 P) xss yss \<Longrightarrow> l
   done
 
 lemma mapM_mapM_transpose:
-  "(mapM_set (mapM_set f) \<circ>\<then> determ transpose) \<le> (transpose \<circ>> mapM_set (mapM_set f))"
+  "(mapM_set (mapM_set f) \<circ>\<then> determ transpose) \<le> determ transpose \<circ>\<then> mapM_set (mapM_set f)"
   by (auto simp: le_fun_def kleisli_set_def in_mapM_set_iff intro!: list_all2_transposeI)
 
 
@@ -1238,8 +1258,9 @@ lift_definition reorder_w :: "'a wtrace \<Rightarrow> 'a itrace" is
     done
   done
 
-lemma wpartition_split: "wpartition n \<le> partition n \<circ>\<then> mapM_set relax_order"
-  apply (clarsimp simp: le_fun_def kleisli_set_def partition_def)
+lemma wpartition_split: "wpartition n \<le> partition n !\<then> mapM_set relax_order"
+  apply (auto simp: le_fun_def strong_kleisli_def partition_def)
+  subgoal sorry
   subgoal for \<sigma> ps
     apply (rule exI[where x="map reorder_w ps"])
     apply (auto simp: wpartition_def wtrace_partition_def
@@ -1252,8 +1273,13 @@ lemma wpartition_split': "partition n \<circ>\<then> mapM_set relax_order \<le> 
       in_mapM_set_iff relax_order_def relaxed_order_def list_all2_conv_all_nth
       wpartition_def wtrace_partition_def) metis+
 
-lemma wpartition_eq: "wpartition n = partition n \<circ>\<then> mapM_set relax_order"
-  using wpartition_split wpartition_split' by (rule antisym)
+lemma wpartition_eq: "wpartition n = partition n !\<then> mapM_set relax_order"
+  apply (rule antisym)
+   apply (rule wpartition_split)
+  apply (rule order_trans)
+   apply (rule strong_kleisli_le_kleisli_set)
+  apply (rule wpartition_split')
+  done
 
 
 lemma length_islice[simp]: "length (islice f xs \<sigma>) = length xs"
@@ -1276,8 +1302,8 @@ lemma i\<Gamma>_islice[simp]: "k < length xs \<Longrightarrow> i\<Gamma> (islice
 
 lemma partition_islice_transpose:
   "partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> determ transpose \<le>
-    islice (\<inter>) xs \<circ>> mapM_set (partition n)"
-  apply (clarsimp simp: le_fun_def kleisli_set_def in_mapM_set_iff)
+    determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (partition n)"
+  apply (clarsimp simp: le_fun_def kleisli_set_def in_mapM_set_iff Bex_def)
   apply (rule list_all2_all_nthI)
   subgoal 1 for \<sigma> ps
     apply (subgoal_tac "ps \<noteq> []")
@@ -1438,7 +1464,6 @@ lemma islice_collapse_swap: "islice (\<inter>) xs \<circ>> map collapse = collap
   by (clarsimp simp: fun_eq_iff islice_def tslice_def split_beta
       map_\<Gamma>_inter_collapse zip_replicate2 cong: map_cong)
 
-
 lemma not_Nil_in_transpose: "[] \<notin> set (transpose xss)"
   apply (clarsimp simp: in_set_conv_nth nth_transpose length_transpose filter_empty_conv)
   apply (induction xss)
@@ -1447,87 +1472,122 @@ lemma not_Nil_in_transpose: "[] \<notin> set (transpose xss)"
 
 
 definition multi_source_slicer :: "'a set list \<Rightarrow> 'a wtrace list \<Rightarrow> 'a trace list set" where
-  "multi_source_slicer xs = determ (map (wslice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
-    mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
+  "multi_source_slicer xs = determ (map (wslice (\<inter>) xs)) !\<then> determ transpose !\<then>
+    mapM_set linearize !\<then> determ (map (reorder' \<circ>> Abs_trace))"
 
 theorem multi_source_correctness:
   assumes "0 < n"
-  shows "wpartition n \<circ>\<then> multi_source_slicer xs = determ (collapse \<circ>> tslice (\<inter>) xs)"
-proof -
-  have lhs_eq: "wpartition n \<circ>\<then> multi_source_slicer xs = partition n \<circ>\<then> mapM_set relax_order \<circ>\<then>
+  shows "wpartition n !\<then> multi_source_slicer xs = determ (collapse \<circ>> tslice (\<inter>) xs)"
+proof (rule eq_determI)
+  have lhs_eq: "wpartition n !\<then> multi_source_slicer xs = partition n !\<then> mapM_set relax_order !\<then>
+    determ (map (wslice (\<inter>) xs)) !\<then> determ transpose !\<then> mapM_set linearize !\<then>
+    determ (map (reorder' \<circ>> Abs_trace))" (is "_ = ?lhs")
+    unfolding multi_source_slicer_def strong_kleisli_assoc wpartition_eq ..
+  also have "\<dots> \<le> partition n \<circ>\<then> mapM_set relax_order \<circ>\<then>
     determ (map (wslice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then>
     determ (map (reorder' \<circ>> Abs_trace))"
-    unfolding multi_source_slicer_def kleisli_set_assoc[symmetric] wpartition_eq ..
+    by (intro order_trans[OF strong_kleisli_le_kleisli_set] kleisli_set_mono order_refl)
   also have "\<dots> \<le> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order) \<circ>\<then>
     determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
   proof -
     have "mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<le> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order)"
-      by (auto simp: mapM_set_determ[symmetric] kleisli_mapM_set determ_kleisli_set
-        intro!: mapM_set_mono relax_order_wslice)
+      by (auto simp: fcomp_kleisli mapM_set_determ[symmetric] kleisli_mapM_set relax_order_wslice
+          intro!: mapM_set_mono)
     then show ?thesis
-      by (subst (1 5) kleisli_set_assoc) (intro kleisli_set_mono order_refl)
+      by (subst (2 6) kleisli_set_assoc) (intro kleisli_set_mono order_refl)
   qed
   also have "\<dots> \<le> partition n \<circ>\<then> determ (map (islice (\<inter>) xs)) \<circ>\<then> determ transpose \<circ>\<then>
     mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
-    by (subst (2 6) kleisli_set_assoc) (auto simp: determ_kleisli_set
-      intro: kleisli_set_mono mapM_mapM_transpose)
+    by (subst (3 7) kleisli_set_assoc) (intro kleisli_set_mono mapM_mapM_transpose order_refl)
   also have "\<dots> \<le> determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (partition n) \<circ>\<then>
     mapM_set (mapM_set relax_order) \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
-    by (auto simp: determ_kleisli_set partition_islice_transpose intro!: kleisli_set_mono)
+    by (subst (1 2 5) kleisli_set_assoc)
+      (intro kleisli_set_mono[OF partition_islice_transpose] order_refl)
   also have "\<dots> \<le> determ (islice (\<inter>) xs) \<circ>\<then> mapM_set (mwpartition n) \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
-    by (subst kleisli_set_assoc, subst kleisli_mapM_set)+
-      (intro kleisli_set_mono order_refl mapM_set_mono partition_relax_linearize)
+    by (subst (2 3) kleisli_set_assoc)
+      (auto simp: kleisli_mapM_set partition_relax_linearize intro!: kleisli_set_mono mapM_set_mono)
   also have "\<dots> \<le> determ (islice (\<inter>) xs) \<circ>\<then> determ (map collapse)"
-    unfolding kleisli_set_assoc
     apply (rule kleisli_set_mono[OF order_refl])
-    apply (simp add: mapM_set_determ[symmetric] kleisli_mapM_set)
+    apply (unfold mapM_set_determ[symmetric] kleisli_mapM_set)
     apply (rule mapM_set_mono)
-    apply (simp add: fcomp_determ[symmetric] determ_kleisli_set[symmetric] kleisli_set_assoc[symmetric])
-    apply (rule order_trans[OF kleisli_set_mono, OF mwpartition_reorder' order_refl])
-    apply (simp add: determ_kleisli_set fcomp_determ fcomp_assoc)
-    apply (simp add: fcomp_def trace.Rep_trace_inverse)
+    apply (unfold determ_fcomp fcomp_kleisli kleisli_set_assoc)
+    apply (rule order_trans[OF kleisli_set_mono])
+      apply (rule mwpartition_reorder')
+     apply (rule order_refl)
+    apply (simp add: kleisli_set_def determ_def trace.Rep_trace_inverse)
     done
   also have "\<dots> \<le> determ (collapse \<circ>> tslice (\<inter>) xs)"
-    by (simp add: determ_kleisli_set fcomp_determ islice_collapse_swap)
-  finally have refines: "wpartition n \<circ>\<then> multi_source_slicer xs \<le> determ (collapse \<circ>> tslice (\<inter>) xs)" .
+    by (simp add: fcomp_kleisli[symmetric] determ_fcomp[symmetric] islice_collapse_swap)
+  finally show "wpartition n !\<then> multi_source_slicer xs \<le> determ (collapse \<circ>> tslice (\<inter>) xs)" .
 
-  have "determ (round_robin n \<circ>> map id_wtrace \<circ>> map (wslice (\<inter>) xs) \<circ>>
-      transpose \<circ>> map linearize_rr \<circ>> map (reorder' \<circ>> Abs_trace)) \<le>
-    partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<circ>\<then>
-      determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
-    unfolding fcomp_determ[symmetric] determ_kleisli_set[symmetric]
-    apply (rule kleisli_set_mono[OF _ order_refl])
-    apply (rule kleisli_set_mono_strong)
-     apply (intro kleisli_set_mono order_refl)
-      apply (simp add: le_fun_def determ_def round_robin_partition \<open>0 < n\<close>)
-     apply (auto simp: le_fun_def determ_def id_wtrace_relax_order \<open>0 < n\<close>
-        intro!: map_in_mapM_setI)[]
-    apply (auto simp: determ_def kleisli_set_def not_Nil_in_transpose intro!: map_in_mapM_setI
-        linearize_rr_linearize)
+  have "\<And>x. ?lhs x \<noteq> {}"
+    apply (rule strong_kleisli_not_emptyI)
+     apply (rule round_robin_partition[OF \<open>0 < n\<close>])
+    apply (rule strong_kleisli_not_emptyI)
+     apply (rule map_in_mapM_setI)
+     apply (rule id_wtrace_relax_order)
+    apply (rule strong_kleisli_not_emptyI)
+     apply (subst in_determ_iff_eq, rule refl)
+    apply (rule strong_kleisli_not_emptyI)
+     apply (subst in_determ_iff_eq, rule refl)
+    apply (rule strong_kleisli_not_emptyI)
+     apply (rule map_in_mapM_setI)
+     apply (rule linearize_rr_linearize)
+     apply (auto simp: not_Nil_in_transpose)
     done
-  also have "\<dots> = wpartition n \<circ>\<then> multi_source_slicer xs" by (simp add: lhs_eq)
-  finally show ?thesis using refines by (intro eq_determI)
+  then show "\<And>x. (wpartition n !\<then> multi_source_slicer xs) x \<noteq> {}"
+    unfolding lhs_eq .
 qed
 
 lemma id_wtrace_le_relax: "determ id_wtrace \<le> relax_order"
   by (simp add: le_fun_def determ_def id_wtrace_relax_order)
 
+corollary ordered_multi_source_correctness:
+  assumes "0 < n"
+  shows "partition n !\<then> determ (map id_wtrace) !\<then> multi_source_slicer xs =
+    determ (collapse \<circ>> tslice (\<inter>) xs)" (is "?impl = ?spec")
+proof (rule eq_determI)
+  have 1: "\<And>a b c. b \<in> partition n a \<Longrightarrow> c \<in> mapM_set relax_order b \<Longrightarrow> multi_source_slicer xs c \<noteq> {}"
+    using multi_source_correctness[OF assms, of xs]
+    by (auto 0 3 simp add: determ_def fun_eq_iff wpartition_eq strong_kleisli_def
+        split: if_splits)
+
+  have "?impl \<le> partition n !\<then> mapM_set relax_order !\<then> multi_source_slicer xs"
+    apply (rule le_funI)
+    apply (rule strong_kleisli_mono[OF order_refl])
+     apply (rule strong_kleisli_mono[OF _ order_refl])
+      apply (auto simp: determ_def id_wtrace_relax_order intro!: map_in_mapM_setI)[]
+     apply (erule (1) 1)
+    apply (rule strong_kleisli_not_emptyI)
+     apply (rule map_in_mapM_setI[OF id_wtrace_relax_order])
+    apply (erule (1) 1)
+    done
+  then show "?impl \<le> ?spec"
+    unfolding multi_source_correctness[OF assms, symmetric] wpartition_eq strong_kleisli_assoc .
+
+  show "\<And>x. ?impl x \<noteq> {}"
+    apply (rule strong_kleisli_not_emptyI)
+     apply (rule round_robin_partition[OF assms])
+    apply (rule strong_kleisli_not_emptyI)
+     apply simp
+    apply (erule 1)
+    apply simp
+    apply (rule map_in_mapM_setI[OF id_wtrace_relax_order])
+    done
+qed
+
 corollary totally_ordered_multi_source:
   assumes "0 < n" and "itrace_partition (add_timepoints \<sigma>) n ps"
   shows "multi_source_slicer xs (map id_wtrace ps) = {tslice (\<inter>) xs \<sigma>}"
-proof -
-  have "determ add_timepoints \<circ>\<then> partition n \<circ>\<then> determ (map id_wtrace) \<circ>\<then> multi_source_slicer xs \<le>
-    determ add_timepoints \<circ>\<then> partition n \<circ>\<then> mapM_set relax_order \<circ>\<then> multi_source_slicer xs" (is "?impl \<le> _")
-    unfolding kleisli_set_assoc
-    by (subst (2 4) kleisli_set_assoc[symmetric])
-      (auto simp: mapM_set_determ[symmetric] id_wtrace_le_relax intro!: kleisli_set_mono mapM_set_mono)
-  also have "\<dots> = determ add_timepoints \<circ>\<then> wpartition n \<circ>\<then> multi_source_slicer xs"
-    unfolding kleisli_set_assoc
-    by (subst (2) kleisli_set_assoc[symmetric]) (simp add: wpartition_eq)
-  also have "\<dots> = determ add_timepoints \<circ>\<then> determ (collapse \<circ>> tslice (\<inter>) xs)"
-    unfolding kleisli_set_assoc multi_source_correctness[OF assms(1)] ..
-  finally have "?impl \<le> determ (tslice (\<inter>) xs)"
-    by (simp add: determ_kleisli_set fcomp_determ fcomp_assoc[symmetric] add_timepoints_collapse)
-  oops
+  using ordered_multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
+      strong_kleisli_singleton_conv partition_def, simplified, rule_format, THEN conjunct2,
+      rule_format, OF assms(2), unfolded collapse_add_timepoints] .
+
+corollary watermarked_multi_source:
+  assumes "0 < n" and "wtrace_partition \<sigma> n ps"
+  shows "multi_source_slicer xs ps = {tslice (\<inter>) xs (collapse \<sigma>)}"
+  using multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
+      strong_kleisli_singleton_conv wpartition_def, simplified, rule_format, THEN conjunct2,
+      rule_format, OF assms(2)] .
 
 end
