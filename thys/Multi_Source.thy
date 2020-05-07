@@ -1087,22 +1087,76 @@ lemma ts_of_idx_mwtl: "(\<exists>j. i = idx (mwnth \<sigma> j)) \<Longrightarrow
 lemma alist_eq_key_imp_eq: "(k, v) \<in> set (DAList.impl_of al) \<Longrightarrow> (k, v') \<in> set (DAList.impl_of al) \<Longrightarrow> v = v'"
   by (transfer fixing: k v v') (simp add: eq_key_imp_eq_value)
 
+lemma sort_key_eqI: "distinct (map f xs) \<Longrightarrow> distinct (map f ys) \<Longrightarrow> sorted (map f ys) \<Longrightarrow>
+  set xs = set ys \<Longrightarrow> sort_key f xs = ys"
+  by (smt distinct_map distinct_sort inj_onD list.inj_map_strong set_map set_sort sorted_distinct_set_unique sorted_sort_key)
+
+coinductive sdistinct :: "'a stream \<Rightarrow> bool" where
+  "shd s \<notin> sset (stl s) \<Longrightarrow> sdistinct (stl s) \<Longrightarrow> sdistinct s"
+
+lemma sdistinct_sdrop[simp]: "sdistinct s \<Longrightarrow> sdistinct (sdrop n s)"
+  by (induction n arbitrary: s) (auto elim: sdistinct.cases)
+
+lemma set_stake_subset: "set (stake n s) \<subseteq> sset s"
+proof (induction n arbitrary: s)
+  case (Suc n)
+  with stl_sset show ?case by (fastforce simp: shd_sset)
+qed simp
+
+lemma distinct_stake[simp]: "sdistinct s \<Longrightarrow> distinct (stake n s)"
+proof (induction n arbitrary: s)
+  case (Suc n)
+  then have "shd s \<notin> sset (stl s)"
+    by (blast elim: sdistinct.cases)
+  then have "shd s \<notin> set (stake n (stl s))"
+    using set_stake_subset by fastforce
+  moreover have "distinct (stake n (stl s))"
+    using Suc by (blast elim: sdistinct.cases)
+  ultimately show ?case by simp
+qed simp
+
+lemma sdistinct_siterate_increasing: "(\<And>x::_::preorder. x < f x) \<Longrightarrow> sdistinct (siterate f x)"
+  apply (coinduction arbitrary: x)
+  apply (auto simp: sset_siterate)
+  subgoal for x n
+    apply (subgoal_tac "\<And>x. x < (f ^^ n) (f x)")
+     apply (metis less_irrefl)
+    apply (thin_tac "_ = _")
+    apply (induction n)
+     apply (auto intro: less_trans)
+    done
+  done
+
+lemma sdistinct_idx_stream: "sdistinct (idx_stream \<sigma>)"
+  apply (clarsimp simp: idx_stream_def least_idx_def Suc_le_eq intro!: sdistinct_siterate_increasing)
+  apply (rule LeastI2_ex)
+  using Suc_le_lessD ex_idx_ge apply blast
+  apply simp
+  done
+
+lemma ssorted_idx_stream: "ssorted (idx_stream \<sigma>)"
+  apply (auto simp: idx_stream_def least_idx_def intro!: ssorted_siterate)
+  apply (rule LeastI2_ex)
+  apply (rule ex_idx_ge)
+  apply simp
+  done
+
 lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
   reorder_step st = (xs, st') \<Longrightarrow> xs = stake (length xs) (sdrop n (reorder_alt \<sigma>)) \<and>
     reorder_state_rel \<sigma> st' (n + length xs)"
   apply (transfer fixing: \<sigma> n xs)
   apply (clarsimp split: prod.splits)
-  subgoal premises assms for st \<sigma>' st'
+  subgoal premises assms for st \<sigma>' st2
   proof -
     note old_state = \<open>collapse_reorder_state st \<sigma>' =
       {(i, collapse_idx \<sigma> i, ts_of_idx \<sigma> i) |i. i \<in> sset (sdrop n (idx_stream \<sigma>))}\<close>
-    note step_eq = \<open>_ = (xs, st')\<close>
+    note step_eq = \<open>_ = (xs, st2)\<close>
     let ?x = "mwhd \<sigma>'"
-    let ?st1 = "reorder_update ?x st"
 
-    have buffer_st1: "buffer ?st1 =
+    define st1 where "st1  = reorder_update ?x st"
+    have buffer_st1: "buffer st1 =
       DAList.map_default (idx ?x) (db ?x, ts ?x) (\<lambda>(d, t). (d \<union> db ?x, t)) (buffer st)"
-      by (simp add: reorder_update_def)
+      by (simp add: st1_def reorder_update_def)
 
     have 1: "{(i, collapse_idx \<sigma>' i, ts_of_idx \<sigma>' i) |i. i \<notin> keyset (buffer st) \<and> (\<exists>j. i = idx (mwnth \<sigma>' j))} =
       {(i, collapse_idx \<sigma>' i, if i = idx (mwhd \<sigma>') then ts (mwhd \<sigma>') else ts_of_idx (mwtl \<sigma>') i) |
@@ -1115,14 +1169,28 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
       apply (metis mwnth_Suc)
       done
 
-    have "collapse_reorder_state ?st1 (mwtl \<sigma>') = collapse_reorder_state st \<sigma>'"
+    have "collapse_reorder_state st1 (mwtl \<sigma>') = collapse_reorder_state st \<sigma>'"
       unfolding collapse_reorder_state_def buffer_st1 set_map_default keyset_map_default 1
       apply (subst (3 4) collapse_idx_mwtl)
       unfolding 2 keyset.rep_eq
       by (auto simp: lookup_None_set_conv lookup_Some_set_conv fst_eq_Domain Domain.simps
           split: option.split dest: alist_eq_key_imp_eq)
 
-    show ?thesis sorry (* TODO *)
+    define w where "w = Min (alist.set (wmarks st1))"
+    have "xs = map snd (sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))))"
+      using step_eq by (simp add: reorder_flush_def st1_def w_def Let_def)
+
+    have "sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))) =
+        stake (length xs) (sdrop n (smap (\<lambda>i. (i, (collapse_idx \<sigma> i, ts_of_idx \<sigma> i))) (idx_stream \<sigma>)))"
+      apply (rule sort_key_eqI)
+         apply (simp add: distinct_map_filter)
+        apply (simp add: sdistinct_idx_stream cong: map_cong)
+       apply (simp add: sorted_stake ssorted_sdrop ssorted_idx_stream cong: map_cong)
+      apply simp
+      sorry
+      (* TODO(JS): Need to strengthen reorder_state_rel so that we know the value of w. *)
+
+    show ?thesis sorry
   qed
   done
 
