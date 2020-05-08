@@ -800,6 +800,14 @@ lemma ex_snth_sfilter: "infinitely P s \<Longrightarrow> \<exists>j. sfilter P s
     done
   done
 
+lemma ex_snth_sfilter2: "P (s !! i) \<Longrightarrow> \<exists>j. sfilter P s !! j = s !! i"
+  apply (induction i arbitrary: s)
+  subgoal for s
+    by (metis Least_eq_0 sdrop_simps(1) sdrop_while_sdrop_LEAST sfilter.sel(1) snth.simps(1))
+  subgoal for i s
+    by (cases s) (metis sfilter_Stream snth_Stream)
+  done
+
 lemma ex_wmark_greater: "k \<in> mworigins \<sigma> \<Longrightarrow> \<exists>i. origin (mwnth \<sigma> i) = k \<and> w < wmark (mwnth \<sigma> i)"
   apply (transfer fixing: k w)
   apply (clarsimp simp: wtracep_def)
@@ -1141,19 +1149,31 @@ lemma ssorted_idx_stream: "ssorted (idx_stream \<sigma>)"
   apply simp
   done
 
+lemma w\<iota>_mwproject: "\<exists>j'. w\<iota> (mwproject (origin (mwnth \<sigma> j)) \<sigma>) j' = idx (mwnth \<sigma> j)"
+  apply (transfer fixing: j)
+  subgoal for s
+    apply (insert ex_snth_sfilter2[where P="\<lambda>x. origin x = origin (s !! j)", OF refl])
+    apply (auto simp: wtsdb.defs)
+    apply metis
+    done
+  done
+
 lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
   reorder_step st = (xs, st') \<Longrightarrow> xs = stake (length xs) (sdrop n (reorder_alt \<sigma>)) \<and>
     reorder_state_rel \<sigma> st' (n + length xs)"
   apply (transfer fixing: \<sigma> n xs)
   apply (clarsimp split: prod.splits)
   subgoal premises assms for st \<sigma>' st2
-  proof -
+  proof (rule conjI)
+    note w\<iota>_inv2 = \<open>\<forall>k\<in>mworigins (mwtl \<sigma>'). \<forall>i. the (DAList.lookup (wmarks st2) k) \<le> w\<iota> (mwproject k (mwtl \<sigma>')) i\<close>
     note old_state = \<open>collapse_reorder_state st \<sigma>' =
       {(i, collapse_idx \<sigma> i, ts_of_idx \<sigma> i) |i. i \<in> sset (sdrop n (idx_stream \<sigma>))}\<close>
     note step_eq = \<open>_ = (xs, st2)\<close>
     let ?x = "mwhd \<sigma>'"
 
-    define st1 where "st1  = reorder_update ?x st"
+    define st1 where "st1 = reorder_update ?x st"
+    have wmarks_st1: "wmarks st1 = wmarks st2"
+      using step_eq by (auto simp: st1_def reorder_flush_def Let_def)
     have buffer_st1: "buffer st1 =
       DAList.map_default (idx ?x) (db ?x, ts ?x) (\<lambda>(d, t). (d \<union> db ?x, t)) (buffer st)"
       by (simp add: st1_def reorder_update_def)
@@ -1175,11 +1195,32 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
       unfolding 2 keyset.rep_eq
       by (auto simp: lookup_None_set_conv lookup_Some_set_conv fst_eq_Domain Domain.simps
           split: option.split dest: alist_eq_key_imp_eq)
+    note st1 = trans[OF this old_state]
 
     define w where "w = Min (alist.set (wmarks st1))"
-    have "xs = map snd (sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))))"
+    have less_w_less_idx: "i < w \<Longrightarrow> i < idx (mwnth (mwtl \<sigma>') j)" for i j
+      apply (insert w\<iota>_inv2[rule_format, of "origin (mwnth (mwtl \<sigma>') j)", OF origin_mwnth])
+      apply (unfold w_def wmarks_st1)
+      apply (subst (asm) Min_gr_iff)
+        apply simp
+       apply (simp add: alist_set_empty_conv \<open>keyset (wmarks st2) = mworigins (mwtl \<sigma>')\<close>)
+      apply (drule bspec[where x="the (DAList.lookup (wmarks st2) (origin (mwnth (mwtl \<sigma>') j)))"])
+       apply (simp add: \<open>keyset (wmarks st2) = mworigins (mwtl \<sigma>')\<close> lookup_in_alist_set origin_mwnth)
+      apply (erule order.strict_trans2)
+      apply (rule exE[OF w\<iota>_mwproject[of "mwtl \<sigma>'" j]])
+      subgoal for i
+        apply (drule meta_spec[where x=i])
+        apply simp
+        done
+      done
+    then have less_w_complete: "i < w \<Longrightarrow> collapse_idx (mwtl \<sigma>') i = {}" for i
+      by (auto simp: collapse_idx_def)
+    have xs_eq: "xs = map snd (sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))))"
       using step_eq by (simp add: reorder_flush_def st1_def w_def Let_def)
-
+    have set_stake_idx: "set (stake (length xs) (sdrop n (idx_stream \<sigma>))) =
+      {i. i \<in> sset (sdrop n (idx_stream \<sigma>)) \<and> i < w}"
+      apply (auto simp: xs_eq elim: subsetD[OF set_stake_subset])
+      sorry
     have "sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))) =
         stake (length xs) (sdrop n (smap (\<lambda>i. (i, (collapse_idx \<sigma> i, ts_of_idx \<sigma> i))) (idx_stream \<sigma>)))"
       apply (rule sort_key_eqI)
@@ -1187,10 +1228,40 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
         apply (simp add: sdistinct_idx_stream cong: map_cong)
        apply (simp add: sorted_stake ssorted_sdrop ssorted_idx_stream cong: map_cong)
       apply simp
-      sorry
-      (* TODO(JS): Need to strengthen reorder_state_rel so that we know the value of w. *)
+      apply (intro set_eqI iffI; clarsimp)
+      subgoal for i d t
+        apply (subgoal_tac "(i, d, t) \<in> {(i, collapse_idx \<sigma> i, ts_of_idx \<sigma> i) |i. i \<in> sset (sdrop n (idx_stream \<sigma>))}")
+        subgoal by (simp add: set_stake_idx)
+        subgoal
+          apply (insert st1[unfolded collapse_reorder_state_def])
+          apply (drule equalityD1)
+          apply (erule subsetD)
+           apply (rule UnI1)
+          apply (rule CollectI)
+          apply (intro exI conjI[rotated])
+           apply assumption
+          apply (simp add: less_w_complete)
+          done
+        done
+      subgoal for i
+        apply (clarsimp simp: set_stake_idx)
+        apply (insert st1[unfolded collapse_reorder_state_def])
+        apply (drule equalityD2)
+        apply (drule subsetD)
+         apply (intro CollectI exI conjI)
+          apply (rule refl)
+         apply assumption
+        apply (erule UnE)
+         apply (clarsimp simp: less_w_complete)
+        using less_w_less_idx apply blast
+        done
+      done
+    then show "xs = stake (length xs) (sdrop n (reorder_alt \<sigma>))"
+      by (simp add: xs_eq reorder_alt_def)
 
-    show ?thesis sorry
+    show "collapse_reorder_state st2 (mwtl \<sigma>') =
+      {(i, collapse_idx \<sigma> i, ts_of_idx \<sigma> i) |i. i \<in> sset (sdrop (n + length xs) (idx_stream \<sigma>))}"
+      sorry
   qed
   done
 
