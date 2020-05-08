@@ -1095,10 +1095,6 @@ lemma ts_of_idx_mwtl: "(\<exists>j. i = idx (mwnth \<sigma> j)) \<Longrightarrow
 lemma alist_eq_key_imp_eq: "(k, v) \<in> set (DAList.impl_of al) \<Longrightarrow> (k, v') \<in> set (DAList.impl_of al) \<Longrightarrow> v = v'"
   by (transfer fixing: k v v') (simp add: eq_key_imp_eq_value)
 
-lemma sort_key_eqI: "distinct (map f xs) \<Longrightarrow> distinct (map f ys) \<Longrightarrow> sorted (map f ys) \<Longrightarrow>
-  set xs = set ys \<Longrightarrow> sort_key f xs = ys"
-  by (smt distinct_map distinct_sort inj_onD list.inj_map_strong set_map set_sort sorted_distinct_set_unique sorted_sort_key)
-
 coinductive sdistinct :: "'a stream \<Rightarrow> bool" where
   "shd s \<notin> sset (stl s) \<Longrightarrow> sdistinct (stl s) \<Longrightarrow> sdistinct s"
 
@@ -1158,6 +1154,61 @@ lemma w\<iota>_mwproject: "\<exists>j'. w\<iota> (mwproject (origin (mwnth \<sig
     done
   done
 
+lemma sset_ssorted_ge_shd: "x \<in> sset s \<Longrightarrow> ssorted (smap f s) \<Longrightarrow> f (shd s) \<le> f x"
+  by (induction x s rule: sset_induct) (auto elim: ssorted.cases)
+
+lemma set_sorted_distinct_gr: "y \<in> set xs \<Longrightarrow> sorted (map f (x # xs)) \<Longrightarrow>
+  distinct (map f (x # xs)) \<Longrightarrow> f x < f y"
+  by (smt distinct.simps(2) image_eqI less_le_trans list.simps(9) not_less_iff_gr_or_eq set_map sorted.simps(2))
+
+lemma stake_length_eq: "ssorted (smap f s) \<Longrightarrow> sdistinct (smap f s) \<Longrightarrow>
+  sorted (map f xs) \<Longrightarrow> distinct (map f xs) \<Longrightarrow>
+  set xs \<subseteq> sset s \<Longrightarrow> (\<And>x. x \<in> sset s \<Longrightarrow> x \<in> set xs \<or> (\<forall>y\<in>set xs. f x > f y)) \<Longrightarrow>
+  stake (length xs) s = xs"
+proof (induction xs arbitrary: s)
+  case Nil
+  show ?case by simp
+next
+  case (Cons x xs)
+  then have "x \<in> sset s" by simp
+  have "shd s = x"
+    apply (rule disjE[OF Cons.prems(6)[OF shd_sset]])
+     apply simp
+     apply (erule (1) disjE)
+     apply (subgoal_tac "f x < f (shd s)")
+    using sset_ssorted_ge_shd[OF \<open>x \<in> sset s\<close> Cons.prems(1)] apply auto[]
+     apply (erule set_sorted_distinct_gr[where f=f, OF _ Cons.prems(3,4)])
+    apply clarsimp
+    using sset_ssorted_ge_shd[OF \<open>x \<in> sset s\<close> Cons.prems(1)] apply auto[]
+    done
+  moreover have "stake (length xs) (stl s) = xs"
+    apply (rule Cons.IH)
+    using Cons.prems(1) apply (auto elim: ssorted.cases)[]
+    using Cons.prems(2) apply (auto elim: sdistinct.cases)[]
+    using Cons.prems(3) apply simp
+    using Cons.prems(4) apply simp
+     apply (rule subsetI)
+    subgoal for y
+      apply (subgoal_tac "y \<noteq> shd s")
+       apply (metis Cons.prems(5) insert_iff set_subset_Cons stream.collapse stream.simps(8) subsetD)
+      using Cons.prems(4) \<open>shd s = x\<close> apply auto
+      done
+    subgoal for y
+      apply (subgoal_tac "y \<noteq> shd s")
+      using Cons.prems(6) \<open>shd s = x\<close> stl_sset apply fastforce
+      apply (rule sdistinct.cases[OF Cons.prems(2)])
+      by (metis (no_types, lifting) Cons.prems(1) leD less_le shd_sset sset_ssorted_ge_shd
+          ssorted.cases stream.map_sel(1) stream.map_sel(2))
+    done
+  ultimately show ?case by simp
+qed
+
+lemma map_insort_key_same: "map f (insort_key f x xs) = insort (f x) (map f xs)"
+  by (induction xs) simp_all
+
+lemma map_sort_key_same: "map f (sort_key f xs) = sort (map f xs)"
+  by (induction xs) (simp_all add: map_insort_key_same)
+
 lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
   reorder_step st = (xs, st') \<Longrightarrow> xs = stake (length xs) (sdrop n (reorder_alt \<sigma>)) \<and>
     reorder_state_rel \<sigma> st' (n + length xs)"
@@ -1188,7 +1239,6 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
        apply (metis mwnth_zero)
       apply (metis mwnth_Suc)
       done
-
     have "collapse_reorder_state st1 (mwtl \<sigma>') = collapse_reorder_state st \<sigma>'"
       unfolding collapse_reorder_state_def buffer_st1 set_map_default keyset_map_default 1
       apply (subst (3 4) collapse_idx_mwtl)
@@ -1217,21 +1267,18 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
       by (auto simp: collapse_idx_def)
     have xs_eq: "xs = map snd (sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))))"
       using step_eq by (simp add: reorder_flush_def st1_def w_def Let_def)
-    have set_stake_idx: "set (stake (length xs) (sdrop n (idx_stream \<sigma>))) =
-      {i. i \<in> sset (sdrop n (idx_stream \<sigma>)) \<and> i < w}"
-      apply (auto simp: xs_eq elim: subsetD[OF set_stake_subset])
-      sorry
-    have "sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1))) =
-        stake (length xs) (sdrop n (smap (\<lambda>i. (i, (collapse_idx \<sigma> i, ts_of_idx \<sigma> i))) (idx_stream \<sigma>)))"
-      apply (rule sort_key_eqI)
-         apply (simp add: distinct_map_filter)
-        apply (simp add: sdistinct_idx_stream cong: map_cong)
-       apply (simp add: sorted_stake ssorted_sdrop ssorted_idx_stream cong: map_cong)
-      apply simp
-      apply (intro set_eqI iffI; clarsimp)
+    have "stake (length xs) (sdrop n (smap (\<lambda>i. (i, (collapse_idx \<sigma> i, ts_of_idx \<sigma> i))) (idx_stream \<sigma>))) =
+      sort_key fst (filter (\<lambda>x. fst x < w) (DAList.impl_of (buffer st1)))"
+      apply (simp only: xs_eq length_map)
+      apply (rule stake_length_eq[where f=fst])
+           apply (simp add: stream.map_comp stream.map_ident ssorted_sdrop ssorted_idx_stream cong: stream.map_cong)
+          apply (simp add: stream.map_comp stream.map_ident sdistinct_idx_stream cong: stream.map_cong)
+         apply simp
+        apply (simp add: map_sort_key_same distinct_map_filter)
+       apply clarsimp
       subgoal for i d t
         apply (subgoal_tac "(i, d, t) \<in> {(i, collapse_idx \<sigma> i, ts_of_idx \<sigma> i) |i. i \<in> sset (sdrop n (idx_stream \<sigma>))}")
-        subgoal by (simp add: set_stake_idx)
+        subgoal by (simp add: stream.set_map)
         subgoal
           apply (insert st1[unfolded collapse_reorder_state_def])
           apply (drule equalityD1)
@@ -1243,8 +1290,8 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
           apply (simp add: less_w_complete)
           done
         done
-      subgoal for i
-        apply (clarsimp simp: set_stake_idx)
+      apply (auto simp: stream.set_map not_less)
+      subgoal for i i' d t
         apply (insert st1[unfolded collapse_reorder_state_def])
         apply (drule equalityD2)
         apply (drule subsetD)
@@ -1253,10 +1300,11 @@ lemma reorder_state_rel_step: "reorder_state_rel \<sigma> st n \<Longrightarrow>
          apply assumption
         apply (erule UnE)
          apply (clarsimp simp: less_w_complete)
+        apply (frule (1) order.strict_trans1)
         using less_w_less_idx apply blast
         done
       done
-    then show "xs = stake (length xs) (sdrop n (reorder_alt \<sigma>))"
+    from this[symmetric] show "xs = stake (length xs) (sdrop n (reorder_alt \<sigma>))"
       by (simp add: xs_eq reorder_alt_def)
 
     show "collapse_reorder_state st2 (mwtl \<sigma>') =
