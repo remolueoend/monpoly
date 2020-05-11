@@ -317,6 +317,7 @@ typedef 'a wtrace = "{s :: 'a wtsdb stream. wtracep s}"
 
 setup_lifting type_definition_wtrace
 
+lift_definition wnth :: "'a wtrace \<Rightarrow> nat \<Rightarrow> 'a wtsdb" is snth .
 lift_definition w\<Gamma> :: "'a wtrace \<Rightarrow> nat \<Rightarrow> 'a set" is "\<lambda>s i. db (s !! i)" .
 lift_definition w\<tau> :: "'a wtrace \<Rightarrow> nat \<Rightarrow> nat" is "\<lambda>s i. ts (s !! i)" .
 lift_definition w\<iota> :: "'a wtrace \<Rightarrow> nat \<Rightarrow> nat" is "\<lambda>s i. idx (s !! i)" .
@@ -1421,103 +1422,252 @@ locale wtrace_partition =
 definition wpartition :: "nat \<Rightarrow> 'a itrace \<Rightarrow> 'a wtrace list set" where
   "wpartition n \<sigma> = {ps. wtrace_partition \<sigma> n ps}"
 
-definition least_w\<iota> :: "'a wtrace \<Rightarrow> nat \<Rightarrow> nat" where
-  "least_w\<iota> \<sigma> i0 = (LEAST i. i0 \<le> i \<and> (\<exists>j. i = w\<iota> \<sigma> j))"
 
-definition w\<iota>_stream :: "'a wtrace \<Rightarrow> nat stream" where
-  "w\<iota>_stream \<sigma> = siterate (least_w\<iota> \<sigma> \<circ> Suc) (least_w\<iota> \<sigma> 0)"
+definition reorder_w_init :: "'a wtrace \<Rightarrow> nat" where
+  "reorder_w_init \<sigma> = (LEAST j. (LEAST i. \<exists>j. i = w\<iota> \<sigma> j) = w\<iota> \<sigma> j)"
 
-definition collapse_w :: "'a wtrace \<Rightarrow> nat \<Rightarrow> 'a set" where
-  "collapse_w \<sigma> i = (\<Union>{d. \<exists>j. i = w\<iota> \<sigma> j \<and> d = w\<Gamma> \<sigma> j})"
+definition reorder_w_step :: "'a wtrace \<Rightarrow> nat \<Rightarrow> nat" where
+  "reorder_w_step \<sigma> j = (if \<exists>j'>j. w\<iota> \<sigma> j = w\<iota> \<sigma> j'
+    then LEAST j'. j' > j \<and> w\<iota> \<sigma> j = w\<iota> \<sigma> j'
+    else LEAST j'. (LEAST i'. i' > w\<iota> \<sigma> j \<and> (\<exists>j. i' = w\<iota> \<sigma> j)) = w\<iota> \<sigma> j')"
 
-definition ts_of_w :: "'a wtrace \<Rightarrow> nat \<Rightarrow> nat" where
-  "ts_of_w \<sigma> i = w\<tau> \<sigma> (LEAST j. i = w\<iota> \<sigma> j)"
+definition reorder_w' :: "'a wtrace \<Rightarrow> nat stream" where
+  "reorder_w' \<sigma> = siterate (reorder_w_step \<sigma>) (reorder_w_init \<sigma>)"
 
-lemma ex_w\<iota>_ge: "\<exists>x\<ge>i. \<exists>j. x = w\<iota> \<sigma> j"
+lemma snth_reorder_w'_Suc: "reorder_w' \<sigma> !! Suc i = (let j = reorder_w' \<sigma> !! i in
+  if \<exists>j'>j. w\<iota> \<sigma> j = w\<iota> \<sigma> j'
+    then LEAST j'. j' > j \<and> w\<iota> \<sigma> j = w\<iota> \<sigma> j'
+    else LEAST j'. (LEAST i'. i' > w\<iota> \<sigma> j \<and> (\<exists>j. i' = w\<iota> \<sigma> j)) = w\<iota> \<sigma> j')"
+  by (auto simp add: reorder_w'_def snth.simps(2)[symmetric] reorder_w_step_def Let_def
+      simp del: siterate.sel snth.simps)
+
+lemma w\<iota>_bound: "\<exists>b. \<forall>j. i = w\<iota> \<sigma> j \<longrightarrow> j \<le> b"
+  apply (transfer fixing: i)
+  subgoal for \<sigma>
+    apply (clarsimp simp: wtracep_def)
+    apply (drule sincreasingD_nat[of "smap wmark \<sigma>" 0 "Suc i"])
+    apply (clarsimp simp: Suc_le_eq)
+    subgoal for j
+      by (rule exI[where x=j]) (meson leD le_less_linear)
+    done
+  done
+
+lemma ex_w\<iota>_gr: "\<exists>x>i. \<exists>j. x = w\<iota> \<sigma> j"
   apply (transfer fixing: i)
   apply (clarsimp simp: wtracep_def)
   apply (drule sincreasing_ex_greater[where j=0 and x=i])
-  by (metis gt_ex le_trans less_imp_le_nat smap_alt)
-
-lemma le_least_w\<iota>: "i \<le> least_w\<iota> \<sigma> i"
-  unfolding least_w\<iota>_def
-  apply (subgoal_tac "i \<le> (LEAST x. i \<le> x \<and> (\<exists>j. x = w\<iota> \<sigma> j)) \<and>
-          (\<exists>j. (LEAST x. i \<le> x \<and> (\<exists>j. x = w\<iota> \<sigma> j)) = w\<iota> \<sigma> j)")
-   apply (erule conjunct1)
-  apply (rule LeastI_ex)
-  by (rule ex_w\<iota>_ge)
-
-lemma ssorted_w\<iota>_stream: "ssorted (w\<iota>_stream \<sigma>)"
-  by (auto simp: w\<iota>_stream_def intro!: ssorted_siterate order_trans[OF _ le_least_w\<iota>])
-
-lemma sincreasing_w\<iota>_stream: "sincreasing (w\<iota>_stream \<sigma>)"
-  by (auto simp: w\<iota>_stream_def intro!: sincreasing_siterate order.strict_trans2[OF _ le_least_w\<iota>])
-
-lemma mono_ts_of_w: "i \<le> j \<Longrightarrow> \<exists>k. i = w\<iota> \<sigma> k \<Longrightarrow> \<exists>k. j = w\<iota> \<sigma> k \<Longrightarrow> ts_of_w \<sigma> i \<le> ts_of_w \<sigma> j"
-  unfolding ts_of_w_def
-  apply (transfer fixing: i j)
-  subgoal for \<sigma>
-    apply (clarsimp simp: wtracep_def)
-    apply (drule spec2[where P="\<lambda>i j. _ i j \<longrightarrow> ts (_ i) \<le> _ j"])
-    apply (erule mp)
-    by (metis (mono_tags, lifting) LeastI)
-  done
-
-lemma ex_snth_w\<iota>_stream: "\<exists>k. w\<iota>_stream \<sigma> !! i = w\<iota> \<sigma> k"
-  apply (induction i)
-   apply (auto simp add: w\<iota>_stream_def least_w\<iota>_def simp del: snth.simps intro: LeastI)
-  subgoal for i k
-    apply (insert LeastI_ex[where P="\<lambda>i. Suc (w\<iota> \<sigma> k) \<le> i \<and> (\<exists>j. i = w\<iota> \<sigma> j)"])
-    apply (drule meta_mp)
-     apply (rule ex_w\<iota>_ge)
-    apply (erule conjunct2)
-    done
-  done
+  by (metis gt_ex order.strict_trans2 smap_alt)
 
 lemma le_w\<iota>_le_w\<tau>: "w\<iota> \<sigma> i \<le> w\<iota> \<sigma> j \<Longrightarrow> w\<tau> \<sigma> i \<le> w\<tau> \<sigma> j"
   by transfer (simp add: wtracep_def)
 
-lemma w\<tau>_increasing: "\<exists>j>i. w\<tau> \<sigma> i < w\<tau> \<sigma> j"
-  by transfer (simp add: wtracep_def sincreasing_def)
+lemma ex_le_w\<tau>: "\<exists>j\<ge>i. x \<le> w\<tau> \<sigma> j"
+  by transfer (auto simp: wtracep_def dest!: sincreasingD_nat)
+
+lemma ex_snth_reorder_w': "\<exists>i. reorder_w' \<sigma> !! i = j"
+proof (induction "w\<iota> \<sigma> j" arbitrary: j rule: less_induct)
+  case less
+  then show ?case
+  proof (induction j rule: less_induct)
+    case (less j)
+    note outer_IH = less.prems
+    show ?case proof (cases "\<exists>j'<j. w\<iota> \<sigma> j' = w\<iota> \<sigma> j")
+      case True
+      define j' where "j' = (GREATEST j'. j' < j \<and> w\<iota> \<sigma> j' = w\<iota> \<sigma> j)"
+      have 1: "j' < j" "w\<iota> \<sigma> j' = w\<iota> \<sigma> j"
+        unfolding j'_def
+        using GreatestI_ex_nat[of "\<lambda>j'. j' < j \<and> w\<iota> \<sigma> j' = w\<iota> \<sigma> j", of j, OF True]
+        by auto
+      then obtain i where "reorder_w' \<sigma> !! i = j'"
+        using less.IH[of j'] outer_IH by auto
+      then have "reorder_w' \<sigma> !! Suc i = j"
+        unfolding snth_reorder_w'_Suc
+        using 1 apply auto
+        apply (rule antisym)
+         apply (rule Least_le)
+         apply simp
+        apply (rule LeastI2_ex)
+         apply blast
+        apply (metis (mono_tags, lifting) Greatest_le_nat j'_def leD le_less_linear less_or_eq_imp_le)
+        done
+      then show ?thesis ..
+    next
+      case least_j: False
+      show ?thesis proof (cases "\<exists>i<w\<iota> \<sigma> j. \<exists>j'. i = w\<iota> \<sigma> j'")
+        case True
+        define i' where "i' = (GREATEST i'. i' < w\<iota> \<sigma> j \<and> (\<exists>j'. i' = w\<iota> \<sigma> j'))"
+        have 1: "i' < w\<iota> \<sigma> j" "\<exists>j'. i' = w\<iota> \<sigma> j'"
+          unfolding i'_def
+          using GreatestI_ex_nat[where P="\<lambda>i'. i' < w\<iota> \<sigma> j \<and> (\<exists>j'. i' = w\<iota> \<sigma> j')", of "w\<iota> \<sigma> j", OF True]
+          by auto
+        define j' where "j' = (GREATEST j'. i' = w\<iota> \<sigma> j')"
+        have 2: "\<not> (\<exists>j''>j'. i' = w\<iota> \<sigma> j'')"
+          apply (clarsimp simp: j'_def not_le[symmetric])
+          apply (erule notE)
+          apply (insert w\<iota>_bound[of i' \<sigma>])
+          apply clarify
+          apply (erule Greatest_le_nat[OF refl])
+          done
+        have "i' = w\<iota> \<sigma> j'"
+          unfolding j'_def
+          using GreatestI_ex_nat[of "\<lambda>j'. i' = w\<iota> \<sigma> j'", OF 1(2)] w\<iota>_bound[of i']
+          by blast
+        with 1 have "w\<iota> \<sigma> j' < w\<iota> \<sigma> j"
+          by simp
+        then obtain k where 3: "reorder_w' \<sigma> !! k = j'"
+          using outer_IH by auto
+        have "reorder_w' \<sigma> !! Suc k = j"
+          unfolding snth_reorder_w'_Suc 3
+          using 2 \<open>i' = w\<iota> \<sigma> j'\<close> apply auto
+          apply (rule antisym)
+           apply (rule Least_le)
+          subgoal 4
+            apply (rule antisym)
+             apply (rule Least_le)
+            using \<open>w\<iota> \<sigma> j' < w\<iota> \<sigma> j\<close> apply blast
+            apply (rule LeastI2_ex)
+             apply (rule ex_w\<iota>_gr)
+            apply (metis (mono_tags, lifting) Greatest_le_nat i'_def leD le_less_linear nat_le_linear)
+            done
+          apply (rule LeastI2_ex)
+           apply (rule exI[where x=j])
+           apply (erule (1) 4)
+          using 4 le_less_linear least_j by auto
+        then show ?thesis ..
+      next
+        case False
+        with least_j have "reorder_w' \<sigma> !! 0 = j"
+          apply (simp add: reorder_w'_def reorder_w_init_def)
+          apply (rule antisym)
+           apply (rule Least_le)
+          subgoal 1
+            apply (rule antisym)
+             apply (rule Least_le)
+             apply blast
+            apply (rule LeastI2_ex)
+             apply blast
+            using le_less_linear apply blast
+            done
+          apply (rule LeastI2_ex)
+           apply (rule exI[where x=j])
+           apply (erule (1) 1)
+          using 1 le_less_linear least_j by auto
+        then show ?thesis ..
+      qed
+    qed
+  qed
+qed
+
+lemma idx_wnth_w\<iota>: "idx (wnth \<sigma> i) = w\<iota> \<sigma> i"
+  by transfer simp
+
+lemma ts_wnth_w\<tau>: "ts (wnth \<sigma> i) = w\<tau> \<sigma> i"
+  by transfer simp
+
+lemma db_wnth_w\<Gamma>: "db (wnth \<sigma> i) = w\<Gamma> \<sigma> i"
+  by transfer simp
 
 lift_definition reorder_w :: "'a wtrace \<Rightarrow> 'a itrace" is
-  "\<lambda>\<sigma>. smap (\<lambda>i. \<lparr>db=collapse_w \<sigma> i, ts=ts_of_w \<sigma> i, idx=i\<rparr>) (w\<iota>_stream \<sigma>)"
-  apply (simp add: stream.map_comp stream.map_ident ssorted_w\<iota>_stream cong: stream.map_cong)
+  "\<lambda>\<sigma>. smap (\<lambda>i. itsdb.truncate (wnth \<sigma> i)) (reorder_w' \<sigma>)"
+  apply (simp add: stream.map_comp itsdb.defs idx_wnth_w\<iota> ts_wnth_w\<tau> le_w\<iota>_le_w\<tau> cong: stream.map_cong)
+  apply (intro conjI)
   subgoal for \<sigma>
-    apply safe
-    subgoal
-      apply (clarsimp simp: sincreasing_def ts_of_w_def)
-      subgoal for i
-        apply (insert w\<tau>_increasing[of "LEAST j. w\<iota>_stream \<sigma> !! i = w\<iota> \<sigma> j" \<sigma>])
-        apply clarify
-        subgoal for j
-          apply (insert sincreasing_w\<iota>_stream[THEN sincreasing_ex_greater, of "Suc i" "w\<iota> \<sigma> j" \<sigma>])
-          apply (clarsimp simp: Suc_le_eq)
-          subgoal for k
-            apply (rule exI[where x=k])
-            apply simp
-            apply (subgoal_tac "w\<tau> \<sigma> j \<le> w\<tau> \<sigma> (LEAST j. w\<iota>_stream \<sigma> !! k = w\<iota> \<sigma> j)")
-             apply (erule (1) order.strict_trans2)
-            apply (rule le_w\<iota>_le_w\<tau>)
-            by (metis (mono_tags, lifting) LeastI_ex ex_snth_w\<iota>_stream le_less_linear less_not_sym)
-          done
+    apply (clarsimp simp: ssorted_iff_mono)
+    subgoal for i j
+      apply (induction j)
+       apply (simp add: reorder_w'_def)
+      subgoal for j
+        apply (cases "Suc j = i")
+         apply simp
+        apply simp
+        apply (erule order_trans)
+        apply (simp add: snth.simps(2)[symmetric] del: siterate.sel snth.simps add: reorder_w'_def)
+        apply (subst reorder_w_step_def)
+        apply auto
+         apply (rule LeastI2_ex)
+          apply blast
+         apply simp
+        apply (rule LeastI2_ex[where P="\<lambda>i'. w\<iota> \<sigma> ((reorder_w_step \<sigma> ^^ j) (reorder_w_init \<sigma>)) < i' \<and> (\<exists>j. i' = w\<iota> \<sigma> j)"])
+        apply (rule ex_w\<iota>_gr)
+        apply (metis (mono_tags, lifting) LeastI order.order_iff_strict)
         done
       done
-    subgoal for i j
-      apply (erule mono_ts_of_w)
-       apply (rule ex_snth_w\<iota>_stream)+
+    done
+  subgoal for \<sigma>
+    apply (clarsimp simp: sincreasing_def)
+    subgoal for i
+      apply (insert ex_le_w\<tau>[of "Suc (Max {reorder_w' \<sigma> !! i' | i'. i' \<le> i})" "Suc (w\<tau> \<sigma> (reorder_w' \<sigma> !! i))" \<sigma>])
+      apply (clarsimp simp: Suc_le_eq)
+      subgoal for j
+        apply (insert ex_snth_reorder_w'[of \<sigma> j])
+        apply clarify
+        subgoal for i'
+          apply (rule exI[where x=i'])
+          apply safe
+           apply (subst (asm) Max_less_iff)
+             apply simp
+          using ex_snth_reorder_w' apply blast
+          apply fastforce
+          done
+        done
       done
     done
   done
 
+lemma ix_reorder_w1: "\<exists>i. i\<iota> (reorder_w \<sigma>) j = w\<iota> \<sigma> i \<and> i\<tau> (reorder_w \<sigma>) j = w\<tau> \<sigma> i \<and>
+  i\<Gamma> (reorder_w \<sigma>) j = w\<Gamma> \<sigma> i"
+  by (auto simp: i\<iota>.rep_eq i\<tau>.rep_eq i\<Gamma>.rep_eq reorder_w.rep_eq itsdb.defs
+      idx_wnth_w\<iota> ts_wnth_w\<tau> db_wnth_w\<Gamma>)
+
+lemma ix_reorder_w2: "\<exists>j. i\<iota> (reorder_w \<sigma>) j = w\<iota> \<sigma> i \<and> i\<tau> (reorder_w \<sigma>) j = w\<tau> \<sigma> i \<and>
+  i\<Gamma> (reorder_w \<sigma>) j = w\<Gamma> \<sigma> i"
+  using ex_snth_reorder_w'[of \<sigma> i]
+  by (auto simp: i\<iota>.rep_eq i\<tau>.rep_eq i\<Gamma>.rep_eq reorder_w.rep_eq itsdb.defs
+      idx_wnth_w\<iota> ts_wnth_w\<tau> db_wnth_w\<Gamma>)
+
 lemma wpartition_split: "wpartition n \<le> partition n !\<then> mapM_set relax_order"
   apply (auto simp: le_fun_def strong_kleisli_def partition_def)
-  subgoal sorry
+  subgoal for a b c
+    apply (drule equals0D[OF sym])
+    apply (erule notE)
+    apply (rule map_in_mapM_setI)
+    apply (rule id_wtrace_relax_order)
+    done
   subgoal for \<sigma> ps
+    apply (erule thin_rl)
     apply (rule exI[where x="map reorder_w ps"])
-    apply (auto simp: wpartition_def wtrace_partition_def
-        itrace_partition_def in_mapM_set_iff relax_order_def relaxed_order_def)
-    sorry (* TODO *)
+    apply (auto simp: wpartition_def wtrace_partition_def itrace_partition_def
+        in_mapM_set_iff relax_order_def relaxed_order_def cong: conj_cong)
+    subgoal for k j by (rule exE[OF ix_reorder_w1[of "ps ! k" j]]) simp
+    subgoal for i
+      apply (drule spec[where x=i and P="\<lambda>i. \<exists>k<length ps. _ i k"])
+      apply clarify
+      subgoal for k j
+        apply (rule exI)
+        apply (rule conjI)
+         apply assumption
+        apply (rule exE[OF ix_reorder_w2[of "ps ! k" j]])
+        apply auto
+        done
+      done
+    subgoal for i f
+      apply (drule spec[where x=i and P="\<lambda>i. \<forall>f\<in>i\<Gamma> \<sigma> i. _ i f"])
+      apply (drule (1) bspec)
+      apply clarify
+      subgoal for k j
+        apply (rule exI)
+        apply (rule conjI)
+         apply assumption
+        apply (rule exE[OF ix_reorder_w2[of "ps ! k" j]])
+        apply auto
+        done
+      done
+    subgoal
+      apply (simp add: list.rel_map)
+      apply (rule list.rel_refl_strong)
+      apply (metis ix_reorder_w1 ix_reorder_w2)
+      done
+    done
   done
 
 lemma wpartition_split': "partition n \<circ>\<then> mapM_set relax_order \<le> wpartition n"

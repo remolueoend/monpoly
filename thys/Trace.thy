@@ -41,6 +41,23 @@ lemma ssorted_iff_mono: "ssorted s \<longleftrightarrow> (\<forall>i j. i \<le> 
 
 definition "sincreasing s = (\<forall>i. \<exists>j>i. s !! i < s !! j)"
 
+lemma sincreasingD_nat:
+  fixes x :: nat
+  assumes "sincreasing s"
+  shows "\<exists>j\<ge>i. x \<le> s !! j"
+proof (induction x)
+  case 0
+  show ?case by auto
+next
+  case (Suc x)
+  then obtain j where "i \<le> j \<and> x \<le> s !! j" ..
+  moreover obtain j' where "j < j' \<and> s !! j < s !! j'"
+    using assms by (auto simp: sincreasing_def)
+  ultimately have "i \<le> j' \<and> Suc x \<le> s !! j'"
+    by (auto intro: Suc_leI order.strict_trans2)
+  then show ?case ..
+qed
+
 lemma sincreasing_siterate[simp]:
   assumes "(\<And>n. n < f n)"
   shows "sincreasing (siterate f n)"
@@ -70,19 +87,7 @@ lemma \<tau>_mono[simp]: "i \<le> j \<Longrightarrow> \<tau> s i \<le> \<tau> s 
   by transfer (auto simp: ssorted_iff_mono)
 
 lemma ex_le_\<tau>: "\<exists>j\<ge>i. x \<le> \<tau> s j"
-proof (transfer fixing: i x)
-  fix s :: "('a set \<times> nat) stream"
-  presume sincreasing: "sincreasing (smap snd s)"
-  show "\<exists>j\<ge>i. x \<le> snd (s !! j)" proof (induction x)
-    case 0
-    show ?case by auto
-  next
-    case (Suc x)
-    then show ?case
-      using sincreasing unfolding sincreasing_def
-      by (metis Suc_le_eq le_less_trans less_imp_le_nat snth_smap)
-  qed
-qed simp
+  by (transfer fixing: i x) (auto dest!: sincreasingD_nat[of _ i x])
 
 lemma le_\<tau>_less: "\<tau> \<sigma> i \<le> \<tau> \<sigma> j \<Longrightarrow> j < i \<Longrightarrow> \<tau> \<sigma> i = \<tau> \<sigma> j"
   by (simp add: antisym)
