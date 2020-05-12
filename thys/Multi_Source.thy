@@ -1,17 +1,37 @@
+(*<*)
 theory Multi_Source
   imports Trace "HOL-Library.BNF_Corec" "HOL-Library.DAList"
 begin
+(*>*)
+
+section \<open>Parallel monitoring of multiple traces\<close>
+
+subsection \<open>Composition of nondeterministic functions\<close>
+
+text \<open>
+  We represent nondeterministic functions by functions that return sets of
+  possible results. The sets can be empty, indicating partiality.
+  Nondeterministic functions are used both for modelling assumptions about
+  the environment of the monitor and for modellings its parallel
+  implementation.
+
+  Function composition is written from left to right in this section:
+\<close>
 
 notation fcomp (infixr "\<circ>>" 55)
 
-lemma map_fcomp_map: "map f \<circ>> map g = map (f \<circ>> g)"
-  by (simp add: fcomp_comp)
+text \<open>Lifting deterministic functions:\<close>
 
 definition determ :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b set" where
   "determ f = (\<lambda>x. {f x})"
 
 lemma in_determ_iff_eq[simp]: "y \<in> determ f x \<longleftrightarrow> y = f x"
   by (simp add: determ_def)
+
+lemma eq_determI: "f \<le> determ g \<Longrightarrow> (\<And>x. f x \<noteq> {}) \<Longrightarrow> f = determ g"
+  by (fastforce simp: le_fun_def fun_eq_iff determ_def)
+
+text \<open>Composition operator for non-deterministic functions:\<close>
 
 definition kleisli_set :: "('a \<Rightarrow> 'b set) \<Rightarrow> ('b \<Rightarrow> 'c set) \<Rightarrow> 'a \<Rightarrow> 'c set" where
   "kleisli_set f g = (\<lambda>x. \<Union> (g ` f x))"
@@ -21,18 +41,16 @@ notation kleisli_set (infixr "\<circ>\<then>" 55)
 lemma kleisli_set_assoc: "f \<circ>\<then> (g \<circ>\<then> h) = (f \<circ>\<then> g) \<circ>\<then> h"
   by (auto simp: kleisli_set_def)
 
-lemma determ_fcomp: "determ (f \<circ>> g) = f \<circ>> determ g"
-  by auto
-
-lemma fcomp_kleisli: "f \<circ>> g = determ f \<circ>\<then> g"
+lemma determ_fcomp_eq_kleisli: "determ (f \<circ>> g) = determ f \<circ>\<then> determ g"
   by (auto simp: kleisli_set_def)
 
 lemma kleisli_set_mono: "f \<le> f' \<Longrightarrow> g \<le> g' \<Longrightarrow> f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
   by (fastforce simp: le_fun_def kleisli_set_def)
 
-lemma kleisli_set_mono_strong: "f \<le> f' \<Longrightarrow> (\<And>x y. y \<in> f' x \<Longrightarrow> g y \<subseteq> g' y) \<Longrightarrow>
-  f \<circ>\<then> g \<le> f' \<circ>\<then> g'"
-  by (fastforce simp: le_fun_def kleisli_set_def)
+lemma in_kleisli_set_iff: "z \<in> (f \<circ>\<then> g) x \<longleftrightarrow> (\<exists>y. z \<in> g y \<and> y \<in> f x)"
+  by (auto simp: kleisli_set_def)
+
+text \<open>Lifting nondeterministic functions to lists:\<close>
 
 definition mapM_set :: "('a \<Rightarrow> 'b set) \<Rightarrow> 'a list \<Rightarrow> 'b list set" where
   "mapM_set f xs = listset (map f xs)"
@@ -44,20 +62,48 @@ lemma in_mapM_set_iff: "xs \<in> mapM_set f ys \<longleftrightarrow> list_all2 (
   by (simp add: mapM_set_def in_listset_iff list.rel_map)
 
 lemma mapM_set_mono: "f \<le> f' \<Longrightarrow> mapM_set f \<le> mapM_set f'"
-  by (fastforce simp: le_fun_def in_mapM_set_iff elim!: list.rel_mono_strong)
+  by (auto 0 3 simp: le_fun_def in_mapM_set_iff elim!: list.rel_mono_strong)
 
 lemma mapM_set_determ: "mapM_set (determ f) = determ (map f)"
-  by (auto simp: fun_eq_iff in_mapM_set_iff list.rel_map list.rel_map(2)[where g=f, symmetric]
-      list.rel_eq intro!: list.rel_refl)
+  by (auto simp: fun_eq_iff in_mapM_set_iff list.rel_map(2)[where g=f, symmetric] list.rel_eq
+      intro!: list.rel_refl)
 
 lemma kleisli_mapM_set: "mapM_set f \<circ>\<then> mapM_set g = mapM_set (f \<circ>\<then> g)"
-  apply (auto simp: fun_eq_iff kleisli_set_def in_mapM_set_iff)
-   apply (auto elim: list_all2_trans[rotated])[]
-  apply (insert list.rel_compp[where R="\<lambda>x y. x \<in> g y" and S="\<lambda>x y. x \<in> f y"])
-  by (simp add: Bex_def relcompp_apply[abs_def] fun_eq_iff in_mapM_set_iff conj_commute)
+proof (intro ext set_eqI iffI)
+  fix x z
+  assume "z \<in> (mapM_set f \<circ>\<then> mapM_set g) x"
+  then obtain y where "list_all2 (\<lambda>a b. a \<in> f b) y x" and "list_all2 (\<lambda>a b. a \<in> g b) z y"
+    by (auto simp: kleisli_set_def in_mapM_set_iff)
+  then have "list_all2 (\<lambda>a b. a \<in> (f \<circ>\<then> g) b) z x"
+    by (auto simp: kleisli_set_def elim: list_all2_trans[rotated])
+  then show "z \<in> mapM_set (f \<circ>\<then> g) x"
+    by (simp add: in_mapM_set_iff)
+next
+  fix x z
+  assume "z \<in> mapM_set (f \<circ>\<then> g) x"
+  then have "list_all2 ((\<lambda>a b. a \<in> g b) OO (\<lambda>a b. a \<in> f b)) z x"
+    by (simp add: in_mapM_set_iff in_kleisli_set_iff relcompp_apply[abs_def])
+  then obtain y where "z \<in> mapM_set g y" and "y \<in> mapM_set f x"
+    by (auto simp: in_mapM_set_iff list.rel_compp)
+  then show "z \<in> (mapM_set f \<circ>\<then> mapM_set g) x"
+    by (auto simp: kleisli_set_def)
+qed
 
 lemma map_in_mapM_setI: "(\<And>x. x \<in> set xs \<Longrightarrow> f x \<in> g x) \<Longrightarrow> map f xs \<in> mapM_set g xs"
   by (auto simp: in_mapM_set_iff list.rel_map intro!: list.rel_refl_strong)
+
+text \<open>
+  The composite function \<^term>\<open>f \<circ>\<then> g\<close> returns all values that can be
+  reached via some intermediate value in the image of \<^term>\<open>f\<close>. However,
+  \<^term>\<open>g\<close> may not be defined (i.e., return an empty set) on other values
+  in this image. Therefore, \<^term>\<open>f \<circ>\<then> g\<close> is not suitable for statements
+  about the total correctness of a system composed of \<^term>\<open>f\<close> and \<^term>\<open>g\<close>,
+  which fails whenever \<^term>\<open>g\<close> fails.
+
+  We introduce a stronger composition operator that fails if the second
+  function fails on any possible output of the first function (for a fixed
+  input).
+\<close>
 
 definition strong_kleisli :: "('a \<Rightarrow> 'b set) \<Rightarrow> ('b \<Rightarrow> 'c set) \<Rightarrow> 'a \<Rightarrow> 'c set" where
   "strong_kleisli f g = (\<lambda>x. if {} \<in> g ` f x then {} else \<Union>(g ` f x))"
@@ -67,9 +113,6 @@ notation strong_kleisli (infixr "!\<then>" 55)
 lemma strong_kleisli_assoc: "f !\<then> (g !\<then> h) = (f !\<then> g) !\<then> h"
   by (auto 0 3 simp: fun_eq_iff strong_kleisli_def)
 
-lemma fcomp_strong_kleisli: "f \<circ>> g = determ f !\<then> g"
-  by (auto simp: fun_eq_iff strong_kleisli_def)
-
 lemma strong_kleisli_le_kleisli_set: "f !\<then> g \<le> f \<circ>\<then> g"
   by (auto simp: le_fun_def strong_kleisli_def kleisli_set_def)
 
@@ -78,14 +121,13 @@ lemma strong_kleisli_not_emptyI: "y \<in> f x \<Longrightarrow> (\<And>z. z \<in
 
 lemma strong_kleisli_mono: "f x \<subseteq> f' x \<Longrightarrow> (\<And>y. y \<in> f' x \<Longrightarrow> g y \<subseteq> g' y) \<Longrightarrow>
   (\<And>y. y \<in> f' x \<Longrightarrow> g' y \<noteq> {}) \<Longrightarrow> (f !\<then> g) x \<subseteq> (f' !\<then> g') x"
-  by (auto simp: strong_kleisli_def) blast
+  by (auto 6 0 simp: strong_kleisli_def)
+
+text \<open>The next lemma does not hold for \<^term>\<open>(\<circ>\<then>)\<close>:\<close>
 
 lemma strong_kleisli_singleton_conv:
   "(f !\<then> g) x = {z} \<longleftrightarrow> (\<exists>y. y \<in> f x) \<and> (\<forall>y. y \<in> f x \<longrightarrow> g y = {z})"
-  by (auto simp: strong_kleisli_def split: if_splits dest: equalityD1)
-
-lemma eq_determI: "f \<le> determ g \<Longrightarrow> (\<And>x. f x \<noteq> {}) \<Longrightarrow> f = determ g"
-  by (fastforce simp: le_fun_def fun_eq_iff determ_def)
+  by (auto simp: strong_kleisli_def dest: equalityD1)
 
 
 record 'a itsdb =
@@ -130,16 +172,6 @@ lemma i\<iota>_refines_i\<tau>: "i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j \
 lemma mono_i\<tau>: "i \<le> j \<Longrightarrow> i\<tau> \<sigma> i \<le> i\<tau> \<sigma> j"
   using i\<iota>_refines_i\<tau>[OF mono_i\<iota>] .
 
-lemma i\<iota>_not_stable: "\<exists>j>i. i\<iota> \<sigma> i \<noteq> i\<iota> \<sigma> j"
-proof -
-  obtain j where "i < j" and "i\<tau> \<sigma> i < i\<tau> \<sigma> j"
-    using i\<tau>_increasing by blast
-  moreover have "i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j"
-    using \<open>i < j\<close> by (simp add: mono_i\<iota>)
-  ultimately show ?thesis
-    using i\<iota>_refines_i\<tau>[of \<sigma> j i] by auto
-qed
-
 lift_definition add_timepoints :: "'a trace \<Rightarrow> 'a itrace" is
   "smap2 (\<lambda>i (db, ts). \<lparr>db=db, ts=ts, idx=i\<rparr>) nats"
   by (auto simp: split_beta smap2_szip stream.map_comp smap_szip_fst[of id, simplified]
@@ -168,20 +200,12 @@ next
   then show ?case by blast
 qed
 
-lemma le_next_i\<iota>: "i \<le> next_i\<iota> \<sigma> i"
-  unfolding next_i\<iota>_def
-  apply (rule LeastI2_ex)
-  using ex_eq_i\<iota>[of "Suc i" \<sigma>] by (auto simp: Suc_le_eq)
-
 definition i\<tau>_of :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" where
   "i\<tau>_of \<sigma> i = i\<tau> \<sigma> (LEAST j. i = i\<iota> \<sigma> j)"
 
 definition collapse' :: "'a itrace \<Rightarrow> ('a set \<times> nat) stream" where
   "collapse' \<sigma> = smap (\<lambda>i. (\<Union>j \<in> i\<iota> \<sigma> -` {i}. i\<Gamma> \<sigma> j, i\<tau>_of \<sigma> i))
     (siterate (next_i\<iota> \<sigma>) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j))"
-
-lemma Least_le_Least: "\<exists>(x::'a::wellorder). Q x \<Longrightarrow> (\<And>x. Q x \<Longrightarrow> \<exists>y\<le>x. P y) \<Longrightarrow> Least P \<le> Least Q"
-  by (meson LeastI_ex order_trans wellorder_Least_lemma(2))
 
 lemma ex_funpow_next_i\<iota>: "\<exists>a. (next_i\<iota> \<sigma> ^^ j) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) = i\<iota> \<sigma> a"
   apply (induction j)
@@ -1199,24 +1223,6 @@ coinductive sdistinct :: "'a stream \<Rightarrow> bool" where
 lemma sdistinct_sdrop[simp]: "sdistinct s \<Longrightarrow> sdistinct (sdrop n s)"
   by (induction n arbitrary: s) (auto elim: sdistinct.cases)
 
-lemma set_stake_subset: "set (stake n s) \<subseteq> sset s"
-proof (induction n arbitrary: s)
-  case (Suc n)
-  with stl_sset show ?case by (fastforce simp: shd_sset)
-qed simp
-
-lemma distinct_stake[simp]: "sdistinct s \<Longrightarrow> distinct (stake n s)"
-proof (induction n arbitrary: s)
-  case (Suc n)
-  then have "shd s \<notin> sset (stl s)"
-    by (blast elim: sdistinct.cases)
-  then have "shd s \<notin> set (stake n (stl s))"
-    using set_stake_subset by fastforce
-  moreover have "distinct (stake n (stl s))"
-    using Suc by (blast elim: sdistinct.cases)
-  ultimately show ?case by simp
-qed simp
-
 lemma sdistinct_siterate_increasing: "(\<And>x::_::preorder. x < f x) \<Longrightarrow> sdistinct (siterate f x)"
   apply (coinduction arbitrary: x)
   apply (auto simp: sset_siterate)
@@ -1906,12 +1912,6 @@ lemma partition_relax_linearize: "partition n \<circ>\<then> mapM_set relax_orde
   done
 
 
-lemma mwpartition_least_idx: "\<sigma>' \<in> mwpartition n \<sigma> \<Longrightarrow> least_idx \<sigma>' 0 = i\<iota> \<sigma> 0"
-  apply (clarsimp simp: mwpartition_def mwtrace_partition_def least_idx_def)
-  apply (rule Least_equality)
-   apply metis
-  by (metis mono_i\<iota> zero_le)
-
 lemma i\<iota>_eq_imp_i\<tau>_eq: "i\<iota> \<sigma> i = i\<iota> \<sigma> j \<Longrightarrow> i\<tau> \<sigma> i = i\<tau> \<sigma> j"
   by (transfer fixing: i j) (simp add: eq_iff)
 
@@ -1993,8 +1993,8 @@ proof (rule eq_determI)
     determ transpose \<circ>\<then> mapM_set linearize \<circ>\<then> determ (map (reorder' \<circ>> Abs_trace))"
   proof -
     have "mapM_set relax_order \<circ>\<then> determ (map (wslice (\<inter>) xs)) \<le> determ (map (islice (\<inter>) xs)) \<circ>\<then> mapM_set (mapM_set relax_order)"
-      by (auto simp: fcomp_kleisli mapM_set_determ[symmetric] kleisli_mapM_set relax_order_wslice
-          intro!: mapM_set_mono)
+      by (auto simp: determ_fcomp_eq_kleisli mapM_set_determ[symmetric] kleisli_mapM_set
+          relax_order_wslice intro!: mapM_set_mono)
     then show ?thesis
       by (subst (2 6) kleisli_set_assoc) (intro kleisli_set_mono order_refl)
   qed
@@ -2012,14 +2012,14 @@ proof (rule eq_determI)
     apply (rule kleisli_set_mono[OF order_refl])
     apply (unfold mapM_set_determ[symmetric] kleisli_mapM_set)
     apply (rule mapM_set_mono)
-    apply (unfold determ_fcomp fcomp_kleisli kleisli_set_assoc)
+    apply (unfold determ_fcomp_eq_kleisli kleisli_set_assoc)
     apply (rule order_trans[OF kleisli_set_mono])
       apply (rule mwpartition_reorder')
      apply (rule order_refl)
     apply (simp add: kleisli_set_def determ_def trace.Rep_trace_inverse)
     done
   also have "\<dots> \<le> determ (collapse \<circ>> tslice (\<inter>) xs)"
-    by (simp add: fcomp_kleisli[symmetric] determ_fcomp[symmetric] islice_collapse_swap)
+    by (simp add: determ_fcomp_eq_kleisli[symmetric] islice_collapse_swap)
   finally show "wpartition n !\<then> multi_source_slicer xs \<le> determ (collapse \<circ>> tslice (\<inter>) xs)" .
 
   have "\<And>x. ?lhs x \<noteq> {}"
