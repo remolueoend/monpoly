@@ -2234,12 +2234,17 @@ qed
 
 subsubsection \<open>Corollaries\<close>
 
+corollary partially_ordered_multi_source:
+  assumes "0 < n" and "ipartitionp \<sigma> n ps"
+  shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice' Xs (collapse \<sigma>)}"
+  using ordered_multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
+      strong_kleisli_singleton_conv ipartition_def, simplified, rule_format, THEN conjunct2,
+      rule_format, OF assms(2)] .
+
 corollary totally_ordered_multi_source:
   assumes "0 < n" and "ipartitionp (add_timepoints \<sigma>) n ps"
   shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice' Xs \<sigma>}"
-  using ordered_multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
-      strong_kleisli_singleton_conv ipartition_def, simplified, rule_format, THEN conjunct2,
-      rule_format, OF assms(2), unfolded collapse_add_timepoints] .
+  using partially_ordered_multi_source[OF assms, unfolded collapse_add_timepoints] .
 
 corollary watermarked_multi_source:
   assumes "0 < n" and "wpartitionp \<sigma> n ps"
@@ -2247,6 +2252,33 @@ corollary watermarked_multi_source:
   using multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
       strong_kleisli_singleton_conv wpartition_def, simplified, rule_format, THEN conjunct2,
       rule_format, OF assms(2)] .
+
+subsubsection \<open>Integration with the monitor function\<close>
+
+lemma tslice'_relevant_events: "tslice' (map (relevant_events \<phi>) Xs) \<sigma> = map (\<lambda>X. tslice \<phi> X \<sigma>) Xs"
+  by (simp add: tslice_def)
+
+context slicable_monitor
+begin
+
+definition multi_source_monitor :: "Formula.formula \<Rightarrow> Formula.env set list \<Rightarrow> Formula.event wtrace list \<Rightarrow> (nat \<times> event_data tuple) set stream" where
+  "multi_source_monitor \<phi> Xs = multi_source_slicer (map (relevant_events \<phi>) Xs) \<circ>> the_elem \<circ>>
+    map2 (\<lambda>X. monitor_stream \<phi> \<circ>> verdict_filter \<phi> X) Xs \<circ>> union_streams"
+
+theorem multi_source_monitor_eq:
+  assumes "\<Union>(set Xs) = UNIV" and "0 < n" and "wpartitionp \<sigma> n ps"
+  shows "multi_source_monitor \<phi> Xs ps = monitor_stream \<phi> (collapse \<sigma>)"
+proof -
+  let ?Xs' = "map (relevant_events \<phi>) Xs"
+  have "multi_source_slicer ?Xs' ps = {tslice' ?Xs' (collapse \<sigma>)}"
+    using watermarked_multi_source[OF assms(2,3)] .
+  then show ?thesis
+    unfolding tslice'_relevant_events
+    by (simp add: multi_source_monitor_def map2_map_map[where f=id, simplified]
+        slice_monitor_stream_eq[OF assms(1)])
+qed
+
+end
 
 (*<*)
 end
