@@ -1924,6 +1924,18 @@ subsection \<open>Proof of correctness\<close>
 
 subsubsection \<open>Switching lemmas\<close>
 
+text \<open>\<^term>\<open>relax_order\<close> and slicing:\<close>
+
+lemma map_w\<Gamma>_relax_order: "\<sigma>' \<in> relax_order \<sigma> \<Longrightarrow> map_w\<Gamma> f \<sigma>' \<in> relax_order (map_i\<Gamma> f \<sigma>)"
+  by (fastforce simp: relax_order_def relax_orderp_def)
+
+lemma relax_order_wslice:
+  "relax_order \<circ>\<then> determ (wslice Xs) \<le> determ (islice Xs) \<circ>\<then> mapM_set relax_order"
+  by (auto simp: le_fun_def kleisli_set_def determ_def in_mapM_set_iff
+      wslice_def islice_def in_set_zip intro!: list_all2I map_w\<Gamma>_relax_order)
+
+text \<open>\<^term>\<open>relax_order\<close> and \<^term>\<open>transpose\<close>:\<close>
+
 lemma list_all2_transposeI: "list_all2 (list_all2 P) xss yss \<Longrightarrow> list_all2 (list_all2 P) (transpose xss) (transpose yss)"
   apply (rule list_all2_all_nthI)
   subgoal 1
@@ -1943,14 +1955,7 @@ lemma mapM_mapM_transpose:
   "(mapM_set (mapM_set f) \<circ>\<then> determ transpose) \<le> determ transpose \<circ>\<then> mapM_set (mapM_set f)"
   by (auto simp: le_fun_def kleisli_set_def in_mapM_set_iff intro!: list_all2_transposeI)
 
-lemma map_w\<Gamma>_relax_order: "\<sigma>' \<in> relax_order \<sigma> \<Longrightarrow> map_w\<Gamma> f \<sigma>' \<in> relax_order (map_i\<Gamma> f \<sigma>)"
-  by (fastforce simp: relax_order_def relax_orderp_def)
-
-lemma relax_order_wslice:
-  "relax_order \<circ>\<then> determ (wslice Xs) \<le> determ (islice Xs) \<circ>\<then> mapM_set relax_order"
-  by (auto simp: le_fun_def kleisli_set_def determ_def in_mapM_set_iff
-      wslice_def islice_def in_set_zip intro!: list_all2I map_w\<Gamma>_relax_order)
-
+text \<open>\<^term>\<open>ipartition\<close> and slicing:\<close>
 
 lemma length_islice[simp]: "length (islice Xs \<sigma>) = length Xs"
   by (simp add: islice_def)
@@ -1988,6 +1993,32 @@ lemma ipartition_islice_transpose:
     by (meson le_infI2)
   done
 
+text \<open>Slicing and \<^term>\<open>collapse\<close>:\<close>
+
+lemma least_i\<iota>_map_i\<Gamma>: "least_i\<iota> (map_i\<Gamma> f \<sigma>) = least_i\<iota> \<sigma>"
+  by (transfer fixing: f) (simp add: least_i\<iota>_def)
+
+lemma next_i\<iota>_map_i\<Gamma>: "next_i\<iota> (map_i\<Gamma> f \<sigma>) = next_i\<iota> \<sigma>"
+  by (transfer fixing: f) (simp add: fun_eq_iff next_i\<iota>_def)
+
+lemma map_\<Gamma>_inter_collapse: "map_\<Gamma> (\<lambda>Y. X \<inter> Y) (collapse \<sigma>) = collapse (map_i\<Gamma> (\<lambda>Y. X \<inter> Y) \<sigma>)"
+  apply (rule Rep_trace_inject[THEN iffD1])
+  apply (simp add: map_\<Gamma>.rep_eq collapse.rep_eq collapse'_def stream.map_comp
+      least_i\<iota>_map_i\<Gamma> next_i\<iota>_map_i\<Gamma> cong: stream.map_cong)
+  apply (rule stream.map_cong[OF refl])
+  apply (auto simp: i\<tau>_of_i\<iota>_def)
+  done
+
+abbreviation "tslice' Xs \<equiv> (\<lambda>\<sigma>. map (\<lambda>X. map_\<Gamma> ((\<inter>) X) \<sigma>) Xs)"
+
+lemma islice_collapse_swap: "islice Xs \<circ>> map collapse = collapse \<circ>> tslice' Xs"
+  by (clarsimp simp: fun_eq_iff islice_def tslice_def split_beta
+      map_\<Gamma>_inter_collapse zip_replicate2 cong: map_cong)
+
+
+subsubsection \<open>Reordering obtains the collapsed trace\<close>
+
+text \<open>Direct characterization of merged out-of-order partition:\<close>
 
 locale mwpartitionp =
   fixes \<sigma> :: "'a itrace" and n :: nat and \<sigma>' :: "'a mwtrace"
@@ -2001,27 +2032,13 @@ locale mwpartitionp =
 definition mwpartition :: "nat \<Rightarrow> 'a itrace \<Rightarrow> 'a mwtrace set" where
   "mwpartition n \<sigma> = {\<sigma>'. mwpartitionp \<sigma> n \<sigma>'}"
 
-lemma ex_snth_sfilter_eq: "infinitely P s \<Longrightarrow> P (s !! i) \<Longrightarrow>
-  \<exists>j. sfilter P s !! j = s !! i"
-  apply (induction i arbitrary: s)
-  subgoal for s
-    by (cases s) (auto simp: sfilter_Stream intro!: exI[where x=0])
-  subgoal for i s
-    apply simp
-    apply (drule meta_spec[where x="stl s"])
-    apply (drule meta_mp)
-     apply (simp add: infinitely_stl)
-    apply (drule (1) meta_mp)
-    by (metis sfilter_stl_cases snth.simps(2))
-  done
-
 lemma mwproject_eqD: "mwproject k \<sigma>' = \<sigma> \<Longrightarrow> k \<in> mworigins \<sigma>' \<Longrightarrow>
   (\<forall>j. origin (mwnth \<sigma>' j) = k \<longrightarrow> (\<exists>i. idx (mwnth \<sigma>' j) = w\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = w\<tau> \<sigma> i \<and> db (mwnth \<sigma>' j) = w\<Gamma> \<sigma> i)) \<and>
   (\<forall>i. \<exists>j. origin (mwnth \<sigma>' j) = k \<and> idx (mwnth \<sigma>' j) = w\<iota> \<sigma> i \<and> ts (mwnth \<sigma>' j) = w\<tau> \<sigma> i \<and> db (mwnth \<sigma>' j) = w\<Gamma> \<sigma> i)"
   apply (transfer fixing: k)
   apply (auto simp: wtsdb.defs)
   subgoal for \<sigma>' x j
-    apply (insert ex_snth_sfilter_eq[of "\<lambda>y. origin y = origin x" \<sigma>' j])
+    apply (insert ex_snth_sfilter2[of "\<lambda>y. origin y = origin x" \<sigma>' j])
     apply clarsimp
     subgoal for i
       apply (rule exI[where x=i])
@@ -2076,7 +2093,6 @@ lemma ipartition_relax_merge: "ipartition n \<circ>\<then> mapM_set relax_order 
     done
   done
 
-
 lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> determ (collapse)"
   apply (clarsimp simp: le_fun_def kleisli_set_def reorder'_eq_alt collapse.abs_eq mwpartition_def)
   apply (rule arg_cong[where f=Abs_trace])
@@ -2110,38 +2126,17 @@ lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> 
     done
   done
 
+subsubsection \<open>Main result\<close>
 
-lemma least_i\<iota>_map_i\<Gamma>: "least_i\<iota> (map_i\<Gamma> f \<sigma>) = least_i\<iota> \<sigma>"
-  by (transfer fixing: f) (simp add: least_i\<iota>_def)
-
-lemma next_i\<iota>_map_i\<Gamma>: "next_i\<iota> (map_i\<Gamma> f \<sigma>) = next_i\<iota> \<sigma>"
-  by (transfer fixing: f) (simp add: fun_eq_iff next_i\<iota>_def)
-
-lemma map_\<Gamma>_inter_collapse: "map_\<Gamma> (\<lambda>Y. X \<inter> Y) (collapse \<sigma>) = collapse (map_i\<Gamma> (\<lambda>Y. X \<inter> Y) \<sigma>)"
-  apply (rule Rep_trace_inject[THEN iffD1])
-  apply (simp add: map_\<Gamma>.rep_eq collapse.rep_eq collapse'_def stream.map_comp
-      least_i\<iota>_map_i\<Gamma> next_i\<iota>_map_i\<Gamma> cong: stream.map_cong)
-  apply (rule stream.map_cong[OF refl])
-  apply (auto simp: i\<tau>_of_i\<iota>_def)
-  done
-
-abbreviation "tslice' Xs \<equiv> (\<lambda>\<sigma>. map (\<lambda>X. map_\<Gamma> ((\<inter>) X) \<sigma>) Xs)"
-
-lemma islice_collapse_swap: "islice Xs \<circ>> map collapse = collapse \<circ>> tslice' Xs"
-  by (clarsimp simp: fun_eq_iff islice_def tslice_def split_beta
-      map_\<Gamma>_inter_collapse zip_replicate2 cong: map_cong)
+definition multi_source_slicer :: "'a set list \<Rightarrow> 'a wtrace list \<Rightarrow> 'a trace list set" where
+  "multi_source_slicer Xs = determ (map (wslice Xs)) !\<then> determ transpose !\<then>
+    mapM_set merge !\<then> determ (map reorder')"
 
 lemma not_Nil_in_transpose: "[] \<notin> set (transpose xss)"
   apply (clarsimp simp: in_set_conv_nth nth_transpose length_transpose filter_empty_conv)
   apply (induction xss)
    apply (auto simp: less_max_iff_disj)
   done
-
-subsubsection \<open>Main result\<close>
-
-definition multi_source_slicer :: "'a set list \<Rightarrow> 'a wtrace list \<Rightarrow> 'a trace list set" where
-  "multi_source_slicer Xs = determ (map (wslice Xs)) !\<then> determ transpose !\<then>
-    mapM_set merge !\<then> determ (map reorder')"
 
 theorem multi_source_correctness:
   assumes "0 < n"
@@ -2236,6 +2231,8 @@ proof (rule eq_determI)
     apply (rule map_in_mapM_setI[OF add_wmarks_relax_order])
     done
 qed
+
+subsubsection \<open>Corollaries\<close>
 
 corollary totally_ordered_multi_source:
   assumes "0 < n" and "ipartitionp (add_timepoints \<sigma>) n ps"
