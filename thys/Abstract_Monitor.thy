@@ -4,12 +4,14 @@ theory Abstract_Monitor
 begin
 (*>*)
 
+no_notation test_bit (infixl "!!" 100)
+
 section \<open>Abstract monitor specification\<close>
 
 locale monitorable =
   fixes monitorable :: "Formula.formula \<Rightarrow> bool"
 
-text \<open>The following locale specifies the desired behavior ouf a monitor abstractly.\<close>
+text \<open>The following locale specifies the desired behavior of a monitor abstractly.\<close>
 
 locale monitor = monitorable +
   fixes
@@ -21,9 +23,58 @@ locale monitor = monitorable +
     and complete_monitor: "monitorable \<phi> \<Longrightarrow> prefix_of \<pi> \<sigma> \<Longrightarrow>
       i < plen \<pi> \<Longrightarrow> wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<Longrightarrow>
       (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> Formula.sat \<sigma> Map.empty (map the v) i \<phi>) \<Longrightarrow> \<exists>\<pi>'. prefix_of \<pi>' \<sigma> \<and> (i, v) \<in> M \<phi> \<pi>'"
+begin
+
+text \<open>Stream of cumulative monitor outputs:\<close>
+
+definition monitor_stream :: "Formula.formula \<Rightarrow> Formula.trace \<Rightarrow> (nat \<times> event_data tuple) set stream" where
+  "monitor_stream \<phi> \<sigma> = smap (\<lambda>n. M \<phi> (take_prefix n \<sigma>)) nats"
+
+lemma snth_monitor_stream[simp]: "monitor_stream \<phi> \<sigma> !! n = M \<phi> (take_prefix n \<sigma>)"
+  by (simp add: monitor_stream_def)
+
+end
+
+subsection \<open>Slicable monitor\<close>
+
+definition tslice :: "Formula.formula \<Rightarrow> Formula.env set \<Rightarrow> Formula.trace \<Rightarrow> Formula.trace" where
+  "tslice \<phi> X = map_\<Gamma> ((\<inter>) (relevant_events \<phi> X))"
+
+lemma take_prefix_tslice: "take_prefix n (tslice \<phi> X \<sigma>) = Formula.pslice \<phi> X (take_prefix n \<sigma>)"
+  unfolding tslice_def
+  by (transfer fixing: n \<phi> X) (simp add: split_beta Int_commute)
+
+definition verdict_filter :: "Formula.formula \<Rightarrow> Formula.env set \<Rightarrow> (nat \<times> event_data tuple) set stream \<Rightarrow>
+    (nat \<times> event_data tuple) set stream" where
+  "verdict_filter \<phi> X = smap (\<lambda>V. {(i, v) \<in> V. mem_restr X v})"
+
+primcorec union_streams :: "'a set stream list \<Rightarrow> 'a set stream" where
+  "shd (union_streams xs) = \<Union>(set (map shd xs))"
+| "stl (union_streams xs) = union_streams (map stl xs)"
 
 locale slicable_monitor = monitor +
   assumes monitor_slice: "mem_restr S v \<Longrightarrow> (i, v) \<in> M \<phi> (Formula.pslice \<phi> S \<pi>) \<longleftrightarrow> (i, v) \<in> M \<phi> \<pi>"
+begin
+
+lemma slice_monitor_stream_eq:
+  assumes part: "\<Union>(set Xs) = UNIV"
+  shows "union_streams (map (\<lambda>X. verdict_filter \<phi> X (monitor_stream \<phi> (tslice \<phi> X \<sigma>))) Xs) = monitor_stream \<phi> \<sigma>"
+proof -
+  from part have "\<exists>X\<in>set Xs. mem_restr X v" for v
+    by (metis (mono_tags) UnionE mem_restr_UNIV mem_restr_def)
+  then have "union_streams (map (\<lambda>X. smap (\<lambda>n.
+      {(i, v) \<in> M \<phi> (Formula.pslice \<phi> X (take_prefix n \<sigma>)). mem_restr X v}) (fromN n)) Xs) =
+    smap (\<lambda>n. M \<phi> (take_prefix n \<sigma>)) (fromN n)" for n
+    using monitor_slice
+    by (coinduction arbitrary: n) (fastforce cong: map_cong)
+  then show ?thesis
+    by (simp add: verdict_filter_def monitor_stream_def take_prefix_tslice stream.map_comp
+        cong: stream.map_cong)
+qed
+
+end
+
+subsection \<open>Monitor with progress function\<close>
 
 locale monitor_pre_progress = monitorable +
   fixes progress :: "Formula.trace \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat"
@@ -87,7 +138,7 @@ next
     case (prefix \<pi> \<sigma>)
     then have "stake j' \<sigma> = stake (length \<pi>) \<sigma> @ stake (j' - length \<pi>) (sdrop (length \<pi>) \<sigma>)"
       by (unfold stake_add) auto
-    with \<open>stake (length \<pi>) \<sigma> = \<pi>\<close> show ?case 
+    with \<open>stake (length \<pi>) \<sigma> = \<pi>\<close> show ?case
       by auto
   qed
   with complete(4) eval' show ?case using progress_prefix_conv[of "take_prefix j' \<sigma>" \<sigma> \<sigma>' \<phi> for \<sigma>']
