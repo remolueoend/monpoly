@@ -4,7 +4,7 @@ theory Multi_Source
 begin
 (*>*)
 
-section \<open>Parallel monitoring of multiple traces\<close>
+section \<open>Parallel monitoring of multiple input traces\<close>
 
 subsection \<open>Composition of nondeterministic functions\<close>
 
@@ -130,10 +130,14 @@ lemma strong_kleisli_singleton_conv:
   by (auto simp: strong_kleisli_def dest: equalityD1)
 
 
-record 'a itsdb =
+subsection \<open>Indexed traces: unifying time-points and time-stamps\<close>
+
+record 'a itsdb = \<comment> \<open>indexed, time-stamped database\<close>
   db :: "'a set"
   ts :: nat
   idx :: nat
+
+text \<open>The index must increase monotonically and it must refine the time-stamps:\<close>
 
 typedef 'a itrace = "{s :: 'a itsdb stream.
   ssorted (smap idx s) \<and> sincreasing (smap ts s) \<and>
@@ -142,6 +146,8 @@ typedef 'a itrace = "{s :: 'a itsdb stream.
     (auto simp: stream.map_comp stream.map_ident cong: stream.map_cong)
 
 setup_lifting type_definition_itrace
+
+subsubsection \<open>Projection functions\<close>
 
 lift_definition i\<Gamma> :: "'a itrace \<Rightarrow> nat \<Rightarrow> 'a set" is "\<lambda>s i. db (s !! i)" .
 lift_definition i\<tau> :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" is "\<lambda>s i. ts (s !! i)" .
@@ -160,7 +166,7 @@ lemma i\<tau>_map_i\<Gamma>[simp]: "i\<tau> (map_i\<Gamma> f \<sigma>) i = i\<ta
 lemma i\<iota>_map_i\<Gamma>[simp]: "i\<iota> (map_i\<Gamma> f \<sigma>) i = i\<iota> \<sigma> i"
   by transfer simp
 
-lemma mono_i\<iota>: "i \<le> j \<Longrightarrow> i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j"
+lemma i\<iota>_mono: "i \<le> j \<Longrightarrow> i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j"
   by transfer (simp add: ssorted_iff_mono)
 
 lemma i\<tau>_increasing: "\<exists>j>i. i\<tau> \<sigma> i < i\<tau> \<sigma> j"
@@ -169,20 +175,32 @@ lemma i\<tau>_increasing: "\<exists>j>i. i\<tau> \<sigma> i < i\<tau> \<sigma> j
 lemma i\<iota>_refines_i\<tau>: "i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j \<Longrightarrow> i\<tau> \<sigma> i \<le> i\<tau> \<sigma> j"
   by transfer simp
 
-lemma mono_i\<tau>: "i \<le> j \<Longrightarrow> i\<tau> \<sigma> i \<le> i\<tau> \<sigma> j"
-  using i\<iota>_refines_i\<tau>[OF mono_i\<iota>] .
+lemma i\<iota>_eq_imp_i\<tau>_eq: "i\<iota> \<sigma> i = i\<iota> \<sigma> j \<Longrightarrow> i\<tau> \<sigma> i = i\<tau> \<sigma> j"
+  by (simp add: i\<iota>_refines_i\<tau> antisym)
 
-lift_definition add_timepoints :: "'a trace \<Rightarrow> 'a itrace" is
-  "smap2 (\<lambda>i (db, ts). \<lparr>db=db, ts=ts, idx=i\<rparr>) nats"
-  by (auto simp: split_beta smap2_szip stream.map_comp smap_szip_fst[of id, simplified]
-      stream.map_ident smap_szip_snd ssorted_iff_mono cong: stream.map_cong)
+lemma i\<tau>_mono: "i \<le> j \<Longrightarrow> i\<tau> \<sigma> i \<le> i\<tau> \<sigma> j"
+  using i\<iota>_refines_i\<tau>[OF i\<iota>_mono] .
 
-lift_definition add_timestamps :: "'a trace \<Rightarrow> 'a itrace" is
-  "smap (\<lambda>(db, ts). \<lparr>db=db, ts=ts, idx=ts\<rparr>)"
-  by (auto simp: split_beta stream.map_comp cong: stream.map_cong)
+subsubsection \<open>Collapse\<close>
+
+text \<open>
+  The collapse of an indexed trace is obtained by merging all time-points with
+  the same index. The result has well-defined time-stamps because we require
+  that indexes refine time-stamps.
+\<close>
+
+definition least_i\<iota> :: "'a itrace \<Rightarrow> nat" where
+  "least_i\<iota> \<sigma> = (LEAST i. \<exists>j. i = i\<iota> \<sigma> j)"
 
 definition next_i\<iota> :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" where
   "next_i\<iota> \<sigma> i = (LEAST i'. i' > i \<and> (\<exists>j. i' = i\<iota> \<sigma> j))"
+
+definition i\<tau>_of_i\<iota> :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" where
+  "i\<tau>_of_i\<iota> \<sigma> i = i\<tau> \<sigma> (LEAST j. i = i\<iota> \<sigma> j)"
+
+definition collapse' :: "'a itrace \<Rightarrow> ('a set \<times> nat) stream" where
+  "collapse' \<sigma> = smap (\<lambda>i. (\<Union>j \<in> i\<iota> \<sigma> -` {i}. i\<Gamma> \<sigma> j, i\<tau>_of_i\<iota> \<sigma> i))
+    (siterate (next_i\<iota> \<sigma>) (least_i\<iota> \<sigma>))"
 
 lemma ex_eq_i\<iota>: "\<exists>i'\<ge>i. \<exists>j. i' = i\<iota> \<sigma> j"
 proof (induction i)
@@ -190,131 +208,176 @@ proof (induction i)
   show ?case by auto
 next
   case (Suc i)
-  then obtain i' j where 1: "i' \<ge> i" "i' = i\<iota> \<sigma> j" by blast
+  then obtain i' j where IH: "i' \<ge> i \<and> i' = i\<iota> \<sigma> j" by blast
   obtain j' where "i\<tau> \<sigma> j < i\<tau> \<sigma> j'"
     using i\<tau>_increasing by blast
   then have "i\<iota> \<sigma> j < i\<iota> \<sigma> j'"
-    using i\<iota>_refines_i\<tau> leD le_less_linear by blast
-  with 1 have "Suc i \<le> i\<iota> \<sigma> j'"
+    using i\<iota>_refines_i\<tau> le_less_linear by (blast dest: leD)
+  with IH have "Suc i \<le> i\<iota> \<sigma> j'"
     by (simp add: Suc_leI)
   then show ?case by blast
 qed
 
-definition i\<tau>_of :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" where
-  "i\<tau>_of \<sigma> i = i\<tau> \<sigma> (LEAST j. i = i\<iota> \<sigma> j)"
+lemma ex_eq_i\<iota>_strict: "\<exists>i'>i. \<exists>j. i' = i\<iota> \<sigma> j"
+  using ex_eq_i\<iota> by (blast dest: Suc_le_lessD)
 
-definition collapse' :: "'a itrace \<Rightarrow> ('a set \<times> nat) stream" where
-  "collapse' \<sigma> = smap (\<lambda>i. (\<Union>j \<in> i\<iota> \<sigma> -` {i}. i\<Gamma> \<sigma> j, i\<tau>_of \<sigma> i))
-    (siterate (next_i\<iota> \<sigma>) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j))"
+lemma ex_funpow_next_i\<iota>1: "\<exists>j. (next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j"
+proof (cases n)
+  case 0
+  then show ?thesis
+    by (auto simp: least_i\<iota>_def intro: LeastI_ex[where P="\<lambda>i. \<exists>j. i = i\<iota> \<sigma> j"])
+next
+  case (Suc n)
+  have "\<exists>j. next_i\<iota> \<sigma> i = i\<iota> \<sigma> j" for i
+    using ex_eq_i\<iota>_strict[of i \<sigma>]
+    by (auto 0 3 simp: next_i\<iota>_def intro: LeastI2_ex[where P="\<lambda>i'. i < i' \<and> (\<exists>j. i' = i\<iota> \<sigma> j)"])
+  with Suc show ?thesis by simp
+qed
 
-lemma ex_funpow_next_i\<iota>: "\<exists>a. (next_i\<iota> \<sigma> ^^ j) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) = i\<iota> \<sigma> a"
-  apply (induction j)
-   apply simp
-   apply (rule LeastI_ex)
-   apply blast
-  apply simp
-  apply (subst next_i\<iota>_def)
-  apply (rule LeastI2_ex)
-  using Suc_le_lessD ex_eq_i\<iota> apply blast
-  apply blast
-  done
+lemma ex_funpow_next_i\<iota>2: "\<exists>n. (next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j"
+proof (induction j)
+  case 0
+  have "(next_i\<iota> \<sigma> ^^ 0) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> 0"
+    using i\<iota>_mono by (auto simp: least_i\<iota>_def intro: Least_equality)
+  then show ?case ..
+next
+  case (Suc j)
+  show ?case proof (cases "i\<iota> \<sigma> (Suc j) = i\<iota> \<sigma> j")
+    case True
+    with Suc.IH show ?thesis by simp
+  next
+    case False
+    then have "i\<iota> \<sigma> j < i\<iota> \<sigma> (Suc j)"
+      by (metis le_less lessI i\<iota>_mono)
+    then have "next_i\<iota> \<sigma> (i\<iota> \<sigma> j) = i\<iota> \<sigma> (Suc j)"
+      by (auto simp: next_i\<iota>_def intro!: Least_equality) (meson leD i\<iota>_mono not_less_eq_eq)
+    moreover obtain n where "(next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j"
+      using Suc.IH ..
+    ultimately have "(next_i\<iota> \<sigma> ^^ Suc n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> (Suc j)"
+      by simp
+    then show ?thesis ..
+  qed
+qed
 
-lemma ex_funpow_next_i\<iota>': "\<exists>j. (next_i\<iota> \<sigma> ^^ j) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) = i\<iota> \<sigma> a"
-  apply (induction a)
-   apply (rule exI[where x=0])
-   apply simp
-   apply (rule antisym)
-    apply (rule Least_le)
-    apply blast
-   apply (rule LeastI2_ex)
-    apply blast
-   apply clarify
-   apply (rule mono_i\<iota>)
-   apply simp
-  subgoal for a
-    apply (cases "i\<iota> \<sigma> (Suc a) = i\<iota> \<sigma> a")
-     apply simp
-    apply (elim exE)
-    subgoal for j
-      apply (rule exI[where x="Suc j"])
-      apply simp
-      apply (subst next_i\<iota>_def)
-      apply (rule antisym)
-       apply (rule Least_le)
-       apply (metis le_less less_Suc_eq mono_i\<iota>)
-      apply (rule LeastI2_ex)
-      using Suc_le_lessD ex_eq_i\<iota> apply blast
-      by (meson leD mono_i\<iota> not_less_eq_eq)
-    done
-  done
+lemma less_next_i\<iota>: "i < next_i\<iota> \<sigma> i"
+  using ex_eq_i\<iota>_strict[of i \<sigma>]
+  by (auto 0 3 simp: next_i\<iota>_def intro: LeastI2_ex[where P="\<lambda>i'. i < i' \<and> (\<exists>j. i' = i\<iota> \<sigma> j)"])
 
-lemma mono_funpow_next_i\<iota>: "a \<le> b \<Longrightarrow>
-  (next_i\<iota> \<sigma> ^^ a) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) \<le> (next_i\<iota> \<sigma> ^^ b) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j)"
-  apply (induction b)
-   apply simp
-  subgoal for b
-    apply (cases "Suc b = a")
-     apply simp
-    apply simp
-    apply (subst next_i\<iota>_def)
-    apply (rule LeastI2_ex[where P="\<lambda>i'. (next_i\<iota> \<sigma> ^^ b) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) < i' \<and> (\<exists>j. i' = i\<iota> \<sigma> j)"])
-    using Suc_le_lessD ex_eq_i\<iota> apply blast
-    apply auto
-    done
-  done
+lemma mono_funpow_next_i\<iota>: "a \<le> b \<Longrightarrow> (next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) \<le> (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
+proof (induction b)
+  case 0
+  then show ?case by simp
+next
+  case (Suc b)
+  show ?case proof (cases "Suc b = a")
+    case True
+    then show ?thesis by simp
+  next
+    case False
+    with Suc have "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) \<le> (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
+      by simp
+    then show ?thesis
+      using less_next_i\<iota>[THEN less_imp_le]
+      by (auto intro: order.trans)
+  qed
+qed
+
+lemma less_funpow_next_i\<iota>: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) < (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>) \<Longrightarrow> a < b"
+proof (induction a)
+  case 0
+  then show ?case by (cases b) simp_all
+next
+  case (Suc a)
+  show ?case proof (cases "Suc a = b")
+    case True
+    with Suc.prems show ?thesis by simp
+  next
+    case False
+    from Suc.prems have "next_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) < (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
+      by simp
+    then have "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) < (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
+      using less_next_i\<iota> by (blast intro: order.strict_trans)
+    with Suc.IH have "a < b" .
+    with False show ?thesis by simp
+  qed
+qed
+
+lemma i\<tau>_of_i\<iota>_mono:
+  assumes "i\<iota> \<sigma> a \<le> i\<iota> \<sigma> b"
+  shows "i\<tau>_of_i\<iota> \<sigma> (i\<iota> \<sigma> a) \<le> i\<tau>_of_i\<iota> \<sigma> (i\<iota> \<sigma> b)"
+proof -
+  have "(LEAST j. i\<iota> \<sigma> a = i\<iota> \<sigma> j) \<le> (LEAST j. i\<iota> \<sigma> b = i\<iota> \<sigma> j)"
+  proof (cases "i\<iota> \<sigma> a = i\<iota> \<sigma> b")
+    case True
+    then show ?thesis by simp
+  next
+    case False
+    with assms have "i\<iota> \<sigma> a < i\<iota> \<sigma> b" by simp
+    show ?thesis proof (rule LeastI2_ex[where P="\<lambda>j. i\<iota> \<sigma> b = i\<iota> \<sigma> j"])
+      fix c
+      have "(LEAST j. i\<iota> \<sigma> a = i\<iota> \<sigma> j) \<le> a"
+        by (simp add: Least_le)
+      also assume "i\<iota> \<sigma> b = i\<iota> \<sigma> c"
+      then have "i\<iota> \<sigma> a < i\<iota> \<sigma> c"
+        using \<open>i\<iota> \<sigma> a < i\<iota> \<sigma> b\<close> by simp
+      then have "a < c"
+        using i\<iota>_mono le_less_linear by (blast dest: leD)
+      finally show "(LEAST j. i\<iota> \<sigma> a = i\<iota> \<sigma> j) \<le> c"
+        by simp
+    qed blast
+  qed
+  then show ?thesis by (simp add: i\<tau>_of_i\<iota>_def i\<tau>_mono)
+qed
+
+lemma i\<tau>_of_i\<iota>_eq: "i\<tau>_of_i\<iota> \<sigma> (i\<iota> \<sigma> j) = i\<tau> \<sigma> j"
+  by (auto 0 3 simp: i\<tau>_of_i\<iota>_def intro: i\<iota>_eq_imp_i\<tau>_eq LeastI2_ex[where P="\<lambda>j'. i\<iota> \<sigma> j = i\<iota> \<sigma> j'"])
 
 lift_definition collapse :: "'a itrace \<Rightarrow> 'a trace" is collapse'
-  apply (auto simp: collapse'_def stream.map_comp ssorted_iff_mono sincreasing_def
-      cong: stream.map_cong)
-  subgoal for \<sigma> i j
-    apply (induction j)
-     apply simp
-    subgoal for j
-      apply (cases "Suc j = i")
-      subgoal by simp
-      subgoal
-        apply simp
-        apply (erule order_trans)
-        apply (subst next_i\<iota>_def)
-        apply (simp add: i\<tau>_of_def)
-        apply (rule mono_i\<tau>)
-        apply (rule LeastI2_ex[where P="\<lambda>k. (next_i\<iota> \<sigma> ^^ j) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) = i\<iota> \<sigma> k"])
-         apply (rule ex_funpow_next_i\<iota>)
-        apply simp
-        subgoal for j'
-          apply (rule LeastI2_ex[where P="\<lambda>j. (LEAST i'. i\<iota> \<sigma> j' < i' \<and> (\<exists>j. i' = i\<iota> \<sigma> j)) = i\<iota> \<sigma> j"])
-           apply (rule LeastI2_ex)
-          using Suc_le_lessD ex_eq_i\<iota> apply blast
-           apply blast
-          apply (intro leI notI)
-          apply (drule less_imp_le)
-          apply (drule mono_i\<iota>[of _ j' \<sigma>])
-          by (metis (mono_tags, lifting) LeastI_ex ex_eq_i\<iota> le_imp_less_Suc not_less_eq)
-        done
-      done
-    done
-  subgoal for \<sigma> i
-    apply (insert i\<tau>_increasing[where \<sigma>=\<sigma> and i="LEAST j. (next_i\<iota> \<sigma> ^^ i) (LEAST i'. \<exists>j. i' = i\<iota> \<sigma> j) = i\<iota> \<sigma> j"])
-    apply (clarsimp simp: i\<tau>_of_def)
-    subgoal for j'
-      apply (rule exE[OF ex_funpow_next_i\<iota>[where \<sigma>=\<sigma> and j=i]])
-      apply (rule exE[OF ex_funpow_next_i\<iota>'[where \<sigma>=\<sigma> and a=j']])
-      apply simp
-      subgoal for j i'
-        apply (rule exI[where x=i'])
-        apply (rule conjI)
-        subgoal
-          apply (subgoal_tac "i\<iota> \<sigma> j < i\<iota> \<sigma> j'")
-           apply (intro not_le_imp_less notI)
-           apply (drule mono_funpow_next_i\<iota>[where \<sigma>=\<sigma>])
-           apply simp
-          by (metis (mono_tags, lifting) LeastI i\<iota>_refines_i\<tau> leD linear order.not_eq_order_implies_strict)
-        subgoal
-          by (metis (mono_tags, lifting) LeastI i\<iota>_refines_i\<tau> less_le_trans less_or_eq_imp_le)
-        done
-      done
-    done
-  done
+proof (intro conjI)
+  fix \<sigma> :: "'a itrace"
+  have "i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) \<le> i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>))"
+    if "a \<le> b" for a b
+  proof -
+    obtain ja where a_eq: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> ja"
+      using ex_funpow_next_i\<iota>1 ..
+    obtain jb where b_eq: "(next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> jb"
+      using ex_funpow_next_i\<iota>1 ..
+    have "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) \<le> (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
+      using \<open>a \<le> b\<close> by (rule mono_funpow_next_i\<iota>)
+    then show ?thesis
+      unfolding a_eq b_eq by (rule i\<tau>_of_i\<iota>_mono)
+  qed
+  then show "ssorted (smap snd (collapse' \<sigma>))"
+    by (simp add: ssorted_iff_mono collapse'_def)
+
+  have "\<exists>b>a. i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) < i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>))" for a
+  proof -
+    obtain ja where a_eq: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> ja"
+      using ex_funpow_next_i\<iota>1 ..
+    obtain jb where "i\<tau> \<sigma> ja < i\<tau> \<sigma> jb"
+      using i\<tau>_increasing by blast
+    obtain b where b_eq: "(next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> jb"
+      using ex_funpow_next_i\<iota>2 ..
+    from \<open>i\<tau> \<sigma> ja < i\<tau> \<sigma> jb\<close> have "i\<iota> \<sigma> ja < i\<iota> \<sigma> jb"
+      using i\<iota>_refines_i\<tau> leD le_less_linear by blast
+    then have "a < b"
+      using less_funpow_next_i\<iota>[of a \<sigma> b] by (auto simp: a_eq b_eq)
+    moreover have "i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) < i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>))"
+      using \<open>i\<tau> \<sigma> ja < i\<tau> \<sigma> jb\<close> unfolding a_eq b_eq i\<tau>_of_i\<iota>_eq .
+    ultimately show ?thesis by blast
+  qed
+  then show "sincreasing (smap snd (collapse' \<sigma>))"
+    by (simp add: sincreasing_def collapse'_def)
+qed
+
+subsubsection \<open>Adding indexes\<close>
+
+text \<open>Time-points as indexes:\<close>
+
+lift_definition add_timepoints :: "'a trace \<Rightarrow> 'a itrace" is
+  "smap2 (\<lambda>i (db, ts). \<lparr>db=db, ts=ts, idx=i\<rparr>) nats"
+  by (auto simp: split_beta smap2_szip stream.map_comp smap_szip_fst[of id, simplified]
+      stream.map_ident smap_szip_snd ssorted_iff_mono cong: stream.map_cong)
 
 lemma i\<Gamma>_timepoints[simp]: "i\<Gamma> (add_timepoints \<sigma>) = \<Gamma> \<sigma>"
   by transfer (simp add: split_beta)
@@ -325,26 +388,34 @@ lemma i\<tau>_timepoints[simp]: "i\<tau> (add_timepoints \<sigma>) = \<tau> \<si
 lemma i\<iota>_timepoints[simp]: "i\<iota> (add_timepoints \<sigma>) = id"
   by transfer (simp add: split_beta id_def)
 
-lemma next_i\<iota>_timepoints: "next_i\<iota> (add_timepoints \<sigma>) = Suc"
+lemma least_i\<iota>_timepoints[simp]: "least_i\<iota> (add_timepoints \<sigma>) = 0"
+  by (simp add: least_i\<iota>_def)
+
+lemma next_i\<iota>_timepoints[simp]: "next_i\<iota> (add_timepoints \<sigma>) = Suc"
   by (simp add: fun_eq_iff next_i\<iota>_def Least_equality)
 
-lemma i\<tau>_of_timepoints: "i\<tau>_of (add_timepoints \<sigma>) = \<tau> \<sigma>"
-  by (simp add: fun_eq_iff i\<tau>_of_def Least_equality)
+lemma i\<tau>_of_i\<iota>_timepoints[simp]: "i\<tau>_of_i\<iota> (add_timepoints \<sigma>) = \<tau> \<sigma>"
+  by (simp add: fun_eq_iff i\<tau>_of_i\<iota>_def Least_equality)
+
+lemma all_snth_eq_imp_eq: "(\<And>n. a !! n = b !! n) \<Longrightarrow> a = b"
+  by (metis stream.map_cong stream_smap_nats)
 
 lemma snth_Rep_trace: "Rep_trace \<sigma> !! i = (\<Gamma> \<sigma> i, \<tau> \<sigma> i)"
   by transfer simp
 
-lemma all_snth_eq_eqI: "(\<And>n. a !! n = b !! n) \<Longrightarrow> a = b"
-  by (metis stream.map_cong stream_smap_nats)
-
 lemma collapse_add_timepoints: "collapse (add_timepoints \<sigma>) = \<sigma>"
 proof -
   have "collapse' (add_timepoints \<sigma>) = Rep_trace \<sigma>"
-    by (auto simp: collapse'_def next_i\<iota>_timepoints i\<tau>_of_timepoints snth_Rep_trace
-        intro: all_snth_eq_eqI)
+    by (auto simp: collapse'_def snth_Rep_trace intro: all_snth_eq_imp_eq)
   then show ?thesis
     by (intro Rep_trace_inject[THEN iffD1]) (simp add: collapse.rep_eq)
 qed
+
+text \<open>Time-stamps as indexes:\<close>
+
+lift_definition add_timestamps :: "'a trace \<Rightarrow> 'a itrace" is
+  "smap (\<lambda>(db, ts). \<lparr>db=db, ts=ts, idx=ts\<rparr>)"
+  by (auto simp: split_beta stream.map_comp cong: stream.map_cong)
 
 
 locale itrace_partition =
@@ -1912,9 +1983,6 @@ lemma partition_relax_linearize: "partition n \<circ>\<then> mapM_set relax_orde
   done
 
 
-lemma i\<iota>_eq_imp_i\<tau>_eq: "i\<iota> \<sigma> i = i\<iota> \<sigma> j \<Longrightarrow> i\<tau> \<sigma> i = i\<tau> \<sigma> j"
-  by (transfer fixing: i j) (simp add: eq_iff)
-
 lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> determ (collapse \<circ>> Rep_trace)"
   apply (clarsimp simp: le_fun_def kleisli_set_def collapse.rep_eq reorder'_eq_alt reorder_alt_def
       idx_stream_def collapse'_def mwpartition_def)
@@ -1924,9 +1992,9 @@ lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> 
     by (clarsimp simp: fun_eq_iff least_idx_def next_i\<iota>_def mwtrace_partition_def Suc_le_eq)
       metis
   subgoal for \<sigma> \<sigma>'
-    by (simp add: least_idx_def mwtrace_partition_def) metis
+    by (simp add: least_idx_def least_i\<iota>_def mwtrace_partition_def) metis
   subgoal for \<sigma> \<sigma>' i
-    apply (clarsimp simp: collapse_idx_def ts_of_idx_def i\<tau>_of_def mwtrace_partition_def)
+    apply (clarsimp simp: collapse_idx_def ts_of_idx_def i\<tau>_of_i\<iota>_def mwtrace_partition_def)
     apply safe
     subgoal by fastforce
     subgoal for f j
@@ -1937,7 +2005,7 @@ lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> 
     subgoal
       apply (rule LeastI2_ex[where P="\<lambda>j. i = i\<iota> \<sigma> j"])
        apply (clarsimp simp: sset_siterate)
-       apply (rule ex_funpow_next_i\<iota>)
+       apply (rule ex_funpow_next_i\<iota>1)
       apply simp
       apply (rule LeastI2_ex)
        apply metis
@@ -1951,15 +2019,18 @@ lemma mwpartition_reorder': "mwpartition n \<circ>\<then> determ reorder' \<le> 
 definition tslice :: "('a \<Rightarrow> 'b set \<Rightarrow> 'c set) \<Rightarrow> 'a list \<Rightarrow> 'b trace \<Rightarrow> 'c trace list" where
   "tslice f xs \<sigma> = map2 (\<lambda>x. map_\<Gamma> (f x)) xs (replicate (length xs) \<sigma>)"
 
+lemma least_i\<iota>_map_i\<Gamma>: "least_i\<iota> (map_i\<Gamma> f \<sigma>) = least_i\<iota> \<sigma>"
+  by (transfer fixing: f) (simp add: least_i\<iota>_def)
+
 lemma next_i\<iota>_map_i\<Gamma>: "next_i\<iota> (map_i\<Gamma> f \<sigma>) = next_i\<iota> \<sigma>"
   by (transfer fixing: f) (simp add: fun_eq_iff next_i\<iota>_def)
 
 lemma map_\<Gamma>_inter_collapse: "map_\<Gamma> (\<lambda>Y. X \<inter> Y) (collapse \<sigma>) = collapse (map_i\<Gamma> (\<lambda>Y. X \<inter> Y) \<sigma>)"
   apply (rule Rep_trace_inject[THEN iffD1])
   apply (simp add: map_\<Gamma>.rep_eq collapse.rep_eq collapse'_def stream.map_comp
-      next_i\<iota>_map_i\<Gamma>)
+      least_i\<iota>_map_i\<Gamma> next_i\<iota>_map_i\<Gamma> cong: stream.map_cong)
   apply (rule stream.map_cong[OF refl])
-  apply (auto simp: i\<tau>_of_def)
+  apply (auto simp: i\<tau>_of_i\<iota>_def)
   done
 
 lemma islice_collapse_swap: "islice (\<inter>) xs \<circ>> map collapse = collapse \<circ>> tslice (\<inter>) xs"
@@ -2092,4 +2163,6 @@ corollary watermarked_multi_source:
       strong_kleisli_singleton_conv wpartition_def, simplified, rule_format, THEN conjunct2,
       rule_format, OF assms(2)] .
 
+(*<*)
 end
+(*>*)
