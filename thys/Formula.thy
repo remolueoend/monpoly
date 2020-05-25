@@ -490,6 +490,84 @@ lemma eps_fv_cong:
   unfolding eps_match by (erule match_fv_cong[THEN fun_cong, THEN fun_cong])
 
 
+subsection \<open>Past-only formulas\<close>
+
+fun past_only :: "formula \<Rightarrow> bool" where
+  "past_only (Pred _ _) = True"
+| "past_only (Eq _ _) = True"
+| "past_only (Less _ _) = True"
+| "past_only (LessEq _ _) = True"
+| "past_only (Let _ _ \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Neg \<psi>) = past_only \<psi>"
+| "past_only (Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (And \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Ands l) = (\<forall>\<alpha>\<in>set l. past_only \<alpha>)"
+| "past_only (Exists \<psi>) = past_only \<psi>"
+| "past_only (Agg _ _ _ _ \<psi>) = past_only \<psi>"
+| "past_only (Prev _ \<psi>) = past_only \<psi>"
+| "past_only (Next _ _) = False"
+| "past_only (Since \<alpha> _ \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (Until \<alpha> _ \<beta>) = False"
+| "past_only (MatchP _ r) = Regex.pred_regex past_only r"
+| "past_only (MatchF _ _) = False"
+
+lemma past_only_sat:
+  assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
+  shows "i < plen \<pi> \<Longrightarrow> dom V = dom V' \<Longrightarrow>
+     (\<And>p i. p \<in> dom V \<Longrightarrow> i < plen \<pi> \<Longrightarrow> the (V p) i = the (V' p) i) \<Longrightarrow>
+     past_only \<phi> \<Longrightarrow> sat \<sigma> V v i \<phi> = sat \<sigma>' V' v i \<phi>"
+proof (induction \<phi> arbitrary: V V' v i)
+  case (Pred e ts)
+  show ?case proof (cases "V e")
+    case None
+    then have "V' e = None" using \<open>dom V = dom V'\<close> by auto
+    with None \<Gamma>_prefix_conv[OF assms(1,2) Pred(1)] show ?thesis by simp
+  next
+    case (Some a)
+    moreover obtain a' where "V' e = Some a'" using Some \<open>dom V = dom V'\<close> by auto
+    moreover have "the (V e) i = the (V' e) i"
+      using Some Pred(1,3) by (fastforce intro: domI)
+    ultimately show ?thesis by simp
+  qed
+next
+  case (Let p b \<phi> \<psi>)
+  let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto>
+      \<lambda>i. {v. length v = nfv \<phi> - b \<and>
+              (\<exists>zs. length zs = b \<and>
+                    sat \<sigma> V (zs @ v) i \<phi>)}))"
+  show ?case unfolding sat.simps proof (rule Let.IH(2))
+    show "i < plen \<pi>" by fact
+    from Let.prems show "past_only \<psi>" by simp
+    from Let.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
+      by (simp del: fun_upd_apply)
+  next
+    fix p' i
+    assume *: "p' \<in> dom (?V V \<sigma>)" "i < plen \<pi>"
+    show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
+      case True
+      with Let \<open>i < plen \<pi>\<close> show ?thesis by auto
+    next
+      case False
+      with * show ?thesis by (auto intro!: Let.prems(3))
+    qed
+  qed
+next
+  case (Ands l)
+  with \<Gamma>_prefix_conv[OF assms] show ?case by simp
+next
+  case (Prev I \<phi>)
+  with \<tau>_prefix_conv[OF assms] show ?case by (simp split: nat.split)
+next
+  case (Since \<phi>1 I \<phi>2)
+  with \<tau>_prefix_conv[OF assms] show ?case by auto
+next
+  case (MatchP I r)
+  then have "Regex.match (sat \<sigma> V v) r a b = Regex.match (sat \<sigma>' V' v) r a b" if "b < plen \<pi>" for a b
+    using that by (intro Regex.match_cong_strong) (auto simp: regex.pred_set)
+  with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
+qed auto
+
+
 subsection \<open>Safe formulas\<close>
 
 fun remove_neg :: "formula \<Rightarrow> formula" where
@@ -871,62 +949,6 @@ lemma sat_slice_iff:
   shows "sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (slice \<phi> S \<sigma>) V v i \<phi>"
   unfolding slice_def
   by (rule sat_slice_strong[OF assms]) auto
-
-qualified lift_definition pslice :: "formula \<Rightarrow> env set \<Rightarrow> prefix \<Rightarrow> prefix" is
-  "\<lambda>\<phi> S \<pi>. map (\<lambda>(D, t). (D \<inter> relevant_events \<phi> S, t)) \<pi>"
-  by (auto simp: o_def split_beta)
-
-lemma prefix_of_pslice_slice: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of (pslice \<phi> R \<pi>) (slice \<phi> R \<sigma>)"
-  unfolding slice_def
-  by transfer simp
-
-lemma plen_pslice[simp]: "plen (pslice \<phi> R \<pi>) = plen \<pi>"
-  by transfer simp
-
-lemma pslice_pnil[simp]: "pslice \<phi> R pnil = pnil"
-  by transfer simp
-
-lemma last_ts_pslice[simp]: "last_ts (pslice \<phi> R \<pi>) = last_ts \<pi>"
-  by transfer (simp add: last_map case_prod_beta split: list.split)
-
-lemma prefix_of_replace_prefix:
-  "prefix_of (pslice \<phi> R \<pi>) \<sigma> \<Longrightarrow> prefix_of \<pi> (replace_prefix \<pi> \<sigma>)"
-proof (transfer; safe; goal_cases)
-  case (1 \<phi> R \<pi> \<sigma>)
-  then show ?case
-    by (subst (asm) (2) stake_sdrop[symmetric, of _ "length \<pi>"])
-      (auto 0 3 simp: ssorted_shift split_beta o_def stake_shift sdrop_smap[symmetric]
-        ssorted_sdrop not_le pslice_def simp del: sdrop_smap)
-qed
-
-lemma slice_replace_prefix:
-  "prefix_of (pslice \<phi> R \<pi>) \<sigma> \<Longrightarrow> slice \<phi> R (replace_prefix \<pi> \<sigma>) = slice \<phi> R \<sigma>"
-unfolding slice_def proof (transfer; safe; goal_cases)
-  case (1 \<phi> R \<pi> \<sigma>)
-  then show ?case
-    by (subst (asm) (2) stake_sdrop[symmetric, of \<sigma> "length \<pi>"],
-        subst (3) stake_sdrop[symmetric, of \<sigma> "length \<pi>"])
-      (auto simp: ssorted_shift split_beta o_def stake_shift sdrop_smap[symmetric] ssorted_sdrop
-        not_le pslice_def simp del: sdrop_smap cong: map_cong)
-qed
-
-lemma prefix_of_psliceD:
-  assumes "prefix_of (pslice \<phi> R \<pi>) \<sigma>"
-  shows "\<exists>\<sigma>'. prefix_of \<pi> \<sigma>' \<and> prefix_of (pslice \<phi> R \<pi>) (slice \<phi> R \<sigma>')"
-proof -
-  from assms(1) obtain \<sigma>' where 1: "prefix_of \<pi> \<sigma>'"
-    using ex_prefix_of by blast
-  then have "prefix_of (pslice \<phi> R \<pi>) (slice \<phi> R \<sigma>')"
-    unfolding slice_def
-    by transfer simp
-  with 1 show ?thesis by blast
-qed
-
-lemma prefix_of_sliceD:
-  assumes "prefix_of \<pi>' (slice \<phi> R \<sigma>)"
-  shows "\<exists>\<pi>''. \<pi>' = pslice \<phi> R \<pi>'' \<and> prefix_of \<pi>'' \<sigma>"
-  using assms unfolding slice_def
-  by transfer (auto intro!: exI[of _ "stake (length _) _"] elim: sym dest: sorted_stake)
 
 
 subsection \<open>Translation to n-ary conjunction\<close>

@@ -6,13 +6,14 @@ session Optimized_MFODL_Monitor (AFP) = Containers +
     IEEE_Floating_Point
     Generic_Join
   theories
+    Trace
+    Abstract_Monitor
+    Multi_Source
     Code_Double
     Event_Data
-    Trace
     Regex
     Interval
     Formula
-    Abstract_Monitor
     Optimized_Join
     Monitor
     Optimized_MTL

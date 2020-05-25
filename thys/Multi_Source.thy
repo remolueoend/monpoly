@@ -2009,10 +2009,10 @@ lemma map_\<Gamma>_inter_collapse: "map_\<Gamma> (\<lambda>Y. X \<inter> Y) (col
   apply (auto simp: i\<tau>_of_i\<iota>_def)
   done
 
-abbreviation "tslice' Xs \<equiv> (\<lambda>\<sigma>. map (\<lambda>X. map_\<Gamma> ((\<inter>) X) \<sigma>) Xs)"
+abbreviation "tslice Xs \<equiv> (\<lambda>\<sigma>. map (\<lambda>X. map_\<Gamma> ((\<inter>) X) \<sigma>) Xs)"
 
-lemma islice_collapse_swap: "islice Xs \<circ>> map collapse = collapse \<circ>> tslice' Xs"
-  by (clarsimp simp: fun_eq_iff islice_def tslice_def split_beta
+lemma islice_collapse_swap: "islice Xs \<circ>> map collapse = collapse \<circ>> tslice Xs"
+  by (clarsimp simp: fun_eq_iff islice_def split_beta
       map_\<Gamma>_inter_collapse zip_replicate2 cong: map_cong)
 
 
@@ -2140,7 +2140,7 @@ lemma not_Nil_in_transpose: "[] \<notin> set (transpose xss)"
 
 theorem multi_source_correctness:
   assumes "0 < n"
-  shows "wpartition n !\<then> multi_source_slicer Xs = determ (collapse \<circ>> tslice' Xs)"
+  shows "wpartition n !\<then> multi_source_slicer Xs = determ (collapse \<circ>> tslice Xs)"
 proof (rule eq_determI)
   have lhs_eq: "wpartition n !\<then> multi_source_slicer Xs = ipartition n !\<then> mapM_set relax_order !\<then>
     determ (map (wslice Xs)) !\<then> determ transpose !\<then> mapM_set merge !\<then>
@@ -2175,9 +2175,9 @@ proof (rule eq_determI)
     apply (rule mapM_set_mono)
     apply (rule mwpartition_reorder')
     done
-  also have "\<dots> \<le> determ (collapse \<circ>> tslice' Xs)"
+  also have "\<dots> \<le> determ (collapse \<circ>> tslice Xs)"
     by (simp add: determ_fcomp_eq_kleisli[symmetric] islice_collapse_swap)
-  finally show "wpartition n !\<then> multi_source_slicer Xs \<le> determ (collapse \<circ>> tslice' Xs)" .
+  finally show "wpartition n !\<then> multi_source_slicer Xs \<le> determ (collapse \<circ>> tslice Xs)" .
 
   have "\<And>x. ?lhs x \<noteq> {}"
     apply (rule strong_kleisli_not_emptyI)
@@ -2201,7 +2201,7 @@ qed
 corollary ordered_multi_source_correctness:
   assumes "0 < n"
   shows "ipartition n !\<then> determ (map add_wmarks) !\<then> multi_source_slicer Xs =
-    determ (collapse \<circ>> tslice' Xs)" (is "?impl = ?spec")
+    determ (collapse \<circ>> tslice Xs)" (is "?impl = ?spec")
 proof (rule eq_determI)
   have 1: "\<And>a b c. b \<in> ipartition n a \<Longrightarrow> c \<in> mapM_set relax_order b \<Longrightarrow> multi_source_slicer Xs c \<noteq> {}"
     using multi_source_correctness[OF assms, of Xs]
@@ -2236,46 +2236,47 @@ subsubsection \<open>Corollaries\<close>
 
 corollary partially_ordered_multi_source:
   assumes "0 < n" and "ipartitionp \<sigma> n ps"
-  shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice' Xs (collapse \<sigma>)}"
+  shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice Xs (collapse \<sigma>)}"
   using ordered_multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
       strong_kleisli_singleton_conv ipartition_def, simplified, rule_format, THEN conjunct2,
       rule_format, OF assms(2)] .
 
 corollary totally_ordered_multi_source:
   assumes "0 < n" and "ipartitionp (add_timepoints \<sigma>) n ps"
-  shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice' Xs \<sigma>}"
+  shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice Xs \<sigma>}"
   using partially_ordered_multi_source[OF assms, unfolded collapse_add_timepoints] .
 
 corollary watermarked_multi_source:
   assumes "0 < n" and "wpartitionp \<sigma> n ps"
-  shows "multi_source_slicer Xs ps = {tslice' Xs (collapse \<sigma>)}"
+  shows "multi_source_slicer Xs ps = {tslice Xs (collapse \<sigma>)}"
   using multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
       strong_kleisli_singleton_conv wpartition_def, simplified, rule_format, THEN conjunct2,
       rule_format, OF assms(2)] .
 
-subsubsection \<open>Integration with the monitor function\<close>
+subsubsection \<open>Integration with the slicing framework\<close>
 
-lemma tslice'_relevant_events: "tslice' (map (relevant_events \<phi>) Xs) \<sigma> = map (\<lambda>X. tslice \<phi> X \<sigma>) Xs"
-  by (simp add: tslice_def)
-
-context slicable_monitor
+context sliceable_fo_spec
 begin
 
-definition multi_source_monitor :: "Formula.formula \<Rightarrow> Formula.env set list \<Rightarrow> Formula.event wtrace list \<Rightarrow> (nat \<times> event_data tuple) set stream" where
-  "multi_source_monitor \<phi> Xs = multi_source_slicer (map (relevant_events \<phi>) Xs) \<circ>> the_elem \<circ>>
-    map2 (\<lambda>X. monitor_stream \<phi> \<circ>> verdict_filter \<phi> X) Xs \<circ>> union_streams"
+lemma tslice_relevant_events: "tslice (map relevant_events Xs) \<sigma> = map (\<lambda>X. slice X \<sigma>) Xs"
+  by (simp add: Int_commute cong: map_\<Gamma>_cong)
+
+definition multi_source_monitor :: "'b list set list \<Rightarrow> 'a wtrace list \<Rightarrow> (nat \<times> 'b tuple) set set" where
+  "multi_source_monitor Xs = multi_source_slicer (map relevant_events Xs) \<circ>\<then>
+    determ (map2 (\<lambda>X. verdicts \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
 theorem multi_source_monitor_eq:
   assumes "\<Union>(set Xs) = UNIV" and "0 < n" and "wpartitionp \<sigma> n ps"
-  shows "multi_source_monitor \<phi> Xs ps = monitor_stream \<phi> (collapse \<sigma>)"
+  shows "multi_source_monitor Xs ps = {verdicts (collapse \<sigma>)}"
 proof -
-  let ?Xs' = "map (relevant_events \<phi>) Xs"
-  have "multi_source_slicer ?Xs' ps = {tslice' ?Xs' (collapse \<sigma>)}"
+  let ?Xs' = "map relevant_events Xs"
+  have "multi_source_slicer ?Xs' ps = {tslice ?Xs' (collapse \<sigma>)}"
     using watermarked_multi_source[OF assms(2,3)] .
   then show ?thesis
-    unfolding tslice'_relevant_events
-    by (simp add: multi_source_monitor_def map2_map_map[where f=id, simplified]
-        slice_monitor_stream_eq[OF assms(1)])
+    unfolding tslice_relevant_events
+    by (simp add: multi_source_monitor_def kleisli_set_def determ_def
+        map2_map_map[where f=id, simplified] del: set_map)
+      (simp add: union_verdicts_slice[OF assms(1)])
 qed
 
 end

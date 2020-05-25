@@ -124,6 +124,9 @@ typedef 'a prefix = "{p :: ('a set \<times> nat) list. sorted (map snd p)}"
 
 setup_lifting type_definition_prefix
 
+lift_definition pmap_\<Gamma> :: "('a set \<Rightarrow> 'b set) \<Rightarrow> 'a prefix \<Rightarrow> 'b prefix" is "\<lambda>f. map (apfst f)"
+  by simp
+
 lift_definition last_ts :: "'a prefix \<Rightarrow> nat" is
   "\<lambda>p. (case p of [] \<Rightarrow> 0 | _ \<Rightarrow> snd (last p))" .
 
@@ -209,6 +212,28 @@ lemma pdrop_0[simp]: "pdrop 0 \<pi> = \<pi>"
 
 lemma prefix_of_antimono: "\<pi> \<le> \<pi>' \<Longrightarrow> prefix_of \<pi>' s \<Longrightarrow> prefix_of \<pi> s"
   by transfer (auto simp del: stake_add simp add: stake_add[symmetric])
+
+lemma prefix_of_imp_linear: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of \<pi>' \<sigma> \<Longrightarrow> \<pi> \<le> \<pi>' \<or> \<pi>' \<le> \<pi>"
+proof transfer
+  fix \<pi> \<pi>' and \<sigma> :: "('a set \<times> nat) stream"
+  assume assms: "stake (length \<pi>) \<sigma> = \<pi>" "stake (length \<pi>') \<sigma> = \<pi>'"
+  show "(\<exists>r. \<pi>' = \<pi> @ r) \<or> (\<exists>r. \<pi> = \<pi>' @ r)"
+  proof (cases "length \<pi>" "length \<pi>'" rule: le_cases)
+    case le
+    then have "\<pi>' = take (length \<pi>) \<pi>' @ drop (length \<pi>) \<pi>'"
+      by simp
+    moreover have "take (length \<pi>) \<pi>' = \<pi>"
+      using assms le by (metis min.absorb1 take_stake)
+    ultimately show ?thesis by auto
+  next
+    case ge
+    then have "\<pi> = take (length \<pi>') \<pi> @ drop (length \<pi>') \<pi>"
+      by simp
+    moreover have "take (length \<pi>') \<pi> = \<pi>'"
+      using assms ge by (metis min.absorb1 take_stake)
+    ultimately show ?thesis by auto
+  qed
+qed
 
 lemma ex_prefix_of: "\<exists>s. prefix_of p s"
 proof (transfer, intro bexI CollectI conjI)
