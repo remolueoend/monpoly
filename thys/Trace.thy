@@ -39,38 +39,58 @@ lemma ssorted_monoI: "\<forall>i j. i \<le> j \<longrightarrow> s !! i \<le> s !
 lemma ssorted_iff_mono: "ssorted s \<longleftrightarrow> (\<forall>i j. i \<le> j \<longrightarrow> s !! i \<le> s !! j)"
   using ssorted_monoI ssorted_monoD by metis
 
-definition "sincreasing s = (\<forall>i. \<exists>j>i. s !! i < s !! j)"
+lemma ssorted_iff_le_Suc: "ssorted s \<longleftrightarrow> (\<forall>i. s !! i \<le> s !! Suc i)"
+  using mono_iff_le_Suc[of "snth s"] by (simp add: mono_def ssorted_iff_mono)
 
-lemma sincreasingD_nat:
-  fixes x :: nat
+definition "sincreasing s = (\<forall>x. \<exists>i. x < s !! i)"
+
+lemma sincreasingI: "(\<And>x. \<exists>i. x < s !! i) \<Longrightarrow> sincreasing s"
+  by (simp add: sincreasing_def)
+
+lemma sincreasing_grD:
+  fixes x :: "'a :: semilattice_sup"
   assumes "sincreasing s"
-  shows "\<exists>j\<ge>i. x \<le> s !! j"
-proof (induction x)
-  case 0
-  show ?case by auto
-next
-  case (Suc x)
-  then obtain j where "i \<le> j \<and> x \<le> s !! j" ..
-  moreover obtain j' where "j < j' \<and> s !! j < s !! j'"
-    using assms by (auto simp: sincreasing_def)
-  ultimately have "i \<le> j' \<and> Suc x \<le> s !! j'"
-    by (auto intro: Suc_leI order.strict_trans2)
-  then show ?case ..
+  shows "\<exists>j>i. x < s !! j"
+proof -
+  let ?A = "insert x {s !! n | n. n \<le> i}"
+  from assms obtain j where *: "Sup_fin ?A < s !! j"
+    by (auto simp: sincreasing_def)
+  then have "x < s !! j"
+    by (rule order.strict_trans1[rotated]) (auto intro: Sup_fin.coboundedI)
+  moreover have "i < j"
+  proof (rule ccontr)
+    assume "\<not> i < j"
+    then have "s !! j \<in> ?A" by (auto simp: not_less)
+    then have "s !! j \<le> Sup_fin ?A"
+      by (auto intro: Sup_fin.coboundedI)
+    with * show False by simp
+  qed
+  ultimately show ?thesis by blast
 qed
 
-lemma sincreasing_siterate[simp]:
+lemma sincreasing_siterate_nat[simp]:
+  fixes n :: nat
   assumes "(\<And>n. n < f n)"
   shows "sincreasing (siterate f n)"
 unfolding sincreasing_def proof
-  fix i
-  show "\<exists>j>i. siterate f n !! i < siterate f n !! j" (is "\<exists>j. ?P n i j")
-  proof (induct i arbitrary: n)
-    case (Suc i)
-    from Suc[of "f n"] obtain j where "?P (f n) i j" by blast
-    then show ?case
-      by (intro exI[of _ "Suc j"]) auto
-  qed (auto intro!: exI[of _ "Suc 0"] assms)
+  fix x
+  show "\<exists>i. x < siterate f n !! i"
+  proof (induction x)
+    case 0
+    have "0 < siterate f n !! 1"
+      using order.strict_trans1[OF le0 assms] by simp
+    then show ?case ..
+  next
+    case (Suc x)
+    then obtain i where "x < siterate f n !! i" ..
+    then have "Suc x < siterate f n !! Suc i"
+      using order.strict_trans1[OF _ assms] by (simp del: snth.simps)
+    then show ?case ..
+  qed
 qed
+
+lemma sincreasing_stl: "sincreasing s \<Longrightarrow> sincreasing (stl s)" for s :: "'a :: semilattice_sup stream"
+  by (auto 0 4 simp: gr0_conv_Suc intro!: sincreasingI dest: sincreasing_grD[of s 0])
 
 typedef 'a trace = "{s :: ('a set \<times> nat) stream. ssorted (smap snd s) \<and> sincreasing (smap snd s)}"
   by (intro exI[of _ "smap (\<lambda>i. ({}, i)) nats"])
@@ -87,7 +107,7 @@ lemma \<tau>_mono[simp]: "i \<le> j \<Longrightarrow> \<tau> s i \<le> \<tau> s 
   by transfer (auto simp: ssorted_iff_mono)
 
 lemma ex_le_\<tau>: "\<exists>j\<ge>i. x \<le> \<tau> s j"
-  by (transfer fixing: i x) (auto dest!: sincreasingD_nat[of _ i x])
+  by (transfer fixing: i x) (auto dest!: sincreasing_grD[of _ i x] less_imp_le)
 
 lemma le_\<tau>_less: "\<tau> \<sigma> i \<le> \<tau> \<sigma> j \<Longrightarrow> j < i \<Longrightarrow> \<tau> \<sigma> i = \<tau> \<sigma> j"
   by (simp add: antisym)
@@ -246,19 +266,12 @@ proof (transfer, intro bexI CollectI conjI)
     by (cases p) (auto simp: last_conv_nth nth_Cons')
   with * show "ssorted (smap snd ?\<sigma>)"
     by (force simp: ssorted_iff_mono sorted_iff_nth_mono shift_snth)
-  show "sincreasing (smap snd ?\<sigma>)" unfolding sincreasing_def
-  proof (rule allI)
-    fix i
-    show "\<exists>j > i.  smap snd ?\<sigma> !! i < smap snd ?\<sigma> !! j"
-    proof (cases "i < length p")
-      case True
-      with le_last[of i] show ?thesis
-        by (auto intro!: exI[of _ "Suc (length p)"])
-    next
-      case False
-      then show ?thesis
-        by (auto simp: neq_Nil_conv intro!: exI[of _ "Suc i"])
-    qed
+  show "sincreasing (smap snd ?\<sigma>)"
+  proof (rule sincreasingI)
+    fix x
+    have "x < smap snd ?\<sigma> !! Suc (length p + x)"
+      by simp (metis Suc_pred add.commute diff_Suc_Suc length_greater_0_conv less_add_Suc1 less_diff_conv)
+    then show "\<exists>i. x < smap snd ?\<sigma> !! i" ..
   qed
 qed
 
@@ -269,14 +282,16 @@ lemma \<Gamma>_prefix_conv: "prefix_of p s \<Longrightarrow> prefix_of p s' \<Lo
   by transfer (simp add: stake_nth[symmetric])
 
 lemma sincreasing_sdrop:
+  fixes s :: "('a :: semilattice_sup) stream"
   assumes "sincreasing s"
   shows "sincreasing (sdrop n s)"
-proof (unfold sincreasing_def; safe)
-  fix i
-  from assms obtain j where "n + i < j" "s !! (n + i) < s !! j"
-    unfolding sincreasing_def by auto
-  then show "\<exists>j>i. sdrop n s !! i < sdrop n s !! j"
-    by (auto simp: sdrop_snth intro!: exI[of _ "j - n"])
+proof (rule sincreasingI)
+  fix x
+  obtain i where "n < i" and "x < s !! i"
+    using sincreasing_grD[OF assms] by blast
+  then have "x < sdrop n s !! (i - n)"
+    by (simp add: sdrop_snth)
+  then show "\<exists>i. x < sdrop n s !! i" ..
 qed
 
 lemma ssorted_shift:
@@ -302,23 +317,15 @@ next
 qed
 
 lemma sincreasing_shift:
-  assumes "ssorted (xs @- s)" "sincreasing s"
+  assumes "sincreasing s"
   shows "sincreasing (xs @- s)"
-proof (unfold sincreasing_def; safe)
-  fix i
-  show "\<exists>j>i. (xs @- s) !! i < (xs @- s) !! j"
-  proof (cases "i < length xs")
-    case True
-    with assms(1) have "xs ! i \<le> shd s" unfolding ssorted_shift by (auto simp: shd_sset)
-    also obtain j where "\<dots> < s !! j"
-      using assms(2) by (auto simp: sincreasing_def dest: spec[of _ 0])
-    finally show ?thesis using True by (auto intro!: exI[of _ "j + length xs"])
-  next
-    case False
-    then obtain j where "i - length xs < j" "s !! (i - length xs) < s !! j"
-      using assms(2) by (auto simp: sincreasing_def)
-    then show ?thesis using False by (auto simp: not_less intro!: exI[of _ "j + length xs"])
-  qed
+proof (rule sincreasingI)
+  fix x
+  from assms obtain i where "x < s !! i"
+    unfolding sincreasing_def by blast
+  then have "x < (xs @- s) !! (length xs + i)"
+    by simp
+  then show "\<exists>i. x < (xs @- s) !! i" ..
 qed
 
 lift_definition replace_prefix :: "'a prefix \<Rightarrow> 'a trace \<Rightarrow> 'a trace" is

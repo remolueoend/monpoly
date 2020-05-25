@@ -161,8 +161,8 @@ lift_definition i\<iota> :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" is "
 lemma i\<iota>_mono: "i \<le> j \<Longrightarrow> i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j"
   by transfer (simp add: ssorted_iff_mono)
 
-lemma i\<tau>_increasing: "\<exists>j>i. i\<tau> \<sigma> i < i\<tau> \<sigma> j"
-  by transfer (simp add: sincreasing_def)
+lemma ex_i\<tau>_gr: "\<exists>j>i. x < i\<tau> \<sigma> j"
+  by transfer (auto dest!: sincreasing_grD)
 
 lemma i\<iota>_refines_i\<tau>: "i\<iota> \<sigma> i \<le> i\<iota> \<sigma> j \<Longrightarrow> i\<tau> \<sigma> i \<le> i\<tau> \<sigma> j"
   by transfer simp
@@ -202,7 +202,7 @@ next
   case (Suc i)
   then obtain i' j where IH: "i' \<ge> i \<and> i' = i\<iota> \<sigma> j" by blast
   obtain j' where "i\<tau> \<sigma> j < i\<tau> \<sigma> j'"
-    using i\<tau>_increasing by blast
+    using ex_i\<tau>_gr by blast
   then have "i\<iota> \<sigma> j < i\<iota> \<sigma> j'"
     using i\<iota>_refines_i\<tau> le_less_linear by (blast dest: leD)
   with IH have "Suc i \<le> i\<iota> \<sigma> j'"
@@ -342,21 +342,15 @@ proof (intro conjI)
   then show "ssorted (smap snd (collapse' \<sigma>))"
     by (simp add: ssorted_iff_mono collapse'_def)
 
-  have "\<exists>b>a. i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) < i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>))" for a
+  have "\<exists>a. x < i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>))" for x
   proof -
-    obtain ja where a_eq: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> ja"
-      using ex_funpow_next_i\<iota>1 ..
-    obtain jb where "i\<tau> \<sigma> ja < i\<tau> \<sigma> jb"
-      using i\<tau>_increasing by blast
-    obtain b where b_eq: "(next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> jb"
+    obtain ja where "x < i\<tau> \<sigma> ja"
+      using ex_i\<tau>_gr by blast
+    moreover obtain a where a_eq: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> ja"
       using ex_funpow_next_i\<iota>2 ..
-    from \<open>i\<tau> \<sigma> ja < i\<tau> \<sigma> jb\<close> have "i\<iota> \<sigma> ja < i\<iota> \<sigma> jb"
-      using i\<iota>_refines_i\<tau> leD le_less_linear by blast
-    then have "a < b"
-      using less_funpow_next_i\<iota>[of a \<sigma> b] by (auto simp: a_eq b_eq)
-    moreover have "i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) < i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>))"
-      using \<open>i\<tau> \<sigma> ja < i\<tau> \<sigma> jb\<close> unfolding a_eq b_eq i\<tau>_of_i\<iota>_eq .
-    ultimately show ?thesis by blast
+    ultimately have "x < i\<tau>_of_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>))"
+      by (simp add: i\<tau>_of_i\<iota>_eq)
+    then show ?thesis ..
   qed
   then show "sincreasing (smap snd (collapse' \<sigma>))"
     by (simp add: sincreasing_def collapse'_def)
@@ -464,15 +458,15 @@ lift_definition w\<beta> :: "'a wtrace \<Rightarrow> nat \<Rightarrow> nat" is "
 lemma w\<iota>_refines_w\<tau>: "w\<iota> \<sigma> i \<le> w\<iota> \<sigma> j \<Longrightarrow> w\<tau> \<sigma> i \<le> w\<tau> \<sigma> j"
   by transfer (simp add: wtracep_def)
 
-lemma ex_w\<tau>_ge: "\<exists>j\<ge>i. x \<le> w\<tau> \<sigma> j"
-  by transfer (auto simp: wtracep_def dest!: sincreasingD_nat)
+lemma ex_w\<tau>_gr: "\<exists>j>i. x < w\<tau> \<sigma> j"
+  by transfer (auto simp: wtracep_def dest!: sincreasing_grD)
 
-lemma ex_w\<iota>_gr: "\<exists>x>i. \<exists>j. x = w\<iota> \<sigma> j"
+lemma ex_w\<iota>_eq: "\<exists>x>i. \<exists>j. x = w\<iota> \<sigma> j"
 proof (transfer fixing: i)
   fix s :: "'a wtsdb stream"
   assume "wtracep s"
   then obtain j where "i < wmark (s !! j)"
-    by (auto simp: wtracep_def less_eq_Suc_le dest!: sincreasingD_nat)
+    by (auto simp: wtracep_def less_eq_Suc_le dest!: sincreasing_grD)
   also have "wmark (s !! j) \<le> idx (s !! Suc j)"
     using \<open>wtracep s\<close> by (simp add: wtracep_def del: snth.simps)
   finally have "i < idx (s !! Suc j)" .
@@ -485,7 +479,7 @@ proof (transfer fixing: i)
   fix s :: "'a wtsdb stream"
   assume "wtracep s"
   then obtain b where "i < wmark (s !! b)"
-    by (auto simp: wtracep_def less_eq_Suc_le dest!: sincreasingD_nat)
+    by (auto simp: wtracep_def less_eq_Suc_le dest!: sincreasing_grD)
   then have "\<forall>j. i = idx (s !! j) \<longrightarrow> j \<le> b"
     using \<open>wtracep s\<close> le_less_linear
     by (fastforce simp: wtracep_def)
@@ -496,8 +490,32 @@ subsubsection \<open>Preserving the index order\<close>
 
 lift_definition add_wmarks :: "'a itrace \<Rightarrow> 'a wtrace" is
   "smap (\<lambda>x. \<lparr>db=db x, ts=ts x, idx=idx x, wmark=idx x\<rparr>)"
-  by (simp add: wtracep_def stream.map_comp ssorted_iff_mono sincreasing_def cong: stream.map_cong)
-    (meson not_le)
+proof  (simp add: wtracep_def stream.map_comp ssorted_iff_mono cong: stream.map_cong, clarify)
+  fix s :: "'a itsdb stream"
+  assume 1: "sincreasing (smap ts s)"
+  assume "\<forall>i j. idx (s !! i) \<le> idx (s !! j) \<longrightarrow> ts (s !! i) \<le> ts (s !! j)"
+  then have 2: "idx (s !! i) < idx (s !! j)" if "ts (s !! i) < ts (s !! j)" for i j
+    using leD le_less_linear that by blast
+  show "sincreasing (smap idx s)"
+  proof (rule sincreasingI)
+    fix x
+    show "\<exists>i. x < smap idx s !! i"
+    proof (induction x)
+      case 0
+      obtain j where "ts (s !! 0) < ts (s !! j)"
+        using 1 by (auto simp: sincreasing_def)
+      then show ?case
+        using order.strict_trans1[OF le0 2] by (auto simp del: snth.simps)
+    next
+      case (Suc x)
+      then obtain i where "x < idx (s !! i)" by auto
+      moreover obtain j where "ts (s !! i) < ts (s !! j)"
+        using 1 by (auto simp: sincreasing_def)
+      ultimately show ?case
+        using order.strict_trans1[OF Suc_leI 2] by auto
+    qed
+  qed
+qed
 
 subsubsection \<open>Relaxing the index order\<close>
 
@@ -569,17 +587,17 @@ lemma snth_sskip: "sskip n s !! i = s !! (i * Suc n)"
 lemma sincreasing_sskip:
   assumes "sincreasing s" and "ssorted s"
   shows "sincreasing (sskip n s)"
-  unfolding sincreasing_def
-proof
-  fix i
-  obtain j where "i + i * n < j" and "s !! (i + i * n) < s !! j"
+proof (rule sincreasingI)
+  fix x
+  obtain i where 1: "x < s !! i"
     using \<open>sincreasing s\<close> by (auto simp: sincreasing_def)
-  moreover have "s !! j \<le> s !! (j + j * n)"
-    using le_add1 ssorted_monoD[OF \<open>ssorted s\<close>] by blast
-  ultimately have "i < j \<and> s !! (i + i * n) < s !! (j + j * n)"
-    by (auto elim: order.strict_trans2)
-  then show "\<exists>j>i. sskip n s !! i < sskip n s !! j"
-    by (auto simp: snth_sskip)
+  have "i \<le> Suc (i div Suc n) * Suc n"
+    using dividend_less_div_times[of "Suc n" i] by simp
+  with 1 have "x < s !! (Suc (i div Suc n) * Suc n)"
+    using \<open>ssorted s\<close> by (blast dest: ssorted_monoD intro: order.strict_trans2)
+  then have "x < sskip n s !! Suc (i div Suc n)"
+    unfolding snth_sskip .
+  then show "\<exists>i. x < sskip n s !! i" ..
 qed
 
 lift_definition round_robin :: "nat \<Rightarrow> 'a itrace \<Rightarrow> 'a itrace list" is
@@ -777,27 +795,19 @@ lift_definition wsort :: "'a wtrace \<Rightarrow> 'a itrace" is
           apply blast
          apply simp
         apply (rule LeastI2_ex[where P="\<lambda>i'. w\<iota> \<sigma> ((wsort_step \<sigma> ^^ j) (wsort_init \<sigma>)) < i' \<and> (\<exists>j. i' = w\<iota> \<sigma> j)"])
-        apply (rule ex_w\<iota>_gr)
+        apply (rule ex_w\<iota>_eq)
         apply (metis (mono_tags, lifting) LeastI order.order_iff_strict)
         done
       done
     done
   subgoal for \<sigma>
-    apply (clarsimp simp: sincreasing_def)
-    subgoal for i
-      apply (insert ex_w\<tau>_ge[of "Suc (Max {wsort_indexes \<sigma> !! i' | i'. i' \<le> i})" "Suc (w\<tau> \<sigma> (wsort_indexes \<sigma> !! i))" \<sigma>])
-      apply (clarsimp simp: Suc_le_eq)
+    apply (rule sincreasingI)
+    apply simp
+    subgoal for x
+      apply (rule ex_w\<tau>_gr[of 0 x \<sigma>, THEN exE])
       subgoal for j
-        apply (insert ex_snth_wsort_indexes[of \<sigma> j])
-        apply clarify
-        subgoal for i'
-          apply (rule exI[where x=i'])
-          apply safe
-           apply (subst (asm) Max_less_iff)
-             apply simp
-          using ex_snth_wsort_indexes apply blast
-          apply fastforce
-          done
+        apply (rule ex_snth_wsort_indexes[of \<sigma> j, THEN exE])
+        apply auto
         done
       done
     done
@@ -929,9 +939,8 @@ setup_lifting type_definition_mwtrace
 subsubsection \<open>Projection functions\<close>
 
 lemma wtracep_stlI: "wtracep s \<Longrightarrow> wtracep (stl s)"
-  apply (auto simp: wtracep_def sincreasing_def elim: ssorted.cases)
-     apply (metis Suc_leI Suc_le_D Suc_le_lessD less_Suc_eq_le snth.simps(2))
-    apply (metis Suc_leI Suc_le_D Suc_le_lessD less_Suc_eq_le snth.simps(2))
+  apply (auto simp add: wtracep_def smap_simps[symmetric] simp del: smap_simps
+      elim: ssorted.cases sincreasing_stl)
    apply (metis snth.simps(2))
   by (metis Suc_mono snth.simps(2))
 
@@ -1332,7 +1341,7 @@ lemma ex_wmark_greater: "k \<in> mworigins \<sigma> \<Longrightarrow> \<exists>i
   subgoal for \<sigma> x
     apply (drule (1) bspec)
     apply clarify
-    apply (drule sincreasingD_nat[of "smap wmark _" 0 "Suc w"])
+    apply (drule sincreasing_grD[of "smap wmark _" 0 w])
     apply clarify
     subgoal for i
       apply (frule ex_snth_sfilter[where i=i])
@@ -1513,15 +1522,14 @@ definition collapse_reorder_state :: "'a raw_reorder_state \<Rightarrow> 'a mwtr
 lift_definition reorder_state_rel :: "'a mwtrace \<Rightarrow> 'a reorder_state \<Rightarrow> nat \<Rightarrow> bool" is
   "\<lambda>\<sigma> (st, \<sigma>') n. collapse_reorder_state st \<sigma>' = {(i, collapse_idx \<sigma> i, ts_of_idx \<sigma> i) | i. i \<in> sset (sdrop n (idx_stream \<sigma>))}" .
 
-lemma ex_idx_ge: "\<exists>x\<ge>y. \<exists>j. x = idx (mwnth \<sigma> j)"
+lemma ex_idx_eq: "\<exists>x\<ge>y. \<exists>j. x = idx (mwnth \<sigma> j)"
   apply (transfer fixing: y)
   subgoal for \<sigma>
     apply (clarsimp simp: wtracep_def)
     apply (drule bspec[where x="shd \<sigma>"])
      apply (simp add: shd_sset)
     apply clarify
-    apply (drule sincreasingD_nat[of "smap wmark _" 0 "Suc y"])
-    apply (simp add: Suc_le_eq)
+    apply (drule sincreasing_grD[of "smap wmark _" 0 y])
     apply (thin_tac "\<forall>i j. _ i j")
     apply clarsimp
     subgoal for i
@@ -1546,7 +1554,7 @@ lemma sset_idx_stream: "sset (idx_stream \<sigma>) = {i. \<exists>j. i = idx (mw
     apply (simp add: least_idx_def)
       apply (insert LeastI_ex[where P="\<lambda>i. Suc (idx (mwnth \<sigma> j)) \<le> i \<and> (\<exists>j. i = idx (mwnth \<sigma> j))"])
       apply (drule meta_mp)
-      apply (rule ex_idx_ge)
+      apply (rule ex_idx_eq)
       apply simp
       done
     done
@@ -1644,14 +1652,14 @@ lemma sdistinct_siterate_increasing: "(\<And>x::_::preorder. x < f x) \<Longrigh
 lemma sdistinct_idx_stream: "sdistinct (idx_stream \<sigma>)"
   apply (clarsimp simp: idx_stream_def least_idx_def Suc_le_eq intro!: sdistinct_siterate_increasing)
   apply (rule LeastI2_ex)
-  using Suc_le_lessD ex_idx_ge apply blast
+  using Suc_le_lessD ex_idx_eq apply blast
   apply simp
   done
 
 lemma ssorted_idx_stream: "ssorted (idx_stream \<sigma>)"
   apply (auto simp: idx_stream_def least_idx_def intro!: ssorted_siterate)
   apply (rule LeastI2_ex)
-  apply (rule ex_idx_ge)
+  apply (rule ex_idx_eq)
   apply simp
   done
 
