@@ -876,6 +876,54 @@ proof (rule antisym)
     using order.trans strong_kleisli_le_kleisli_set by blast
 qed
 
+subsubsection \<open>Complete definition of the input model\<close>
+
+text \<open>
+  Here, we collect all conditions imposed by the input model and express them
+  in terms of plain streams.
+\<close>
+
+locale wpartitionp_alt =
+  fixes \<sigma> :: "'a itrace" and n :: nat and ps :: "'a wtsdb stream list"
+  assumes
+    n_greater_0: "n > 0" and
+    length_ps_eq_n: "length ps = n" and
+    sorted_wmark: "\<forall>k<n. ssorted (smap wmark (ps ! k))" and
+    increasing_wmark: "\<forall>k<n. sincreasing (smap wmark (ps ! k))" and
+    increasing_ts: "\<forall>k<n. sincreasing (smap ts (ps ! k))" and
+    wmark_le_idx: "\<forall>k<n. \<forall>i. \<forall>j>i. wmark (ps ! k !! i) \<le> idx (ps ! k !! j)" and
+    sound_partition: "\<forall>k<n. \<forall>j. \<exists>i. idx (ps ! k !! j) = i\<iota> \<sigma> i \<and> ts (ps ! k !! j) = i\<tau> \<sigma> i \<and> db (ps ! k !! j) \<subseteq> i\<Gamma> \<sigma> i" and
+    complete_partition1: "\<forall>i. \<exists>k<n. \<exists>j. idx (ps ! k !! j) = i\<iota> \<sigma> i \<and> ts (ps ! k !! j) = i\<tau> \<sigma> i" and
+    complete_partition2: "\<forall>i. \<forall>f \<in> i\<Gamma> \<sigma> i. \<exists>k<n. \<exists>j. idx (ps ! k !! j) = i\<iota> \<sigma> i \<and> ts (ps ! k !! j) = i\<tau> \<sigma> i \<and> f \<in> db (ps ! k !! j)"
+begin
+
+lift_definition ps' :: "'a wtrace list" is ps
+  apply (auto simp: list.pred_set wtracep_def in_set_conv_nth length_ps_eq_n
+      sorted_wmark increasing_wmark increasing_ts wmark_le_idx)
+  subgoal for j j' k
+    apply (frule sound_partition[rule_format, of _ j])
+    apply (frule sound_partition[rule_format, of _ j'])
+    using i\<iota>_refines_i\<tau> by auto
+  done
+
+lemma length_ps'[simp]: "length ps' = n"
+  by (transfer fixing: n) (rule length_ps_eq_n)
+
+lemma Rep_wtrace_nth_ps': "k < n \<Longrightarrow> Rep_wtrace (ps' ! k) = ps ! k"
+  by (metis length_ps' nth_map ps'.rep_eq)
+
+lemma wx_nth_ps':
+  "k < n \<Longrightarrow> w\<iota> (ps' ! k) i = idx (ps ! k !! i)"
+  "k < n \<Longrightarrow> w\<tau> (ps' ! k) i = ts (ps ! k !! i)"
+  "k < n \<Longrightarrow> w\<Gamma> (ps' ! k) i = db (ps ! k !! i)"
+  by (simp_all add: w\<iota>.rep_eq w\<tau>.rep_eq w\<Gamma>.rep_eq Rep_wtrace_nth_ps')
+
+lemma wpartitionp_ps': "wpartitionp \<sigma> n ps'"
+  using n_greater_0 sound_partition complete_partition1 complete_partition2
+  by unfold_locales (simp_all add: wx_nth_ps' cong: ex_cong1 conj_cong)
+
+end
+
 
 subsection \<open>Multiplexed traces with watermarks\<close>
 
@@ -2243,23 +2291,23 @@ qed
 subsubsection \<open>Corollaries\<close>
 
 corollary partially_ordered_multi_source:
-  assumes "0 < n" and "ipartitionp \<sigma> n ps"
+  assumes "ipartitionp \<sigma> n ps"
   shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice Xs (collapse \<sigma>)}"
-  using ordered_multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
-      strong_kleisli_singleton_conv ipartition_def, simplified, rule_format, THEN conjunct2,
-      rule_format, OF assms(2)] .
+  using ordered_multi_source_correctness[OF ipartitionp.n_greater_0, OF assms, unfolded fun_eq_iff
+      determ_def strong_kleisli_singleton_conv ipartition_def, simplified, rule_format,
+      THEN conjunct2, rule_format, OF assms] .
 
 corollary totally_ordered_multi_source:
-  assumes "0 < n" and "ipartitionp (add_timepoints \<sigma>) n ps"
+  assumes "ipartitionp (add_timepoints \<sigma>) n ps"
   shows "multi_source_slicer Xs (map add_wmarks ps) = {tslice Xs \<sigma>}"
   using partially_ordered_multi_source[OF assms, unfolded collapse_add_timepoints] .
 
 corollary watermarked_multi_source:
-  assumes "0 < n" and "wpartitionp \<sigma> n ps"
+  assumes "wpartitionp \<sigma> n ps"
   shows "multi_source_slicer Xs ps = {tslice Xs (collapse \<sigma>)}"
-  using multi_source_correctness[OF assms(1), unfolded fun_eq_iff determ_def
-      strong_kleisli_singleton_conv wpartition_def, simplified, rule_format, THEN conjunct2,
-      rule_format, OF assms(2)] .
+  using multi_source_correctness[OF wpartitionp.n_greater_0[OF assms], unfolded fun_eq_iff
+      determ_def strong_kleisli_singleton_conv wpartition_def, simplified, rule_format,
+      THEN conjunct2, rule_format, OF assms] .
 
 subsubsection \<open>Integration with the slicing framework\<close>
 
@@ -2274,18 +2322,22 @@ definition multi_source_monitor :: "'b list set list \<Rightarrow> 'a wtrace lis
     determ (map2 (\<lambda>X. verdicts \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
 theorem multi_source_monitor_eq:
-  assumes "\<Union>(set Xs) = UNIV" and "0 < n" and "wpartitionp \<sigma> n ps"
+  assumes "\<Union>(set Xs) = UNIV" and "wpartitionp \<sigma> n ps"
   shows "multi_source_monitor Xs ps = {verdicts (collapse \<sigma>)}"
 proof -
   let ?Xs' = "map relevant_events Xs"
   have "multi_source_slicer ?Xs' ps = {tslice ?Xs' (collapse \<sigma>)}"
-    using watermarked_multi_source[OF assms(2,3)] .
+    using watermarked_multi_source[OF assms(2)] .
   then show ?thesis
     unfolding tslice_relevant_events
     by (simp add: multi_source_monitor_def kleisli_set_def determ_def
         map2_map_map[where f=id, simplified] del: set_map)
       (simp add: union_verdicts_slice[OF assms(1)])
 qed
+
+corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow>
+  multi_source_monitor Xs (wpartitionp_alt.ps' ps) = {verdicts (collapse \<sigma>)}"
+  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps'] .
 
 end
 
