@@ -274,24 +274,14 @@ next
   qed
 qed
 
-lemma less_funpow_next_i\<iota>: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) < (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>) \<Longrightarrow> a < b"
-proof (induction a)
+lemma le_funpow_next_i\<iota>: "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) \<le> (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>) \<Longrightarrow> a \<le> b"
+proof (induction a arbitrary: b)
   case 0
-  then show ?case by (cases b) simp_all
+  show ?case by simp
 next
   case (Suc a)
-  show ?case proof (cases "Suc a = b")
-    case True
-    with Suc.prems show ?thesis by simp
-  next
-    case False
-    from Suc.prems have "next_i\<iota> \<sigma> ((next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>)) < (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
-      by simp
-    then have "(next_i\<iota> \<sigma> ^^ a) (least_i\<iota> \<sigma>) < (next_i\<iota> \<sigma> ^^ b) (least_i\<iota> \<sigma>)"
-      using less_next_i\<iota> by (blast intro: order.strict_trans)
-    with Suc.IH have "a < b" .
-    with False show ?thesis by simp
-  qed
+  then show ?case
+    by (metis antisym funpow.simps(2) leD less_next_i\<iota> linear mono_funpow_next_i\<iota> not_less_eq_eq o_apply)
 qed
 
 lemma i\<tau>_of_i\<iota>_mono:
@@ -355,6 +345,54 @@ proof (intro conjI)
   then show "sincreasing (smap snd (collapse' \<sigma>))"
     by (simp add: sincreasing_def collapse'_def)
 qed
+
+text \<open>Alternative characterisation of \<^term>\<open>collapse\<close> via a surjective function.\<close>
+
+definition collapse_map :: "'a itrace \<Rightarrow> nat \<Rightarrow> nat" where
+  "collapse_map \<sigma> j = (THE n. (next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j)"
+
+lemma collapse_map_ex1: "\<exists>!n. (next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j"
+  by (metis ex_funpow_next_i\<iota>2 antisym le_funpow_next_i\<iota> order_refl)
+
+lemma surj_collapse_map: "surj (collapse_map \<sigma>)"
+proof (rule surjI)
+  fix n
+  define f where "f = (\<lambda>n. LEAST j. (next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j)"
+  have *: "(next_i\<iota> \<sigma> ^^ n) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> (f n)"
+    unfolding f_def by (rule LeastI_ex[OF ex_funpow_next_i\<iota>1])
+  moreover have "n' = n" if "(next_i\<iota> \<sigma> ^^ n') (least_i\<iota> \<sigma>) = i\<iota> \<sigma> (f n)" for n'
+    by (metis antisym le_funpow_next_i\<iota> eq_refl * that)
+  ultimately show "collapse_map \<sigma> (f n) = n"
+    unfolding collapse_map_def by (rule the_equality)
+qed
+
+lemma mono_collapse_map: "mono (collapse_map \<sigma>)"
+proof
+  fix j j' :: nat
+  assume "j \<le> j'"
+  show "collapse_map \<sigma> j \<le> collapse_map \<sigma> j'"
+    apply (simp add: collapse_map_def)
+    apply (rule the1I2)
+     apply (rule collapse_map_ex1)
+    apply (rule the1I2)
+     apply (rule collapse_map_ex1)
+    by (metis \<open>j \<le> j'\<close> i\<iota>_mono le_funpow_next_i\<iota>)
+qed
+
+lemma collapse_map_consistent: "i\<iota> \<sigma> j = i\<iota> \<sigma> j' \<Longrightarrow> collapse_map \<sigma> j = collapse_map \<sigma> j'"
+  using collapse_map_ex1 by (auto simp: collapse_map_def)
+
+lemma collapse_map_eq: "(next_i\<iota> \<sigma> ^^ collapse_map \<sigma> j) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> j"
+  unfolding collapse_map_def by (rule theI') (rule collapse_map_ex1)
+
+lemma collapse_alt_\<tau>: "\<tau> (collapse \<sigma>) (collapse_map \<sigma> j) = i\<tau> \<sigma> j"
+  by (simp add: \<tau>.rep_eq collapse.rep_eq collapse'_def collapse_map_eq i\<tau>_of_i\<iota>_eq)
+
+lemma collapse_alt_\<Gamma>: "\<Gamma> (collapse \<sigma>) i = \<Union>{i\<Gamma> \<sigma> j | j. collapse_map \<sigma> j = i}"
+  apply (auto simp: \<Gamma>.rep_eq collapse.rep_eq collapse'_def)
+   apply (metis collapse_map_eq collapse_map_ex1)
+  by (metis collapse_map_eq vimage_singleton_eq)
+
 
 subsubsection \<open>Adding indexes\<close>
 
