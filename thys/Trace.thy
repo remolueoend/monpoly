@@ -103,6 +103,12 @@ lift_definition \<Gamma> :: "'a trace \<Rightarrow> nat \<Rightarrow> 'a set" is
 lift_definition \<tau> :: "'a trace \<Rightarrow> nat \<Rightarrow> nat" is
   "\<lambda>s i. snd (s !! i)" .
 
+lemma stream_eq_iff: "s = s' \<longleftrightarrow> (\<forall>n. s !! n = s' !! n)"
+  by (metis stream.map_cong0 stream_smap_nats)
+
+lemma trace_eqI: "(\<And>i. \<Gamma> \<sigma> i = \<Gamma> \<sigma>' i) \<Longrightarrow> (\<And>i. \<tau> \<sigma> i = \<tau> \<sigma>' i) \<Longrightarrow> \<sigma> = \<sigma>'"
+  by transfer (auto simp: stream_eq_iff intro!: prod_eqI)
+
 lemma \<tau>_mono[simp]: "i \<le> j \<Longrightarrow> \<tau> s i \<le> \<tau> s j"
   by transfer (auto simp: ssorted_iff_mono)
 

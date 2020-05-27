@@ -173,12 +173,12 @@ lemma i\<iota>_eq_imp_i\<tau>_eq: "i\<iota> \<sigma> i = i\<iota> \<sigma> j \<L
 lemma i\<tau>_mono: "i \<le> j \<Longrightarrow> i\<tau> \<sigma> i \<le> i\<tau> \<sigma> j"
   using i\<iota>_refines_i\<tau>[OF i\<iota>_mono] .
 
-subsubsection \<open>Collapse\<close>
+subsubsection \<open>Generalized collapse\<close>
 
 text \<open>
-  The collapse of an indexed trace is obtained by merging all time-points with
-  the same index. The result has well-defined time-stamps because we require
-  that indexes refine time-stamps.
+  The generalized collapse of an indexed trace is obtained by merging all
+  time-points with the same index. The result has well-defined time-stamps
+  because we require that indexes refine time-stamps.
 \<close>
 
 definition least_i\<iota> :: "'a itrace \<Rightarrow> nat" where
@@ -378,18 +378,18 @@ proof
     by (metis le_funpow_next_i\<iota> *)
 qed
 
-lemma collapse_map_consistent: "i\<iota> \<sigma> i = i\<iota> \<sigma> i' \<Longrightarrow> collapse_map \<sigma> i = collapse_map \<sigma> i'"
-  using collapse_map_ex1 by (auto simp: collapse_map_def)
-
 lemma collapse_map_eq: "(next_i\<iota> \<sigma> ^^ collapse_map \<sigma> i) (least_i\<iota> \<sigma>) = i\<iota> \<sigma> i"
   unfolding collapse_map_def using collapse_map_ex1 by (rule theI')
 
-lemma \<tau>_collapse_map: "\<tau> (collapse \<sigma>) (collapse_map \<sigma> i) = i\<tau> \<sigma> i"
-  by (simp add: \<tau>.rep_eq collapse.rep_eq collapse'_def collapse_map_eq i\<tau>_of_i\<iota>_eq)
-
-lemma \<Gamma>_collapse_map: "\<Gamma> (collapse \<sigma>) j = \<Union>{i\<Gamma> \<sigma> i | i. collapse_map \<sigma> i = j}"
-  by (auto simp: \<Gamma>.rep_eq collapse.rep_eq collapse'_def collapse_map_eq)
-    (metis collapse_map_eq collapse_map_ex1)
+lemma collapse_map_consistent: "i\<iota> \<sigma> i = i\<iota> \<sigma> i' \<longleftrightarrow> collapse_map \<sigma> i = collapse_map \<sigma> i'"
+  (is "?L \<longleftrightarrow> ?R")
+proof
+  assume ?L
+  then show ?R using collapse_map_ex1 by (auto simp: collapse_map_def)
+next
+  assume ?R
+  then show ?L using collapse_map_eq by metis
+qed
 
 lemma less_i\<iota>D: "i\<iota> \<sigma> i < i\<iota> \<sigma> j \<Longrightarrow> i < j"
   by (metis i\<iota>_mono leD le_less_linear)
@@ -439,6 +439,36 @@ proof -
     by (auto simp: fun_eq_iff collapse_map_def intro!: the_equality[symmetric])
 qed
 
+lemma \<tau>_collapse: "\<tau> (collapse \<sigma>) (collapse_map \<sigma> i) = i\<tau> \<sigma> i"
+  by (simp add: \<tau>.rep_eq collapse.rep_eq collapse'_def collapse_map_eq i\<tau>_of_i\<iota>_eq)
+
+lemma \<Gamma>_collapse: "\<Gamma> (collapse \<sigma>) j = \<Union>{i\<Gamma> \<sigma> i | i. collapse_map \<sigma> i = j}"
+  by (auto simp: \<Gamma>.rep_eq collapse.rep_eq collapse'_def collapse_map_eq)
+    (metis collapse_map_eq collapse_map_ex1)
+
+lemma collapse_alt:
+  assumes "surj f" and "mono f" and "\<And>i i'. i\<iota> \<sigma> i = i\<iota> \<sigma> i' \<longleftrightarrow> f i = f i'"
+    and \<tau>_c: "\<And>i. \<tau> c (f i) = i\<tau> \<sigma> i" and \<Gamma>_c: "\<And>j. \<Gamma> c j = \<Union>{i\<Gamma> \<sigma> i | i. f i = j}"
+  shows "c = collapse \<sigma>"
+proof -
+  from assms(1-3) have f_eq: "f = collapse_map \<sigma>"
+    by (rule unique_collapse_map)
+  show ?thesis
+  proof (rule trace_eqI)
+    fix j
+    show "\<Gamma> c j = \<Gamma> (collapse \<sigma>) j"
+      unfolding \<Gamma>_c \<Gamma>_collapse f_eq ..
+  next
+    fix j
+    obtain i where "collapse_map \<sigma> i = j"
+      using surj_collapse_map by (metis surjE)
+    moreover have "\<tau> c (f i) = \<tau> (collapse \<sigma>) (collapse_map \<sigma> i)"
+      unfolding \<tau>_c \<tau>_collapse ..
+    ultimately show "\<tau> c j = \<tau> (collapse \<sigma>) j"
+      by (simp add: f_eq)
+  qed
+qed
+
 subsubsection \<open>Adding indexes\<close>
 
 text \<open>Time-points as indexes:\<close>
@@ -485,6 +515,27 @@ text \<open>Time-stamps as indexes:\<close>
 lift_definition add_timestamps :: "'a trace \<Rightarrow> 'a itrace" is
   "smap (\<lambda>(db, ts). \<lparr>db=db, ts=ts, idx=ts\<rparr>)"
   by (auto simp: split_beta stream.map_comp cong: stream.map_cong)
+
+lemma i\<Gamma>_timestamps[simp]: "i\<Gamma> (add_timestamps \<sigma>) = \<Gamma> \<sigma>"
+  by transfer (simp add: split_beta)
+
+lemma i\<tau>_timestamps[simp]: "i\<tau> (add_timestamps \<sigma>) = \<tau> \<sigma>"
+  by transfer (simp add: split_beta)
+
+lemma i\<iota>_timestamps[simp]: "i\<iota> (add_timestamps \<sigma>) = \<tau> \<sigma>"
+  by transfer (simp add: split_beta)
+
+lemma collapse_add_timestamps_alt:
+  assumes "surj f" and "mono f" and consistent_lr: "\<And>i i'. \<tau> \<sigma> i = \<tau> \<sigma> i' \<Longrightarrow> f i = f i'"
+    and \<tau>_c: "\<And>i. \<tau> c (f i) = \<tau> \<sigma> i" and \<Gamma>_c: "\<And>j. \<Gamma> c j = \<Union>{\<Gamma> \<sigma> i | i. f i = j}"
+  shows "collapse (add_timestamps \<sigma>) = c"
+proof -
+  have "\<tau> \<sigma> i = \<tau> \<sigma> i' \<longleftrightarrow> f i = f i'" for i i'
+    using consistent_lr \<tau>_c by metis
+  then show ?thesis
+    using collapse_alt[where \<sigma>="add_timestamps \<sigma>", OF \<open>surj f\<close> \<open>mono f\<close>] \<tau>_c \<Gamma>_c
+    by auto
+qed
 
 subsubsection \<open>Slicing\<close>
 
