@@ -1897,11 +1897,11 @@ lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi>
   unfolding pprogress_def using progress_prefix_conv
   by blast
 
-locale verimon_spec =
+locale future_bounded_mfodl =
   fixes \<phi> :: Formula.formula
-  assumes monitorable: "mmonitorable \<phi>"
+  assumes future_bounded: "Formula.future_bounded \<phi>"
 
-sublocale verimon_spec \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" "relevant_events \<phi>"
+sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" "relevant_events \<phi>"
   "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"
 proof (unfold_locales, goal_cases)
   case (1 x)
@@ -1924,8 +1924,7 @@ next
 next
   case (5 \<sigma> x)
   obtain j where "x \<le> progress \<sigma> Map.empty \<phi> j"
-    using monitorable progress_ge
-    by (fastforce simp: mmonitorable_def)
+    using future_bounded progress_ge by blast
   then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
@@ -1947,6 +1946,13 @@ next
   ultimately show ?case
     by (simp add: pprogress_eq progress_time_conv)
 qed
+
+locale verimon_spec =
+  fixes \<phi> :: Formula.formula
+  assumes monitorable: "mmonitorable \<phi>"
+
+sublocale verimon_spec \<subseteq> future_bounded_mfodl
+  using monitorable by unfold_locales (simp add: mmonitorable_def)
 
 
 subsection \<open>Correctness\<close>
