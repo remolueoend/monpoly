@@ -108,6 +108,15 @@ let aggr_op = function
 | MED -> Med
 | SUM -> Sum
 
+
+let aggr_op_type = function 
+| MAX -> TCst TInt
+| MIN -> TCst TInt
+| CNT -> TCst TInt
+| AVG -> TCst TFloat
+| MED -> TCst TFloat
+| SUM -> TCst TInt
+
 let rec formula_of_genformula = function
 | GRel         (rop,t1,t2) -> 
   (match rop with 
@@ -140,10 +149,10 @@ let rec formula_of_genformula = function
 | GUntil       (i, f1, f2) -> Until (i, formula_of_genformula f1, formula_of_genformula f2)
 | GNUntil      (i, f1, f2) -> Until (i, Neg (formula_of_genformula f1), formula_of_genformula f2)
 | GAggOnce     (r, a, v, gs, i, f) 
-| GAggMMOnce   (r, a, v, gs, i, f) -> Aggreg (r, (aggr_op a), v, gs, Once (i, formula_of_genformula f))
+| GAggMMOnce   (r, a, v, gs, i, f) -> Aggreg ((aggr_op_type a), r, (aggr_op a), v, gs, Once (i, formula_of_genformula f))
 | GAggAvg      (r, a, v, gs, f)
 | GAggMed      (r, a, v, gs, f) 
-| GAgg         (r, a, v, gs, f) -> Aggreg (r, (aggr_op a), v, gs, formula_of_genformula f)
+| GAgg         (r, a, v, gs, f) -> Aggreg ((aggr_op_type a), r, (aggr_op a), v, gs, formula_of_genformula f)
 
 
 let rec string_of_arity = function
@@ -201,7 +210,7 @@ let rec string_f_rec top par h =
         string_f_rec false false f
         ^ ")"
 
-      | Aggreg (y,op,x,glist,f) -> failwith "Unsupported: aggregation operators"
+      | Aggreg (_,y,op,x,glist,f) -> failwith "Unsupported: aggregation operators"
       | Prev (intv,f) ->
         check_interval intv ^
         "(" ^
@@ -385,10 +394,11 @@ let predicate_gen map vs =
   Gen.map (fun (m,p) -> (m, make_predicate (p, shuffle vs))) 
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
-let formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum size = 
+let formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl varnum size = 
   let fq = if past_only || qtl then 0 else 1 in
   let mq = if (max_lb < 0) then 0 else 1 in
-  let aq = if aggr then 1 else 0 in 
+  let aq = if aggr then 1 else 0 in
+  let tq = if foo then 0 else 1 in 
   let max_interval = max 0 max_interval in
   let size = max 0 size in
   let varnum = max 0 varnum in
@@ -500,19 +510,19 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum
         1, vars_sub1 >>= (fun v1 -> binarybind gAndSUB1     v1 vars);
         1, vars_sub1 >>= (fun v1 -> binarybind gAndSUB2     vars v1);
         1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [new_bv] sf)));
-        1, metricunarybind gPrev        interval;
-       fq, metricunarybind gNext        interval_bound;
-        1, metricunarybind gOnce        interval;
-       mq, metricunarybind gOnceA       interval_inf;
-       mq, metricunarybind gOnceZ       interval_zero;
-       fq, metricunarybind gEventually  interval_bound;
-       fq, metricunarybind gEventuallyZ interval_zero_bound;
-        1, vars_sub1 >>= (fun v1 -> metricbinarybind gSince      interval v1 vars);
-       mq, vars_sub1 >>= (fun v1 -> metricbinarybind gSinceA     interval_inf v1 vars);
-       mq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSince     interval v1 vars);
-       mq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSinceA    interval_inf v1 vars);
-       fq, vars_sub1 >>= (fun v1 -> metricbinarybind gUntil      interval_bound v1 vars);
-       fq, vars_sub1 >>= (fun v1 -> metricbinarybind gNUntil     interval_bound v1 vars);
+       tq, metricunarybind gPrev        interval;
+    fq*tq, metricunarybind gNext        interval_bound;
+       tq, metricunarybind gOnce        interval;
+    mq*tq, metricunarybind gOnceA       interval_inf;
+    mq*tq, metricunarybind gOnceZ       interval_zero;
+    fq*tq, metricunarybind gEventually  interval_bound;
+    fq*tq, metricunarybind gEventuallyZ interval_zero_bound;
+       tq, vars_sub1 >>= (fun v1 -> metricbinarybind gSince      interval v1 vars);
+    mq*tq, vars_sub1 >>= (fun v1 -> metricbinarybind gSinceA     interval_inf v1 vars);
+    mq*tq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSince     interval v1 vars);
+    mq*tq, vars_sub1 >>= (fun v1 -> metricbinarybind gNSinceA    interval_inf v1 vars);
+    fq*tq, vars_sub1 >>= (fun v1 -> metricbinarybind gUntil      interval_bound v1 vars);
+    fq*tq, vars_sub1 >>= (fun v1 -> metricbinarybind gNUntil     interval_bound v1 vars);
        aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
                 (fun (newMap, sf) -> result_var >>= 
                   (fun r -> aggr_var >>= 
@@ -526,13 +536,13 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum
                   (fun r -> aggr_var >>= 
                     (fun a -> aggr_gen_mmcs >>=
                       (fun op -> fun s -> (newMap, gAgg r op a (var_op Set.diff vars [r]) sf)))));
-       aq*oq, (go (predmap, aggr_free_vars, (n-2))) >>= 
+ aq*oq*tq, (go (predmap, aggr_free_vars, (n-2))) >>= 
                 (fun (newMap, sf) -> result_var >>= 
                   (fun r -> aggr_var >>= 
                     (fun a -> aggr_gen_mm >>=
                       (fun op -> interval >>= 
                         (fun i -> fun s -> (newMap, gAggMMOnce r op a (var_op Set.diff vars [r]) i sf))))));
-       aq*oq, (go (predmap, aggr_free_vars, (n-2))) >>= 
+ aq*oq*tq, (go (predmap, aggr_free_vars, (n-2))) >>= 
                 (fun (newMap, sf) -> result_var >>= 
                   (fun r -> aggr_var >>= 
                     (fun a -> aggr_gen_all >>=
@@ -542,7 +552,7 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum
       if qtl then toplvlq result vars
       else result
   
-  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr qtl varnum size))
+  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(foo=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl varnum size))
 
     (* TODO: check binary temporal ops for qtl  *)
     (* TODO: other special AND case *)

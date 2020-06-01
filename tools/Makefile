@@ -67,10 +67,10 @@ log_generator:
 
 fma_generator: 
 	ocamlfind ocamlc -I ../src -c random_generator.mli
-	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -c random_generator.ml
+	ocamlfind ocamlopt -I ../src -package qcheck -package zarith -linkpkg -c random_generator.ml
 	ocamlfind ocamlc -I ../src -g -c formula_generator.mli
-	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -g -c formula_generator.ml
-	ocamlfind ocamlopt -I ../src -package qcheck -linkpkg -g -o gen_fma str.cmxa ../src/mqueue.cmx ../src/dllist.cmx ../src/misc.cmx ../src/predicate.cmx ../src/MFOTL.cmx random_generator.ml formula_generator.ml gen_fma.ml
+	ocamlfind ocamlopt -I ../src -package qcheck -package zarith -linkpkg -g -c formula_generator.ml
+	ocamlfind ocamlopt -I ../src -package qcheck -package zarith -linkpkg -g -o gen_fma str.cmxa ../src/mqueue.cmx ../src/dllist.cmx ../src/misc.cmx ../src/predicate.cmx ../src/MFOTL.cmx random_generator.ml formula_generator.ml gen_fma.ml
 
 
 %.cmi: %.mli $(MONPOLY_LIB)
