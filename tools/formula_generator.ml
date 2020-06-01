@@ -49,6 +49,7 @@ type genformula =
   | GAndSUB1      of (genformula * genformula)
   | GAndSUB2      of (genformula * genformula)
   | GExists       of (var list * genformula)
+  | GForall       of (var list * genformula)
   | GPrev         of (interval * genformula)
   | GNext         of (interval * genformula)
   | GOnce         of (interval * genformula)
@@ -81,6 +82,7 @@ let gAndEQ       f1 f2        = GAndEQ       (f1, f2)
 let gAndSUB1     f1 f2        = GAndSUB1     (f1, f2) 
 let gAndSUB2     f1 f2        = GAndSUB2     (f1, f2) 
 let gExists      v f          = GExists      (v, f) 
+let gForall      v f          = GForall      (v, f) 
 let gPrev        i f          = GPrev        (i, f) 
 let gNext        i f          = GNext        (i, f) 
 let gOnce        i f          = GOnce        (i, f) 
@@ -135,6 +137,7 @@ let rec formula_of_genformula = function
 | GAndSUB1     (f1, f2)
 | GAndSUB2     (f1, f2)    -> And (formula_of_genformula f1, formula_of_genformula f2)
 | GExists      (v, f)      -> Exists (v, formula_of_genformula f)
+| GForall      (v, f)      -> ForAll (v, formula_of_genformula f)
 | GPrev        (i, f)      -> Prev (i, formula_of_genformula f)
 | GNext        (i, f)      -> Next (i, formula_of_genformula f)
 | GOnce        (i, f)
@@ -154,7 +157,7 @@ let rec formula_of_genformula = function
 | GAggMed      (r, a, v, gs, f) 
 | GAgg         (r, a, v, gs, f) -> Aggreg ((aggr_op_type a), r, (aggr_op a), v, gs, formula_of_genformula f)
 
-
+(* TODO: Print floats where necessary (e.g., result of AVG and MED) *)
 let rec string_of_arity = function
 | 0 -> ""
 | 1 -> "int"
@@ -370,17 +373,20 @@ let shuffle l =
 
 let var_op f vs1 vs2 = Set.elements (f (Set.of_list vs1) (Set.of_list vs2))
 
-(* TODO: make the const a parameter *)
-let rel_gen vs all_rels = 
-  let rel = if all_rels then Gen.oneofl [LT ; GT ; LEQ ; GEQ ; EQ] else Gen.return EQ in 
-  let cons= Gen.int_bound 42 in 
-  cons >>= (fun c -> 
+let rel_gen vs all_rels max_const = 
+  let rel  = if all_rels then Gen.oneofl [LT ; GT ; LEQ ; GEQ ; EQ] else Gen.return EQ in 
+  let cons1 = Gen.int_bound max_const in 
+  let cons2 = Gen.int_bound max_const in 
+  cons1 >>= (fun c1 -> 
+  cons2 >>= (fun c2 -> 
     vs >>= (fun v -> 
       rel >>= (fun r -> 
-      (fun s -> 
-        if (List.length v) == 2 
-        then gRel r (Var (List.hd v)) (Var (List.hd (List.tl v)))
-        else gRel r (Var (List.hd v)) (Cst (Int c))))))
+      (fun s -> match (List.length v) with
+        | 2 ->  gRel r (Var (List.hd v)) (Var (List.hd (List.tl v)))
+        | 1 ->  gRel r (Var (List.hd v)) (Cst (Int c1))
+        | 0 ->  gRel r (Cst (Int c1)) (Cst (Int c2))
+        | _ -> failwith "Rigid predicates can have up to 2 variables"
+      )))))
 
 let predicate_gen map vs =
   let vs = List.map (fun e -> Var e) vs in 
@@ -394,7 +400,7 @@ let predicate_gen map vs =
   Gen.map (fun (m,p) -> (m, make_predicate (p, shuffle vs))) 
   (Gen.oneofl ((updatedMap, freshPred) :: (List.map (fun e -> (map,e)) (Set.elements oldSet)))))
 
-let formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl varnum size = 
+let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi max_const qtl varnum size = 
   let fq = if past_only || qtl then 0 else 1 in
   let mq = if (max_lb < 0) then 0 else 1 in
   let aq = if aggr then 1 else 0 in
@@ -410,12 +416,13 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl va
   let result = Random_generator.fix (
   fun go (predmap, vars, size) -> match size with 
     | 0 -> 
-      if (List.length vars) == 1 then
+      let vnum = if ndi then 2 else 1 in
+      if (List.length vars) <= vnum then
       let predbool = Gen.bool in
       predbool >>= (fun b ->
         if b then 
-          let twovars = random_bounded_subset 1 vars in
-          Gen.map (fun e -> (predmap,e)) (rel_gen twovars all_rels)
+          let twovars = random_bounded_subset vnum vars in
+          Gen.map (fun e -> (predmap,e)) (rel_gen twovars all_rels max_const)
         else
           Gen.map (mapSnd gPred) (predicate_gen predmap vars)
       )
@@ -466,7 +473,7 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl va
       let m = Random.int n in
       let unarybind f vars =
         let twovars = random_bounded_subset 1 vars in
-        let sf = rel_gen twovars all_rels in 
+        let sf = rel_gen twovars all_rels max_const in 
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf1) -> 
               sf >>= (fun sf2 ->
@@ -499,6 +506,8 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl va
                         intr >>= 
                             (fun i -> 
                                 (fun s -> (newestMap, (f i lf rf)))))) in
+    (* Monitrable formulas *)
+    if not ndi then  
       Gen.frequency [
         1, binarybind gOr          vars vars;
         1, binarybind gNAndEQ      vars vars;
@@ -548,11 +557,59 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl va
                     (fun a -> aggr_gen_all >>=
                       (fun op -> interval >>= 
                         (fun i -> fun s -> (newMap, gAggOnce r op a (var_op Set.diff vars [r]) i sf))))))
-      ]) (signature, vars, size) in
+      ]
+      else 
+      (* Arbitrary formulas *)
+      Gen.frequency [
+        1, (go (predmap, vars, (n-1))) >>= (fun (newMap,sf1) -> (fun s -> (newMap, gNeg sf1)));
+        1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gAnd v1 v2'));
+        1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gOr v1 v2'));
+        1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [new_bv] sf)));
+        1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gForall [new_bv] sf)));
+       tq, metricunarybind gPrev        interval;
+    fq*tq, metricunarybind gNext        interval_bound;
+       tq, metricunarybind gOnce        interval;
+    mq*tq, metricunarybind gOnceA       interval_inf;
+    mq*tq, metricunarybind gOnceZ       interval_zero;
+    fq*tq, metricunarybind gEventually  interval_bound;
+    fq*tq, metricunarybind gEventuallyZ interval_zero_bound;
+       tq, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in metricbinarybind gSince      interval v1 v2'));
+    mq*tq, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in metricbinarybind gSinceA     interval_inf v1 v2'));
+    mq*tq, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in metricbinarybind gNSince     interval v1 v2'));
+    mq*tq, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in metricbinarybind gNSinceA    interval_inf v1 v2'));
+    fq*tq, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in metricbinarybind gUntil      interval_bound v1 v2'));
+    fq*tq, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in metricbinarybind gNUntil     interval_bound v1 v2'));
+       aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> fun s -> (newMap, gAggAvg r AVG a (var_op Set.diff vars [r]) sf))));
+       aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> fun s -> (newMap, gAggMed r MED a (var_op Set.diff vars [r]) sf))));
+       aq, (go (predmap, aggr_free_vars, (n-1))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> aggr_gen_mmcs >>=
+                      (fun op -> fun s -> (newMap, gAgg r op a (var_op Set.diff vars [r]) sf)))));
+ aq*oq*tq, (go (predmap, aggr_free_vars, (n-2))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> aggr_gen_mm >>=
+                      (fun op -> interval >>= 
+                        (fun i -> fun s -> (newMap, gAggMMOnce r op a (var_op Set.diff vars [r]) i sf))))));
+ aq*oq*tq, (go (predmap, aggr_free_vars, (n-2))) >>= 
+                (fun (newMap, sf) -> result_var >>= 
+                  (fun r -> aggr_var >>= 
+                    (fun a -> aggr_gen_all >>=
+                      (fun op -> interval >>= 
+                        (fun i -> fun s -> (newMap, gAggOnce r op a (var_op Set.diff vars [r]) i sf))))))
+      ]
+      ) (signature, vars, size) in
       if qtl then toplvlq result vars
       else result
   
-  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(foo=false) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr foo qtl varnum size))
+  let generate_formula ?(signature = empty) ?(max_lb = -1) ?(max_interval=10) ?(past_only=false) ?(all_rels=false) ?(aggr=false) ?(foo=false) ?(ndi=false) ?(max_const=42) ?(qtl=false) varnum size = List.hd (Gen.generate ~n:1 (formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi max_const qtl varnum size))
 
     (* TODO: check binary temporal ops for qtl  *)
     (* TODO: other special AND case *)

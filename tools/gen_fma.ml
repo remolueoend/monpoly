@@ -39,6 +39,8 @@ let past_only = ref false
 let all_rels = ref false
 let qtl = ref false
 let fo_only = ref false
+let ndi = ref false
+let max_const = ref 42
 let aggregations = ref false;;
 
 (* Printexc.record_backtrace true;; *)
@@ -76,7 +78,7 @@ let main () =
   end;
   let ssig = if sig_string = sig_string_cmp then "" else !sig_string in
   let sigmap = parse_sig ssig in
-  let (sigout,fma) = generate_formula ~signature:sigmap ~max_lb:!max_lb ~max_interval:!max_interval ~past_only:!past_only ~all_rels:!all_rels ~aggr:!aggregations ~foo:!fo_only ~qtl:!qtl !free_vars !size in
+  let (sigout,fma) = generate_formula ~signature:sigmap ~max_lb:!max_lb ~max_interval:!max_interval ~past_only:!past_only ~all_rels:!all_rels ~aggr:!aggregations ~foo:!fo_only ~ndi:!ndi ~max_const:!max_const ~qtl:!qtl !free_vars !size in
   let output_str = Printf.sprintf "SIGNATURE:\n%s\nMFOTL FORMULA:\n%s\n" (string_of_sig sigout) (string_of_genformula fma) in
   let output_str = output_str ^ if !qtl then Printf.sprintf "\nQTL FORMULA:\n%s\n" (string_of_genformula_qtl fma) else "" in
   if out_file = out_file_cmp then
@@ -116,8 +118,11 @@ let _ =
     "-debug", Arg.Set debug, "\t\tSet debug mode (Default: false)";
     "-aggr", Arg.Set aggregations, "\t\tGenerate aggregation operators (Default: false)";
     "-fo_only", Arg.Set fo_only, "\t\tGenerate only first-order operators (Default: false)";
+    "-non-di", Arg.Set ndi, "\t\tGenerate arbitrary formulas (as opposed to domain independent) (Default: false)";
+    "-max_const", Arg.Set_int max_const, "\tSet the maximum constant value occuring in the formula (Default: 42)";
     "-version", Arg.Unit print_version, "\t\tPrint version and exit";
     ]
     (fun _ -> ())
     usage_string;
   main ()
+  
