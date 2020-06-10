@@ -23,7 +23,7 @@ context begin
 
 subsection \<open>Formulas and satisfiability\<close>
 
-qualified type_synonym name = string
+qualified type_synonym name = String.literal
 qualified type_synonym event = "(name \<times> event_data list)"
 qualified type_synonym database = "(name, event_data list set list) mapping"
 qualified type_synonym prefix = "(name \<times> event_data list) prefix"

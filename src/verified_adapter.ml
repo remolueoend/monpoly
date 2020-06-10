@@ -30,7 +30,7 @@ let index_of =
 
 let convert_cst = function
   | Int x -> EInt (Z.of_int x)
-  | Str x -> EString (explode x)
+  | Str x -> EString x
   | Float x -> EFloat x
   | ZInt x -> EInt x
 
@@ -89,9 +89,9 @@ let convert_formula dbschema f =
   | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Less (t1,t2) -> Less (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | LessEq (t1,t2) -> LessEq (convert_term fvl bvl t1, convert_term fvl bvl t2)
-  | Pred (p,_,tl) -> Pred (explode p, List.map (fun t -> convert_term fvl bvl t) tl)
+  | Pred (p,_,tl) -> Pred (p, List.map (fun t -> convert_term fvl bvl t) tl)
   | Let (p,f1,f2) -> let (n,a,ts) = Predicate.get_info p in
-                     Let (explode n, nat_of_int 0, convert_formula_vars (MFOTL.free_vars f1) [] f1, convert_formula_vars fvl bvl f2)
+                     Let (n, nat_of_int 0, convert_formula_vars (MFOTL.free_vars f1) [] f1, convert_formula_vars fvl bvl f2)
   | Neg f -> Neg (convert_formula_vars fvl bvl f)
   | And (f1,f2) -> And (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
   | Or (f1,f2) -> Or (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
@@ -136,10 +136,10 @@ let unorderedFlatMap m =
 let convert_db md =
   let rbt_single x = RBT_set (rbt_insert x rbt_empty) in
   let add_builtin xs (name, tup) =
-    (explode name, rbt_single (List.map convert_cst tup)) :: xs in
+    (name, rbt_single (List.map convert_cst tup)) :: xs in
   let convert_table t =
     let (name,_) = (Table.get_schema t) in
-    (explode name, RBT_set (Relation.fold (fun v -> rbt_insert (List.map convert_cst v))
+    (name, RBT_set (Relation.fold (fun v -> rbt_insert (List.map convert_cst v))
       (Table.get_relation t) rbt_empty)) in
   let db_events = List.map convert_table (Db.get_tables md.db) in
   let all_events = List.fold_left add_builtin db_events
@@ -150,7 +150,7 @@ let convert_db md =
 let cst_of_event_data = function
   | EInt x -> (try Int (Z.to_int x) with Z.Overflow -> ZInt x)
   | EFloat x -> Float x
-  | EString x -> Str (implode x)
+  | EString x -> Str x
 
 let convert_tuple xs = Tuple.make_tuple (List.map cst_of_event_data (deoptionalize xs))
 

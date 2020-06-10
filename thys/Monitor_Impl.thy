@@ -405,7 +405,7 @@ lemma remove_Union_code[code]: "remove_Union A X B =
 lemma tabulate_remdups: "Mapping.tabulate xs f = Mapping.tabulate (remdups xs) f"
   by (transfer fixing: xs f) (auto simp: map_of_map_restrict)
 
-lift_definition clearjunk :: "(char list \<times> event_data list set) list \<Rightarrow> (char list, event_data list set list) alist" is
+lift_definition clearjunk :: "(String.literal \<times> event_data list set) list \<Rightarrow> (String.literal, event_data list set list) alist" is
   "\<lambda>t. List.map_filter (\<lambda>(p, X). if X = {} then None else Some (p, [X])) (AList.clearjunk t)"
   unfolding map_filter_def o_def list.map_comp
   by (subst map_cong[OF refl, of _ _ fst]) (auto simp: map_filter_def distinct_map_fst_filter split: if_splits)

@@ -79,8 +79,7 @@ module Monitor : sig
     RBT_set of ('a, unit) mapping_rbt | Set_Monad of 'a list |
     Complement of 'a set
   val nat_of_integer : Z.t -> nat
-  type char
-  type event_data = EInt of Z.t | EFloat of float | EString of char list
+  type event_data = EInt of Z.t | EFloat of float | EString of string
   type trm = Var of nat | Const of event_data | Plus of trm * trm |
     Minus of trm * trm | UMinus of trm | Mult of trm * trm | Div of trm * trm |
     Mod of trm * trm | F2i of trm | I2f of trm
@@ -93,8 +92,8 @@ module Monitor : sig
   type i
   type modality
   type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
-  type formula = Pred of char list * trm list |
-    Let of char list * nat * formula * formula | Eq of trm * trm |
+  type formula = Pred of string * trm list |
+    Let of string * nat * formula * formula | Eq of trm * trm |
     Less of trm * trm | LessEq of trm * trm | Neg of formula |
     Or of formula * formula | And of formula * formula | Ands of formula list |
     Exists of formula |
@@ -107,14 +106,13 @@ module Monitor : sig
   type 'a queue
   type ('a, 'b, 'c) mstate_ext
   val wild : 'a regex
-  val implode : char list -> string
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
   val mk_db :
-    (char list * (event_data list) set) list ->
-      ((char list), ((event_data list) set list)) mapping
+    (string * (event_data list) set) list ->
+      (string, ((event_data list) set list)) mapping
   val mstep :
-    ((char list), ((event_data list) set list)) mapping * nat ->
+    (string, ((event_data list) set list)) mapping * nat ->
       ((nat *
          (nat *
            (bool list *
@@ -159,7 +157,6 @@ module Monitor : sig
     ((event_data option) list -> 'a -> 'a) ->
       (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
   val rbt_empty : ((event_data list), unit) mapping_rbt
-  val explode : string -> char list
   val mmonitorable_exec : formula -> bool
   val minit_safe :
     formula ->
@@ -2514,22 +2511,7 @@ let rec lcompare_double
 
 let rec equal_double x y = Z.equal (lcompare_double x y) Z.zero;;
 
-type char = Chara of bool * bool * bool * bool * bool * bool * bool * bool;;
-
-type event_data = EInt of Z.t | EFloat of float | EString of char list;;
-
-let rec equal_chara
-  (Chara (x1, x2, x3, x4, x5, x6, x7, x8))
-    (Chara (y1, y2, y3, y4, y5, y6, y7, y8)) =
-    equal_boola x1 y1 &&
-      (equal_boola x2 y2 &&
-        (equal_boola x3 y3 &&
-          (equal_boola x4 y4 &&
-            (equal_boola x5 y5 &&
-              (equal_boola x6 y6 &&
-                (equal_boola x7 y7 && equal_boola x8 y8))))));;
-
-let equal_char = ({equal = equal_chara} : char equal);;
+type event_data = EInt of Z.t | EFloat of float | EString of string;;
 
 let rec equal_event_dataa
   x0 x1 = match x0, x1 with EFloat x2, EString x3 -> false
@@ -2538,7 +2520,7 @@ let rec equal_event_dataa
     | EString x3, EInt x1 -> false
     | EInt x1, EFloat x2 -> false
     | EFloat x2, EInt x1 -> false
-    | EString x3, EString y3 -> equal_lista equal_char x3 y3
+    | EString x3, EString y3 -> ((x3 : string) = y3)
     | EFloat x2, EFloat y2 -> equal_double x2 y2
     | EInt x1, EInt y1 -> Z.equal x1 y1;;
 
@@ -2670,67 +2652,23 @@ let linorder_integer = ({order_linorder = order_integer} : Z.t linorder);;
 
 let equal_integer = ({equal = Z.equal} : Z.t equal);;
 
-let rec of_bool _A = function true -> one _A.one_zero_neq_one
-                     | false -> zero _A.zero_zero_neq_one;;
+let ord_literal =
+  ({less_eq = (fun a b -> ((a : string) <= b));
+     less = (fun a b -> ((a : string) < b))}
+    : string ord);;
 
-let one_integera : Z.t = (Z.of_int 1);;
+let preorder_literal = ({ord_preorder = ord_literal} : string preorder);;
 
-let zero_integer = ({zero = Z.zero} : Z.t zero);;
+let order_literal = ({preorder_order = preorder_literal} : string order);;
 
-let one_integer = ({one = one_integera} : Z.t one);;
+let linorder_literal = ({order_linorder = order_literal} : string linorder);;
 
-let zero_neq_one_integer =
-  ({one_zero_neq_one = one_integer; zero_zero_neq_one = zero_integer} :
-    Z.t zero_neq_one);;
-
-let rec integer_of_char
-  (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
-    Z.add (Z.mul
-            (Z.add
-              (Z.mul
-                (Z.add
-                  (Z.mul
-                    (Z.add
-                      (Z.mul
-                        (Z.add
-                          (Z.mul
-                            (Z.add
-                              (Z.mul
-                                (Z.add
-                                  (Z.mul (of_bool zero_neq_one_integer b7)
-                                    (Z.of_int 2))
-                                  (of_bool zero_neq_one_integer b6))
-                                (Z.of_int 2))
-                              (of_bool zero_neq_one_integer b5))
-                            (Z.of_int 2))
-                          (of_bool zero_neq_one_integer b4))
-                        (Z.of_int 2))
-                      (of_bool zero_neq_one_integer b3))
-                    (Z.of_int 2))
-                  (of_bool zero_neq_one_integer b2))
-                (Z.of_int 2))
-              (of_bool zero_neq_one_integer b1))
-            (Z.of_int 2))
-      (of_bool zero_neq_one_integer b0);;
-
-let rec nat_of_char c = Nat (integer_of_char c);;
-
-let rec less_eq_char c1 c2 = less_eq_nat (nat_of_char c1) (nat_of_char c2);;
-
-let rec less_char c1 c2 = less_nat (nat_of_char c1) (nat_of_char c2);;
-
-let ord_char = ({less_eq = less_eq_char; less = less_char} : char ord);;
-
-let preorder_char = ({ord_preorder = ord_char} : char preorder);;
-
-let order_char = ({preorder_order = preorder_char} : char order);;
-
-let linorder_char = ({order_linorder = order_char} : char linorder);;
+let equal_literal = ({equal = (fun a b -> ((a : string) = b))} : string equal);;
 
 let rec comparator_event_data
   x0 x1 = match x0, x1 with
     EString x, EString yb ->
-      comparator_list (comparator_of (equal_char, linorder_char)) x yb
+      comparator_of (equal_literal, linorder_literal) x yb
     | EString x, EFloat ya -> Gt
     | EString x, EInt y -> Gt
     | EFloat x, EString yb -> Lt
@@ -2856,11 +2794,58 @@ let ccompare_trma : (trm -> trm -> ordera) option = Some comparator_trm;;
 
 let ccompare_trm = ({ccompare = ccompare_trma} : trm ccompare);;
 
-let rec compare_char x = comparator_of (equal_char, linorder_char) x;;
+let rec of_bool _A = function true -> one _A.one_zero_neq_one
+                     | false -> zero _A.zero_zero_neq_one;;
 
-let ccompare_chara : (char -> char -> ordera) option = Some compare_char;;
+type char = Chara of bool * bool * bool * bool * bool * bool * bool * bool;;
 
-let ccompare_char = ({ccompare = ccompare_chara} : char ccompare);;
+let one_integera : Z.t = (Z.of_int 1);;
+
+let zero_integer = ({zero = Z.zero} : Z.t zero);;
+
+let one_integer = ({one = one_integera} : Z.t one);;
+
+let zero_neq_one_integer =
+  ({one_zero_neq_one = one_integer; zero_zero_neq_one = zero_integer} :
+    Z.t zero_neq_one);;
+
+let rec integer_of_char
+  (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
+    Z.add (Z.mul
+            (Z.add
+              (Z.mul
+                (Z.add
+                  (Z.mul
+                    (Z.add
+                      (Z.mul
+                        (Z.add
+                          (Z.mul
+                            (Z.add
+                              (Z.mul
+                                (Z.add
+                                  (Z.mul (of_bool zero_neq_one_integer b7)
+                                    (Z.of_int 2))
+                                  (of_bool zero_neq_one_integer b6))
+                                (Z.of_int 2))
+                              (of_bool zero_neq_one_integer b5))
+                            (Z.of_int 2))
+                          (of_bool zero_neq_one_integer b4))
+                        (Z.of_int 2))
+                      (of_bool zero_neq_one_integer b3))
+                    (Z.of_int 2))
+                  (of_bool zero_neq_one_integer b2))
+                (Z.of_int 2))
+              (of_bool zero_neq_one_integer b1))
+            (Z.of_int 2))
+      (of_bool zero_neq_one_integer b0);;
+
+let rec nat_of_char c = Nat (integer_of_char c);;
+
+let rec less_eq_char c1 c2 = less_eq_nat (nat_of_char c1) (nat_of_char c2);;
+
+let rec less_char c1 c2 = less_nat (nat_of_char c1) (nat_of_char c2);;
+
+let ord_char = ({less_eq = less_eq_char; less = less_char} : char ord);;
 
 let rec equal_option _A = ({equal = equal_optiona _A} : ('a option) equal);;
 
@@ -3008,6 +2993,19 @@ let ccompare_mregexa : (mregex -> mregex -> ordera) option
 
 let ccompare_mregex = ({ccompare = ccompare_mregexa} : mregex ccompare);;
 
+let rec compare_literal x = comparator_of (equal_literal, linorder_literal) x;;
+
+let ccompare_literala : (string -> string -> ordera) option
+  = Some compare_literal;;
+
+let ccompare_literal = ({ccompare = ccompare_literala} : string ccompare);;
+
+let mapping_impl_literala : (string, mapping_impla) phantom
+  = Phantom Mapping_RBT;;
+
+let mapping_impl_literal =
+  ({mapping_impl = mapping_impl_literala} : string mapping_impl);;
+
 type enat = Enat of nat | Infinity_enat;;
 
 let rec equal_enat x0 x1 = match x0, x1 with Enat nat, Infinity_enat -> false
@@ -3138,6 +3136,33 @@ let rec lexordp_eqa _A
             (if less _A x y then true
               else (if less _A y x then false else lexordp_eqa _A xsa ysa))));;
 
+let rec bit_cut_integer
+  k = (if Z.equal k Z.zero then (Z.zero, false)
+        else (let (r, s) =
+                (fun k l -> if Z.equal Z.zero l then (Z.zero, l) else Z.div_rem
+                  (Z.abs k) (Z.abs l))
+                  k (Z.of_int 2)
+                in
+               ((if Z.lt Z.zero k then r else Z.sub (Z.neg r) s),
+                 Z.equal s (Z.of_int 1))));;
+
+let rec char_of_integer
+  k = (let (q0, b0) = bit_cut_integer k in
+       let (q1, b1) = bit_cut_integer q0 in
+       let (q2, b2) = bit_cut_integer q1 in
+       let (q3, b3) = bit_cut_integer q2 in
+       let (q4, b4) = bit_cut_integer q3 in
+       let (q5, b5) = bit_cut_integer q4 in
+       let (q6, b6) = bit_cut_integer q5 in
+       let a = bit_cut_integer q6 in
+       let (_, aa) = a in
+        Chara (b0, b1, b2, b3, b4, b5, b6, aa));;
+
+let rec explode
+  s = mapa char_of_integer
+        (let s = s in let rec exp i l = if i < 0 then l else exp (i - 1) (let k = Char.code (String.get s i) in
+      if k < 128 then Z.of_int k :: l else failwith "Non-ASCII character in literal") in exp (String.length s - 1) []);;
+
 let rec less_eq_event_data
   x0 x1 = match x0, x1 with EInt x, EInt y -> Z.leq x y
     | EInt x, EFloat y -> Pervasives.(<=) (Z.to_float x) y
@@ -3145,7 +3170,7 @@ let rec less_eq_event_data
     | EFloat x, EInt y -> Pervasives.(<=) x (Z.to_float y)
     | EFloat x, EFloat y -> Pervasives.(<=) x y
     | EFloat uw, EString ux -> false
-    | EString x, EString y -> lexordp_eqa ord_char x y
+    | EString x, EString y -> lexordp_eqa ord_char (explode x) (explode y)
     | EString uy, EInt v -> false
     | EString uy, EFloat v -> false;;
 
@@ -3188,12 +3213,12 @@ type modality = Past | Futu;;
 
 type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med;;
 
-type formula = Pred of char list * trm list |
-  Let of char list * nat * formula * formula | Eq of trm * trm |
-  Less of trm * trm | LessEq of trm * trm | Neg of formula |
-  Or of formula * formula | And of formula * formula | Ands of formula list |
-  Exists of formula | Agg of nat * (agg_type * event_data) * nat * trm * formula
-  | Prev of i * formula | Next of i * formula | Since of formula * i * formula |
+type formula = Pred of string * trm list |
+  Let of string * nat * formula * formula | Eq of trm * trm | Less of trm * trm
+  | LessEq of trm * trm | Neg of formula | Or of formula * formula |
+  And of formula * formula | Ands of formula list | Exists of formula |
+  Agg of nat * (agg_type * event_data) * nat * trm * formula |
+  Prev of i * formula | Next of i * formula | Since of formula * i * formula |
   Until of formula * i * formula | MatchF of i * formula regex |
   MatchP of i * formula regex;;
 
@@ -3205,8 +3230,8 @@ type 'a args_ext = Args_ext of i * nat * nat set * nat set * bool * 'a;;
 type mconstraint = MEq | MLess | MLessEq;;
 
 type ('a, 'b) mformula = MRel of ((event_data option) list) set |
-  MPred of char list * trm list |
-  MLet of char list * nat * nat * ('a, 'b) mformula * ('a, 'b) mformula |
+  MPred of string * trm list |
+  MLet of string * nat * nat * ('a, 'b) mformula * ('a, 'b) mformula |
   MAnd of
     nat set * ('a, 'b) mformula * bool * nat set * ('a, 'b) mformula *
       (((event_data option) list) set list *
@@ -4148,16 +4173,6 @@ let rec lookup_default (_B1, _B2)
 let rec lookupb (_A1, _A2) (_B1, _B2, _B3)
   = lookup_default (_A1, _A2) (empty_table (_B1, _B2, _B3));;
 
-let rec implode
-  cs = (let xs = (mapa integer_of_char
-                   cs)
-      and chr k =
-        let l = Z.to_int k
-          in if 0 <= l && l < 128
-          then Char.chr l
-          else failwith "Non-ASCII character in literal"
-      in String.init (List.length xs) (List.nth (List.map chr xs)));;
-
 let rec restrict
   a v = mapa (fun i ->
                (if member (ceq_nat, ccompare_nat) i a then nth v i else None))
@@ -4775,6 +4790,8 @@ let rec remove_neg = function Neg phi -> phi
                      | MatchF (v, va) -> MatchF (v, va)
                      | MatchP (v, va) -> MatchP (v, va);;
 
+let rec eq_set (_A1, _A2, _A3, _A4) = set_eq (_A2, _A3, _A4);;
+
 let rec safe_formula
   = function
     Eq (t1, t2) ->
@@ -4925,8 +4942,8 @@ let rec safe_formula
           (fvi zero_nata (MatchP (v, va))) &&
           safe_formula (MatchP (v, va))
     | Or (phi, psi) ->
-        set_eq (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata psi)
-          (fvi zero_nata phi) &&
+        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          (fvi zero_nata psi) (fvi zero_nata phi) &&
           (safe_formula phi && safe_formula psi)
     | And (phi, psi) ->
         safe_formula phi &&
@@ -6407,7 +6424,9 @@ let rec bin_join (_A1, _A2, _A3)
                                   ((ceq_list (ceq_option _A1)),
                                     (ccompare_list (ccompare_option _A2)))
                                   (of_phantom set_impl_lista))
-                    else (if set_eq (cenum_nat, ceq_nat, ccompare_nat) a aa
+                    else (if eq_set
+                               (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                               a aa
                            then (if pos
                                   then inf_seta
  ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2))) ta t
@@ -7151,7 +7170,7 @@ let rec meval
         (let (xs, phia) = meval m t db phi in
          let (ys, psia) =
            meval n t
-             (updateb ((ccompare_list ccompare_char), (equal_list equal_char)) p
+             (updateb (ccompare_literal, equal_literal) p
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
@@ -7164,8 +7183,7 @@ let rec meval
            in
           (ys, MLet (p, m, b, phia, psia)))
     | n, t, db, MPred (e, ts) ->
-        ((match
-           lookupa ((ccompare_list ccompare_char), (equal_list equal_char)) db e
+        ((match lookupa (ccompare_literal, equal_literal) db e
            with None ->
              [set_empty
                 ((ceq_list (ceq_option ceq_event_data)),
@@ -7420,9 +7438,7 @@ let rec minit
   phi = (let n = nfv phi in Mstate_ext (zero_nata, minit0 n phi, n, ()));;
 
 let rec mk_db
-  t = of_alist
-        ((ccompare_list ccompare_char), (equal_list equal_char),
-          mapping_impl_list)
+  t = of_alist (ccompare_literal, equal_literal, mapping_impl_literal)
         (map_filter
           (fun (p, x) ->
             (if is_empty
@@ -7430,7 +7446,7 @@ let rec mk_db
                     (cproper_interval_list ccompare_event_data))
                   x
               then None else Some (p, [x])))
-          (clearjunk (equal_list equal_char) t));;
+          (clearjunk equal_literal t));;
 
 let rec mstate_n (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_n;;
 
@@ -7479,33 +7495,6 @@ let rec map_regex
 
 let rbt_empty : ((event_data list), unit) mapping_rbt
   = emptyc (ccompare_list ccompare_event_data);;
-
-let rec bit_cut_integer
-  k = (if Z.equal k Z.zero then (Z.zero, false)
-        else (let (r, s) =
-                (fun k l -> if Z.equal Z.zero l then (Z.zero, l) else Z.div_rem
-                  (Z.abs k) (Z.abs l))
-                  k (Z.of_int 2)
-                in
-               ((if Z.lt Z.zero k then r else Z.sub (Z.neg r) s),
-                 Z.equal s (Z.of_int 1))));;
-
-let rec char_of_integer
-  k = (let (q0, b0) = bit_cut_integer k in
-       let (q1, b1) = bit_cut_integer q0 in
-       let (q2, b2) = bit_cut_integer q1 in
-       let (q3, b3) = bit_cut_integer q2 in
-       let (q4, b4) = bit_cut_integer q3 in
-       let (q5, b5) = bit_cut_integer q4 in
-       let (q6, b6) = bit_cut_integer q5 in
-       let a = bit_cut_integer q6 in
-       let (_, aa) = a in
-        Chara (b0, b1, b2, b3, b4, b5, b6, aa));;
-
-let rec explode
-  s = mapa char_of_integer
-        (let s = s in let rec exp i l = if i < 0 then l else exp (i - 1) (let k = Char.code (String.get s i) in
-      if k < 128 then Z.of_int k :: l else failwith "Non-ASCII character in literal") in exp (String.length s - 1) []);;
 
 let rec mmonitorable_exec
   = function Eq (t1, t2) -> is_simple_eq t1 t2
@@ -7654,8 +7643,8 @@ let rec mmonitorable_exec
           (fvi zero_nata (MatchP (v, va))) &&
           mmonitorable_exec (MatchP (v, va))
     | Or (phi, psi) ->
-        set_eq (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
-          (fvi zero_nata psi) &&
+        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          (fvi zero_nata phi) (fvi zero_nata psi) &&
           (mmonitorable_exec phi && mmonitorable_exec psi)
     | And (phi, psi) ->
         mmonitorable_exec phi &&
