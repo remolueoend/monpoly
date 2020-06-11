@@ -169,12 +169,11 @@ function run() {
 
     local ts2=$(date +%s%N)
     local delta=$((ts2 - ts1))
-    local time=`bc <<< "scale=2; $delta/1000000000"`
 
-    space=`bc <<< "scale=2; $space/1000"`
-    
     #returns time
     if [ $status == "0" ]; then
+        local time=`bc <<< "scale=2; $delta/1000000000"`
+        space=`bc <<< "scale=2; $space/1000"`
         echo "$time/$space"
     else
         if [ "$status" == "124" ]; then
