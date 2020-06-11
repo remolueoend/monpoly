@@ -126,7 +126,7 @@ function make_log() {
 # ============================================================
 
 TIME="\time -f %M"
-TIMEOUTCMD="timeout --foreground"
+TIMEOUTCMD="timeout"
 TIMEOUT=60
 
 function verdict_path() {
