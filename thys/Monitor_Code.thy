@@ -4,7 +4,7 @@ theory Monitor_Code
 begin
 (*>*)
 
-export_code convert_multiway minit_safe mstep mmonitorable_exec
+export_code convert_multiway vminit_safe minit_safe vmstep mstep mmonitorable_exec
    checking OCaml?
 
 export_code
@@ -14,7 +14,7 @@ export_code
   (*term, formula, and regex constructors*)
   EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild
   (*main functions*)
-  convert_multiway minit_safe mstep mmonitorable_exec
+  convert_multiway vminit_safe minit_safe vmstep mstep mmonitorable_exec
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)
