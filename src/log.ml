@@ -178,18 +178,18 @@ let get_next_entry lexbuf =
         raise e
     in
     match log_entry with
-    | DataTuple {ts; db; } when ts = MFOTL.ts_invalid ->
+    | DataTuple {ts; db; complete;} when ts = MFOTL.ts_invalid ->
       let lnum, snum, cnum, token, line = show_error lexbuf in
       Printf.eprintf
         "[Log.get_next_entry] Ignoring the current time point due to parse error. \
          Error at line %d, character %d. Current token is: %s. \
          Suffix of line %d starting from index %d is: %s.\n%!"
         lnum cnum token lnum snum line;
-      update lexbuf;
+      if not complete then update lexbuf;
       get_next lexbuf
 
-    | DataTuple {ts; db; } ->
-      update lexbuf;
+    | DataTuple {ts; db; complete;} ->
+      if not complete then update lexbuf;
       last_ts := ts;
       incr tp;
       if !Filter_empty_tp.enabled && Db.is_empty db then

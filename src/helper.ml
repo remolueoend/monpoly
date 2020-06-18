@@ -26,7 +26,7 @@ type commandParameter =
     | SplitParameters of splitParameters
     | Argument        of string
 
-    type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; }
+    type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; complete:bool; }
     type commandTuple = { c: string;  parameters: commandParameter option; }
     type slicingTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
     
