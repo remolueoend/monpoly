@@ -67,6 +67,9 @@ monpoly.byte: .depend $(OBJC) version.ml main_js.ml
 monpoly.js: monpoly.byte
 	js_of_ocaml --disable genprim -I . --file examples:/ $<
 
+profile: clean .depend version.ml main.ml
+	ocamlbuild -use-ocamlfind -tag use_str -tag profile -package qcheck -package zarith main.native
+	mv main.native monpoly
 
 # update version with the latest revision number
 version.ml: FORCE
