@@ -488,7 +488,7 @@ lemma (in fo_spec) adequate_verdicts_collapse: "adequate \<sigma> \<Longrightarr
   unfolding adequate_def verdicts_def by (auto intro: rev_image_eqI)
 
 lemma (in cosafety_monitor) adequate_verdicts_collapse_M: "adequate \<sigma> \<Longrightarrow>
-  verdicts (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` M_limit (forget_idx \<sigma>)"
+  M_limit (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` M_limit (forget_idx \<sigma>)"
   unfolding M_limit_eq using adequate_verdicts_collapse .
 
 subsubsection \<open>Adding indexes\<close>
@@ -2495,12 +2495,14 @@ end
 locale multi_source = sliceable_fo_spec + cosafety_monitor
 begin
 
-corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow>
-  multi_source_monitor Xs (wpartitionp_alt.ps' ps) = {M_limit (collapse \<sigma>)}"
-  unfolding M_limit_eq
-  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps'] .
+definition multi_source_monitor_M :: "'a list set list \<Rightarrow> 'b wtrace list \<Rightarrow> (nat \<times> 'a tuple) set set" where
+  "multi_source_monitor_M Xs = multi_source_slicer (map relevant_events Xs) \<circ>\<then>
+    determ (map2 (\<lambda>X. M_limit \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
-end
+corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow>
+  multi_source_monitor_M Xs (wpartitionp_alt.ps' ps) = {M_limit (collapse \<sigma>)}"
+  unfolding M_limit_eq multi_source_monitor_M_def
+  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps', unfolded multi_source_monitor_def] .
 
 end
 
