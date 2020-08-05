@@ -68,10 +68,12 @@ text \<open>
   satisfactions in the limit:
 \<close>
 
+abbreviation (in monitor) "M_limit \<sigma> \<equiv> \<Union>{M \<pi> | \<pi>. prefix_of \<pi> \<sigma>}"
+
 locale cosafety_monitor = cosafety_fo_spec + monitor
 begin
 
-lemma M_limit_eq: "\<Union>{M \<pi> | \<pi>. prefix_of \<pi> \<sigma>} = verdicts \<sigma>"
+lemma M_limit_eq: "M_limit \<sigma> = verdicts \<sigma>"
 proof
   show "\<Union>{M \<pi> | \<pi>. prefix_of \<pi> \<sigma>} \<subseteq> verdicts \<sigma>"
     by (auto simp: verdicts_def wf_monitor sound_monitor)

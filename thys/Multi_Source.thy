@@ -469,6 +469,28 @@ proof -
   qed
 qed
 
+subsubsection \<open>Adequacy\<close>
+
+text \<open>
+  An indexed trace is adequate for a specification if the trace satisfies
+  essentially the same valuations as its collapse, modulo the mapping of
+  stream positions.
+\<close>
+
+lift_definition forget_idx :: "'a itrace \<Rightarrow> 'a trace" is "smap (\<lambda>x. (db x, ts x))"
+  by (simp add: stream.map_comp comp_def ssorted_iff_mono)
+
+definition (in fo_spec) adequate :: "'a itrace \<Rightarrow> bool" where
+  "adequate \<sigma> \<longleftrightarrow> (\<forall>v i. sat (collapse \<sigma>) v i \<longleftrightarrow> (\<exists>j. collapse_map \<sigma> j = i \<and> sat (forget_idx \<sigma>) v j))"
+
+lemma (in fo_spec) adequate_verdicts_collapse: "adequate \<sigma> \<Longrightarrow>
+  verdicts (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` verdicts (forget_idx \<sigma>)"
+  unfolding adequate_def verdicts_def by (auto intro: rev_image_eqI)
+
+lemma (in cosafety_monitor) adequate_verdicts_collapse_M: "adequate \<sigma> \<Longrightarrow>
+  verdicts (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` M_limit (forget_idx \<sigma>)"
+  unfolding M_limit_eq using adequate_verdicts_collapse .
+
 subsubsection \<open>Adding indexes\<close>
 
 text \<open>Time-points as indexes:\<close>
@@ -2109,7 +2131,6 @@ lemma reorder'_eq_alt: "reorder' \<sigma> = Abs_trace (reorder_alt \<sigma>)"
   using reorder_eq_alt[OF reorder_state_rel_init, of \<sigma>] by (simp add: reorder'_def)
 
 
-
 subsection \<open>Proof of correctness\<close>
 
 subsubsection \<open>Switching lemmas\<close>
@@ -2469,9 +2490,17 @@ proof -
       (simp add: union_verdicts_slice[OF assms(1)])
 qed
 
+end
+
+locale multi_source = sliceable_fo_spec + cosafety_monitor
+begin
+
 corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow>
-  multi_source_monitor Xs (wpartitionp_alt.ps' ps) = {verdicts (collapse \<sigma>)}"
+  multi_source_monitor Xs (wpartitionp_alt.ps' ps) = {M_limit (collapse \<sigma>)}"
+  unfolding M_limit_eq
   using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps'] .
+
+end
 
 end
 
