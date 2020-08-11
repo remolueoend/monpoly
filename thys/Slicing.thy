@@ -456,16 +456,16 @@ proof safe
   then obtain k where in_M: "(i, v) \<in> M (splitter \<pi> k)"
   unfolding skip_joiner_def by blast
   from ex_prefix_of obtain \<sigma> where "prefix_of \<pi> \<sigma>" by blast
-  with sound_monitor[OF assms(1) in_M] have
-    "MFOTL.sat (MFOTL.slice \<phi> (slice_set \<phi> k) \<sigma>) (map the v) i \<phi>" "ok \<phi> v"
+  with wf_monitor[OF in_M] sound_monitor[OF in_M] have
+    "MFOTL.sat (MFOTL.slice \<phi> (slice_set k) \<sigma>) (map the v) i \<phi>" "ok \<phi> v"
     by (auto simp: splitter_pslice intro!: prefix_of_pslice_slice)
-  note unique_sat_strategy[OF assms(2,3) nonempty mergeable this]
+  note unique_sat_strategy[OF assms nonempty mergeable this]
   with in_M show "(i, v) \<in> ?L" unfolding joiner_def by blast
 qed (auto simp: joiner_def skip_joiner_def)
 
-sublocale skip_joint_monitor: monitor monitorable
-  "\<lambda>\<phi> \<pi>. (if safe_formula \<phi> \<and> gen_unique \<phi> then skip_joiner else joiner \<phi>) (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k))"
-  using joint_monitor.mono_monitor joint_monitor.sound_monitor joint_monitor.complete_monitor
+sublocale skip_joint_monitor: MFOTL_monitor \<phi> monitorable
+  "\<lambda>\<pi>. (if safe_formula \<phi> \<and> gen_unique \<phi> then skip_joiner else joiner) (\<lambda>k. M (splitter \<pi> k))"
+  using joint_monitor.mono_monitor joint_monitor.wf_monitor joint_monitor.sound_monitor joint_monitor.complete_monitor
   by unfold_locales (auto simp: skip_joiner[symmetric] split: if_splits)
 
 end
