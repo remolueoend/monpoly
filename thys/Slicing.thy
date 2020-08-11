@@ -25,21 +25,21 @@ lemmas complete_slicer = equalityD2[OF correct_slicer]
 
 end
 
-locale self_slicer = slicer where M = M and submonitor = "\<lambda>_. M" for M
+locale self_slicer = slicer nfv fv sat M "\<lambda>_. M" splitter joiner for nfv fv sat M splitter joiner
 
 subsection \<open>Definition 3\<close>
 
 locale event_separable_splitter =
-  fixes event_splitter :: "'a MFOTL.formula \<Rightarrow> 'a MFOTL.event \<Rightarrow> 'k :: finite set"
+  fixes event_splitter :: "'a MFOTL.event \<Rightarrow> 'k :: finite set"
 begin
 
-lift_definition splitter :: "'a MFOTL.formula \<Rightarrow> 'a MFOTL.prefix \<Rightarrow> 'k \<Rightarrow> 'a MFOTL.prefix" is
-  "\<lambda>\<phi> \<pi> k. map (\<lambda>(D, t). ({e \<in> D. k \<in> event_splitter \<phi> e}, t)) \<pi>"
+lift_definition splitter :: "'a MFOTL.prefix \<Rightarrow> 'k \<Rightarrow> 'a MFOTL.prefix" is
+  "\<lambda>\<pi> k. map (\<lambda>(D, t). ({e \<in> D. k \<in> event_splitter e}, t)) \<pi>"
   by (auto simp: o_def split_beta)
 
 subsection \<open>Lemma 1\<close>
 
-lemma mono_splitter: "\<pi> \<le> \<pi>' \<Longrightarrow> splitter \<phi> \<pi> k \<le> splitter \<phi> \<pi>' k"
+lemma mono_splitter: "\<pi> \<le> \<pi>' \<Longrightarrow> splitter \<pi> k \<le> splitter \<pi>' k"
   by transfer auto
 
 end
@@ -48,82 +48,93 @@ section \<open>Section 4.3\<close>
 
 abbreviation (input) "ok \<phi> v \<equiv> wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v"
 
-locale splitting_strategy =
-  fixes strategy :: "'a MFOTL.formula \<Rightarrow> 'a option list \<Rightarrow> 'k :: finite set"
-  assumes strategy_nonempty: "monitorable \<phi> \<Longrightarrow> wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v \<Longrightarrow> strategy \<phi> v \<noteq> {}"
+locale monitorable =
+  fixes \<phi> :: "'a MFOTL.formula" and monitorable
+  assumes monitorable: "monitorable \<phi>"
+
+locale splitting_strategy = monitorable \<phi> monitorable for \<phi> :: "'a MFOTL.formula" and monitorable +
+  fixes strategy :: "'a option list \<Rightarrow> 'k :: finite set"
+  assumes strategy_nonempty: "ok \<phi> v \<Longrightarrow> strategy v \<noteq> {}"
 begin
 
 abbreviation slice_set where
-  "slice_set \<phi> k \<equiv> {v. \<exists>v'. map the v' = v \<and> ok \<phi> v' \<and> k \<in> strategy \<phi> v'}"
+  "slice_set k \<equiv> {v. \<exists>v'. map the v' = v \<and> ok \<phi> v' \<and> k \<in> strategy v'}"
 
 end
 
 subsection \<open>Definition 4\<close>
 
-locale joint_data_slicer = monitor "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "M \<phi>" + splitting_strategy strategy
-  for monitorable ::and strategy :: "'a MFOTL.formula \<Rightarrow> _"
+locale MFOTL_monitor =
+  monitorable \<phi> monitorable + monitor "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" M
+  for \<phi> monitorable M
+
+locale joint_data_slicer = MFOTL_monitor \<phi> monitorable M + splitting_strategy \<phi> monitorable strategy
+  for \<phi> monitorable M strategy
 begin
 
 definition event_splitter where
-  "event_splitter \<phi> e = (\<Union>(strategy \<phi> ` {v. ok \<phi> v \<and> MFOTL.matches (map the v) \<phi> e}))"
+  "event_splitter e = (\<Union>(strategy ` {v. ok \<phi> v \<and> MFOTL.matches (map the v) \<phi> e}))"
 
 sublocale event_separable_splitter where event_splitter = event_splitter .
 
 definition joiner where
-  "joiner \<phi> = (\<lambda>s. \<Union>k. s k \<inter> (UNIV :: nat set) \<times> {v. k \<in> strategy \<phi> v})"
+  "joiner = (\<lambda>s. \<Union>k. s k \<inter> (UNIV :: nat set) \<times> {v. k \<in> strategy v})"
 
-lemma splitter_pslice: "splitter \<phi> \<pi> k = MFOTL.pslice \<phi> (slice_set \<phi> k) \<pi>"
+lemma splitter_pslice: "splitter \<pi> k = MFOTL.pslice \<phi> (slice_set k) \<pi>"
   by transfer (auto simp: event_splitter_def)
 
 subsection \<open>Lemma 2\<close>
 
 text \<open>Corresponds to the following theorem @{thm[source] sat_slice_strong} proved in theory
-   @{theory "MFOTL_Monitor.Abstract_Monitor"}:
+   @{theory "Draft.Abstract_Monitor"}:
 
    @{thm sat_slice_strong[no_vars]}\<close>
 
 subsection \<open>Theorem 1\<close>
 
-sublocale joint_monitor: monitor monitorable "\<lambda>\<phi> \<pi>. joiner \<phi> (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k))"
-proof (standard, goal_cases mono sound complete)
-  case (mono \<phi> \<pi> \<pi>')
+sublocale joint_monitor: MFOTL_monitor \<phi> monitorable "\<lambda>\<pi>. joiner (\<lambda>k. M (splitter \<pi> k))"
+proof (unfold_locales, goal_cases mono wf sound complete)
+  case (mono \<pi> \<pi>')
   show ?case
-    using mono_monitor[OF _ mono_splitter, OF mono]
+    using mono_monitor[OF mono_splitter, OF mono]
     by (auto simp: joiner_def)
 next
-  case (sound \<phi> i v \<pi>)
-  then obtain k where in_M: "(i, v) \<in> M \<phi> (splitter \<phi> \<pi> k)"  and k: "k \<in> strategy \<phi> v"
+  case (wf i v \<pi>)
+  then obtain k where in_M: "(i, v) \<in> M (splitter \<pi> k)"  and k: "k \<in> strategy v"
     unfolding joiner_def by (auto split: if_splits)
-  have len: "i < plen (splitter \<phi> \<pi> k)" and wf: "wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v" and
-    sat: "\<And>\<sigma>. prefix_of (splitter \<phi> \<pi> k) \<sigma> \<Longrightarrow> MFOTL.sat \<sigma> (map the v) i \<phi>"
-    using sound_monitor[OF sound(1) in_M] by auto
-  from len have "i < plen \<pi>"
-    by transfer auto
-  moreover have "MFOTL.sat \<sigma> (map the v) i \<phi>" if "prefix_of \<pi> \<sigma>" for \<sigma>
-    using that wf k
-    by (intro iffD2[OF sat_slice_iff[of "map the v" "slice_set \<phi> k" \<sigma> i \<phi>]])
-      (auto simp: wf_tuple_def fvi_less_nfv splitter_pslice intro!: exI[of _ v] prefix_of_pslice_slice sat)
-  ultimately show ?case using wf by blast
+  then show ?case
+    using wf_monitor[OF in_M] by auto
 next
-  case (complete \<phi> \<pi> \<sigma> i v)
-  with strategy_nonempty obtain k where k: "k \<in> strategy \<phi> v" by blast
-  have "MFOTL.sat \<sigma>' (map the v) i \<phi>" if "prefix_of (MFOTL.pslice \<phi> (slice_set \<phi> k) \<pi>) \<sigma>'" for \<sigma>'
+  case (sound i v \<pi> \<sigma>)
+  then obtain k where in_M: "(i, v) \<in> M (splitter \<pi> k)"  and k: "k \<in> strategy v"
+    unfolding joiner_def by (auto split: if_splits)
+  have wf: "ok \<phi> v" and sat: "\<And>\<sigma>. prefix_of (splitter \<pi> k) \<sigma> \<Longrightarrow> MFOTL.sat \<sigma> (map the v) i \<phi>"
+    using sound_monitor[OF in_M] wf_monitor[OF in_M] by auto
+  then have "MFOTL.sat \<sigma> (map the v) i \<phi>" if "prefix_of \<pi> \<sigma>" for \<sigma>
+    using that k
+    by (intro iffD2[OF sat_slice_iff[of "map the v" "slice_set k" \<sigma> i \<phi>]])
+      (auto simp: wf_tuple_def fvi_less_nfv splitter_pslice intro!: exI[of _ v] prefix_of_pslice_slice)
+  then show ?case using sound(2) by blast
+next
+  case (complete \<pi> \<sigma> v i)
+  with strategy_nonempty obtain k where k: "k \<in> strategy v" by blast
+  have "MFOTL.sat \<sigma>' (map the v) i \<phi>" if "prefix_of (MFOTL.pslice \<phi> (slice_set k) \<pi>) \<sigma>'" for \<sigma>'
   proof -
-    have "MFOTL.sat \<sigma>' (map the v) i \<phi> = MFOTL.sat (MFOTL.slice \<phi> (slice_set \<phi> k) \<sigma>') (map the v) i \<phi>"
-      using complete(4) k by (auto intro!: sat_slice_iff)
-    also have "\<dots> = MFOTL.sat (MFOTL.slice \<phi> (slice_set \<phi> k) (replace_prefix \<pi> \<sigma>')) (map the v) i \<phi>"
+    have "MFOTL.sat \<sigma>' (map the v) i \<phi> = MFOTL.sat (MFOTL.slice \<phi> (slice_set k) \<sigma>') (map the v) i \<phi>"
+      using complete(2) k by (auto intro!: sat_slice_iff)
+    also have "\<dots> = MFOTL.sat (MFOTL.slice \<phi> (slice_set k) (replace_prefix \<pi> \<sigma>')) (map the v) i \<phi>"
       using that complete k by (subst slice_replace_prefix[symmetric]; simp)
     also have "\<dots> = MFOTL.sat (replace_prefix \<pi> \<sigma>') (map the v) i \<phi>"
-      using complete(4) k by (auto intro!: sat_slice_iff[symmetric])
+      using complete(2) k by (auto intro!: sat_slice_iff[symmetric])
     also have "\<dots>"
-      by (rule complete(5)[rule_format], rule prefix_of_replace_prefix[OF that])
+      by (rule complete(3)[rule_format], rule prefix_of_replace_prefix[OF that])
     finally show ?thesis .
   qed
-  with complete(1-4) obtain \<pi>' where \<pi>':
-    "prefix_of \<pi>' (MFOTL.slice \<phi> (slice_set \<phi> k) \<sigma>)"" (i, v) \<in> M \<phi> \<pi>'"
-    by (atomize_elim, intro complete_monitor[where \<pi>="MFOTL.pslice \<phi> (slice_set \<phi> k) \<pi>"])
+  with complete(1-3) obtain \<pi>' where \<pi>':
+    "prefix_of \<pi>' (MFOTL.slice \<phi> (slice_set k) \<sigma>)" "(i, v) \<in> M \<pi>'"
+    by (atomize_elim, intro complete_monitor[where \<pi>="MFOTL.pslice \<phi> (slice_set k) \<pi>"])
       (auto simp: splitter_pslice intro!: prefix_of_pslice_slice)
-  from \<pi>'(1) obtain \<pi>'' where "\<pi>' = MFOTL.pslice \<phi> (slice_set \<phi> k) \<pi>''" "prefix_of \<pi>'' \<sigma>"
+  from \<pi>'(1) obtain \<pi>'' where "\<pi>' = MFOTL.pslice \<phi> (slice_set k) \<pi>''" "prefix_of \<pi>'' \<sigma>"
     by (atomize_elim, rule prefix_of_sliceD)
   with \<pi>' k show ?case
     by (intro exI[of _ \<pi>'']) (auto simp: joiner_def splitter_pslice intro!: exI[of _ k])
@@ -131,38 +142,44 @@ qed
 
 subsection \<open>Corollary 1\<close>
 
-sublocale joint_slicer: slicer
-  monitorable "\<lambda>\<phi> \<pi>. joiner \<phi> (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k))" "\<lambda>\<phi> _. M \<phi>" splitter joiner
+sublocale joint_slicer: slicer "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>"
+  "\<lambda>\<pi>. joiner (\<lambda>k. M (splitter \<pi> k))" "\<lambda>_. M" splitter joiner
   by standard (auto simp: mono_splitter)
 
 end
 
 subsection \<open>Definition 5\<close>
 
-text \<open>Corresponds to locale @{locale slicable_monitor} defined in theory @{theory "MFOTL_Monitor.Abstract_Monitor"}.\<close>
+text \<open>Corresponds to locale @{locale sliceable_monitor} defined in theory @{theory "Draft.Abstract_Monitor"}.\<close>
 
-locale slicable_joint_data_slicer = slicable_monitor + joint_data_slicer
+locale slicable_joint_data_slicer =
+  sliceable_monitor "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "relevant_events \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" M +
+  joint_data_slicer \<phi> monitorable M strategy for \<phi> monitorable M strategy
 begin
 
-lemma monitor_split: "ok \<phi> v \<Longrightarrow> k \<in> strategy \<phi> v \<Longrightarrow> (i, v) \<in> M \<phi> (splitter \<phi> \<pi> k) \<longleftrightarrow> (i, v) \<in> M \<phi> \<pi>"
-  unfolding splitter_pslice
-  by (rule monitor_slice)
+lemma pslice_pslice: "MFOTL.pslice \<phi> S = pslice S"
+  unfolding MFOTL.pslice_def pmap_\<Gamma>_def
+  by (auto simp: apfst_def map_prod_def)
+
+lemma monitor_split: "ok \<phi> v \<Longrightarrow> k \<in> strategy v \<Longrightarrow> (i, v) \<in> M (splitter \<pi> k) \<longleftrightarrow> (i, v) \<in> M \<pi>"
+  unfolding splitter_pslice pslice_pslice
+  by (rule sliceable_M)
     (auto simp: wf_tuple_def fvi_less_nfv intro!: mem_restrI[rotated 2, where y="map the v"])
 
 subsection \<open>Theorem 2\<close>
 
-sublocale self_slicer monitorable M splitter joiner
+sublocale self_slicer "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" M splitter joiner
 proof (standard, erule mono_splitter, safe, goal_cases sound complete)
-  case (sound \<phi> \<pi> i v)
-  have "ok \<phi> v" using joint_monitor.sound_monitor[OF sound] by auto
-  from sound(2) obtain k where "(i, v) \<in> M \<phi> (splitter \<phi> \<pi> k)" "k \<in> strategy \<phi> v"
+  case (sound \<pi> i v)
+  have "ok \<phi> v" using joint_monitor.wf_monitor[OF sound] by auto
+  from sound obtain k where "(i, v) \<in> M (splitter \<pi> k)" "k \<in> strategy v"
     unfolding joiner_def by blast
   with \<open>ok \<phi> v\<close> show ?case by (simp add: monitor_split)
 next
-  case (complete \<phi> \<pi> i v)
-  have "ok \<phi> v" using sound_monitor[OF complete] by auto
-  with complete strategy_nonempty obtain k where k: "k \<in> strategy \<phi> v" by blast
-  then have "(i, v) \<in> M \<phi> (splitter \<phi> \<pi> k)" using complete \<open>ok \<phi> v\<close> by (simp add: monitor_split)
+  case (complete \<pi> i v)
+  have "ok \<phi> v" using wf_monitor[OF complete] by auto
+  with complete strategy_nonempty obtain k where k: "k \<in> strategy v" by blast
+  then have "(i, v) \<in> M (splitter \<pi> k)" using complete \<open>ok \<phi> v\<close> by (simp add: monitor_split)
   with k show ?case unfolding joiner_def by blast
 qed
 
@@ -412,15 +429,15 @@ qed
 subsection \<open>Lemma 3\<close>
 
 lemma (in splitting_strategy) unique_sat_strategy:
-  "safe_formula \<phi> \<Longrightarrow> gen_unique \<phi> \<Longrightarrow> slice_set \<phi> k \<noteq> {} \<Longrightarrow>
-  mergeable_envs (MFOTL.nfv \<phi>) (slice_set \<phi> k) \<Longrightarrow>
-  MFOTL.sat (MFOTL.slice \<phi> (slice_set \<phi> k) \<sigma>) (map the v) i \<phi> \<Longrightarrow>
-  ok \<phi> v \<Longrightarrow> k \<in> strategy \<phi> v"
+  "safe_formula \<phi> \<Longrightarrow> gen_unique \<phi> \<Longrightarrow> slice_set k \<noteq> {} \<Longrightarrow>
+  mergeable_envs (MFOTL.nfv \<phi>) (slice_set k) \<Longrightarrow>
+  MFOTL.sat (MFOTL.slice \<phi> (slice_set k) \<sigma>) (map the v) i \<phi> \<Longrightarrow>
+  ok \<phi> v \<Longrightarrow> k \<in> strategy v"
   by (drule (3) unique_sat_slice_mem) (auto dest: wf_tuple_cong)
 
 locale skip_inter = joint_data_slicer +
-  assumes nonempty: "slice_set \<phi> k \<noteq> {}"
-  and mergeable: "mergeable_envs (MFOTL.nfv \<phi>) (slice_set \<phi> k)"
+  assumes nonempty: "slice_set k \<noteq> {}"
+  and mergeable: "mergeable_envs (MFOTL.nfv \<phi>) (slice_set k)"
 begin
 
 subsection \<open>Definition of J'\<close>
@@ -430,13 +447,13 @@ definition "skip_joiner = (\<lambda>s. \<Union>k. s k)"
 subsection \<open>Theorem 3\<close>
 
 lemma skip_joiner:
-  assumes "monitorable \<phi>" "safe_formula \<phi>" "gen_unique \<phi>"
-  shows "joiner \<phi> (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k)) = skip_joiner (\<lambda>k. M \<phi> (splitter \<phi> \<pi> k))"
+  assumes "safe_formula \<phi>" "gen_unique \<phi>"
+  shows "joiner (\<lambda>k. M (splitter \<pi> k)) = skip_joiner (\<lambda>k. M (splitter \<pi> k))"
   (is "?L = ?R")
 proof safe
   fix i v
   assume "(i, v) \<in> ?R"
-  then obtain k where in_M: "(i, v) \<in> M \<phi> (splitter \<phi> \<pi> k)"
+  then obtain k where in_M: "(i, v) \<in> M (splitter \<pi> k)"
   unfolding skip_joiner_def by blast
   from ex_prefix_of obtain \<sigma> where "prefix_of \<pi> \<sigma>" by blast
   with sound_monitor[OF assms(1) in_M] have
