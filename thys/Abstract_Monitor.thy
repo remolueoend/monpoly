@@ -286,11 +286,6 @@ text \<open>
   time-stamps, then also the monitor itself is sliceable.
 \<close>
 
-lift_definition pts :: "'a prefix \<Rightarrow> nat list" is "map snd" .
-
-lemma (in abstract_slicer) pts_pslice[simp]: "pts (pslice S \<pi>) = pts \<pi>"
-  by (transfer fixing: S) simp
-
 locale timed_progress = progress +
   assumes progress_time_conv: "pts \<pi> = pts \<pi>' \<Longrightarrow> progress \<pi> = progress \<pi>'"
 

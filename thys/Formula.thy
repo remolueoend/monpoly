@@ -817,14 +817,7 @@ next
   then show ?case by auto
 qed (auto 9 0 simp add: nth_Cons' fv_regex_alt)
 
-abbreviation relevant_events where
-  "relevant_events \<phi> S \<equiv> {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}"
-
-qualified definition slice :: "formula \<Rightarrow> env set \<Rightarrow> trace \<Rightarrow> trace" where
-  "slice \<phi> S \<sigma> = map_\<Gamma> (\<lambda>D. D \<inter> relevant_events \<phi> S) \<sigma>"
-
-lemma \<tau>_slice[simp]: "\<tau> (slice \<phi> S \<sigma>) = \<tau> \<sigma>"
-  unfolding slice_def by (simp add: fun_eq_iff)
+abbreviation relevant_events where "relevant_events \<phi> S \<equiv> {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}"
 
 lemma sat_slice_strong:
   assumes "v \<in> S" "dom V = dom V'"
@@ -943,12 +936,6 @@ next
   then show ?case
     by auto
 qed simp_all
-
-lemma sat_slice_iff:
-  assumes "v \<in> S"
-  shows "sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (slice \<phi> S \<sigma>) V v i \<phi>"
-  unfolding slice_def
-  by (rule sat_slice_strong[OF assms]) auto
 
 
 subsection \<open>Translation to n-ary conjunction\<close>

@@ -150,8 +150,9 @@ typedef 'a prefix = "{p :: ('a set \<times> nat) list. sorted (map snd p)}"
 
 setup_lifting type_definition_prefix
 
-lift_definition pmap_\<Gamma> :: "('a set \<Rightarrow> 'b set) \<Rightarrow> 'a prefix \<Rightarrow> 'b prefix" is "\<lambda>f. map (apfst f)"
-  by simp
+lift_definition pmap_\<Gamma> :: "('a set \<Rightarrow> 'b set) \<Rightarrow> 'a prefix \<Rightarrow> 'b prefix" is
+  "\<lambda>f. map (\<lambda>(x, i). (f x, i))"
+  by (simp add: split_beta comp_def)
 
 lift_definition last_ts :: "'a prefix \<Rightarrow> nat" is
   "\<lambda>p. (case p of [] \<Rightarrow> 0 | _ \<Rightarrow> snd (last p))" .
@@ -206,6 +207,9 @@ lemma prefix_of_pnil[simp]: "prefix_of pnil \<sigma>"
   by transfer auto
 
 lemma plen_pnil[simp]: "plen pnil = 0"
+  by transfer auto
+
+lemma prefix_of_pmap_\<Gamma>[simp]: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of (pmap_\<Gamma> f \<pi>) (map_\<Gamma> f \<sigma>)"
   by transfer auto
 
 lemma plen_mono: "\<pi> \<le> \<pi>' \<Longrightarrow> plen \<pi> \<le> plen \<pi>'"
@@ -339,6 +343,49 @@ lift_definition replace_prefix :: "'a prefix \<Rightarrow> 'a trace \<Rightarrow
      \<pi> @- sdrop (length \<pi>) \<sigma> else smap (\<lambda>i. ({}, i)) nats"
   by (auto split: if_splits simp: stream.map_comp stream.map_ident sdrop_smap[symmetric]
     simp del: sdrop_smap intro!: sincreasing_shift sincreasing_sdrop cong: stream.map_cong)
+
+lemma prefix_of_replace_prefix:
+  "prefix_of (pmap_\<Gamma> f \<pi>) \<sigma> \<Longrightarrow> prefix_of \<pi> (replace_prefix \<pi> \<sigma>)"
+proof (transfer; safe; goal_cases)
+  case (1 f \<pi> \<sigma>)
+  then show ?case
+    by (subst (asm) (2) stake_sdrop[symmetric, of _ "length \<pi>"])
+      (auto 0 3 simp: ssorted_shift split_beta o_def stake_shift sdrop_smap[symmetric]
+        ssorted_sdrop not_le simp del: sdrop_smap)
+qed
+
+lemma map_\<Gamma>_replace_prefix:
+  "\<forall>x. f (f x) = f x \<Longrightarrow> prefix_of (pmap_\<Gamma> f \<pi>) \<sigma> \<Longrightarrow> map_\<Gamma> f (replace_prefix \<pi> \<sigma>) = map_\<Gamma> f \<sigma>"
+proof (transfer; safe; goal_cases)
+  case (1 f \<pi> \<sigma>)
+  then show ?case
+    by (subst (asm) (2) stake_sdrop[symmetric, of \<sigma> "length \<pi>"],
+        subst (3) stake_sdrop[symmetric, of \<sigma> "length \<pi>"])
+      (auto simp: ssorted_shift split_beta o_def stake_shift sdrop_smap[symmetric] ssorted_sdrop
+        not_le simp del: sdrop_smap cong: map_cong)
+qed
+
+lemma prefix_of_pmap_\<Gamma>_D:
+  assumes "prefix_of (pmap_\<Gamma> f \<pi>) \<sigma>"
+  shows "\<exists>\<sigma>'. prefix_of \<pi> \<sigma>' \<and> prefix_of (pmap_\<Gamma> f \<pi>) (map_\<Gamma> f \<sigma>')"
+proof -
+  from assms(1) obtain \<sigma>' where 1: "prefix_of \<pi> \<sigma>'"
+    using ex_prefix_of by blast
+  then have "prefix_of (pmap_\<Gamma> f \<pi>) (map_\<Gamma> f \<sigma>')"
+    by transfer simp
+  with 1 show ?thesis by blast
+qed
+
+lemma prefix_of_map_\<Gamma>_D:
+  assumes "prefix_of \<pi>' (map_\<Gamma> f \<sigma>)"
+  shows "\<exists>\<pi>''. \<pi>' = pmap_\<Gamma> f \<pi>'' \<and> prefix_of \<pi>'' \<sigma>"
+  using assms
+  by transfer (auto intro!: exI[of _ "stake (length _) _"] elim: sym dest: sorted_stake)
+
+lift_definition pts :: "'a prefix \<Rightarrow> nat list" is "map snd" .
+
+lemma pts_pmap_\<Gamma>[simp]: "pts (pmap_\<Gamma> f \<pi>) = pts \<pi>"
+  by (transfer fixing: f) (simp add: split_beta)
 
 (*<*)
 end
