@@ -1912,7 +1912,7 @@ next
 next
   case (3 v S \<sigma> i)
   then show ?case
-    using sat_slice_iff[symmetric] by (simp add: Formula.slice_def)
+    using sat_slice_iff[symmetric] by simp
 next
   case (4 \<pi> \<pi>')
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"

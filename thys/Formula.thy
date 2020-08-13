@@ -1,6 +1,6 @@
 (*<*)
 theory Formula
-  imports Interval Trace Regex Event_Data
+  imports Interval Trace Abstract_Monitor Regex Event_Data
     "MFOTL_Monitor.Table"
     "HOL-Library.Mapping"
     Containers.Set_Impl
@@ -1287,6 +1287,13 @@ next
 qed (auto cong: nat.case_cong)
 
 end (*context*)
+
+interpretation Formula_slicer: abstract_slicer "relevant_events \<phi>" for \<phi> .
+
+lemma sat_slice_iff:
+  assumes "v \<in> S"
+  shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat (Formula_slicer.slice \<phi> S \<sigma>) V v i \<phi>"
+  by (rule sat_slice_strong[OF assms]) auto
 
 lemma Neg_splits:
   "P (case \<phi> of formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =
