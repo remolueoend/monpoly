@@ -1,0 +1,1 @@
+P0(x1,x2) AND (NOT (P1(x1) SINCE[0,*] P0(x2,x1)))

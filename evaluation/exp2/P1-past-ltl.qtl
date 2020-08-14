@@ -1,0 +1,6 @@
+prop P1 :
+Forall a. Forall f. publish(a,f) ->
+          ( [acc_S(a), acc_F(a))
+          &
+          P (Exists m.
+            [mgr_S(m,a), mgr_F(m,a)) & approve(m,f)))

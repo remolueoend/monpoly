@@ -7,11 +7,15 @@ all: monpoly
 
 tools: merger fc_colsuf fc_paramslicing fc_filter_empty_tp compare count mfotl2sql table2log
 
-.PHONY: monpoly doc clean clean-all depend 
+.PHONY: monpoly update-verimon doc clean clean-all depend 
 
 monpoly: 
 	cd src && $(MAKE) monpoly
 	cp src/monpoly monpoly
+
+update-verimon:
+	cd thys && $(MAKE) verimon
+	cp thys/MFODL_Monitor_Devel/verified.ocaml src/verified.ml
 
 merger: 
 	cd tools && $(MAKE) merger
@@ -48,6 +52,16 @@ table2log:
 	cd tools && $(MAKE) table2log
 	cp -v tools/table2log $(BIN)
 
+log_generator:
+	cd tools && $(MAKE) log_generator
+	cp tools/gen_log gen_log
+
+fma_generator:
+	cd src && $(MAKE) monpoly
+	cd tools && $(MAKE) fma_generator
+	cp tools/gen_fma gen_fma
+
+
 install: monpoly 
 	cp -v monpoly $(BIN)monpoly
 
@@ -75,10 +89,10 @@ clean:
 
 
 clean-all: clean
-	rm -f monpoly
+	rm -f monpoly gen_fma gen_log
 	rm -f doc/*
 	rm -f tools/merger tools/fc_colsuf tools/fc_paramslicing tools/fc_filter_empty_tp tools/compare tools/count \
-		tools/mysql_test tools/pgsql tools/mfotl2sql tools/table2log
+		tools/mysql_test tools/pgsql tools/mfotl2sql tools/table2log tools/gen_fma tools/gen_log
 	rm -f src/monpoly $(BIN)monpoly $(BIN)mfotl2sql $(BIN)table2log
 
 depend:
@@ -91,7 +105,7 @@ monpoly-$(VER).tgz:
 release: monpoly-$(VER).tgz
 
 
-docker: 
+docker: clean
 	docker build -t $(USERNAME)/$(IMAGENAME) .
 
 docker-run:

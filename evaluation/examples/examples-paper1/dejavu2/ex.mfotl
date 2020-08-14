@@ -1,0 +1,1 @@
+EXISTS x1 . (((P0() SINCE  (ONCE P1())) AND (x1=24)))

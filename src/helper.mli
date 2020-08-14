@@ -1,6 +1,7 @@
 open MFOTL
 open Predicate
 open Db
+open Relation
 
 type constraintSet
 
@@ -31,7 +32,7 @@ type commandParameter =
     | SplitParameters of splitParameters
     | Argument        of string
 
-type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; lookahead: bool; }
+type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; complete:bool; }
 type commandTuple = { c: string;  parameters: commandParameter option; }
 type slicingTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
 
@@ -58,3 +59,5 @@ type 'a atree =
 type ('a, 'b) stree =  ('a, 'b option) Sliding.node atree
 
 val get_new_elements: 'a Dllist.dllist -> 'a Dllist.cell -> ('a -> bool) -> ('a -> 'b) -> 'b list * 'a Dllist.cell
+
+val show_results: bool -> 'a -> int -> timestamp -> relation -> unit

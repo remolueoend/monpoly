@@ -94,8 +94,8 @@ rule
   | "{"                      { f "LBC" lexbuf; LCB }
   | "}"                      { f "RCB" lexbuf; RCB }
   | ","                      { f "COM" lexbuf; COM }
-  | ";"                      { f "SEM" lexbuf; SEM }
-
+  | ";"                      { f "TERMINATOR"  lexbuf; TR }
+  
   | string as lxm            { f "STR" lexbuf; STR (strip lxm) }
 
   | "#"                      { f "#" lexbuf; line_comment lexbuf }

@@ -121,8 +121,8 @@ let get_signature_lexbuf lexbuf =
     else
       let predefined_predicates =
   [("tp", ["i", TInt]);
-   ("ts", ["t", TInt]);
-   ("tpts", [("i", TInt); ("t", TInt)]);]
+   ("ts", ["t", TFloat]);
+   ("tpts", [("i", TInt); ("t", TFloat)]);]
       in predefined_predicates @ sign
   with e ->
     Printf.eprintf
@@ -150,10 +150,10 @@ let log_open logfile =
   in
   Lexing.from_channel ic
 
-let update lexbuf lookahead =
+let update lexbuf =
   if Misc.debugging Dbg_log then
     Printf.eprintf "[Log.update] curr=%d\n%!" lexbuf.lex_curr_pos;
-  if lookahead && lexbuf.lex_curr_pos > 0 then
+  if lexbuf.lex_curr_pos > 0 then
     lexbuf.lex_curr_pos <- lexbuf.lex_curr_pos - 1
 
 let skipped_tps = ref 0
@@ -178,18 +178,18 @@ let get_next_entry lexbuf =
         raise e
     in
     match log_entry with
-    | DataTuple {ts; db; lookahead; } when ts = MFOTL.ts_invalid ->
+    | DataTuple {ts; db; complete;} when ts = MFOTL.ts_invalid ->
       let lnum, snum, cnum, token, line = show_error lexbuf in
       Printf.eprintf
         "[Log.get_next_entry] Ignoring the current time point due to parse error. \
          Error at line %d, character %d. Current token is: %s. \
          Suffix of line %d starting from index %d is: %s.\n%!"
         lnum cnum token lnum snum line;
-      update lexbuf lookahead;
+      if not complete then update lexbuf;
       get_next lexbuf
 
-    | DataTuple {ts; db; lookahead; } ->
-      update lexbuf lookahead;
+    | DataTuple {ts; db; complete;} ->
+      if not complete then update lexbuf;
       last_ts := ts;
       incr tp;
       if !Filter_empty_tp.enabled && Db.is_empty db then

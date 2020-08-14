@@ -1,0 +1,25 @@
+Benchmark generator for the monitoring patient measurements.
+
+
+# CREATING LOGS
+
+Add streamqre.jar to the local maven repo as such: 
+
+mvn install:install-file -Dfile=./lib/StreamQRE.jar -DgroupId=edu.rice.csweb \
+    -DartifactId=streamqre -Dversion=1.0.0 -Dpackaging=jar
+
+Compile:
+
+mvn package 
+
+Run: 
+
+java -jar target/streamqre-0.0.1-SNAPSHOT.jar  -h
+
+
+# SIGs and MFOTL formulas
+
+alur.sig and .mfotl are for single patient benchmarks (generated with -p 1 flag)
+
+alur2.sig and .mfotl are for multiple patient benchmarks
+

@@ -1189,7 +1189,7 @@ let main () =
   let attr = Log.get_signature !sigfile in
   let f = analyse_formulafile !formulafile in
   let f = if !negate then Neg f else f in
-  let is_mon, pf, vt_list = Rewriting.check_formula attr f in
+  let is_mon, pf, vt_list = Rewriting.check_formula false attr f in
   if is_mon then
     let all_attr = 
       (tbl_time, ("tp", TInt) :: ("ts", TInt) :: []) ::

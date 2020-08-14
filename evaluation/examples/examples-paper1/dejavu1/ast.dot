@@ -1,0 +1,5 @@
+digraph G {
+  0 [shape=octagon, color=red, label="0 : !P0"]
+  1 [shape=box, label="1 : P0"]
+  0 -> 1
+}

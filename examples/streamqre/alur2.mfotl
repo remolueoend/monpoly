@@ -1,0 +1,2 @@
+D() AND v<-MAX r ; p (PREVIOUS (NOT D() SINCE
+  (E(p) AND (r<-AVG x ; p (NOT B(p) SINCE M(p,x))))))

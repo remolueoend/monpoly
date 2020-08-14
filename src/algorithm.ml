@@ -553,7 +553,7 @@ let comp_aggMM_once tsq intv state update_state_old update_state_new get_result 
           (* current relation in the interval, so we process it *)
           begin
             ignore (Queue.pop state.non_tw_rels);
-            update_state_new state tsq arel;
+            update_state_new state tsj arel;
             consider_other_rels ()
           end
           (* else, that is, not (MFOTL.in_right_ext diff intv) *)
@@ -722,16 +722,22 @@ let rec eval f neval crt discard =
           end;
         let pcrt = NEval.get_prev neval crt in
         begin
+          let prev_tp, prev_ts = NEval.get_data pcrt in
+          assert(prev_tp = q - 1);
+          assert(prev_ts = inf.ptsq);
           let orel = eval f1 neval pcrt discard in
           if !added then
             ignore(NEval.pop_first neval);
           match orel with
           | Some rel1 ->
+            let res =
+              if MFOTL.in_interval (MFOTL.ts_minus tsq inf.ptsq) intv then
+                Some rel1
+              else
+                Some Relation.empty
+            in
             inf.ptsq <- tsq;
-            if MFOTL.in_interval (MFOTL.ts_minus tsq inf.ptsq) intv then
-              Some rel1
-            else
-              Some Relation.empty;
+            res
           | None -> None
         end
       end
@@ -998,88 +1004,90 @@ let rec eval f neval crt discard =
     inf.last1 <- eval_subf f1 inf.listrel1 inf.last1;
     inf.last2 <- eval_subf f2 inf.listrel2 inf.last2;
 
-    if inf.last1 == NEval.void || inf.last2 == NEval.void then
-      None
-    else
-      let (i1,tsi1) = NEval.get_data inf.last1 in
-      let (i2,tsi2) = NEval.get_data inf.last2 in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi2 tsq) intv) && i1 >= i2-2 then
-        (* we have the lookahead, we can compute the result; note that
-           that i2-1 is the last time point in the relevant interval,
-           and thus the last time point for which we need f1's
-           evaluation is i2-2 *)
-        begin
-          (* we iteratively compute the union of the relations [f1]_j
-             with q <= j <= j0-1, where j0 is the first index which
-             satisfies the temporal constraint relative to q *)
-          let f1union = ref Relation.empty in
-          let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
-          let rec iter1 () =
-            let j,tsj,relj = Dllist.get_data !crt1_j in
-            if j < q then
-              begin (* clean up from previous evaluation *)
-                assert (j = q-1);
-                ignore(Dllist.pop_first inf.listrel1);
-                if not (Dllist.is_last inf.listrel1 !crt1_j) then
-                  begin
-                    crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                    iter1 ()
-                  end
-              end
-            else if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
-              begin
-                f1union := Relation.union !f1union relj;
-                if not (Dllist.is_last inf.listrel1 !crt1_j) then
-                  begin
-                    crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                    iter1 ()
-                  end
-              end
-          in
-          iter1 ();
+    (* checks whether the position to be evaluated is beyond the interval *)
+    let has_lookahead last =
+      let ncrt =
+        if neval_is_last neval last then
+          last
+        else
+          neval_get_crt neval last crt q
+      in
+      let _, tsi = NEval.get_data ncrt in
+      not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv)
+    in
 
-          (* we now iterate through the remaining indexes, updating the
-             union, and also computing the result *)
-          let res = ref Relation.empty in
-          let crt2_j = ref (Dllist.get_first_cell inf.listrel2) in
-          let rec iter2 () =
-            let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
-            if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
-              begin (* clean up from previous evaluation *)
-                ignore(Dllist.pop_first inf.listrel2);
-                if not (Dllist.is_last inf.listrel2 !crt2_j) then
-                  begin
-                    crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                    iter2 ()
-                  end
-              end
-            else
-              begin
-                let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
-                assert(j1 = j2);
-                if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
-                  begin
-                    f1union := Relation.union !f1union rel1;
-                    let resj = comp rel2 !f1union in
-                    res := Relation.union !res resj;
-                    let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
-                    let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
-                    assert (not (is_last1 && is_last2));
-                    if (not is_last1) && (not is_last2) then
-                      begin
-                        crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
-                        crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
-                        iter2 ()
-                      end
-                  end
-              end
-          in
-          iter2();
-          Some !res
-        end
-      else
-        None
- 
+    if has_lookahead inf.last1 && has_lookahead inf.last2 then
+      (* we have the lookahead for both f1 and f2 (to be consistent with Until),
+        we can compute the result
+
+        NOTE: we could evaluate earlier with respect to f1, also in Until *)
+      begin
+        (* we iteratively compute the union of the relations [f1]_j
+          with q <= j <= j0-1, where j0 is the first index which
+          satisfies the temporal constraint relative to q *)
+        let f1union = ref Relation.empty in
+        let crt1_j = ref (Dllist.get_first_cell inf.listrel1) in
+        let rec iter1 () =
+          let j,tsj,relj = Dllist.get_data !crt1_j in
+          if j < q then
+            begin (* clean up from previous evaluation *)
+              assert (j = q-1);
+              ignore(Dllist.pop_first inf.listrel1);
+              crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
+              iter1 ()
+            end
+          else if not (MFOTL.in_right_ext (MFOTL.ts_minus tsj tsq) intv) then
+            begin
+              f1union := Relation.union !f1union relj;
+              if not (Dllist.is_last inf.listrel1 !crt1_j) then
+                begin
+                  crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
+                  iter1 ()
+                end
+            end
+        in
+        iter1 ();
+
+        (* we now iterate through the remaining indexes, updating the
+          union, and also computing the result *)
+        let res = ref Relation.empty in
+        let crt2_j = ref (Dllist.get_first_cell inf.listrel2) in
+        let rec iter2 () =
+          let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
+          if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
+            begin (* clean up from previous evaluation *)
+              ignore(Dllist.pop_first inf.listrel2);
+              if not (Dllist.is_last inf.listrel2 !crt2_j) then
+                begin
+                  crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
+                  iter2 ()
+                end
+            end
+          else
+            begin
+              let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
+              assert(j1 = j2);
+              if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
+                begin
+                  let resj = comp rel2 !f1union in
+                  res := Relation.union !res resj;
+                  f1union := Relation.union !f1union rel1;
+                  let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
+                  let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
+                  if (not is_last1) && (not is_last2) then
+                    begin
+                      crt1_j := Dllist.get_next inf.listrel1 !crt1_j;
+                      crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
+                      iter2 ()
+                    end
+                end
+            end
+        in
+        iter2();
+        Some !res
+      end
+    else
+      None
 
 
 
@@ -1276,9 +1284,7 @@ let add_index f i tsi db =
          | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
          | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
          | "tpts" ->
-           let cst_i = Int i in
-           let cst_ts = Int (int_of_float tsi) in
-           Relation.singleton (Tuple.make_tuple [cst_i; cst_ts])
+           Relation.singleton (Tuple.make_tuple [Int i; Float tsi])
          | _ -> Relation.empty
         )
       in
@@ -1312,39 +1318,6 @@ let add_index f i tsi db =
   in
   update f
 
-(** This function displays the "results" (if any) obtained after
-    analyzing event index [i]. The results are those tuples satisfying
-    the formula for some index [q<=i]. *)
-let rec show_results closed i q tsq rel =
-  if !Misc.stop_at_first_viol && Relation.cardinal rel > 1 then
-    let rel2 = Relation.singleton (Relation.choose rel) in
-    show_results closed i q tsq rel2
-  else if !Misc.verbose then
-    if closed then
-      Printf.printf "@%s (time point %d): %b\n%!"
-        (MFOTL.string_of_ts tsq) q (rel <> Relation.empty)
-    else
-      begin
-        Printf.printf "@%s (time point %d): " (MFOTL.string_of_ts tsq) q;
-        Relation.print_reln "" rel
-      end
-  else
-    begin
-      if Misc.debugging Dbg_perf then
-        Perf.show_results q tsq;
-      if rel <> Relation.empty then (* formula satisfied *)
-        if closed then (* no free variables *)
-          Printf.printf "@%s (time point %d): true\n%!" (MFOTL.string_of_ts tsq) q
-        else (* free variables *)
-          begin
-            Printf.printf "@%s (time point %d): " (MFOTL.string_of_ts tsq) q;
-            Relation.print_rel4 "" rel;
-            print_newline()
-          end
-    end
-
-
-
 let process_index ff closed neval i =
   if !Misc.verbose then
     Printf.printf "At time point %d:\n%!" i;
@@ -1352,14 +1325,16 @@ let process_index ff closed neval i =
   let rec eval_loop () =
     if not (NEval.is_empty neval) then
       let first = NEval.get_first_cell neval in
-      match eval ff neval first false with
-      | Some rel ->
-        ignore(NEval.pop_first neval);
-        let (q,tsq) = NEval.get_data first in
-        show_results closed i q tsq rel;
-        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
-        else eval_loop ()
-      | None -> true
+      let (q,tsq) = NEval.get_data first in
+      if tsq < MFOTL.ts_max then
+        match eval ff neval first false with
+        | Some rel ->
+          ignore(NEval.pop_first neval);
+          show_results closed i q tsq rel;
+          if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
+          else eval_loop ()
+        | None -> true
+      else false
     else true
   in
   eval_loop ()
@@ -1455,35 +1430,31 @@ let median xlist len fmed =
 
 
 
-let aggreg_empty_rel op glist =
+let aggreg_empty_rel op glist t =
   let op_str = MFOTL.string_of_agg_op op in
-  let default_value = function
-    | Avg -> Float 0.
-    | Cnt -> Int 0
-    | Min | Max | Sum | Med -> Float 0.
-  in
+  let default_value = MFOTL.aggreg_default_value op t in
   if glist = [] then
     begin
       (match op with
        | Avg | Med | Min | Max ->
          let err_msg = Printf.sprintf "WARNING: %s applied on empty relation \
                                        at time point %d, timestamp %s! \
-                                       Resulting value is 0, by (our) convention.\n"
-             op_str !crt_tp (MFOTL.string_of_ts !crt_ts)
+                                       Resulting value is %s, by (our) convention.\n"
+             op_str !crt_tp (MFOTL.string_of_ts !crt_ts) (string_of_cst true default_value)
          in
          prerr_string err_msg
 
        | Cnt | Sum -> ()
       );
 
-      Relation.singleton (Tuple.make_tuple [default_value op])
+      Relation.singleton (Tuple.make_tuple [default_value])
     end
   else
     Relation.empty
 
 
 
-let rec add_ext f =
+let rec add_ext dbschema f =
   match f with
   | Pred p ->
     EPred (p, Relation.eval_pred p, Queue.create())
@@ -1496,10 +1467,10 @@ let rec add_ext f =
     let rel = Relation.eval_not_equal t1 t2 in
     ERel rel
 
-  | Neg f -> ENeg (add_ext f)
+  | Neg f -> ENeg (add_ext dbschema f)
 
   | Exists (vl, f1) ->
-    let ff1 = add_ext f1 in
+    let ff1 = add_ext dbschema f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Pervasives.compare pos in
@@ -1507,15 +1478,15 @@ let rec add_ext f =
     EExists (comp,ff1)
 
   | Or (f1, f2) ->
-    let ff1 = add_ext f1 in
-    let ff2 = add_ext f2 in
+    let ff1 = add_ext dbschema f1 in
+    let ff2 = add_ext dbschema f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
     let comp =
       if attr1 = attr2 then
         Relation.union
       else
-        let matches = Table.get_matches attr1 attr2 in
+        let matches = Table.get_matches attr2 attr1 in
         let new_pos = List.map snd matches in
         (* first reorder rel2 *)
         (fun rel1 rel2 ->
@@ -1528,13 +1499,13 @@ let rec add_ext f =
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ff1 = add_ext f1 in
+    let ff1 = add_ext dbschema f1 in
     let f2_is_special = Rewriting.is_special_case attr1 attr2 f2 in
     let ff2 =
       if f2_is_special then ERel Relation.empty
       else match f2 with
-        | Neg f2' -> add_ext f2'
-        | _ -> add_ext f2
+        | Neg f2' -> add_ext dbschema f2'
+        | _ -> add_ext dbschema f2
     in
     let comp =
       if f2_is_special then
@@ -1573,11 +1544,12 @@ let rec add_ext f =
     in
     EAnd (comp, ff1, ff2, {arel = None})
 
-  | Aggreg (y, (Avg as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Sum as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Cnt as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Med as op), x, glist, Once (intv, f)) ->
+  | Aggreg (t_y, y, (Avg as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Sum as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Cnt as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Med as op), x, glist, Once (intv, f)) ->
 
+    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1585,7 +1557,8 @@ let rec add_ext f =
     let init_agg_val op cst =
       match op with
       | Med -> Med_aux (1, Intmap.singleton cst 1)
-      | _ -> CSA_aux (1, cst)
+      | Cnt -> C_aux (1)
+      | _ -> SA_aux (1, cst)
     in
 
     let init_agg_values = init_agg_val op in
@@ -1607,10 +1580,14 @@ let rec add_ext f =
 
     let update_agg_values add_flag prev_values cst =
       match prev_values with
-      | CSA_aux (c, s) ->
+      | C_aux (c) -> 
         if add_flag
-        then true, CSA_aux (c + 1, Predicate.plus s cst)
-        else c = 1, CSA_aux (c - 1, Predicate.minus s cst)
+        then true, C_aux (c+1)
+        else c = 1, C_aux (c-1)
+      | SA_aux (c, s) ->
+        if add_flag
+        then true, SA_aux (c + 1, Predicate.plus s cst)
+        else c = 1, SA_aux (c - 1, Predicate.minus s cst)
       | Med_aux (len, xlist) ->
         if add_flag
         then true, Med_aux (len + 1, add cst xlist)
@@ -1663,26 +1640,26 @@ let rec add_ext f =
     let get_val_func = function
       | Cnt ->
         (fun x -> match x with
-           | CSA_aux (c, _) -> Int c
-           | Med_aux _ -> failwith "internal error"
+           | C_aux c -> Int c
+           | _ -> failwith "internal error"
         )
       | Sum ->
         (fun x -> match x with
-           | CSA_aux (_, s) -> s
-           | Med_aux _ -> failwith "internal error"
+           | SA_aux (_, s) -> s
+           | _ -> failwith "internal error"
         )
       | Avg ->
         (fun x -> match x with
-           | CSA_aux (c,s) -> (match s with
+           | SA_aux (c,s) -> (match s with
                | Int s -> Float ((float_of_int s) /. (float_of_int c))
                | Float s -> Float (s /. (float_of_int c))
                | _ -> failwith "internal error")
-           | Med_aux _ -> failwith "internal error"
+           | _ -> failwith "internal error"
         )
       | Med ->
         (fun x -> match x with
            | Med_aux (len, xlist) -> median xlist len Predicate.avg
-           | CSA_aux _ -> failwith "internal error"
+           | _ -> failwith "internal error"
         )
 
       | _ -> failwith "[add_ext, AggOnce] internal error"
@@ -1692,7 +1669,7 @@ let rec add_ext f =
 
     let get_result state =
       if Hashtbl.length state.hres = 0 then
-        aggreg_empty_rel op glist
+        aggreg_empty_rel op glist t_y
       else
         let res = ref Relation.empty in
         Hashtbl.iter
@@ -1711,11 +1688,11 @@ let rec add_ext f =
     }
     in
 
-    EAggOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
+    EAggOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
-  | Aggreg (y, (Min as op), x, glist, Once (intv, f))
-  | Aggreg (y, (Max as op), x, glist, Once (intv, f)) ->
+  | Aggreg (t_y, y, (Min as op), x, glist, Once (intv, f))
+  | Aggreg (t_y, y, (Max as op), x, glist, Once (intv, f)) ->
 
     let get_comp_func = function
       | Min -> (fun x y -> - (Pervasives.compare x y))
@@ -1728,6 +1705,7 @@ let rec add_ext f =
     (* for Max: x is better than y iff x > y *)
     let is_better = get_comp_func op in
 
+    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1792,17 +1770,15 @@ let rec add_ext f =
     in
 
     let update_state_old state tsq =
-      Hashtbl.iter (fun gtuple dllist ->
+      Hashtbl.filter_map_inplace (fun _ dllist ->
           update_list_old tsq dllist;
-          if Dllist.is_empty dllist then
-            (* TODO: is it safe to modify the hash table while we iterate on it!? *)
-            Hashtbl.remove state.tbl gtuple;
+          if Dllist.is_empty dllist then None else Some dllist
         ) state.tbl
     in
 
     let get_result state =
       if Hashtbl.length state.tbl = 0 then
-        aggreg_empty_rel op glist
+        aggreg_empty_rel op glist t_y
       else
         let res = ref Relation.empty in
         Hashtbl.iter
@@ -1820,11 +1796,11 @@ let rec add_ext f =
     }
     in
 
-    EAggMMOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
+    EAggMMOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
 
-  | Aggreg (y, Avg, x, glist, f) ->
+  | Aggreg (t_y, y, Avg, x, glist, f) ->
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1839,7 +1815,7 @@ let rec add_ext f =
     let comp_map = comp_aggreg init_value update posx posG in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel Avg glist
+        aggreg_empty_rel Avg glist TFloat 
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
@@ -1854,9 +1830,9 @@ let rec add_ext f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext f)
+    EAggreg (comp, add_ext dbschema f)
 
-  | Aggreg (y, Med, x, glist, f) ->
+  | Aggreg (t_y, y, Med, x, glist, f) ->
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1865,13 +1841,13 @@ let rec add_ext f =
     let comp_map = comp_aggreg init_value update posx posG in
     let fmed a b =
       match a, b with
-      | Int x, Int y -> Int ((x+y)/2)
+      | Int x, Int y -> Float (((float_of_int x) +. (float_of_int y)) /. 2.)
       | Float x, Float y -> Float ((x+.y)/.2.)
       | _ -> failwith "[add_ext] type error"
     in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel Med glist
+        aggreg_empty_rel Med glist TFloat
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
@@ -1882,9 +1858,10 @@ let rec add_ext f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext f)
+    EAggreg (comp, add_ext dbschema f)
 
-  | Aggreg (y, op, x, glist, f) ->
+  | Aggreg (t_y, y, op, x, glist, f)  ->
+    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
@@ -1905,7 +1882,7 @@ let rec add_ext f =
     let comp_map = comp_aggreg init_value update posx posG in
     let comp rel =
       if Relation.is_empty rel then
-        aggreg_empty_rel op glist
+        aggreg_empty_rel op glist t_y
       else
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
@@ -1914,14 +1891,14 @@ let rec add_ext f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext f)
+    EAggreg (comp, add_ext dbschema f)
 
   | Prev (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     EPrev (intv, ff, {ptsq = MFOTL.ts_invalid})
 
   | Next (intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     ENext (intv, ff, {init = true})
 
   | Since (intv,f1,f2) ->
@@ -1940,11 +1917,10 @@ let rec add_ext f =
         fun relj rel1 -> Relation.minus posl relj rel1
       else
         let matches2 = Table.get_matches attr2 attr1 in
-        let matches1 = Table.get_matches attr1 attr2 in
-        fun relj rel1 -> Relation.natural_join matches2 matches1 relj rel1
+        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
+    let ff1 = add_ext dbschema ef1 in
+    let ff2 = add_ext dbschema f2 in
     if snd intv = Inf then
       let inf = {sres = Relation.empty; sarel2 = None; saauxrels = Mqueue.create()} in
       ESinceA (comp,intv,ff1,ff2,inf)
@@ -1953,12 +1929,12 @@ let rec add_ext f =
       ESince (comp,intv,ff1,ff2,inf)
 
   | Once ((_, Inf) as intv, f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     EOnceA (intv,ff,{ores = Relation.empty;
                      oaauxrels = Mqueue.create()})
 
   | Once (intv,f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     if fst intv = CBnd MFOTL.ts_null then
       EOnceZ (intv,ff,{oztree = LNode {l = -1;
                                        r = -1;
@@ -1981,8 +1957,8 @@ let rec add_ext f =
        | _ -> f1,false
       )
     in
-    let ff1 = add_ext ef1 in
-    let ff2 = add_ext f2 in
+    let ff1 = add_ext dbschema ef1 in
+    let ff2 = add_ext dbschema f2 in
     if neg then
       let comp =
         let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
@@ -1999,8 +1975,7 @@ let rec add_ext f =
     else
       let comp =
         let matches2 = Table.get_matches attr2 attr1 in
-        let matches1 = Table.get_matches attr1 attr2 in
-        fun relj rel1 -> Relation.natural_join matches2 matches1 relj rel1
+        fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
       in
       let inf = {ulast = NEval.void;
                  ufirst = false;
@@ -2013,7 +1988,7 @@ let rec add_ext f =
 
 
   | Eventually (intv,f) ->
-    let ff = add_ext f in
+    let ff = add_ext dbschema f in
     if fst intv = CBnd MFOTL.ts_null then
       EEventuallyZ (intv,ff,{eztree = LNode {l = -1;
                                              r = -1;
@@ -2031,7 +2006,7 @@ let rec add_ext f =
 
   | _ -> failwith "[add_ext] internal error"
 
-(* 
+(*
   STATE MANAGEMENT CALLS
   - (Un-)Marshalling, Splitting, Merging
  *)
@@ -2055,8 +2030,8 @@ let dump_to_file dumpfile value =
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
   Reads state from specified dumpfile and converts neval array to dllist
-*)  
-let read_m_from_file file =   
+*)
+let read_m_from_file file =
   let ch = open_in_bin file in
   let value = (Marshal.from_channel ch : state) in
   close_in ch;
@@ -2070,7 +2045,7 @@ let marshal dumpfile ff closed neval =
   let a, mf = Marshalling.ext_to_m ff neval in
   let value : state = (!Log.last_ts,closed,mf,a,!Log.tp,!Log.last) in
   (*Printf.printf "Log TP to restore: %d \n" !Log.tp;*)
-  dump_to_file dumpfile value  
+  dump_to_file dumpfile value
 
 (*
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
@@ -2082,23 +2057,23 @@ let unmarshal resumefile =
   (last_ts,ff,closed,neval,tp,last)
 
 
-let create_empty_db = 
+let create_empty_db =
   Db.make_db []
 
-let add_empty_db ff neval = 
+let add_empty_db ff neval =
   crt_tp := !Log.tp -1;
   lastts := !Log.last_ts;
   NEval.add_last (!crt_tp, !lastts) neval;
-  add_index ff !crt_tp !lastts create_empty_db  
+  add_index ff !crt_tp !lastts create_empty_db
 
-let catch_up_on_filtered_tp ff neval = 
+let catch_up_on_filtered_tp ff neval =
   let rec eval_loop () =
     if not (NEval.is_empty neval) then
       let first = NEval.get_first_cell neval in
       match eval ff neval first false with
       | Some rel ->
         ignore(NEval.pop_first neval);
-        if (Relation.is_empty rel) then 
+        if (Relation.is_empty rel) then
           eval_loop ()
         else ()
       | None -> ()
@@ -2139,7 +2114,7 @@ let split_save filename ff closed neval  =
 (*
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
    with names of index prepended with dumpfile variable.
-*)  
+*)
 let split_and_save  sconsts dumpfile i ff closed neval  =
   catch_up_on_filtered_tp ff neval;
   let a, mf = Marshalling.ext_to_m ff neval in
@@ -2151,7 +2126,7 @@ let split_and_save  sconsts dumpfile i ff closed neval  =
   Printf.printf "%s\n%!" saved_state_msg
 
 (* Convert comma separated filenames to list of strings *)
-let files_to_list f = 
+let files_to_list f =
   String.split_on_char ',' f
 
 (*
@@ -2174,7 +2149,7 @@ let merge_formulas files =
     Printf.printf "2 length_ %d \n" (NEval.length neval2);
     *)
     let comb_nv = Splitting.combine_neval neval1 neval2 in
-  
+
     let comb_ff = Splitting.comb_m ff1 ff2 in
     (last_ts,comb_ff,closed, comb_nv,tp,last)
   ) (List.tl files) (read_m_from_file (List.hd files))
@@ -2188,7 +2163,7 @@ let checkExitParam p = match p with
     true
   | _ -> false
 
-(* Checks if the parameters for the split command are set *)  
+(* Checks if the parameters for the split command are set *)
 let checkSplitParam p = match p with
   | SplitParameters sp ->
     dumpfile := "partition-";
@@ -2206,7 +2181,7 @@ let checkSplitParam p = match p with
 *)
 
 let set_slicer_parameters c p =
-  match p with 
+  match p with
   | SplitSave sp ->
     let heavy, shares, seeds = sp in
     slicer_heavy_unproc := heavy;
@@ -2224,7 +2199,7 @@ let rec check_log lexbuf ff closed neval i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
 
-    (* Helper functions for handling different monpoly commands *)  
+    (* Helper functions for handling different monpoly commands *)
     let save_state c params = match params with
       | Some (Argument filename) ->
                     catch_up_on_filtered_tp ff neval;
@@ -2239,11 +2214,11 @@ let rec check_log lexbuf ff closed neval i =
                     marshal !dumpfile ff closed neval;
                     Printf.printf "%s\n%!" saved_state_msg
         end
-        else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i  
+        else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i
       | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
     in
     let split_save   c params = match params with
-      | Some p -> if (checkExitParam p = true) then 
+      | Some p -> if (checkExitParam p = true) then
                     split_save !dumpfile ff closed neval
                   else
                     Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
@@ -2285,8 +2260,8 @@ let rec check_log lexbuf ff closed neval i =
                 save_state c parameters;
                 loop ffl i
             | "set_slicer" ->
-                set_slicer c parameters; 
-                loop ffl i    
+                set_slicer c parameters;
+                loop ffl i
             | "split_save" -> split_save c parameters;
                 loop ffl i
             | "save_and_exit" ->  save_and_exit c parameters;
@@ -2328,10 +2303,10 @@ let rec check_log lexbuf ff closed neval i =
   loop ff i
 
 
-let monitor_lexbuf lexbuf f =
-  check_log lexbuf (add_ext f) (MFOTL.free_vars f = []) (NEval.empty()) 0
+let monitor_lexbuf dbschema  lexbuf f =
+  check_log lexbuf (add_ext dbschema f) (MFOTL.free_vars f = []) (NEval.empty()) 0
 
-let monitor_string log f =
+let monitor_string dbschema log f =
   (let lexbuf = Lexing.from_string log in
    lastts := MFOTL.ts_invalid;
    crt_tp := -1;
@@ -2339,12 +2314,12 @@ let monitor_string log f =
    Log.tp := 0;
    Log.skipped_tps := 0;
    Log.last := false;
-   monitor_lexbuf lexbuf f;
+   monitor_lexbuf dbschema lexbuf f;
    Lexing.flush_input lexbuf;)
 
-let monitor logfile =
+let monitor dbschema logfile =
   let lexbuf = Log.log_open logfile in
-  monitor_lexbuf lexbuf
+  monitor_lexbuf dbschema lexbuf
 
 
 let test_filter logfile f =
@@ -2370,7 +2345,7 @@ let test_filter logfile f =
       | _ ->
         Printf.printf "%s, processed %d time points\n" "Unrecognized type" (i - 1)
   in
-  loop f 0 
+  loop f 0
 
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
@@ -2386,10 +2361,10 @@ let resume logfile =
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" restored_state_msg;
   check_log lexbuf ff closed neval 0
-  
+
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
-let combine logfile = 
+let combine logfile =
   let files = files_to_list !combine_files in
   let (last_ts,mf,closed,neval,tp,last) = merge_formulas files in
   let ff = Marshalling.m_to_ext mf neval in
@@ -2405,7 +2380,7 @@ let combine logfile =
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" combined_state_msg;
   check_log lexbuf ff closed neval 0
-  
+
 
 (* Testing slicer *)
 let test_tuple_split slicer size tuple dest =
@@ -2430,7 +2405,7 @@ let test_slicer ff evaluation  =
       let tuple = convert_slicing_tuple slicer elem.vars elem.tuple in
       let () = test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple elem.output in
       test_entries i
-    else 
+    else
       print_endline "All entries tested"
   in
     test_entries 0
@@ -2445,7 +2420,7 @@ let rec test_log lexbuf ff evaluation =
     | MonpolyCommand {c; parameters} ->
         let process_command = function
             | "set_slicer" ->
-                set_slicer c parameters; 
+                set_slicer c parameters;
                 loop ffl
             | "test_slicer" -> test_slicer ff evaluation;
                 loop ffl
@@ -2462,7 +2437,7 @@ let rec test_log lexbuf ff evaluation =
   loop ff
 
 
-let run_test testfile formula = 
+let run_test dbschema testfile formula =
   let lexbuf = Log.log_open testfile in
   Printf.printf "Testing slicing configurations\n";
-  test_log lexbuf (add_ext formula) (NEval.empty())
+  test_log lexbuf (add_ext dbschema formula) (NEval.empty())

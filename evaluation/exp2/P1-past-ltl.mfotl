@@ -1,0 +1,5 @@
+publish(a,f) IMPLIES
+  (NOT acc_F(a) SINCE acc_S(a))
+  AND
+  ONCE[0,*] (EXISTS m.
+    (NOT mgr_F(m,a) SINCE mgr_S(m,a)) AND approve(m,f))

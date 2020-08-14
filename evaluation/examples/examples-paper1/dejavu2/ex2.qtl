@@ -1,0 +1,1 @@
+prop random : (! Exists x1 . ((P0() S  (P P1())) & (x1=34)))

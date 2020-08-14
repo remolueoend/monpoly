@@ -1,19 +1,20 @@
-OCAMLOPT = ocamlopt
-OCAMLC = ocamlc
+OCAMLOPT = ocamlfind ocamlopt
+OCAMLC = ocamlfind ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
+export OCAMLRUNPARAM=b
 
-FLAGS = -I ../src
+FLAGS = -package qcheck -package zarith -linkpkg -I ../src
 
 ifeq "$(OCAML)" "$(OCAMLC)"
   O = cmo
   A = cma
-  LIBS = -custom unix.$(A) str.$(A)
+  LIBS = -custom unix.$(A) str.$(A) nums.$(A)
 else
   O = cmx
   A = cmxa
-  LIBS = unix.$(A) str.$(A) 
+  LIBS = str.$(A) nums.$(A)
   OCAMLDEPFLAGS = -native
 endif
 
@@ -61,6 +62,17 @@ mfotl2sql: $(MONPOLY_LIB) mfotl2sql.ml
 table2log: $(MONPOLY_LIB) table2log.cmi table2log.$(O)
 	$(OCAMLEXE) -I ../src/ ../src/$(MONPOLY_LIB) table2log.ml -o $@
 
+log_generator: 
+	ocamlopt -o gen_log PrioQueue.ml gen_log.ml
+
+fma_generator: 
+	ocamlfind ocamlc -I ../src -c random_generator.mli
+	ocamlfind ocamlopt -I ../src -package qcheck -package zarith -linkpkg -c random_generator.ml
+	ocamlfind ocamlc -I ../src -g -c formula_generator.mli
+	ocamlfind ocamlopt -I ../src -package qcheck -package zarith -linkpkg -g -c formula_generator.ml
+	ocamlfind ocamlopt -I ../src -package qcheck -package zarith -linkpkg -g -o gen_fma str.cmxa ../src/mqueue.cmx ../src/dllist.cmx ../src/misc.cmx ../src/predicate.cmx ../src/MFOTL.cmx random_generator.ml formula_generator.ml gen_fma.ml
+
+
 %.cmi: %.mli $(MONPOLY_LIB)
 	$(OCAMLC) $(FLAGS) -c $<
 
@@ -72,4 +84,5 @@ table2log: $(MONPOLY_LIB) table2log.cmi table2log.$(O)
 
 
 clean:
-	rm -f *.cm[iox]
+	rm -f *.cm[iox] *.o
+	rm -f gen_fma mfotl2sql gen_log

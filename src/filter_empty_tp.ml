@@ -331,7 +331,7 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     | Or (f1,f2) -> LOr ((go_down f1), (go_down f2))
     | Exists (vl,f) -> LExists (vl, (go_down f))
     | ForAll (vl,f) -> LForAll (vl, (go_down f))
-    | Aggreg (y,op,x,glist,f) -> LAggreg (y,op,x,glist, go_down f)
+    | Aggreg (_,y,op,x,glist,f) -> LAggreg (y,op,x,glist, go_down f)
     | Prev (i,f) -> LPrev (i, (go_down f))
     | Next (i,f) -> LNext (i, (go_down f))
     | Eventually (intv,f) -> LEventually (intv, (go_down f))
@@ -344,6 +344,9 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     (* (\* rewrite p => q to ~p or q *\) *)
     (* LOr ((go_down (Neg f1)), (go_down f2)) *)
     | Equiv (f1,f2) -> failwith "[Filter_empty_tp.go_down] formula contains Equiv"
+    | Let (_,_,_) -> failwith "Internal error"
+    | Frex (_,_) -> failwith "Internal error"
+    | Prex (_,_) -> failwith "Internal error"
   in
   let l = add_labels lf
   in

@@ -75,6 +75,7 @@ type formula =
   | Less of (term * term)
   | LessEq of (term * term)
   | Pred of predicate
+  | Let of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -82,7 +83,7 @@ type formula =
   | Equiv of (formula * formula)
   | Exists of (var list * formula)
   | ForAll of (var list * formula)
-  | Aggreg of (var * agg_op * var * var list * formula)
+  | Aggreg of (tsymb * var * agg_op * var * var list * formula)
   | Prev of (interval * formula)
   | Next of (interval * formula)
   | Eventually of (interval * formula)
@@ -91,7 +92,14 @@ type formula =
   | PastAlways of (interval * formula)
   | Since of (interval * formula * formula)
   | Until of (interval * formula * formula)
-
+  | Frex of (interval * regex)
+  | Prex of (interval * regex)
+and regex = 
+  | Wild
+  | Test of formula
+  | Concat of (regex * regex)
+  | Plus of (regex * regex)
+  | Star of regex
 
 (** Operations on timestamps: *)
 
@@ -109,20 +117,30 @@ val in_right_ext: tsdiff -> interval -> bool
 val in_interval: tsdiff -> interval -> bool
 
 
+(** Default values for aggregations on empty sets: *)
+val aggreg_default_value: agg_op -> tcst -> cst
+
 
 (** Operations on formulas: *)
 
+val map: (formula -> formula) -> (regex -> regex) -> formula -> formula
+
 val direct_subformulas: formula -> formula list
-  (** [direct_subformulas f] returns the list of all direct subformulas of [f]; hence not the
-      of all subformulas of [f], and not including [f]. *)
+  (** [direct_subformulas f] returns the list of all direct subformulas of [f]; hence not 
+       all subformulas of [f], and not including [f]. Regexes are ignored *)
 
 val is_temporal: formula -> bool
   (** [is_temporal f] returns [true] if the main connective of [f] is
       temporal. *)
 
+val is_mfodl: formula -> bool
+  (** [is_mfodl f] returns [true] if the formula contains future or past match operators *)
+
 val free_vars: formula -> var list
   (** [free_vars f] returns the list of free variables of [f]. *)
 
+val substitute_vars: (Predicate.var * Predicate.var Predicate.eterm) list -> formula -> formula
+ (** [substitute_vars m f] is a capture avoiding substitution f[m]  *)
 
 (** Conversion functions: *)
 
@@ -135,6 +153,9 @@ val string_of_agg_op: agg_op -> string
 
 val string_of_ts: timestamp -> string
 val print_ts: timestamp -> unit
+val string_of_interval: interval -> string
 val print_interval: interval -> unit
+val string_of_formula: string -> formula -> string
 val print_formula: string -> formula -> unit
 val printnl_formula: string -> formula -> unit
+val string_of_parenthesized_formula: string -> formula -> string

@@ -43,6 +43,7 @@ open Misc
 open Predicate
 open MFOTL
 open Db
+open Verified
 
 
 let elim_double_negation f =
@@ -51,6 +52,7 @@ let elim_double_negation f =
     | Less (t1, t2) -> Less (t1, t2)
     | LessEq (t1, t2) -> LessEq (t1, t2)
     | Pred p -> Pred p
+    | Let (p,f1,f2) -> Let (p,elim f1, elim f2)
 
     | Neg (Neg f) -> elim f
 
@@ -61,7 +63,7 @@ let elim_double_negation f =
     | Equiv (f1, f2) -> Equiv (elim f1, elim f2)
     | Exists (v, f) -> Exists (v, elim f)
     | ForAll (v, f) -> ForAll (v, elim f)
-    | Aggreg (y, op, x, glist, f) -> Aggreg (y, op, x, glist, elim f)
+    | Aggreg (ytyp, y, op, x, glist, f) -> Aggreg (ytyp, y, op, x, glist, elim f)
     | Prev (intv, f) -> Prev (intv, elim f)
     | Next (intv, f) -> Next (intv, elim f)
     | Eventually (intv, f) -> Eventually (intv, elim f)
@@ -70,6 +72,14 @@ let elim_double_negation f =
     | PastAlways (intv, f) -> PastAlways (intv, elim f)
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
+    | Frex (intv, r) -> Frex (intv, elim_re r)
+    | Prex (intv, r) -> Prex (intv, elim_re r)
+  and elim_re = function
+  | Wild -> Wild
+  | Test f -> Test (elim f)
+  | Concat (r1,r2) -> Concat(elim_re r1, elim_re r2)
+  | Plus (r1,r2) -> Plus(elim_re r1, elim_re r2)
+  | Star r -> Star (elim_re r)
   in
   elim f
 
@@ -91,6 +101,7 @@ let simplify_terms f =
       let name, _, tlist = Predicate.get_info p in
       let new_tlist = List.map st tlist in
       Pred (Predicate.make_predicate (name, new_tlist))
+    | Let (p,f1,f2) -> Let (p, s f1, s f2)
     | Neg f -> Neg (s f)
     | And (f1, f2) -> And (s f1, s f2)
     | Or (f1, f2) -> Or (s f1, s f2)
@@ -98,7 +109,7 @@ let simplify_terms f =
     | Equiv (f1, f2) -> Equiv (s f1, s f2)
     | Exists (v, f) -> Exists (v, s f)
     | ForAll (v, f) -> ForAll (v, s f)
-    | Aggreg (y, op, x, glist, f) -> Aggreg (y, op, x, glist, s f)
+    | Aggreg (ytyp, y, op, x, glist, f) -> Aggreg (ytyp, y, op, x, glist, s f)
     | Prev (intv, f) -> Prev (intv, s f)
     | Next (intv, f) -> Next (intv, s f)
     | Eventually (intv, f) -> Eventually (intv, s f)
@@ -107,6 +118,14 @@ let simplify_terms f =
     | PastAlways (intv, f) -> PastAlways (intv, s f)
     | Since (intv, f1, f2) -> Since (intv, s f1, s f2)
     | Until (intv, f1, f2) -> Until (intv, s f1, s f2)
+    | Frex (intv, r) -> Frex (intv, s_re r)
+    | Prex (intv, r) -> Prex (intv, s_re r)
+  and s_re = function
+  | Wild -> Wild
+  | Test f -> Test (s f)
+  | Concat (r1,r2) -> Concat(s_re r1, s_re r2)
+  | Plus (r1,r2) -> Plus(s_re r1, s_re r2)
+  | Star r -> Star (s_re r)
   in
   s f
 
@@ -123,6 +142,7 @@ let rec elim_syntactic_sugar g =
     match f with
     | Equal _ | Less _ | LessEq _ | Pred _ -> f
 
+    | Let (p,f1,f2) -> Let (p, elim f1, elim f2)
     | Neg f -> Neg (elim f)
     | And (f1, f2) -> And (elim f1, elim f2)
     | Or (f1, f2) -> Or (elim f1, elim f2)
@@ -141,7 +161,7 @@ let rec elim_syntactic_sugar g =
                            Or (elim f1, elim (Neg f2)))
     | ForAll (v, f) -> elim (Neg (Exists (v, Neg f)))
 
-    | Aggreg (y, op, x, glist, f) -> Aggreg (y, op, x, glist, elim f)
+    | Aggreg (ytyp, y, op, x, glist, f) -> Aggreg (ytyp, y, op, x, glist, elim f)
 
 
     | Prev (intv, f) -> Prev (intv, elim f)
@@ -152,6 +172,14 @@ let rec elim_syntactic_sugar g =
     | PastAlways (intv, f) -> Neg (Once (intv, elim (Neg f)))
     | Since (intv, f1, f2) -> Since (intv, elim f1, elim f2)
     | Until (intv, f1, f2) -> Until (intv, elim f1, elim f2)
+    | Frex (intv, r) -> Frex (intv, elim_re r)
+    | Prex (intv, r) -> Prex (intv, elim_re r)
+  and elim_re = function
+  | Wild -> Wild
+  | Test f -> Test (elim f)
+  | Concat (r1,r2) -> Concat(elim_re r1, elim_re r2)
+  | Plus (r1,r2) -> Plus(elim_re r1, elim_re r2)
+  | Star r -> Star (elim_re r)
   in
   elim g
 
@@ -163,8 +191,6 @@ let push_negation g =
   let rec push f = match f with
     | Neg (And (f1, f2)) -> Or ((push (Neg f1)), (push (Neg  f2)))
     | Neg (Or (f1, f2)) -> And ((push (Neg f1)), (push (Neg  f2)))
-    | Neg (Prev (intv, f)) -> (Prev (intv, push (Neg f)))
-    | Neg (Next (intv, f)) -> (Next (intv, push (Neg f)))
     | Neg (Eventually (intv, f)) ->
       (* (Always (intv, push (Neg f))) *)
       Neg (Eventually (intv, push f))
@@ -177,8 +203,10 @@ let push_negation g =
       (Once (intv, push (Neg f)))
     | Neg (Implies (f1, f2) as f) -> push (Neg (push f))
     | Neg (Equiv (f1, f2) as f) -> push (Neg (push f))
+    | Neg (Let (p,f1,f2)) -> Let (p,f1, push (Neg f2))
 
     | Neg f -> Neg (push f)
+    | Let (p,f1,f2) -> Let (p,f1, push f2)
     | Equal _ | Less _ | LessEq _ | Pred _ -> f
     | And (f1, f2) -> And (push f1, push f2)
     | Or (f1, f2) -> Or (push f1, push f2)
@@ -186,7 +214,7 @@ let push_negation g =
     | Equiv (f1, f2) -> Equiv (push f1, push f2)
     | Exists (v, f) -> Exists (v, push f)
     | ForAll (v, f) -> ForAll (v, push f)
-    | Aggreg (y, op, x, glist, f) -> Aggreg (y, op, x, glist, push f)
+    | Aggreg (ytyp, y, op, x, glist, f) -> Aggreg (ytyp, y, op, x, glist, push f)
     | Prev (intv, f) -> Prev (intv, push f)
     | Next (intv, f) -> Next (intv, push f)
     | Eventually (intv, f) -> Eventually (intv, push f)
@@ -195,6 +223,14 @@ let push_negation g =
     | PastAlways (intv, f) -> PastAlways (intv, push f)
     | Since (intv, f1, f2) -> Since (intv, push f1, push f2)
     | Until (intv, f1, f2) -> Until (intv, push f1, push f2)
+    | Frex (intv, r) -> Frex (intv, push_re r)
+    | Prex (intv, r) -> Prex (intv, push_re r)
+  and push_re = function
+  | Wild -> Wild
+  | Test f -> Test (push f)
+  | Concat (r1,r2) -> Concat(push_re r1, push_re r2)
+  | Plus (r1,r2) -> Plus(push_re r1, push_re r2)
+  | Star r -> Star (push_re r)
   in
   push g
 
@@ -308,6 +344,8 @@ let rec is_monitorable f =
     then (true, None)
     else (false, Some (f, msg_PRED))
 
+  | Let (_,_,_) -> failwith "[Rewriting.is_monitorable] internal error"
+
   | Neg f1 ->
     if MFOTL.free_vars f1 = [] then
       is_monitorable f1
@@ -346,7 +384,7 @@ let rec is_monitorable f =
       else is_monitorable f2
 
   | Exists (_, f1)
-  | Aggreg (_,_,_,_,f1)
+  | Aggreg (_,_,_,_,_,f1)
   | Prev (_, f1)
   | Next (_, f1)
   | Eventually (_, f1)
@@ -369,6 +407,8 @@ let rec is_monitorable f =
             | _ -> f1)
         in
         is_monitorable f1'
+  | Frex (intv , f) -> failwith "[Rewriting.is_monitorable] The future match operator |.|> can be used only with the -verified flag set"
+  | Prex (intv , f) -> failwith "[Rewriting.is_monitorable] The past match operator <|.| can be used only with the -verified flag set"
 
   (* These operators should have been eliminated *)
   | Implies _
@@ -494,7 +534,7 @@ let rec rr = function
   (* else *)
   (*   (rrf, false) *)
 
-  | Aggreg (y, op, x, glist, f) ->
+  | Aggreg (ytyp, y, op, x, glist, f) ->
     let rrf, b = rr f in
     let frr = List.filter (fun z -> List.mem z glist) rrf in
     y :: frr, b
@@ -509,8 +549,21 @@ let rec rr = function
     let _, b1 = rr f1 in
     let rr2, b2 = rr f2 in
     (rr2, b1 && b2)
-
+  | Frex (_,r) -> rr_re true r 
+  | Prex (_,r) -> rr_re false r 
+  | Let (_,_,f) -> rr f
   | _ -> failwith "[Rewriting.rr] internal error"
+  and rr_re future = function 
+  | Wild -> ([],true)
+  | Test f -> rr f
+  | Concat (r1,r2) -> let (rr1,b1) = rr_re future r1 in
+                      let (rr2,b2) = rr_re future r2 in
+                      (rr2, b1 && b2)
+  | Plus (r1, r2) ->  let (rr1,b1) = rr_re future r1 in
+                      let (rr2,b2) = rr_re future r2 in
+                      (List.filter (fun v -> List.mem v rr1) rr2, b1 && b2)
+  | Star r -> rr_re future r
+  
 
 
 
@@ -693,13 +746,25 @@ let rec rewrite f =
 
 (*** Some syntactic checks *)
 
-let check_bound intv =
-  let _,b = intv in
-  match b with
-  | Inf -> false
-  | _ -> true
-
-let rec check_bounds = function
+let rec check_intervals = 
+  let check_interval intv =
+    let check_bound b = match b with
+    | OBnd a
+    | CBnd a -> a >= 0.
+    | _ -> true
+    in
+    let check_lb_ub lb ub =
+      match lb, ub with
+          | Inf, _ -> false
+          | CBnd a, CBnd b -> a<=b
+          | CBnd a, OBnd b
+          | OBnd a, CBnd b
+          | OBnd a, OBnd b -> a < b
+          | _ as l , Inf -> l <> Inf
+    in
+    let lb, ub = intv in
+    (check_bound lb) && (check_bound ub) && (check_lb_ub lb ub) in  
+function
   | Equal _
   | Less _
   | LessEq _
@@ -709,26 +774,93 @@ let rec check_bounds = function
   | Neg f
   | Exists (_, f)
   | ForAll (_, f)
-  | Aggreg (_, _, _, _, f)
+  | Aggreg (_, _, _, _, _, f)
+    -> check_intervals f
+
+  | And (f1, f2)
+  | Or (f1, f2)
+  | Implies (f1, f2)
+  | Equiv (f1, f2)
+  | Let (_,f1,f2)
+    -> (check_intervals f1) && (check_intervals f2)
+
+  | Eventually (intv, f)
+  | Always (intv, f)
+  | Prev (intv, f)
+  | Next (intv, f)
+  | Once (intv, f)
+  | PastAlways (intv, f)
+    -> (check_interval intv) && (check_intervals f)
+    
+  | Since (intv, f1, f2)
+  | Until (intv, f1, f2)
+    -> (check_interval intv) && (check_intervals f1) && (check_intervals f2)
+
+  | Frex (intv, r) 
+  | Prex (intv, r) 
+    -> (check_interval intv) && (check_re_intervals r)
+and check_re_intervals = function
+  | Wild -> true
+  | Test f -> (check_intervals f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) 
+    -> (check_re_intervals r1) && (check_re_intervals r2)
+  | Star r -> (check_re_intervals r) 
+
+
+
+
+
+let rec check_bounds =
+  let check_bound intv =
+    let _,b = intv in
+    match b with
+    | Inf -> false
+    | _ -> true in
+function
+  | Equal _
+  | Less _
+  | LessEq _
+  | Pred _
+    -> true
+
+  | Neg f
+  | Exists (_, f)
+  | ForAll (_, f)
+  | Aggreg (_, _, _, _, _, f)
   | Prev (_, f)
   | Next (_, f)
   | Once (_, f)
   | PastAlways (_, f)
     -> check_bounds f
+  | Prex (intv, r)
+    -> check_re_bounds r
 
   | And (f1, f2)
   | Or (f1, f2)
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Let (_,f1,f2)
     -> (check_bounds f1) && (check_bounds f2)
 
   | Eventually (intv, f)
   | Always (intv, f)
     -> (check_bound intv) && (check_bounds f)
+  | Frex (intv, r)
+    -> (check_bound intv) && (check_re_bounds r)
 
   | Until (intv, f1, f2)
     -> (check_bound intv) && (check_bounds f1) && (check_bounds f2)
+and check_re_bounds = function
+  | Wild -> true
+  | Test f -> (check_bounds f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) 
+    -> (check_re_bounds r1) && (check_re_bounds r2)
+  | Star r -> (check_re_bounds r)
+
+  
 
 let rec is_future = function
   | Equal _
@@ -740,24 +872,144 @@ let rec is_future = function
   | Neg f
   | Exists (_, f)
   | ForAll (_, f)
-  | Aggreg (_, _, _, _, f)
+  | Aggreg (_, _, _, _, _, f)
   | Prev (_, f)
-  | Next (_, f)
   | Once (_, f)
   | PastAlways (_, f)
     -> is_future f
+
+  | Prex (_,r) -> is_re_future r
 
   | And (f1, f2)
   | Or (f1, f2)
   | Implies (f1, f2)
   | Equiv (f1, f2)
   | Since (_, f1, f2)
+  | Let (_,f1,f2)
     -> (is_future f1) || (is_future f2)
 
+  | Next (_, _)
   | Eventually (_, _)
   | Always (_, _)
   | Until (_, _, _)
+  | Frex (_,_)
     -> true
+and is_re_future = function 
+  | Wild -> false
+  | Test f -> (is_future f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) -> (is_re_future r1) || (is_re_future r2)
+  | Star r -> (is_re_future r)
+
+  let rec check_let = function
+  | Let (p,f1,f2) -> 
+    let (n,a,ts) = get_info p in
+    let check_params = List.for_all (fun t -> match t with Var _ -> true | _ -> false) ts in
+    if not check_params
+    then 
+      let string_of_terms = List.fold_left (fun s v -> s ^ " " ^ string_of_term v) "" in
+      let str = Printf.sprintf "[Rewriting.check_let] LET %s's parameters %s must be variables" n (string_of_terms ts) 
+      in failwith str
+    else ();
+    let prms = List.flatten (List.map tvars ts) in 
+    let fv1 = free_vars f1 in
+    if (List.length fv1) != a
+    then 
+      let str = Printf.sprintf "[Rewriting.check_let] LET %s's arity %n must match the number \
+      of free variables of %s " n a (string_of_formula "" f1)
+      in failwith str
+    else ();
+    if not (Misc.subset fv1 prms && Misc.subset prms fv1)
+    then 
+      let string_of_vars = List.fold_left (fun s v -> s ^ " " ^ string_of_var v) "" in
+      let str = Printf.sprintf "[Rewriting.check_let] LET %s's parameters %s do not coincide with \
+      free variables %s of %s" n (string_of_vars prms) (string_of_vars fv1) (string_of_formula "" f1)
+      in failwith str
+    else ();
+    check_let f2
+
+  | Equal _
+  | Less _
+  | LessEq _
+  | Pred _
+    -> true
+
+  | Neg f
+  | Exists (_, f)
+  | ForAll (_, f)
+  | Aggreg (_, _, _, _, _, f)
+  | Prev (_, f)
+  | Once (_, f)
+  | PastAlways (_, f)
+  | Next (_, f)
+  | Always (_, f)
+  | Eventually (_, f)
+    -> check_let f
+
+  | Prex (_,r) 
+  | Frex (_,r) -> check_re_let r
+
+  | And (f1, f2)
+  | Or (f1, f2)
+  | Implies (f1, f2)
+  | Equiv (f1, f2)
+  | Since (_, f1, f2)
+  | Until (_, f1, f2)
+    -> (check_let f1) && (check_let f2)
+and check_re_let = function 
+  | Wild -> true
+  | Test f -> (check_let f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) -> (check_re_let r1) && (check_re_let r2)
+  | Star r -> (check_re_let r)
+
+
+let expand_let f = 
+  let _ = check_let f in
+  let rec expand_let_rec m = function
+  | Equal _
+  | Less _
+  | LessEq _ as f -> f
+
+  | Pred (p)  -> 
+    let (n,_,ts) = get_info p in
+    if List.mem_assoc n m
+    then 
+      let (args,f) = List.assoc n m  in
+      let args = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") args in (* We allow only variables here with check_let *)
+      let subm = Misc.zip args ts in
+      expand_let_rec (List.remove_assoc n m) (substitute_vars subm f)
+    else Pred (p)
+
+  | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
+
+  | Neg f -> Neg (expand_let_rec m f)
+  | Exists (v, f) -> Exists (v,expand_let_rec m f)
+  | ForAll (v, f) -> ForAll (v,expand_let_rec m f)
+  | Aggreg (ytyp, y, op, x, g, f) -> Aggreg (ytyp, y,op,x,g, expand_let_rec m f)
+  | Prev (i, f) -> Prev (i,expand_let_rec m f)
+  | Next (i, f) -> Next (i,expand_let_rec m f)
+  | Once (i, f) -> Once (i, expand_let_rec m f)
+  | PastAlways (i, f) -> PastAlways (i, expand_let_rec m f)
+  | Eventually (i, f) -> Eventually (i, expand_let_rec m f)
+  | Always (i, f) -> Always (i, expand_let_rec m f)
+
+  | Prex (i, r) -> Prex (i, expand_let_re_rec m r)
+  | Frex (i, r) -> Frex (i, expand_let_re_rec m r)
+
+  | And (f1, f2) -> And (expand_let_rec m f1, expand_let_rec m f2)
+  | Or (f1, f2) -> Or (expand_let_rec m f1, expand_let_rec m f2)
+  | Implies (f1, f2) -> Implies (expand_let_rec m f1, expand_let_rec m f2)
+  | Equiv (f1, f2) ->  Equiv (expand_let_rec m f1, expand_let_rec m f2)
+  | Since (i, f1, f2) -> Since (i, expand_let_rec m f1, expand_let_rec m f2)
+  | Until (i, f1, f2) -> Until (i, expand_let_rec m f1, expand_let_rec m f2)
+and expand_let_re_rec m = function
+  | Wild -> Wild 
+  | Test f -> Test (expand_let_rec m f)
+  | Concat (r1,r2) -> Concat ((expand_let_re_rec m r1), (expand_let_re_rec m r2))
+  | Plus (r1,r2) -> Plus (expand_let_re_rec m r1, (expand_let_re_rec m r2))
+  | Star r -> Star (expand_let_re_rec m r) in
+expand_let_rec [] f
 
 
 (* We check that
@@ -767,194 +1019,374 @@ let rec is_future = function
  [check_syntax db_schema f] returns the list of free variables of [f]
  together with their types
 *)
+
+let (<<) f g x = f (g x)
+
+let new_type_symbol cls vs = 
+  let maxtype = ((List.fold_left (fun a e -> (max a e)) 0) 
+                << (List.map (fun x -> match x with TSymb (_,a) -> a | _ -> -1))
+                 << (List.filter (fun x -> match x with TSymb _ -> true | _ -> false)) 
+                  << (List.map snd)) vs in
+  TSymb (cls, maxtype + 1)
+
+let (|<=|) t1 t2 = match t1, t2 with 
+   | TSymb (TNum,a), TSymb (TNum,b) 
+   | TSymb (TAny,a), TSymb (TAny,b) -> a <= b
+   | TSymb (TNum,_), TSymb (_,_) -> true
+   | TSymb _ , _ -> false
+   | TCst _ , _ -> true
+
+let type_clash t1 t2 = match t1, t2 with 
+   | TCst a, TCst b -> a<>b
+   | TSymb (TNum,_), TCst TStr
+   | TCst TStr, TSymb (TNum,_) -> true
+   | _ -> false
+
+let more_spec_type t1 t2 = if t1 |<=| t2 then t1 else t2 
+
+let string_of_type = function
+| TCst TInt -> "Int"
+| TCst TFloat -> "Float"
+| TCst TStr -> "String"
+| TSymb (TNum,a) -> "(Num t" ^ (string_of_int a) ^ ") =>  t" ^ (string_of_int a)
+| TSymb (_,a) -> "t" ^ (string_of_int a)
+
+(* 
+Checks for type compatibility between t1 and t2
+
+Parameters: 
+  t  - term
+  t1 - expected type
+  t2 - actual type
+*)
+let type_error t1 t2 t =
+  if type_clash t1 t2 then 
+        let str = Printf.sprintf "[Rewriting.type_check_term] Type check error on \
+        term %s: expected type %s, actual type %s" (string_of_term t) (string_of_type t1) (string_of_type t2)
+        in failwith str
+  else ()
+
+(* Given that v:t1 and v:t2 for some v,
+   check which type is more specific and update Γ accordingly
+ *)
+ let propagate_constraints t1 t2 vars =
+  let update_vars oldt newt  = 
+    List.map (fun (v, t) -> if t=oldt then (v,newt) else (v,t)) in
+  if (t1 |<=| t2) 
+  then update_vars t2 t1 vars 
+  else update_vars t1 t2 vars 
+
+(* DEBUG functions *)
+
+let first_debug = ref true
+
+let string_of_delta sch = 
+  if (List.length sch > 0)
+  then 
+    let string_of_types ts = 
+      if (List.length ts > 0) 
+      then 
+        let ft = List.hd ts in 
+        List.fold_left (fun a e -> a ^ ", " ^ (string_of_type e)) (string_of_type ft) (List.tl ts)
+      else "()" 
+    in
+    let (fp, fs) = List.hd sch 
+    in List.fold_left 
+          (fun a (p,ts) -> a ^ ", " ^ p ^ ":(" ^ (string_of_types ts) ^ ")") 
+          (fp ^ ":(" ^ (string_of_types fs) ^ ")") (List.tl sch)
+  else "_"
+
+let string_of_gamma vars = 
+  if (List.length vars > 0)
+  then 
+  let (fv,ft) = List.hd vars in 
+      List.fold_left 
+        (fun a (v,t) -> a ^ ", " ^ v ^ ":" ^ (string_of_type t))
+      (fv ^ ":" ^ string_of_type ft) (List.tl vars)
+  else "_"
+
+
+(*
+Type judgement is of the form (Δ;Γ) ⊢ t::τ  
+where Δ is the predicate schema
+      Γ is the symbol table containing variable types
+      t term and 
+      τ is a type
+
+Parameters:
+(sch, vars) are (Δ,Γ)
+typ is the type of t as expected by the caller
+t is the term
+
+Returns a triple (Δ',Γ', typ') where Δ' and Γ' are the new Δ and Γ
+and typ' is the inferred type of t.
+Fails of expected (typ) and inferred (typ') types do not match.
+*)
+let  type_check_term_debug d (sch, vars) typ term = 
+  let rec type_check_term (sch, vars) typ term = 
+    let _ = 
+      if (d) then
+      begin
+        Printf.printf "[Rewriting.type_check] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
+        Predicate.print_term term;
+        Printf.printf ": %s" (string_of_type typ);
+        Printf.printf "\n";
+      end
+      else () in
+    match term with 
+      | Var v as tt -> 
+        if List.mem_assoc v vars then
+          let vtyp = (List.assoc v vars) in 
+          type_error typ vtyp tt;
+          let newvars = propagate_constraints typ vtyp vars in
+          (sch, newvars, (List.assoc v vars))  
+        else 
+          (sch, (v,typ)::vars, typ)
+      | Cst c as tt -> 
+        let ctyp = TCst (type_of_cst c) in
+        type_error typ ctyp tt;
+        let newvars = propagate_constraints typ ctyp vars in
+        (sch, newvars, ctyp)
+      | F2i t as tt ->
+        type_error (TCst TInt) typ tt;
+        let vars = propagate_constraints typ (TCst TInt) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+        type_error (TCst TFloat) t_typ t;
+        let v = propagate_constraints t_typ (TCst TFloat) v in
+        (s,v,(TCst TInt))             
+      | I2f t as tt ->
+        type_error (TCst TFloat) typ tt;
+        let vars = propagate_constraints typ (TCst TFloat) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TInt) t in
+        type_error (TCst TInt) t_typ t;
+        let v = propagate_constraints t_typ (TCst TInt) v in
+        (s,v,(TCst TFloat))
+      | UMinus t as tt -> 
+        let exp_typ = new_type_symbol TNum vars in
+        type_error exp_typ typ tt;
+        let vars = propagate_constraints typ exp_typ vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) exp_typ t in
+        type_error exp_typ t_typ t;
+        let v = propagate_constraints t_typ exp_typ v in
+        (s,v,more_spec_type t_typ exp_typ)
+      | Plus (t1, t2) 
+      | Minus (t1, t2) 
+      | Mult (t1, t2)  
+      | Div (t1, t2) as tt ->
+        let exp_typ = new_type_symbol TNum vars in
+        type_error exp_typ typ tt;
+        let vars = propagate_constraints typ exp_typ vars in
+        let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
+        type_error exp_typ t1_typ t1;
+        let v1 = propagate_constraints t1_typ exp_typ v1 in
+        let (s2,v2,t2_typ) = type_check_term (s1, v1) t1_typ t2 in
+        type_error t1_typ t2_typ t2;
+        let v2 = propagate_constraints t2_typ t1_typ v2 in
+        (s2,v2,t2_typ)
+      | Mod (t1, t2) as tt ->
+        let exp_typ = (TCst TInt) in
+        type_error exp_typ typ tt;
+        let vars = propagate_constraints typ exp_typ vars in
+        let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
+        type_error exp_typ t1_typ t1;
+        let v1 = propagate_constraints t1_typ exp_typ v1 in
+        let (s2,v2,t2_typ) = type_check_term (s1, v1) exp_typ t2 in
+        type_error exp_typ t2_typ t2;
+        let v2 = propagate_constraints t2_typ exp_typ v2 in
+        (s2,v2,exp_typ) in
+  type_check_term (sch,vars) typ term
+
+
+(*
+Type judgement is of the form (Δ;Γ) ⊢ ϕ wff  
+where Δ is the predicate schema
+      Γ is the symbol table containing variable types
+      ϕ formula 
+
+Parameters:
+  (sch, vars) are (Δ,Γ)
+  ϕ is an MFOTL formula
+
+Returns a pair (Δ',Γ') where Δ' and Γ' are the new Δ and Γ
+Fails if ϕ is not a well formed formula
+*)
+let type_check_formula_debug d (sch, vars) = 
+let rec type_check_formula (sch, vars) f = 
+  let _ = 
+    if (d) then
+      begin
+        Printf.printf "[Rewriting.type_check] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
+        MFOTL.print_formula "" f;
+        Printf.printf "\n";
+      end
+    else () in
+  match f with 
+  | Equal (t1,t2)
+  | Less (t1,t2) 
+  | LessEq (t1,t2) as f -> 
+    let exp_typ = new_type_symbol TAny vars in
+    let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ t1 in
+    type_error exp_typ t1_typ t1;
+    let v1 = propagate_constraints t1_typ exp_typ v1 in
+    let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ t2 in
+    type_error exp_typ t2_typ t2;
+    let v2 = propagate_constraints t2_typ exp_typ v2 in
+    type_error t1_typ t2_typ t2;
+    let v2 = propagate_constraints t1_typ t2_typ v2 in
+    (s2,v2,f)
+  | Pred p as f ->
+    let name = Predicate.get_name p in
+    let exp_typ_list =
+    if List.mem_assoc name sch then
+      List.assoc name sch
+    else failwith ("[Rewriting.check_syntax] unknown predicate " ^ name  ^
+                   " in input formula")
+    in 
+    let t_list = Predicate.get_args p in 
+    if (List.length t_list) = (List.length exp_typ_list) then
+      let ts = zip exp_typ_list t_list in  
+      let (s,v,_) = 
+        List.fold_left 
+          (fun (s,v,_) (exp_t,t) -> 
+              let (s1,v1,t1) = type_check_term_debug d (s,v) exp_t t in
+              type_error exp_t t1 t;
+              let v1 = propagate_constraints exp_t t1 v1 in
+              (s1,v1,t1)
+          ) (sch, vars, (TCst TInt)) ts in
+      (s,v,f)
+    else 
+      failwith ("[Rewriting.check_syntax] wrong arity for predicate " ^ name ^
+                " in input formula")
+  | Let (p, f1, f2) -> 
+    let (n,_,ts) = get_info p in
+    let new_vars = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") ts in (* We allow only variables here with check_let *)
+    let new_typed_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] new_vars in
+    let (s1,v1,f1) = type_check_formula (sch, new_typed_vars) f1 in
+    assert((List.length v1) = (List.length new_typed_vars));
+    let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
+    let new_sig = List.map (fun (_,t) -> t) new_sig in
+    let (shadowed_pred,rest) = List.partition (fun (p,_) -> n=p) s1 in
+    let delta = (n,new_sig)::rest in
+    let (s2, v2, f2) = type_check_formula (delta,vars) f2 in
+    let new_delta = List.filter (fun (p,_) -> not (n=p)) s2 in
+    (shadowed_pred@new_delta, v2, Let(p,f1,f2))
+
+  | Neg f -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Neg f)
+  | Prev (intv,f) -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Prev (intv,f))
+  | Next (intv,f) -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Next (intv,f))
+  | Eventually (intv,f) -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Eventually (intv,f))
+  | Once (intv,f) -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Once (intv,f))
+  | Always (intv,f)-> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Always (intv,f))
+  | PastAlways (intv,f) -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, PastAlways (intv,f))
+
+  | And (f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, And(f1, f2))
+  | Or (f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Or(f1, f2))
+  | Implies (f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Implies(f1, f2))
+  | Equiv (f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Equiv(f1, f2))
+  | Since (intv,f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Since(intv,f1, f2))
+  | Until (intv,f1,f2) -> 
+    let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
+    let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
+    (s2, v2, Until(intv, f1, f2))
+    
+
+  | Exists (v,f) -> 
+    let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr v) vars in
+    let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars v in
+    let (s1,v1,f) = type_check_formula (sch,new_vars) f in
+    let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr v)) v1 in
+    (s1,unshadowed_vars@shadowed_vars, Exists (v,f)) 
+  | ForAll (v,f) -> 
+    let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr v) vars in
+    let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars v in
+    let (s1,v1,f) = type_check_formula (sch,new_vars) f in
+    let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr v)) v1 in
+    (s1,unshadowed_vars@shadowed_vars, ForAll (v,f))
+
+  | Aggreg (rty,r,op,x,gs,f) -> 
+    let zs = List.filter (fun v -> not (List.mem v gs)) (MFOTL.free_vars f) in
+    let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr zs) vars in
+    let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars zs in
+    let type_check_aggregation exp_typ1 exp_typ2 =
+        let (s1,v1,t1) = type_check_term_debug d (sch,new_vars) exp_typ1 (Var r) in
+        let shadowed_vars = 
+          if (List.mem_assoc r shadowed_vars) 
+          then propagate_constraints (List.assoc r shadowed_vars) (List.assoc r v1) shadowed_vars 
+          else shadowed_vars
+          in
+        let (s2,v2,t2) = type_check_term_debug d (s1,v1) exp_typ2 (Var x) in
+        let (s3,v3,f) = type_check_formula (s2,v2) f in
+        let shadowed_vars = 
+          if (exp_typ1 = exp_typ2) && (List.mem_assoc r shadowed_vars)
+          then propagate_constraints (List.assoc x v3) (List.assoc r shadowed_vars) shadowed_vars
+          else shadowed_vars in 
+        let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr zs)) v3 in
+        let unshadowed_vars = 
+          if (exp_typ1 = exp_typ2) && (List.mem_assoc r unshadowed_vars)
+          then propagate_constraints (List.assoc x v3) (List.assoc r unshadowed_vars) unshadowed_vars
+          else unshadowed_vars in
+        (*TODO add type of r *)
+        let v3 = unshadowed_vars@shadowed_vars in
+        (s3, v3, Aggreg ((List.assoc r v3), r,op,x,gs,f))
+    in
+    let exp_typ = new_type_symbol TAny new_vars in
+    let exp_num_typ = new_type_symbol TNum new_vars in
+    (match op with
+      | Min | Max -> type_check_aggregation exp_typ exp_typ
+      | Cnt -> type_check_aggregation (TCst TInt) exp_typ
+      | Sum -> type_check_aggregation exp_num_typ exp_num_typ
+      | Avg | Med -> type_check_aggregation (TCst TFloat) exp_num_typ)
+  | Frex (intv,r) -> let (s,v,r) = type_check_re_formula (sch, vars) r in (s,v,Frex (intv,r))
+  | Prex (intv,r) -> let (s,v,r) = type_check_re_formula (sch, vars) r in (s,v,Prex (intv,r))
+and type_check_re_formula (sch, vars) = function 
+  | Wild -> (sch, vars, Wild)
+  | Test f -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v,Test f)
+  | Concat (r1,r2) ->
+    let (s1,v1,r1) = type_check_re_formula (sch, vars) r1 in
+    let (s2,v2,r2) = type_check_re_formula (s1, v1) r2 in
+    (s2,v2,Concat (r1,r2))
+  | Plus (r1,r2) -> 
+    let (s1,v1,r1) = type_check_re_formula (sch, vars) r1 in
+    let (s2,v2,r2) = type_check_re_formula (s1, v1) r2 in
+    (s2,v2,Plus (r1,r2))
+  | Star r -> let (s,v,r) = type_check_re_formula (sch, vars) r in (s,v,Star r)
+ in
+ type_check_formula (sch, vars)
+
+
+
 let rec check_syntax db_schema f =
-  let get_type p pos =
-    let vartype_list = List.assoc p db_schema in
-    snd (List.nth vartype_list pos)
-  in
-
-  let rec check_term p assign pos = function
-    | Var v ->
-      if List.mem_assoc v assign then
-        if get_type p pos <> List.assoc v assign then
-          let str = Printf.sprintf
-              "[Rewriting.check_syntax] Type check error on variable \
-               at position %d in predicate %s." pos p
-          in failwith str
-        else
-          assign
-      else
-        (v, get_type p pos) :: assign
-
-
-    | Cst c ->
-      (match c, get_type p pos with
-       | Int _, TInt
-       | Str _, TStr -> assign
-       | _ -> let str = Printf.sprintf
-                  "[Rewriting.check_syntax] Type check error on constant \
-                   at position %d in predicate %s." pos p
-         in failwith str
-      )
-
-    | F2i t (* TODO: term should have type float! *)
-    | I2f t (* TODO: term should have type int! *)
-    | UMinus t -> (* TODO: term should have a numeric type! *)
-      check_term p assign pos t
-
-    | Plus (t1, t2)
-    | Minus (t1, t2)
-    | Mult (t1, t2)
-    | Div (t1, t2)
-    | Mod (t1, t2)
-      ->
-      (* TODO: both terms should have numeric or int type! *)
-      let assign' = check_term p assign pos t1 in
-      check_term p assign' pos t2
-  in
-
-  let rec check_vars p assign pos = function
-    | [] -> assign
-    | term :: rest ->
-      let assign' = check_term p assign pos term in
-      check_vars p assign' (pos + 1) rest
-
-  in
-
-  let union assign1 assign2 =
-    assign2 @
-    (List.filter
-       (fun (x, xtype) ->
-          if List.mem_assoc x assign2 then
-            if xtype = List.assoc x assign2 then
-              false
-            else
-              failwith (Printf.sprintf "[Rewriting.check_syntax] Type check error on variable %s." x)
-          else
-            true
-       )
-       assign1)
-  in
-
-  let rec check assign = function
-    | Equal (t1, t2)
-    | Less (t1, t2)
-    | LessEq (t1, t2) ->
-      (match t1, t2 with
-       | Var x, Var y ->
-         if List.mem_assoc x assign then
-           let xtype = List.assoc x assign in
-           if List.mem_assoc y assign then
-             if xtype <> List.assoc y assign then
-               let str = Printf.sprintf
-                   "[Rewriting.check_syntax] The comparison %s ? %s does not type check." x y
-               in failwith str
-             else
-               assign
-           else
-             (y, xtype) :: assign
-         else
-         if List.mem_assoc y assign then
-           let ytype = List.assoc y assign in
-           (x, ytype) :: assign
-         else
-           (* Remark: not a complete check, as if both variables haven't
-              yet been assigned a type, then they might have one later on...*)
-           assign
-
-       | Var x, Cst c
-       | Cst c, Var x ->
-         if List.mem_assoc x assign then
-           (match c, List.assoc x assign with
-            | Int _, TInt
-            | Float _, TFloat
-            | Str _, TStr -> assign
-            | _ -> failwith ("[Rewriting.check_syntax] The comparison " ^ x ^ " ? " ^
-                             (Predicate.string_of_cst true c) ^ " does not type check.")
-           )
-         else
-           let xtype = Predicate.type_of_cst c in
-           (x, xtype) :: assign
-
-       | Cst c, Cst c' ->
-         (match c, c' with
-          | Int _, Int _
-          | Float _, Float _
-          | Str _, Str _ -> assign
-          | _ -> let str = Printf.sprintf
-                     "[Rewriting.check_syntax] The comparison %s ? %s does not type check."
-                     (Predicate.string_of_cst true c) (Predicate.string_of_cst true c')
-            in failwith str
-         )
-
-       | _ -> assign
-      )
-
-    | Pred p ->
-      let name, ar, args = Predicate.get_info p in
-      if List.mem_assoc name db_schema then
-        begin
-          let vartype_list = List.assoc name db_schema in
-          if ar <> List.length vartype_list then
-            failwith ("[Rewriting.check_syntax] wrong arity for predicate " ^ name ^
-                      " in input formula")
-        end
-      else
-        (match name with
-         | "tp" | "ts" | "tpts" -> ()
-         | _ ->
-           failwith ("[Rewriting.check_syntax] unknown predicate " ^ name  ^
-                     " in input formula")
-        );
-      check_vars name assign 0 args
-
-    | Neg f
-    | Prev (_,f)
-    | Next (_,f)
-    | Eventually (_,f)
-    | Once (_,f)
-    | Always (_,f)
-    | PastAlways (_,f) -> check assign f
-
-    | Exists (vl,f)
-    | ForAll (vl,f) ->
-      List.filter (fun (x,t) -> not (List.mem x vl)) (check assign f)
-
-
-    | Aggreg (y,op,x,glist,f) ->
-      let assign = check assign f in
-      (* if List.assoc x assign = TStr then *)
-      (*   failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^  *)
-      (*          " should have an integer type"); *)
-      if List.mem_assoc x assign then
-        if List.assoc x assign = TStr && (op = Avg || op = Sum) then
-          failwith ("[Rewriting.check_syntax] aggregation attribute " ^ x ^
-                    " should have an numeric type");
-      (* TODO: else *)
-      (*   failwith ("[check_syntax] aggregation attribute " ^ x ^  *)
-      (*          " not found in subformula"); *)
-      let assign' = List.filter (fun (x,_) -> List.mem x glist) assign in
-      (match op with
-       | Avg -> (y, TFloat) :: assign'
-       | Cnt -> (y, TInt) :: assign'
-       | _ ->
-         if List.mem_assoc x assign then
-           let typ_x = List.assoc x assign in
-           (y, typ_x) :: assign'
-         else
-           assign'
-      )
-
-    | And (f1,f2)
-    | Or (f1,f2)
-    | Implies (f1,f2)
-    | Equiv (f1,f2)
-    | Since (_,f1,f2)
-    | Until (_,f1,f2) ->
-      let assign1 = check assign f1 in
-      union assign1 (check assign1 f2)
-  in
-  List.rev (check [] f)
+  let lift_type t = TCst t in
+  let sch = List.map (fun (t, l) -> (t, List.map (fun (_,t) -> lift_type t) l)) db_schema in 
+  let debug = !first_debug && (Misc.debugging Dbg_formula) in 
+  let fvs = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] (MFOTL.free_vars f) in
+  let (s,v,f) = type_check_formula_debug debug (sch,fvs) f in
+  if debug 
+    then 
+      begin
+      Printf.printf "[Rewriting.type_check] The final type judgement is (%s; %s) ⊢ " (string_of_delta s) (string_of_gamma v);
+      MFOTL.print_formula "" f;
+      Printf.printf "\n";
+      end
+    else ();
+  first_debug := false;
+  (List.map (fun (v,t) -> (v,match t with | TCst a -> a | _ -> TFloat)) v, f)
+ 
 
 
 let print_reason str reason =
@@ -965,9 +1397,16 @@ let print_reason str reason =
     print_endline msg
   | None -> failwith "[Rewriting.print_reason] internal error"
 
-let check_formula s f =
+let check_formula check_mon s f =
   (* we first the formula's syntax *)
-  let fv = check_syntax s f in
+  let (fv,f) = check_syntax s f in
+
+  (* we then check that it contains wf intervals *)
+  if not (check_intervals f) then
+    begin
+      print_endline "The formula contains a negative or empty interval";
+      exit 1;
+    end;
 
   (* we then check that it is a bounded future formula *)
   if not (check_bounds f) then
@@ -978,7 +1417,7 @@ let check_formula s f =
     end;
 
   if !Misc.no_rw then
-    let is_mon, reason = is_monitorable f in
+    let is_mon, reason = check_mon f in
     if !Misc.verbose || !Misc.checkf then
       begin
         MFOTL.printnl_formula "The input formula is:\n  " f;
@@ -989,14 +1428,14 @@ let check_formula s f =
         else print_reason "The formula is NOT monitorable" reason
       end
     else if not is_mon then
-      print_reason "The formula is NOT monitorable" reason;
+      print_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
     (is_mon, f, fv)
   else
     let nf = normalize f in
     if (Misc.debugging Dbg_monitorable) && nf <> f then
       MFOTL.printnl_formula "The normalized formula is:\n  " nf;
 
-    let is_mon = is_monitorable nf in
+    let is_mon = check_mon nf in
     let rf = if fst is_mon then nf else rewrite nf in
     if (Misc.debugging Dbg_monitorable) && rf <> nf then
       MFOTL.printnl_formula "The \"rewritten\" formula is:\n  " rf;
@@ -1019,12 +1458,12 @@ let check_formula s f =
         print_newline()
       end;
 
-    let is_mon = if not (fst is_mon) then is_monitorable rf else is_mon in
+    let is_mon = if not (fst is_mon) then check_mon rf else is_mon in
     if (not (fst is_mon)) then
       begin
-        print_reason "The analyzed formula is NOT monitorable" (snd is_mon);
-        if !Misc.verbose then
+        if !Misc.verbose || !Misc.checkf then
           begin
+            print_reason "The analyzed formula is NOT monitorable" (snd is_mon);
             let is_sr = is_saferange nf in
             (* assert(is_sr = is_saferange rf); *)
             if is_sr then
@@ -1038,8 +1477,11 @@ let check_formula s f =
             else
               print_endline "By the way, the analyzed formula is not TSF safe-range.";
           end
+          else 
+            print_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
       end
     else if !Misc.checkf then
       print_string "The analyzed formula is monitorable.\n";
 
-    (fst is_mon, rf, check_syntax s rf)
+    let (fv,rf) = check_syntax s rf in
+    (fst is_mon, rf, fv)

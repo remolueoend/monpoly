@@ -3,19 +3,20 @@ OCAMLC = ocamlfind ocamlc
 
 # Set here which complier will be used
 OCAML = $(OCAMLOPT)
-FLAGS = -noassert -unsafe-string # -w A
+FLAGSLIB = -noassert -unsafe-string # -w A
+FLAGS = -noassert -unsafe-string -package qcheck -package zarith -linkpkg -g # -w A
 JSFLAGS = -package str -package unix -package js_of_ocaml -package lwt -package js_of_ocaml.syntax -syntax camlp4o
 # FLAGS = -ccopt -static
 
 ifeq "$(OCAML)" "$(OCAMLOPT)"
   O = cmx
   A = cmxa
-  LIBS = unix.$(A) str.$(A)
+  LIBS =  str.$(A) nums.$(A)
   OCAMLDEPFLAGS = -native
 else
   O = cmo
   A = cma
-  LIBS = -custom unix.$(A) str.$(A)
+  LIBS = -custom  str.$(A) nums.$(A)
 endif
 
 OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
@@ -24,24 +25,24 @@ OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
 # The list of interface files
 MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
       tuple.mli relation.mli table.mli db.mli \
-      rewriting.mli filter_rel.mli filter_empty_tp.mli sliding.mli \
+      filter_rel.mli filter_empty_tp.mli sliding.mli \
 	  helper.mli domain_set.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
-	  murmur_hash3.mli hypercube_slicer.mli
+	  murmur_hash3.mli hypercube_slicer.mli rewriting.mli verified_adapter.mli
 
-OURMLI = $(MLI) log.mli algorithm.mli 
+OURMLI = $(MLI) log.mli algorithm_verified.mli algorithm.mli
 
 ALLMLI = $(OURMLI) formula_parser.mli log_parser.mli
 
 
 # The lists of implementation files
-OURML = $(OURMLI:.mli=.ml) main.ml
+OURML = $(OURMLI:.mli=.ml) verified.ml main.ml
 ALLML = $(ALLMLI:.mli=.ml) formula_lexer.ml log_lexer.ml
 
 # The lists of object files
-OBJ = $(MLI:.mli=.$(O)) \
+OBJ =  verified.$(O) $(MLI:.mli=.$(O)) \
        formula_parser.$(O) log_parser.$(O) \
        formula_lexer.$(O) log_lexer.$(O) \
-       log.$(O) algorithm.$(O)
+       log.$(O) algorithm.$(O) algorithm_verified.$(O)
 
 OBJC = $(OBJ:.$(O)=.cmo)
 OBJX = $(OBJ:.$(O)=.cmx)
@@ -55,10 +56,10 @@ monpoly: .depend $(OBJ) version.ml main.ml
 	$(OCAMLEXE) $(OBJ) version.ml main.ml -o $@
 
 monpoly.cma: .depend $(OBJC)
-	$(OCAMLC) $(FLAGS) -a $(OBJC) -o $@
+	$(OCAMLC) $(FLAGSLIB) -a $(OBJC) -o $@
 
 monpoly.cmxa: .depend $(OBJX)
-	$(OCAMLOPT) $(FLAGS) -a $(OBJX) -o $@
+	$(OCAMLOPT) $(FLAGSLIB) -a $(OBJX) -o $@
 
 monpoly.byte: .depend $(OBJC) version.ml main_js.ml
 	$(OCAMLC) $(FLAGS) $(JSFLAGS) -linkpkg $(OBJC) version.ml main_js.ml -o $@
@@ -66,6 +67,9 @@ monpoly.byte: .depend $(OBJC) version.ml main_js.ml
 monpoly.js: monpoly.byte
 	js_of_ocaml --disable genprim -I . --file examples:/ $<
 
+profile: clean .depend version.ml main.ml
+	ocamlbuild -use-ocamlfind -tag use_str -tag profile -package qcheck -package zarith main.native
+	mv main.native monpoly
 
 # update version with the latest revision number
 version.ml: FORCE
@@ -88,7 +92,7 @@ clean:
 
 # Dependencies
 %.cmi: %.mli
-	$(OCAMLC) -c $<
+	$(OCAMLC) $(FLAGS) -c $<
 
 %.cmo: %.ml
 	$(OCAMLC) $(FLAGS) -c $<

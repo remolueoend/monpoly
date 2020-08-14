@@ -49,9 +49,15 @@ type cst =
   | Int of int
   | Str of string
   | Float of float
+  | ZInt of Z.t
 
-(** Two types of constants are supported: integers and strings *)
+(** Three (constant) types are supported: integers, strings and floats *)
 type tcst = TInt | TStr | TFloat
+
+(** Two type classes exists: Numeric and Any*) 
+type tcl = TNum | TAny 
+(** Type can be a symbolic type (from one of the two supported classes) or a constant type *) 
+type tsymb = TSymb of (tcl * int) | TCst of tcst
 
 
 (** A term is either a variable or a constant. *)
@@ -68,6 +74,8 @@ type 'a eterm =
   | Mod of 'a eterm * 'a eterm
 
 type term = var eterm
+
+val substitute_vars: ('a * 'a eterm) list -> 'a eterm -> 'a eterm
 
 val eval_eterm: ('a -> cst) -> 'a eterm -> cst
 val eval_term: (var * cst) list -> term -> cst
@@ -135,5 +143,6 @@ val print_cst: bool -> cst -> unit
 (* val output_cst: out_channel -> cst -> unit *)
 val string_of_term: term -> string
 val print_term: term -> unit
+val string_of_predicate: predicate -> string
 val print_predicate: predicate -> unit
 val print_vartypes_list: (var * tcst) list -> unit

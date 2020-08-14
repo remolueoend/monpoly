@@ -14,7 +14,7 @@ let read_log insert lexbuf =
   Misc.new_last_ts := false;
   let rec read lexbuf = 
     match (Log.get_next_entry lexbuf) with
-      | Some (tp,ts,db) -> 
+      | MonpolyData {tp; ts; db} -> 
 	let ts = int_of_float ts in
 	insert "tbl_Time" (tp :: [ts]);
 	let tables = Db.get_tables db in
@@ -40,7 +40,7 @@ let read_log insert lexbuf =
 	
 	read lexbuf
 
-      | None -> ()
+      | _ -> ()
   in 
   read lexbuf
 

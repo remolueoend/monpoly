@@ -26,7 +26,7 @@ type commandParameter =
     | SplitParameters of splitParameters
     | Argument        of string
 
-    type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; lookahead: bool; }
+    type dataTuple    = { ts: MFOTL.timestamp; db: Db.db; complete:bool; }
     type commandTuple = { c: string;  parameters: commandParameter option; }
     type slicingTestTuple = { vars: Predicate.var list; tuple: string list; output: int array}
     
@@ -133,3 +133,34 @@ let get_new_elements l last cond f =
         get (Dllist.get_next l last) last []
       else
         [], last
+
+(** This function displays the "results" (if any) obtained after
+    analyzing event index [i]. The results are those tuples satisfying
+    the formula for some index [q<=i]. *)
+let rec show_results closed i q tsq rel =
+  if !Misc.stop_at_first_viol && Relation.cardinal rel > 1 then
+    let rel2 = Relation.singleton (Relation.choose rel) in
+    show_results closed i q tsq rel2
+  else if !Misc.verbose then
+    if closed then
+      Printf.printf "@%s (time point %d): %b\n%!"
+        (MFOTL.string_of_ts tsq) q (rel <> Relation.empty)
+    else
+      begin
+        Printf.printf "@%s (time point %d): " (MFOTL.string_of_ts tsq) q;
+        Relation.print_reln "" rel
+      end
+  else
+    begin
+      if Misc.debugging Dbg_perf then
+        Perf.show_results q tsq;
+      if rel <> Relation.empty then (* formula satisfied *)
+        if closed then (* no free variables *)
+          Printf.printf "@%s (time point %d): true\n%!" (MFOTL.string_of_ts tsq) q
+        else (* free variables *)
+          begin
+            Printf.printf "@%s (time point %d): " (MFOTL.string_of_ts tsq) q;
+            Relation.print_rel4 "" rel;
+            print_newline()
+          end
+    end

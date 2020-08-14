@@ -1,0 +1,16 @@
+(ONCE (read(t1,x) OR write(t1,x))) AND (ONCE write(t2,x)) AND NOT
+(
+ EXISTS l.
+  (ONCE (read(t1,x) OR write(t1,x))) AND (ONCE write(t2,x)) AND (EXISTS t. ONCE acq(t,l))
+  AND NOT (
+   ONCE
+   (
+    (read(t1,x) OR write(t1,x)) AND (EXISTS t. ONCE acq(t,l) OR EVENTUALLY[0,1] acq(t,l)) AND NOT ((NOT rel(t1,l)) SINCE acq(t1,l))
+   )
+  ) AND NOT (
+   ONCE
+   (
+    ((read(t2,x) OR write(t2,x)) AND (EXISTS t. ONCE acq(t,l) OR EVENTUALLY[0,1] acq(t,l)) AND NOT ((NOT rel(t2,l)) SINCE acq(t2,l)))
+   )
+  )
+)

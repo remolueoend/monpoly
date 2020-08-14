@@ -1,0 +1,2 @@
+prop linear:
+  Forall a . Forall b . Forall c . Forall d . (P ((P A(a,b)) & B(b,c))) -> ! C(c,d)

@@ -14,7 +14,7 @@ Requirements
 ============
 
 OCaml compiler (http://caml.inria.fr/ocaml/index.en.html)
-  MonPoly has been tested with version 3.12.1 of OCaml
+  MonPoly has been tested with version 4.05.0 of OCaml
   under Linux. It should also compile and work with most not-too-old
   versions of OCaml under other operating systems.
 
@@ -34,14 +34,21 @@ Gentoo), Microsoft Windows, and MacOS X.  For Microsoft Windows you
 may need to install the Cygwin environment (http://www.cygwin.com/).
 
 
-Compiling
-=========
+Compiling MonPoly
+=================
 
 $ make monpoly
 
 $ make clean      # optional, to delete the object and other generated files
 $ make clean-all  # also deletes the executable and the documentation
 
+
+Compiling Verimon
+=================
+
+$ make verimon   # assumes you have the Isabelle binary on your PATH
+
+$ make verimon ISABELLE=<path/to/Isabelle>  #to explicitly pass the path to the Isabelle binary
 
 Running
 =======

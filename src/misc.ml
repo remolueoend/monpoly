@@ -147,7 +147,7 @@ let median l len f =
         if len mod 2 = 0 then
           f h (List.hd l)
         else
-          h
+          f h h
       else median_aux l (n+1)
   in
   median_aux l 0
@@ -395,12 +395,20 @@ let remove_positions posl l =
 let get_positions posl l =
   List.map (List.nth l) posl
 
+let rec zip l1 l2 = match l1, l2 with
+  | x::xs , y::ys -> (x,y):: zip xs ys
+  | _ -> []
 
+let replace m = 
+  let rec replace_acc a = function
+    | [] -> List.rev a
+    | x::xs -> 
+      let n = if List.mem_assoc x m then (List.assoc x m) else x in
+      replace_acc (n::a) xs
+  in
+  replace_acc []
 
-
-
-
-
+    
 
 
 

@@ -19,7 +19,8 @@ type int_map = Intmap.int_map
 
 
 type t_agg =
-  | CSA_aux of int * cst
+  | C_aux of int 
+  | SA_aux of int * cst
   | Med_aux of (int * int_map)
 
 type agg_once_state = {

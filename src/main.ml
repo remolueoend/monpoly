@@ -55,8 +55,8 @@ open Rewriting
 let usage_string =
   "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]
                [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]
-               [-check] [-sigout] [-unix] [-mem] [-nonewlastts]
-               [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
+               [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]
+               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-testfilter] [-stats]
                [-ignore_parse_errors] [-stop_at_out_of_order_ts]
                [-stop_at_first_viol] [-load <file>]"
 
@@ -92,6 +92,9 @@ let statsarg = ref false
 let testfilteropt = ref false
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
+let verified = ref false
+
+(* Printexc.record_backtrace true;; *)
 
 let starttime = Unix.time()
 
@@ -136,15 +139,20 @@ let main () =
     else
       begin
         (* read signature file *)
+        let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
-        let is_mon, pf, vartypes = Rewriting.check_formula sign f in
+
+        let check_mon = if !verified then Verified_adapter.is_monitorable sign
+                        else is_monitorable in
+        let f = if !verified then f else expand_let f in
+        let is_mon, pf, vartypes = check_formula check_mon sign f in
         if !sigout then
           Predicate.print_vartypes_list vartypes
         else if is_mon && not !Misc.checkf then
           begin
             if not !nofilterrelopt then
               Filter_rel.enable pf;
-            if not !nofilteremptytpopt then
+            if not !nofilteremptytpopt && not !verified then
               Filter_empty_tp.enable pf;
             if !testfilteropt then
               Algorithm.test_filter !logfile pf
@@ -152,14 +160,16 @@ let main () =
               let _ = Log.get_signature !sigfile in
               (* Test Slicing implementation *)
               if !slicer_file <> "" then
-                Algorithm.run_test !slicer_file pf
+                Algorithm.run_test sign !slicer_file pf
               (* start monitoring *)
               else if !Algorithm.resumefile <> "" then
                 Algorithm.resume !logfile
               else if !Algorithm.combine_files <> "" then
                 Algorithm.combine !logfile
+              else if !verified then
+                Algorithm_verified.monitor sign !logfile pf
               else
-                Algorithm.monitor !logfile pf
+                Algorithm.monitor sign !logfile pf
           end
       end
 
@@ -188,6 +198,8 @@ let _ =
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
     "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
     "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
+    "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
+    "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
   ]
     (fun _ -> ())
     usage_string;

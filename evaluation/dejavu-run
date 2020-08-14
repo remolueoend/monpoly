@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# DejaVu - a tool for checking past time temporal logic properties in QTL against traces in CSV format.
+#
+# To use, call (after making executable with: chmod +x dejavu) as follows:
+#
+#   dejavu <traceFile> <output file>
+
+
+BDDSIZE=20 # default number of bits per variable = 20
+DEBUG="" # default is no debugging
+
+DEJAVU=`cd "$(dirname "$BASH_SOURCE")"; pwd`
+fma=$1
+log=$2
+output=$3
+
+if [ ! -e ${fma}/TraceMonitor.class ]; then
+  mkdir -p ${fma}
+  $DEJAVU/dejavu-compile ${fma}.qtl
+  mv *.class ${fma}
+  mv TraceMonitor.scala ${fma}
+  mv ast.dot ${fma}
+fi
+
+
+# Run the compiled monitor on trace:
+result=$( { scala -J-Xmx16g -cp .:$DEJAVU/dejavu.jar:${fma} TraceMonitor $log $BDDSIZE $DEBUG; } 2>&1 )
+
+if [[ "$result" == *"Exception"* || "$result" == *"Error"* ]]; then
+  echo "scala -J-Xmx16g -cp .:$DEJAVU/dejavu.jar:${fma} TraceMonitor $log $BDDSIZE $DEBUG" >> /tmp/error.log
+  echo "REASON: $result" >> /tmp/error.log
+fi 
+
+# Move results
+mv dejavu-results $output
+
+# Clean up:
+# rm *.class
+# rm ast.dot
+# rm TraceMonitor.scala

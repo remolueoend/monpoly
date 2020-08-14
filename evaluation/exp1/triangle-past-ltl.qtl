@@ -1,0 +1,2 @@
+prop triangle:
+  Forall a . Forall b . Forall c . (P ((P A(a,b)) & B(b,c))) -> ! C(c,a)

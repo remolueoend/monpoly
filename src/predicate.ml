@@ -48,8 +48,11 @@ type cst =
   | Int of int
   | Str of string
   | Float of float
+  | ZInt of Z.t
 
 type tcst = TInt | TStr | TFloat
+type tcl = TNum | TAny 
+type tsymb = TSymb of (tcl * int) | TCst of tcst
 
 (* type term =  *)
 (*   | Var of var *)
@@ -94,6 +97,7 @@ let type_of_cst = function
   | Int _ -> TInt
   | Str _ -> TStr
   | Float _ -> TFloat
+  | ZInt _ -> TInt
 
 let cst_of_str t v = 
   match t with
@@ -122,6 +126,21 @@ let rec tvars = function
   | Mod (t1, t2)
     -> (tvars t1) @ (tvars t2)
 
+let substitute_vars m = 
+  let subst v = if List.mem_assoc v m then List.assoc v m else Var v in
+  let rec substitute_vars_rec = function 
+  | Var v -> subst v
+  | Cst c as t -> t
+  | F2i t -> F2i (substitute_vars_rec t)
+  | I2f t -> I2f (substitute_vars_rec t)
+  | UMinus t -> UMinus (substitute_vars_rec t)
+  | Plus (t1, t2) -> Plus (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Minus (t1, t2) -> Minus (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Mult (t1, t2) -> Mult (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Div (t1, t2) -> Div (substitute_vars_rec t1, substitute_vars_rec t2)
+  | Mod (t1, t2) -> Mod (substitute_vars_rec t1, substitute_vars_rec t2) 
+  in
+  substitute_vars_rec 
 
 let eval_eterm f t =
   let rec eval = function
@@ -175,7 +194,7 @@ let eval_gterm t = eval_term [] t
 
 let avg a b =
   match a, b with
-  | Int x, Int y -> Int ((x+y)/2)
+  | Int x, Int y -> Float (((float_of_int x) +. (float_of_int y)) /. 2.)
   | Float x, Float y -> Float ((x+.y)/.2.)
   | _ -> failwith "[Predicate.fmed] type error"
 
@@ -245,6 +264,7 @@ let string_of_cst qm c =
       if s.[0] = '\"' && s.[(String.length s)-1] = '\"' then s
       else "\"" ^ s ^ "\""
     else s
+  | ZInt i -> Z.to_string i
 
 
 let print_cst qm c = print_string (string_of_cst qm c)
@@ -257,8 +277,8 @@ let rec string_of_term term =
     let b', str = match term with
       | Var v -> true, v
       | Cst c -> true, string_of_cst true c
-      | F2i t ->  false, "f2i" ^ (t2s' t)
-      | I2f t ->  false, "i2f" ^ (t2s' t)
+      | F2i t ->  false, "f2i(" ^ (t2s true t) ^ ")"
+      | I2f t ->  false, "i2f(" ^ (t2s true t) ^ ")"
       | UMinus t ->  false, "-" ^ (t2s' t)
       | Plus (t1, t2) -> false, (t2s' t1) ^ " + " ^ (t2s' t2)
       | Minus (t1, t2) -> false, (t2s' t1) ^ " - " ^ (t2s' t2)
@@ -275,6 +295,10 @@ let rec string_of_term term =
   t2s true term
 
 let print_term t = print_string (string_of_term t)
+
+
+let string_of_predicate (p,ar,args) =
+  string_of_var p ^ Misc.string_of_list string_of_term args
 
 let print_predicate (p,ar,args) =
   print_var p;

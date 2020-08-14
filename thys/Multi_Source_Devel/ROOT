@@ -1,0 +1,3 @@
+session Multi_Source_Devel = MFOTL_Monitor_Devel +
+  theories
+    Multi_Source

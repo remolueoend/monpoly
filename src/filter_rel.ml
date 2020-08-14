@@ -61,7 +61,7 @@ let get_predicates f =
     | Neg f
     | Exists (_,f)
     | ForAll (_,f)
-    | Aggreg (_,_,_,_,f)
+    | Aggreg (_,_,_,_,_,f)
     | Prev (_,f)
     | Next (_,f)
     | Eventually (_,f)
@@ -74,6 +74,15 @@ let get_predicates f =
     | Equiv (f1,f2)
     | Since (_,f1,f2)
     | Until (_,f1,f2) -> (get_preds preds f1) @ (get_preds preds f2)
+    | Frex (_, r) 
+    | Prex (_, r) -> get_re_preds preds r
+    | Let (_,_,_) -> failwith "Internal error"
+  and get_re_preds preds = function 
+    | Wild -> preds
+    | Test f -> (get_preds preds f) 
+    | Concat (r1,r2)
+    | Plus (r1,r2) -> (get_re_preds preds r1) @ (get_re_preds preds r2)
+    | Star r -> (get_re_preds preds r)
   in
   get_preds [] f
 
@@ -125,7 +134,7 @@ let get_tuple_filter f =
     | Neg f
     | Exists (_,f)
     | ForAll (_,f)
-    | Aggreg (_,_,_,_,f)
+    | Aggreg (_,_,_,_,_,f)
     | Prev (_,f)
     | Next (_,f)
     | Eventually (_,f)
@@ -138,6 +147,15 @@ let get_tuple_filter f =
     | Equiv (f1,f2)
     | Since (_,f1,f2)
     | Until (_,f1,f2) -> get_tuples (get_tuples tuples f1) f2
+    | Frex (_,r) 
+    | Prex (_,r) -> get_re_tuples tuples r
+    | Let (_,_,_) -> failwith "Internal error"
+  and get_re_tuples tuples = function (* regex *)
+    | Wild -> tuples
+    | Test f -> get_tuples tuples f
+    | Concat (r1,r2)
+    | Plus (r1,r2) -> get_re_tuples (get_re_tuples tuples r1) r2
+    | Star r -> get_re_tuples tuples r
   in
   (* filter out from stage1 filter
      all (p,i) instances which occur as variables somewhere within the formula
