@@ -2,7 +2,6 @@
 theory Monitor_Impl
   imports Monitor
     Optimized_MTL
-    Event_Data
     "HOL-Library.Code_Target_Nat"
     Containers.Containers
 begin

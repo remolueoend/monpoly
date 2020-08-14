@@ -1,6 +1,9 @@
 (*<*)
 theory Regex
-  imports Trace "HOL-Library.Lattice_Syntax" "HOL-Library.Extended_Nat"
+  imports
+    "MFOTL_Monitor_Devel.Trace"
+    "HOL-Library.Lattice_Syntax"
+    "HOL-Library.Extended_Nat"
 begin
 (*>*)
 

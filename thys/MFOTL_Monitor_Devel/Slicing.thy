@@ -4,13 +4,19 @@ theory Slicing
 begin
 (*>*)
 
-section \<open>Section 4.2\<close>
+section \<open>Slicing framework\<close>
 
-subsection \<open>Definition 1\<close>
+text \<open>This section formalizes the abstract slicing framework and the joint data slicer
+  presented in the article~\cite[Sections 4.2 and~4.3]{SchneiderBBKT-STTT20}.\<close>
 
-text \<open>Corresponds to locale @{locale monitor} defined in theory @{theory "Draft.Abstract_Monitor"}.\<close>
+subsection \<open>Abstract slicing\<close>
 
-subsection \<open>Definition 2\<close>
+subsubsection \<open>Definition 1\<close>
+
+text \<open>Corresponds to locale @{locale monitor} defined in theory
+  @{theory MFOTL_Monitor_Devel.Abstract_Monitor}.\<close>
+
+subsubsection \<open>Definition 2\<close>
 
 locale slicer = monitor +
   fixes submonitor :: "'k :: finite \<Rightarrow> 'a prefix \<Rightarrow> (nat \<times> 'b option list) set"
@@ -27,7 +33,7 @@ end
 
 locale self_slicer = slicer nfv fv sat M "\<lambda>_. M" splitter joiner for nfv fv sat M splitter joiner
 
-subsection \<open>Definition 3\<close>
+subsubsection \<open>Definition 3\<close>
 
 locale event_separable_splitter =
   fixes event_splitter :: "'a \<Rightarrow> 'k :: finite set"
@@ -37,18 +43,19 @@ lift_definition splitter :: "'a prefix \<Rightarrow> 'k \<Rightarrow> 'a prefix"
   "\<lambda>\<pi> k. map (\<lambda>(D, t). ({e \<in> D. k \<in> event_splitter e}, t)) \<pi>"
   by (auto simp: o_def split_beta)
 
-subsection \<open>Lemma 1\<close>
+subsubsection \<open>Lemma 1\<close>
 
 lemma mono_splitter: "\<pi> \<le> \<pi>' \<Longrightarrow> splitter \<pi> k \<le> splitter \<pi>' k"
   by transfer auto
 
 end
 
-section \<open>Section 4.3\<close>
+
+subsection \<open>Joint data slicer\<close>
 
 abbreviation (input) "ok \<phi> v \<equiv> wf_tuple (MFOTL.nfv \<phi>) (MFOTL.fv \<phi>) v"
 
-locale splitting_strategy = 
+locale splitting_strategy =
   fixes \<phi> :: "'a MFOTL.formula"
   and strategy :: "'a option list \<Rightarrow> 'k :: finite set"
   assumes strategy_nonempty: "ok \<phi> v \<Longrightarrow> strategy v \<noteq> {}"
@@ -59,7 +66,7 @@ abbreviation slice_set where
 
 end
 
-subsection \<open>Definition 4\<close>
+subsubsection \<open>Definition 4\<close>
 
 locale MFOTL_monitor =
   monitor "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" M for \<phi> M
@@ -79,14 +86,14 @@ definition joiner where
 lemma splitter_pslice: "splitter \<pi> k = MFOTL_slicer.pslice \<phi> (slice_set k) \<pi>"
   by transfer (auto simp: event_splitter_def)
 
-subsection \<open>Lemma 2\<close>
+subsubsection \<open>Lemma 2\<close>
 
 text \<open>Corresponds to the following theorem @{thm[source] sat_slice_strong} proved in theory
-   @{theory "Draft.Abstract_Monitor"}:
+   @{theory MFOTL_Monitor_Devel.Abstract_Monitor}:
 
    @{thm sat_slice_strong[no_vars]}\<close>
 
-subsection \<open>Theorem 1\<close>
+subsubsection \<open>Theorem 1\<close>
 
 sublocale joint_monitor: MFOTL_monitor \<phi> "\<lambda>\<pi>. joiner (\<lambda>k. M (splitter \<pi> k))"
 proof (unfold_locales, goal_cases mono wf sound complete)
@@ -136,7 +143,7 @@ next
     by (intro exI[of _ \<pi>'']) (auto simp: joiner_def splitter_pslice intro!: exI[of _ k])
 qed
 
-subsection \<open>Corollary 1\<close>
+subsubsection \<open>Corollary 1\<close>
 
 sublocale joint_slicer: slicer "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>"
   "\<lambda>\<pi>. joiner (\<lambda>k. M (splitter \<pi> k))" "\<lambda>_. M" splitter joiner
@@ -144,9 +151,10 @@ sublocale joint_slicer: slicer "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<
 
 end
 
-subsection \<open>Definition 5\<close>
+subsubsection \<open>Definition 5\<close>
 
-text \<open>Corresponds to locale @{locale sliceable_monitor} defined in theory @{theory "Draft.Abstract_Monitor"}.\<close>
+text \<open>Corresponds to locale @{locale sliceable_monitor} defined in theory
+  @{theory MFOTL_Monitor_Devel.Abstract_Monitor}.\<close>
 
 locale slicable_joint_data_slicer =
   sliceable_monitor "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "relevant_events \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" M +
@@ -158,7 +166,7 @@ lemma monitor_split: "ok \<phi> v \<Longrightarrow> k \<in> strategy v \<Longrig
   by (rule sliceable_M)
     (auto simp: wf_tuple_def fvi_less_nfv intro!: mem_restrI[rotated 2, where y="map the v"])
 
-subsection \<open>Theorem 2\<close>
+subsubsection \<open>Theorem 2\<close>
 
 sublocale self_slicer "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" M splitter joiner
 proof (standard, erule mono_splitter, safe, goal_cases sound complete)
@@ -177,7 +185,7 @@ qed
 
 end
 
-section \<open>Towards Theorem 3\<close>
+subsubsection \<open>Towards Theorem 3\<close>
 
 fun names :: "'a MFOTL.formula \<Rightarrow> MFOTL.name set" where
   "names (MFOTL.Pred e _) = {e}"
@@ -411,7 +419,7 @@ proof -
   with fv_eq show ?thesis by (auto iff: sat_fvi_cong)
 qed
 
-subsection \<open>Lemma 3\<close>
+subsubsection \<open>Lemma 3\<close>
 
 lemma (in splitting_strategy) unique_sat_strategy:
   "safe_formula \<phi> \<Longrightarrow> gen_unique \<phi> \<Longrightarrow> slice_set k \<noteq> {} \<Longrightarrow>
@@ -425,11 +433,11 @@ locale skip_inter = joint_data_slicer +
   and mergeable: "mergeable_envs (MFOTL.nfv \<phi>) (slice_set k)"
 begin
 
-subsection \<open>Definition of J'\<close>
+subsubsection \<open>Definition of J'\<close>
 
 definition "skip_joiner = (\<lambda>s. \<Union>k. s k)"
 
-subsection \<open>Theorem 3\<close>
+subsubsection \<open>Theorem 3\<close>
 
 lemma skip_joiner:
   assumes "safe_formula \<phi>" "gen_unique \<phi>"

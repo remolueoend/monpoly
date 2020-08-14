@@ -1,27 +1,23 @@
 chapter AFP
 
-session Optimized_MFODL_Monitor (AFP) = Containers +
+session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
   options [timeout = 1200]
   sessions
     IEEE_Floating_Point
-    Generic_Join
+    Generic_Join_Devel
   theories
-    Trace
-    Abstract_Monitor
-    Multi_Source
     Code_Double
     Event_Data
     Regex
-    Interval
     Formula
     Optimized_Join
     Monitor
     Optimized_MTL
     Monitor_Impl
-  theories [condition=ISABELLE_OCAMLFIND, document=false]
+  theories [document=false]
     Monitor_Code
   document_files
     "root.tex"
     "root.bib"
   export_files (in ".") [2]
-    "Optimized_MFODL_Monitor.Monitor_Code:code/**"
+    "MFODL_Monitor_Devel.Monitor_Code:code/**"

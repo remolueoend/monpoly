@@ -1,6 +1,9 @@
 (*<*)
 theory Multi_Source
-  imports Abstract_Monitor "HOL-Library.BNF_Corec" "HOL-Library.DAList"
+  imports
+    "MFOTL_Monitor_Devel.Abstract_Monitor"
+    "HOL-Library.BNF_Corec"
+    "HOL-Library.DAList"
 begin
 (*>*)
 
@@ -880,8 +883,7 @@ proof (induction "w\<iota> \<sigma> j" arbitrary: j rule: less_induct)
           apply (clarsimp simp: j'_def not_le[symmetric])
           apply (erule notE)
           apply (insert w\<iota>_bound[of i' \<sigma>])
-          apply clarify
-          apply (erule Greatest_le_nat[OF refl])
+          apply (blast intro: Greatest_le_nat)
           done
         have "i' = w\<iota> \<sigma> j'"
           unfolding j'_def

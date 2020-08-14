@@ -2,28 +2,21 @@ BIN = ~/bin/
 VER = 1.1.7
 USERNAME ?= $(shell bash -c 'read -r -p "Username: " uuu; echo $$uuu')
 IMAGENAME ?= $(shell bash -c 'read -r -p "Image name: " iii; echo $$iii')
-ISABELLE=isabelle
-export ISABELLE
-
 
 all: monpoly
 
 tools: merger fc_colsuf fc_paramslicing fc_filter_empty_tp compare count mfotl2sql table2log
 
-.PHONY: monpoly doc clean clean-all depend 
+.PHONY: monpoly update-verimon doc clean clean-all depend 
 
 monpoly: 
 	cd src && $(MAKE) monpoly
 	cp src/monpoly monpoly
 
-verimon: isabelle clean
-	cd src && $(MAKE) monpoly
-	cp src/monpoly monpoly
+update-verimon:
+	cd thys && $(MAKE) verimon
+	cp thys/MFODL_Monitor_Devel/verified.ocaml src/verified.ml
 
-isabelle: 
-	cd thys && $(MAKE) verimon 
-	cp thys/verified.ocaml src/verified.ml
-	
 merger: 
 	cd tools && $(MAKE) merger
 

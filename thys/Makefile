@@ -1,12 +1,11 @@
-ISABELLE=isabelle
-ifeq (${AFP},)
-	p=$$AFP
+ISABELLE = isabelle
+ifeq ($(AFP),)
+	AFP_THYS = $$AFP
 else
-	p=${AFP}/thys/
+	AFP_THYS = $(AFP)/thys
 endif
 
-all: verimon
-
 verimon:
-	$(ISABELLE) build -d'$p' -evD .
-	cp verified.ocaml ../src/verified.ml
+	$(ISABELLE) build -ev -o "document=pdf" -d '$(AFP_THYS)' -D .
+
+.PHONY: verimon

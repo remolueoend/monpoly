@@ -1,6 +1,6 @@
 (*<*)
 theory Abstract_Monitor
-  imports Trace MFOTL_Monitor.Table
+  imports Trace Table
 begin
 (*>*)
 

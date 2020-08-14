@@ -1,14 +1,14 @@
 (*<*)
 theory MFOTL
-  imports Interval Trace "MFOTL_Monitor.Table" Abstract_Monitor
+  imports Interval Trace Abstract_Monitor
 begin
 (*>*)
 
-section \<open>Metric First-order Temporal Logic\<close>
+section \<open>Metric first-order temporal logic\<close>
 
 context begin
 
-subsection \<open>Formulas and Satisfiability\<close>
+subsection \<open>Formulas and satisfiability\<close>
 
 qualified type_synonym name = string
 qualified type_synonym 'a event = "(name \<times> 'a list)"
@@ -201,7 +201,7 @@ next
 qed (auto 8 0 simp add: nth_Cons' split: nat.splits intro!: iff_exI)
 
 
-subsection \<open>Defined Connectives\<close>
+subsection \<open>Defined connectives\<close>
 
 qualified definition "And \<phi> \<psi> = Neg (Or (Neg \<phi>) (Neg \<psi>))"
 
@@ -232,7 +232,7 @@ lemma sat_And_Not: "sat \<sigma> v i (And_Not \<phi> \<psi>) = (sat \<sigma> v i
   unfolding And_Not_def by simp
 
 
-subsection \<open>Safe Formulas\<close>
+subsection \<open>Safe formulas\<close>
 
 fun safe_formula :: "'a MFOTL.formula \<Rightarrow> bool" where
   "safe_formula (MFOTL.Eq t1 t2) = (MFOTL.is_Const t1 \<or> MFOTL.is_Const t2)"
@@ -291,7 +291,7 @@ next
 qed (auto intro: assms)
 
 
-subsection \<open>Slicing Traces\<close>
+subsection \<open>Slicing traces\<close>
 
 qualified primrec matches :: "'a env \<Rightarrow> 'a formula \<Rightarrow> name \<times> 'a list \<Rightarrow> bool" where
   "matches v (Pred r ts) e = (r = fst e \<and> map (eval_trm v) ts = snd e)"
