@@ -11,18 +11,6 @@ typedef \<I> = "{(i :: nat, j :: enat). i \<le> j}"
 
 setup_lifting type_definition_\<I>
 
-instantiation \<I> :: equal begin
-lift_definition equal_\<I> :: "\<I> \<Rightarrow> \<I> \<Rightarrow> bool" is "(=)" .
-instance by standard (transfer, auto)
-end
-
-instantiation \<I> :: linorder begin
-lift_definition less_eq_\<I> :: "\<I> \<Rightarrow> \<I> \<Rightarrow> bool" is "(\<le>)" .
-lift_definition less_\<I> :: "\<I> \<Rightarrow> \<I> \<Rightarrow> bool" is "(<)" .
-instance by standard (transfer, auto)+
-end
-
-
 lift_definition all :: \<I> is "(0, \<infinity>)" by simp
 lift_definition left :: "\<I> \<Rightarrow> nat" is fst .
 lift_definition right :: "\<I> \<Rightarrow> enat" is snd .
