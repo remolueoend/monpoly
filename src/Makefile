@@ -11,12 +11,12 @@ JSFLAGS = -package str -package unix -package js_of_ocaml -package lwt -package 
 ifeq "$(OCAML)" "$(OCAMLOPT)"
   O = cmx
   A = cmxa
-  LIBS =  str.$(A) nums.$(A)
+  LIBS = str.$(A)
   OCAMLDEPFLAGS = -native
 else
   O = cmo
   A = cma
-  LIBS = -custom  str.$(A) nums.$(A)
+  LIBS = -custom str.$(A)
 endif
 
 OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
