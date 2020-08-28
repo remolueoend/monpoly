@@ -50,7 +50,7 @@ definition init_vmsaux :: "args \<Rightarrow> event_data vmsaux" where
 
 definition add_new_ts_vmsaux :: "args \<Rightarrow> nat \<Rightarrow> event_data vmsaux \<Rightarrow> event_data vmsaux" where
   "add_new_ts_vmsaux = (\<lambda>args nt (t, auxlist). (nt, filter (\<lambda>(t, rel).
-    enat (nt - t) \<le> right (args_ivl args)) auxlist))"
+    memR (args_ivl args) (nt - t)) auxlist))"
 
 definition join_vmsaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data vmsaux \<Rightarrow> event_data vmsaux" where
   "join_vmsaux = (\<lambda>args rel1 (t, auxlist). (t, map (\<lambda>(t, rel).
@@ -64,7 +64,7 @@ definition add_new_table_vmsaux :: "args \<Rightarrow> event_data table \<Righta
 
 definition result_vmsaux :: "args \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table" where
   "result_vmsaux = (\<lambda>args (cur, auxlist).
-    foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, left (args_ivl args) \<le> cur - t] {})"
+    foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {})"
 
 type_synonym 'a vmuaux = "nat \<times> (nat \<times> 'a table \<times> 'a table) list"
 

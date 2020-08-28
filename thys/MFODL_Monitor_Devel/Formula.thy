@@ -253,9 +253,9 @@ qualified fun future_bounded :: "formula \<Rightarrow> bool" where
 | "future_bounded (Prev I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Next I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Since \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
-| "future_bounded (Until \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi> \<and> right I \<noteq> \<infinity>)"
+| "future_bounded (Until \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi> \<and> bounded I)"
 | "future_bounded (MatchP I r) = Regex.pred_regex future_bounded r"
-| "future_bounded (MatchF I r) = (Regex.pred_regex future_bounded r \<and> right I \<noteq> \<infinity>)"
+| "future_bounded (MatchF I r) = (Regex.pred_regex future_bounded r \<and> bounded I)"
 
 
 subsubsection \<open>Semantics\<close>
@@ -279,12 +279,12 @@ qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarr
 | "sat \<sigma> V v i (Agg y \<omega> b f \<phi>) =
     (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> V (zs @ v) i \<phi> \<and> eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
     in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M)"
-| "sat \<sigma> V v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> V v j \<phi>)"
-| "sat \<sigma> V v i (Next I \<phi>) = (mem (\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i) I \<and> sat \<sigma> V v (Suc i) \<phi>)"
-| "sat \<sigma> V v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))"
-| "sat \<sigma> V v i (Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>))"
-| "sat \<sigma> V v i (MatchP I r) = (\<exists>j\<le>i. mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<and> Regex.match (sat \<sigma> V v) r j i)"
-| "sat \<sigma> V v i (MatchF I r) = (\<exists>j\<ge>i. mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I \<and> Regex.match (sat \<sigma> V v) r i j)"
+| "sat \<sigma> V v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
+| "sat \<sigma> V v i (Next I \<phi>) = (mem I ((\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i)) \<and> sat \<sigma> V v (Suc i) \<phi>)"
+| "sat \<sigma> V v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))"
+| "sat \<sigma> V v i (Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>))"
+| "sat \<sigma> V v i (MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat \<sigma> V v) r j i)"
+| "sat \<sigma> V v i (MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat \<sigma> V v) r i j)"
 
 lemma sat_abbrevs[simp]:
   "sat \<sigma> V v i TT" "\<not> sat \<sigma> V v i FF"
@@ -294,139 +294,136 @@ lemma sat_Ands: "sat \<sigma> V v i (Ands l) \<longleftrightarrow> (\<forall>\<p
   by (simp add: list_all_iff)
 
 lemma sat_Until_rec: "sat \<sigma> V v i (Until \<phi> I \<psi>) \<longleftrightarrow>
-  mem 0 I \<and> sat \<sigma> V v i \<psi> \<or>
-  (\<Delta> \<sigma> (i + 1) \<le> right I \<and> sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>))"
+  memL I 0 \<and> sat \<sigma> V v i \<psi> \<or>
+  (memR I (\<Delta> \<sigma> (i + 1)) \<and> sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>))"
   (is "?L \<longleftrightarrow> ?R")
 proof (rule iffI; (elim disjE conjE)?)
   assume ?L
-  then obtain j where j: "i \<le> j" "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I" "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>"
+  then obtain j where j: "i \<le> j" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)" "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>"
     by auto
   then show ?R
   proof (cases "i = j")
     case False
-    with j(1,2) have "\<Delta> \<sigma> (i + 1) \<le> right I"
+    with j(1,2) have "memR I (\<Delta> \<sigma> (i + 1))"
       by (auto elim: order_trans[rotated] simp: diff_le_mono)
     moreover from False j(1,4) have "sat \<sigma> V v i \<phi>" by auto
     moreover from False j have "sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>)"
-      by (cases "right I") (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j])
+      by (auto intro!: exI[of _ j])
     ultimately show ?thesis by blast
   qed simp
 next
-  assume \<Delta>: "\<Delta> \<sigma> (i + 1) \<le> right I" and now: "sat \<sigma> V v i \<phi>" and
+  assume \<Delta>: "memR I (\<Delta> \<sigma> (i + 1))" and now: "sat \<sigma> V v i \<phi>" and
    "next": "sat \<sigma> V v (i + 1) (Until \<phi> (subtract (\<Delta> \<sigma> (i + 1)) I) \<psi>)"
-  from "next" obtain j where j: "i + 1 \<le> j" "mem (\<tau> \<sigma> j - \<tau> \<sigma> (i + 1)) ((subtract (\<Delta> \<sigma> (i + 1)) I))"
+  from "next" obtain j where j: "i + 1 \<le> j" "mem ((subtract (\<Delta> \<sigma> (i + 1)) I)) (\<tau> \<sigma> j - \<tau> \<sigma> (i + 1))"
       "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {i + 1 ..< j}. sat \<sigma> V v k \<phi>"
+    by (auto simp: diff_le_mono memL_mono)
+  from \<Delta> j(1,2) have "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)"
     by auto
-  from \<Delta> j(1,2) have "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I"
-    by (cases "right I") (auto simp: le_diff_conv2)
   with now j(1,3,4) show ?L by (auto simp: le_eq_less_or_eq[of i] intro!: exI[of _ j])
 qed auto
 
 lemma sat_Since_rec: "sat \<sigma> V v i (Since \<phi> I \<psi>) \<longleftrightarrow>
-  mem 0 I \<and> sat \<sigma> V v i \<psi> \<or>
-  (i > 0 \<and> \<Delta> \<sigma> i \<le> right I \<and> sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>))"
+  mem I 0 \<and> sat \<sigma> V v i \<psi> \<or>
+  (i > 0 \<and> memR I (\<Delta> \<sigma> i) \<and> sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>))"
   (is "?L \<longleftrightarrow> ?R")
 proof (rule iffI; (elim disjE conjE)?)
   assume ?L
-  then obtain j where j: "j \<le> i" "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I" "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>"
+  then obtain j where j: "j \<le> i" "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)" "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>"
     by auto
   then show ?R
   proof (cases "i = j")
     case False
     with j(1) obtain k where [simp]: "i = k + 1"
       by (cases i) auto
-    with j(1,2) False have "\<Delta> \<sigma> i \<le> right I"
+    with j(1,2) False have "memR I (\<Delta> \<sigma> i)"
       by (auto elim: order_trans[rotated] simp: diff_le_mono2 le_Suc_eq)
     moreover from False j(1,4) have "sat \<sigma> V v i \<phi>" by auto
     moreover from False j have "sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>)"
-      by (cases "right I") (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j])
+      by (auto intro!: exI[of _ j])
     ultimately show ?thesis by auto
   qed simp
 next
-  assume i: "0 < i" and \<Delta>: "\<Delta> \<sigma> i \<le> right I" and now: "sat \<sigma> V v i \<phi>" and
+  assume i: "0 < i" and \<Delta>: "memR I (\<Delta> \<sigma> i)" and now: "sat \<sigma> V v i \<phi>" and
    "prev": "sat \<sigma> V v (i - 1) (Since \<phi> (subtract (\<Delta> \<sigma> i) I) \<psi>)"
-  from "prev" obtain j where j: "j \<le> i - 1" "mem (\<tau> \<sigma> (i - 1) - \<tau> \<sigma> j) ((subtract (\<Delta> \<sigma> i) I))"
+  from "prev" obtain j where j: "j \<le> i - 1" "mem (subtract (\<Delta> \<sigma> i) I) (\<tau> \<sigma> (i - 1) - \<tau> \<sigma> j)"
       "sat \<sigma> V v j \<psi>" "\<forall>k \<in> {j <.. i - 1}. sat \<sigma> V v k \<phi>"
+    by (auto simp: diff_le_mono2 memL_mono)
+  from \<Delta> i j(1,2) have "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)"
     by auto
-  from \<Delta> i j(1,2) have "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I"
-    by (cases "right I") (auto simp: le_diff_conv2)
   with now i j(1,3,4) show ?L by (auto simp: le_Suc_eq gr0_conv_Suc intro!: exI[of _ j])
 qed auto
 
-lemma sat_MatchF_rec: "sat \<sigma> V v i (MatchF I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> V v) i r \<or>
-  \<Delta> \<sigma> (i + 1) \<le> right I \<and> (\<exists>s \<in> Regex.lpd (sat \<sigma> V v) i r. sat \<sigma> V v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s))"
+lemma sat_MatchF_rec: "sat \<sigma> V v i (MatchF I r) \<longleftrightarrow> memL I 0 \<and> Regex.eps (sat \<sigma> V v) i r \<or>
+  memR I (\<Delta> \<sigma> (i + 1)) \<and> (\<exists>s \<in> Regex.lpd (sat \<sigma> V v) i r. sat \<sigma> V v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s))"
   (is "?L \<longleftrightarrow> ?R1 \<or> ?R2")
 proof (rule iffI; (elim disjE conjE bexE)?)
   assume ?L
-  then obtain j where j: "j \<ge> i" "mem (\<tau> \<sigma> j - \<tau> \<sigma> i) I" and "Regex.match (sat \<sigma> V v) r i j" by auto
+  then obtain j where j: "j \<ge> i" "mem I (\<tau> \<sigma> j - \<tau> \<sigma> i)" and "Regex.match (sat \<sigma> V v) r i j" by auto
   then show "?R1 \<or> ?R2"
   proof (cases "i < j")
     case True
     with \<open>Regex.match (sat \<sigma> V v) r i j\<close> lpd_match[of i j "sat \<sigma> V v" r]
     obtain s where "s \<in> Regex.lpd (sat \<sigma> V v) i r" "Regex.match (sat \<sigma> V v) s (i + 1) j" by auto
     with True j have ?R2
-      by (cases "right I")
-        (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j] elim: le_trans[rotated])
+      by (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j] elim: le_trans[rotated])
     then show ?thesis by blast
   qed (auto simp: eps_match)
 next
-  assume "enat (\<Delta> \<sigma> (i + 1)) \<le> right I"
+  assume "memR I (\<Delta> \<sigma> (i + 1))"
   moreover
   fix s
   assume [simp]: "s \<in> Regex.lpd (sat \<sigma> V v) i r" and "sat \<sigma> V v (i + 1) (MatchF (subtract (\<Delta> \<sigma> (i + 1)) I) s)"
   then obtain j where "j > i" "Regex.match (sat \<sigma> V v) s (i + 1) j"
-    "mem (\<tau> \<sigma> j - \<tau> \<sigma> (Suc i)) (subtract (\<Delta> \<sigma> (i + 1)) I)" by (auto simp: Suc_le_eq)
+    "mem (subtract (\<Delta> \<sigma> (i + 1)) I) (\<tau> \<sigma> j - \<tau> \<sigma> (Suc i))"
+    by (auto simp: diff_le_mono memL_mono Suc_le_eq)
   ultimately show ?L
-    by (cases "right I")
-      (auto simp: le_diff_conv lpd_match intro!: exI[of _ j] bexI[of _ s])
+    by (auto simp: le_diff_conv lpd_match intro!: exI[of _ j] bexI[of _ s])
 qed (auto simp: eps_match intro!: exI[of _ i])
 
-lemma sat_MatchP_rec: "sat \<sigma> V v i (MatchP I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> V v) i r \<or>
-  i > 0 \<and> \<Delta> \<sigma> i \<le> right I \<and> (\<exists>s \<in> Regex.rpd (sat \<sigma> V v) i r. sat \<sigma> V v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s))"
+lemma sat_MatchP_rec: "sat \<sigma> V v i (MatchP I r) \<longleftrightarrow> memL I 0 \<and> Regex.eps (sat \<sigma> V v) i r \<or>
+  i > 0 \<and> memR I (\<Delta> \<sigma> i) \<and> (\<exists>s \<in> Regex.rpd (sat \<sigma> V v) i r. sat \<sigma> V v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s))"
   (is "?L \<longleftrightarrow> ?R1 \<or> ?R2")
 proof (rule iffI; (elim disjE conjE bexE)?)
   assume ?L
-  then obtain j where j: "j \<le> i" "mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I" and "Regex.match (sat \<sigma> V v) r j i" by auto
+  then obtain j where j: "j \<le> i" "mem I (\<tau> \<sigma> i - \<tau> \<sigma> j)" and "Regex.match (sat \<sigma> V v) r j i" by auto
   then show "?R1 \<or> ?R2"
   proof (cases "j < i")
     case True
     with \<open>Regex.match (sat \<sigma> V v) r j i\<close> rpd_match[of j i "sat \<sigma> V v" r]
     obtain s where "s \<in> Regex.rpd (sat \<sigma> V v) i r" "Regex.match (sat \<sigma> V v) s j (i - 1)" by auto
     with True j have ?R2
-      by (cases "right I")
-        (auto simp: le_diff_conv le_diff_conv2 intro!: exI[of _ j] elim: le_trans)
+      by (auto simp: diff_le_mono2 intro!: exI[of _ j])
     then show ?thesis by blast
   qed (auto simp: eps_match)
 next
-  assume "enat (\<Delta> \<sigma> i) \<le> right I"
+  assume "memR I (\<Delta> \<sigma> i)"
   moreover
   fix s
   assume [simp]: "s \<in> Regex.rpd (sat \<sigma> V v) i r" and "sat \<sigma> V v (i - 1) (MatchP (subtract (\<Delta> \<sigma> i) I) s)" "i > 0"
   then obtain j where "j < i" "Regex.match (sat \<sigma> V v) s j (i - 1)"
-    "mem (\<tau> \<sigma> (i - 1) - \<tau> \<sigma> j) (subtract (\<Delta> \<sigma> i) I)" by (auto simp: gr0_conv_Suc less_Suc_eq_le)
+    "mem (subtract (\<Delta> \<sigma> i) I) (\<tau> \<sigma> (i - 1) - \<tau> \<sigma> j)" by (auto simp: gr0_conv_Suc less_Suc_eq_le)
   ultimately show ?L
-    by (cases "right I")
-      (auto simp: le_diff_conv rpd_match intro!: exI[of _ j] bexI[of _ s])
+    by (auto simp: rpd_match intro!: exI[of _ j] bexI[of _ s])
 qed (auto simp: eps_match intro!: exI[of _ i])
 
-lemma sat_Since_0: "sat \<sigma> V v 0 (Since \<phi> I \<psi>) \<longleftrightarrow> mem 0 I \<and> sat \<sigma> V v 0 \<psi>"
+lemma sat_Since_0: "sat \<sigma> V v 0 (Since \<phi> I \<psi>) \<longleftrightarrow> memL I 0 \<and> sat \<sigma> V v 0 \<psi>"
   by auto
 
-lemma sat_MatchP_0: "sat \<sigma> V v 0 (MatchP I r) \<longleftrightarrow> mem 0 I \<and> Regex.eps (sat \<sigma> V v) 0 r"
+lemma sat_MatchP_0: "sat \<sigma> V v 0 (MatchP I r) \<longleftrightarrow> memL I 0 \<and> Regex.eps (sat \<sigma> V v) 0 r"
   by (auto simp: eps_match)
 
 lemma sat_Since_point: "sat \<sigma> V v i (Since \<phi> I \<psi>) \<Longrightarrow>
-    (\<And>j. j \<le> i \<Longrightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<Longrightarrow> sat \<sigma> V v i (Since \<phi> (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<psi>) \<Longrightarrow> P) \<Longrightarrow> P"
+    (\<And>j. j \<le> i \<Longrightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<Longrightarrow> sat \<sigma> V v i (Since \<phi> (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) \<psi>) \<Longrightarrow> P) \<Longrightarrow> P"
   by (auto intro: diff_le_self)
 
 lemma sat_MatchP_point: "sat \<sigma> V v i (MatchP I r) \<Longrightarrow>
-    (\<And>j. j \<le> i \<Longrightarrow> mem (\<tau> \<sigma> i - \<tau> \<sigma> j) I \<Longrightarrow> sat \<sigma> V v i (MatchP (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) r) \<Longrightarrow> P) \<Longrightarrow> P"
+    (\<And>j. j \<le> i \<Longrightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<Longrightarrow> sat \<sigma> V v i (MatchP (point (\<tau> \<sigma> i - \<tau> \<sigma> j)) r) \<Longrightarrow> P) \<Longrightarrow> P"
   by (auto intro: diff_le_self)
 
-lemma sat_Since_pointD: "sat \<sigma> V v i (Since \<phi> (point t) \<psi>) \<Longrightarrow> mem t I \<Longrightarrow> sat \<sigma> V v i (Since \<phi> I \<psi>)"
+lemma sat_Since_pointD: "sat \<sigma> V v i (Since \<phi> (point t) \<psi>) \<Longrightarrow> mem I t \<Longrightarrow> sat \<sigma> V v i (Since \<phi> I \<psi>)"
   by auto
 
-lemma sat_MatchP_pointD: "sat \<sigma> V v i (MatchP (point t) r) \<Longrightarrow> mem t I \<Longrightarrow> sat \<sigma> V v i (MatchP I r)"
+lemma sat_MatchP_pointD: "sat \<sigma> V v i (MatchP (point t) r) \<Longrightarrow> mem I t \<Longrightarrow> sat \<sigma> V v i (MatchP I r)"
   by auto
 
 lemma sat_fv_cong: "\<forall>x\<in>fv \<phi>. v!x = v'!x \<Longrightarrow> sat \<sigma> V v i \<phi> = sat \<sigma> V v' i \<phi>"
