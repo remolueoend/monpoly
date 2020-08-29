@@ -3249,7 +3249,7 @@ type safety = Strict | Lax;;
 
 type ('a, 'b) sum = Inl of 'a | Inr of 'b;;
 
-type i = Abs_I of (nat * enat);;
+type i = Abs_I of ((nat -> bool) * ((nat -> bool) * bool));;
 
 type modality = Past | Futu;;
 
@@ -4062,7 +4062,9 @@ let rec ecard (_A1, _A2, _A3)
 
 let rec rep_I (Abs_I x) = x;;
 
-let rec left x = fst (rep_I x);;
+let rec memL x = fst (rep_I x);;
+
+let rec memR x = fst (snd (rep_I x));;
 
 let rec mapping_empty_choose _A
   = (match ccompare _A with None -> Assoc_List_Mapping empty
@@ -4095,8 +4097,6 @@ let rec matcha
     | I2f vb :: va, uv -> None
     | v :: va, [] -> None
     | [], v :: va -> None;;
-
-let rec right x = snd (rep_I x);;
 
 let rec enumerate
   n x1 = match n, x1 with n, x :: xs -> (n, x) :: enumerate (suc n) xs
@@ -4244,6 +4244,8 @@ let rec combine _B
         failwith "combine RBT_Mapping: ccompare = None"
           (fun _ -> combine _B f (RBT_Mapping t) (RBT_Mapping u))
       | Some _ -> RBT_Mapping (joina _B (fun _ -> f) t u));;
+
+let rec bounded x = snd (snd (rep_I x));;
 
 let rec list_update
   x0 i y = match x0, i, y with [], i, y -> []
@@ -4516,7 +4518,10 @@ let rec less_eq_enat q x1 = match q, x1 with Infinity_enat, Enat n -> false
                        | Enat m, Enat n -> less_eq_nat m n;;
 
 let rec interval
-  l r = Abs_I (if less_eq_enat (Enat l) r then (l, r)
+  l r = Abs_I (if less_eq_enat (Enat l) r
+                then (less_eq_nat l,
+                       ((fun i -> less_eq_enat (Enat i) r),
+                         not (equal_enat r Infinity_enat)))
                 else rep_I (failwith "undefined"));;
 
 let rec arg_min_list _B
@@ -5225,14 +5230,10 @@ let rec score (_A1, _A2)
            in
           foldl plus_nata zero_nata a);;
 
-let rec plus_enat q qa = match q, qa with q, Infinity_enat -> Infinity_enat
-                    | Infinity_enat, q -> Infinity_enat
-                    | Enat m, Enat n -> Enat (plus_nata m n);;
-
 let rec eval_until
   i nt x2 = match i, nt, x2 with i, nt, [] -> ([], [])
     | i, nt, (t, (a1, a2)) :: aux ->
-        (if less_enat (plus_enat (Enat t) (right i)) (Enat nt)
+        (if not (memR i (minus_nata nt t))
           then (let a = eval_until i nt aux in
                 let (xs, aa) = a in
                  (a2 :: xs, aa))
@@ -5266,9 +5267,7 @@ let rec mprev_next
     | i, x :: xs, ta :: t :: ts ->
         (let a = mprev_next i xs (t :: ts) in
          let (ys, aa) = a in
-          ((if less_eq_nat (left i) (minus_nata t ta) &&
-                 less_eq_enat (Enat (minus_nata t ta)) (right i)
-             then x
+          ((if memL i (minus_nata t ta) && memR i (minus_nata t ta) then x
              else empty_table
                     ((ceq_list (ceq_option ceq_event_data)),
                       (ccompare_list (ccompare_option ccompare_event_data)),
@@ -5339,8 +5338,9 @@ let rec upd_nested_max_tstp (_A1, _A2, _A3, _A4) (_B1, _B2, _B3, _B4, _B5)
 let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
 
 let rec ts_tp_lt
-  ts tp tstp =
-    (match tstp with Inl a -> less_nat ts a | Inr a -> less_eq_nat tp a);;
+  i ts tp tstp =
+    (match tstp with Inl tsa -> memL i (minus_nata tsa ts)
+      | Inr a -> less_eq_nat tp a);;
 
 let rec rep_queue (Abs_queue x) = x;;
 
@@ -5386,14 +5386,18 @@ let rec safe_hd_aux
 
 let rec safe_hd x = rep_isom (safe_hd_aux x);;
 
+let rec args_ivl
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_ivl;;
+
 let rec eval_step_mmuaux (_A1, _A2)
-  (tp, (tss, (len, (maskL, (maskR, (a1_map, (a2_map, (donea, done_length))))))))
+  args (tp, (tss, (len, (maskL,
+                          (maskR, (a1_map, (a2_map, (donea, done_length))))))))
     = (let (Some ts, tssa) = safe_hd tss in
        let Some m = lookupa (ccompare_nat, equal_nat) a2_map (minus_nata tp len)
          in
        let ma =
          filterc (ccompare_list (ccompare_option _A2))
-           (fun _ -> ts_tp_lt ts (minus_nata tp len)) m
+           (fun _ -> ts_tp_lt (args_ivl args) ts (minus_nata tp len)) m
          in
        let t =
          keys (cenum_list, (ceq_list (ceq_option _A1)),
@@ -5436,9 +5440,6 @@ let rec takeWhile_queue
 
 let rec linearize xa = (let (fs, ls) = rep_queue xa in fs @ rev ls);;
 
-let rec args_ivl
-  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_ivl;;
-
 let rec shift_mmuaux (_A1, _A2)
   args nt
     (tp, (tss, (len, (maskL,
@@ -5446,11 +5447,9 @@ let rec shift_mmuaux (_A1, _A2)
     = (let a =
          linearize
            (takeWhile_queue
-             (fun t ->
-               less_enat (plus_enat (Enat t) (right (args_ivl args))) (Enat nt))
-             tss)
+             (fun t -> not (memR (args_ivl args) (minus_nata nt t))) tss)
          in
-        foldl (fun aux _ -> eval_step_mmuaux (_A1, _A2) aux)
+        foldl (fun aux _ -> eval_step_mmuaux (_A1, _A2) args aux)
           (tp, (tss, (len, (maskL,
                              (maskR,
                                (a1_map, (a2_map, (donea, done_length))))))))
@@ -5595,10 +5594,7 @@ let rec add_new_mmuaux
            = shift_mmuaux (ceq_event_data, ccompare_event_data) args nt aux in
          let i = args_ivl args in
          let pos = args_pos args in
-         let new_tstp =
-           (if equal_nata (left i) zero_nata then Inr tp
-             else Inl (minus_nata nt (minus_nata (left i) one_nata)))
-           in
+         let new_tstp = (if memL i zero_nata then Inr tp else Inl nt) in
          let tmp =
            sup_seta
              ((ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
@@ -5700,7 +5696,7 @@ let rec add_new_mmuaux
                                     (set_impl_proda set_impl_nat
                                       set_impl_list))))))
                  rel2))
-             (if equal_nata (left i) zero_nata
+             (if memL i zero_nata
                then productc (ceq_nat, ccompare_nat, set_impl_nat)
                       ((ceq_list (ceq_option ceq_event_data)),
                         (ccompare_list (ccompare_option ccompare_event_data)),
@@ -6560,7 +6556,7 @@ let rec add_new_table_mmsaux (_A1, _A2, _A3)
                        (ccompare_list (ccompare_option _A2)), set_impl_list)
                  tuple_since))
          in
-        (if less_eq_nat (left (args_ivl args)) zero_nata
+        (if memL (args_ivl args) zero_nata
           then (t, (gc, (maskL,
                           (maskR,
                             (data_prev,
@@ -6600,8 +6596,8 @@ let rec add_new_ts_mmsauxa (_A1, _A2, _A3)
     (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
     = (let i = args_ivl args in
        let (data_preva, move) =
-         takedropWhile_queue
-           (fun (ta, _) -> less_eq_nat (left i) (minus_nata nt ta)) data_prev
+         takedropWhile_queue (fun (ta, _) -> memL i (minus_nata nt ta))
+           data_prev
          in
        let data_ina = fold (fun (ta, x) -> append_queue (ta, x)) move data_in in
        let tuple_ina =
@@ -6645,13 +6641,11 @@ let rec shift_end (_A1, _A2, _A3)
     (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
     = (let i = args_ivl args in
        let data_preva =
-         dropWhile_queue
-           (fun (ta, _) -> less_enat (right i) (Enat (minus_nata nt ta)))
+         dropWhile_queue (fun (ta, _) -> not (memR i (minus_nata nt ta)))
            data_prev
          in
        let (data_ina, discard) =
-         takedropWhile_queue
-           (fun (ta, _) -> less_enat (right i) (Enat (minus_nata nt ta)))
+         takedropWhile_queue (fun (ta, _) -> not (memR i (minus_nata nt ta)))
            data_in
          in
        let tuple_ina =
@@ -6833,7 +6827,7 @@ let rec gc_mmsaux (_A1, _A2)
 let rec gc_join_mmsaux (_A1, _A2, _A3)
   args x
     (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
-    = (if less_enat (right (args_ivl args)) (Enat (minus_nata t gc))
+    = (if not (memR (args_ivl args) (minus_nata t gc))
         then join_mmsaux (_A1, _A2, _A3) args x
                (gc_mmsaux (_A1, _A2)
                  (t, (gc, (maskL,
@@ -6918,7 +6912,7 @@ let rec update_matchP
     (let auxa =
        (match
          maps (fun (t, rel) ->
-                (if less_eq_enat (Enat (minus_nata nt t)) (right i)
+                (if memR i (minus_nata nt t)
                   then [(t, mrtabulate (ceq_event_data, ccompare_event_data) mrs
                               (fun mra ->
                                 sup_seta
@@ -6956,7 +6950,7 @@ let rec update_matchP
                ((ceq_list (ceq_option ceq_event_data)),
                  (ccompare_list (ccompare_option ccompare_event_data))))
          (maps (fun (t, rel) ->
-                 (if less_eq_nat (left i) (minus_nata nt t)
+                 (if memL i (minus_nata nt t)
                    then [lookupb (ccompare_mregex, equal_mregex)
                            ((ceq_list (ceq_option ceq_event_data)),
                              (ccompare_list
@@ -6976,8 +6970,7 @@ let rec update_matchF_step (_A1, _A2, _A3)
     (fun (t, (rels, rel)) (aux, x) ->
       (let y = mrtabulate (_A1, _A2) mrs (l_delta (_A1, _A2, _A3) id x rels) in
         ((t, (rels,
-               (if less_eq_nat (left i) (minus_nata nt t) &&
-                     less_eq_enat (Enat (minus_nata nt t)) (right i)
+               (if memL i (minus_nata nt t) && memR i (minus_nata nt t)
                  then sup_seta
                         ((ceq_list (ceq_option _A1)),
                           (ccompare_list (ccompare_option _A2)))
@@ -7022,7 +7015,7 @@ let rec update_matchF_base (_A1, _A2, _A3)
     (let x = mrtabulate (_A1, _A2) mrs (l_epsilon_strict (_A1, _A2, _A3) n rels)
        in
       ([(nt, (rels,
-               (if equal_nata (left i) zero_nata
+               (if memL i zero_nata
                  then lookupb (ccompare_mregex, equal_mregex)
                         ((ceq_list (ceq_option _A1)),
                           (ccompare_list (ccompare_option _A2)), set_impl_list)
@@ -7066,7 +7059,7 @@ let rec mbuf2t_take
 let rec eval_matchF
   i mr nt x3 = match i, mr, nt, x3 with i, mr, nt, [] -> ([], [])
     | i, mr, nt, (t, (rels, rel)) :: aux ->
-        (if less_enat (plus_enat (Enat t) (right i)) (Enat nt)
+        (if not (memR i (minus_nata nt t))
           then (let a = eval_matchF i mr nt aux in
                 let (xs, aa) = a in
                  (rel :: xs, aa))
@@ -7541,9 +7534,7 @@ let rec add_new_table_vmsaux
 
 let rec add_new_ts_vmsaux
   x = (fun args nt (_, auxlist) ->
-        (nt, filtera
-               (fun (t, _) ->
-                 less_eq_enat (Enat (minus_nata nt t)) (right (args_ivl args)))
+        (nt, filtera (fun (t, _) -> memR (args_ivl args) (minus_nata nt t))
                auxlist))
         x;;
 
@@ -7553,8 +7544,8 @@ let rec result_vmsaux
                 ((ceq_list (ceq_option ceq_event_data)),
                   (ccompare_list (ccompare_option ccompare_event_data))))
           (maps (fun (t, rel) ->
-                  (if less_eq_nat (left (args_ivl args)) (minus_nata cur t)
-                    then [rel] else []))
+                  (if memL (args_ivl args) (minus_nata cur t) then [rel]
+                    else []))
             auxlist)
           (set_empty
             ((ceq_list (ceq_option ceq_event_data)),
@@ -7589,9 +7580,8 @@ let rec update_until
                            (ccompare_list
                              (ccompare_option ccompare_event_data)))
                          a1 rel1),
-                 (if less_eq_nat (left (args_ivl args)) (minus_nata nt t) &&
-                       less_eq_enat (Enat (minus_nata nt t))
-                         (right (args_ivl args))
+                 (if memL (args_ivl args) (minus_nata nt t) &&
+                       memR (args_ivl args) (minus_nata nt t)
                    then sup_seta
                           ((ceq_list (ceq_option ceq_event_data)),
                             (ccompare_list
@@ -7602,7 +7592,7 @@ let rec update_until
                    else a2))))
       aux @
       [(nt, (rel1,
-              (if equal_nata (left (args_ivl args)) zero_nata then rel2
+              (if memL (args_ivl args) zero_nata then rel2
                 else empty_table
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)),
@@ -8176,7 +8166,7 @@ let rec mmonitorable_exec
     | Until (phi, i, psi) ->
         subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
           (fvi zero_nata phi) (fvi zero_nata psi) &&
-          (not (equal_enat (right i) Infinity_enat) &&
+          (bounded i &&
             ((mmonitorable_exec phi ||
                (match phi with Pred (_, _) -> false | Let (_, _, _) -> false
                  | Eq (_, _) -> false | Less (_, _) -> false
@@ -8221,7 +8211,7 @@ let rec mmonitorable_exec
                   | Since (_, _, _) -> false | Until (_, _, _) -> false
                   | MatchF (_, _) -> false | MatchP (_, _) -> false))
           Futu Strict r &&
-          not (equal_enat (right i) Infinity_enat)
+          bounded i
     | Less (v, va) -> false
     | LessEq (v, va) -> false;;
 
