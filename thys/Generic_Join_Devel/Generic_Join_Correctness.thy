@@ -45,49 +45,7 @@ lemma isSame_equi_dev:
   assumes "A \<subseteq> V"
   assumes "B \<subseteq> V"
   shows "isSameIntersection t1 s t2 = (restrict s t1 = restrict s t2)"
-proof -
-  have "(\<forall>i\<in>s. t1!i = t2!i) \<longleftrightarrow> (restrict s t1 = restrict s t2)" (is "?A \<longleftrightarrow> ?B")
-  proof -
-    have "?B \<Longrightarrow> ?A"
-    proof -
-      assume "?B"
-      have "\<And>i. i\<in>s \<Longrightarrow> t1!i = t2!i"
-      proof -
-        fix i assume "i \<in> s"
-        then have "i \<in> A" using assms(4) by blast
-        then have "i < n" using assms(1) assms(6) wf_set_def by auto
-        then show "t1!i = t2!i" by (metis (no_types, lifting) \<open>i \<in> s\<close> \<open>restrict s t1 = restrict s t2\<close>
-              assms(2) length_restrict nth_restrict wf_tuple_length)
-      qed
-      then show "?A" by blast
-    qed
-    moreover have "?A \<Longrightarrow> ?B"
-    proof -
-      assume "?A"
-      obtain "length (restrict s t1) = n" "length (restrict s t2) = n"
-        using assms(2) assms(3) length_restrict wf_tuple_length by blast
-      then have "\<And>i. i < n \<Longrightarrow> (restrict s t1)!i = (restrict s t2)!i"
-      proof -
-        fix i assume "i < n"
-        then show "(restrict s t1)!i = (restrict s t2)!i"
-        proof (cases "i \<in> s")
-          case True
-          then show ?thesis by (metis \<open>\<forall>i\<in>s. t1 ! i = t2 ! i\<close> \<open>i < n\<close> \<open>length (restrict s t1) = n\<close>
-                \<open>length (restrict s t2) = n\<close> length_restrict nth_restrict)
-        next
-          case False
-          then show ?thesis
-            by (metis (no_types, hide_lams) \<open>i < n\<close> assms(2) assms(3) assms(4) assms(5) wf_tuple_def
-                wf_tuple_restrict_simple)
-        qed
-      qed
-      then show "?B"
-        by (metis \<open>length (restrict s t1) = n\<close> \<open>length (restrict s t2) = n\<close> nth_equalityI)
-    qed
-    then show ?thesis using calculation by linarith
-  qed
-  then show ?thesis by simp
-qed
+  by simp
 
 lemma wf_getIJ:
   assumes "card V \<ge> 2"

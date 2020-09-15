@@ -1,7 +1,7 @@
 section \<open>Example instantiations and queries\<close>
 
 theory Examples_Join
-  imports Generic_Join
+  imports Generic_Join Proj_Code
 begin
 
 subsection \<open>Instantiations\<close>

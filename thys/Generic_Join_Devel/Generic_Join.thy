@@ -8,6 +8,9 @@ type_synonym 'a atable = "nat set \<times> 'a table"
 type_synonym 'a query = "'a atable set"
 type_synonym vertices = "nat set"
 
+type_synonym 'a satable = "nat set \<times> ('a tuple \<Rightarrow> 'a tuple set)"
+type_synonym 'a squery = "nat set \<times> nat set \<times> 'a satable set"
+
 subsection \<open>Generic algorithm\<close>
 
 locale getIJ =
@@ -46,13 +49,23 @@ fun projectQuery :: "vertices \<Rightarrow> 'a query \<Rightarrow> 'a query" whe
   "projectQuery V s = Set.image (projectTable V) s"
 
 fun isSameIntersection :: "'a tuple \<Rightarrow> nat set \<Rightarrow> 'a tuple \<Rightarrow> bool" where
-  "isSameIntersection t1 s t2 = (\<forall>i\<in>s. t1!i = t2!i)"
+  "isSameIntersection t1 s t2 = (restrict s t1 = restrict s t2)"
 
 fun semiJoin :: "'a atable \<Rightarrow> (nat set \<times> 'a tuple) \<Rightarrow> 'a atable" where
   "semiJoin (s, tab) (st, tup) = (s, Set.filter (isSameIntersection tup (s \<inter> st)) tab)"
 
 fun newQuery :: "vertices \<Rightarrow> 'a query \<Rightarrow> (nat set \<times> 'a tuple) \<Rightarrow> 'a query" where
   "newQuery V Q (st, t) = Set.image (\<lambda>tab. projectTable V (semiJoin tab (st, t))) Q"
+
+fun squery_of_query :: "vertices \<Rightarrow> vertices \<Rightarrow> 'a query \<Rightarrow> 'a squery" where
+  "squery_of_query I J Q = (I, J, Set.image (\<lambda>(V, T).
+    (V, Equiv_Relations.proj (Set.image (\<lambda>t. (restrict (V \<inter> I) t, restrict J t)) T))) Q)"
+
+fun query_of_squery :: "'a squery \<Rightarrow> 'a tuple \<Rightarrow> 'a query" where
+  "query_of_squery (I, J, SQ) t = Set.image (\<lambda>(V, f). (V \<inter> J, f (restrict (V \<inter> I) t))) SQ"
+
+lemma squery_correct: "newQuery J Q (I, t) = query_of_squery (squery_of_query I J Q) t"
+  by (auto simp: Equiv_Relations.proj_def image_image intro!: image_cong)
 
 fun merge_option :: "'a option \<times> 'a option \<Rightarrow> 'a option" where
   "merge_option (None, None) = None"
@@ -80,6 +93,24 @@ function (sequential) genericJoin :: "vertices \<Rightarrow> 'a query \<Rightarr
 by pat_completeness auto
 termination
   by (relation "measure (\<lambda>(V, Q_pos, Q_neg). card V)") (auto simp add: getIJProperties)
+
+lemma genericJoin_code[code]:
+  "genericJoin V Q_pos Q_neg =
+    (if card V \<le> 1 then
+      (\<Inter>(_, x) \<in> Q_pos. x) - (\<Union>(_, x) \<in> Q_neg. x)
+    else
+      let (I, J) = getIJ Q_pos Q_neg V in
+      let Q_I_pos = projectQuery I (filterQuery I Q_pos) in
+      let Q_I_neg = filterQueryNeg I Q_neg in
+      let R_I = genericJoin I Q_I_pos Q_I_neg in
+      let Q_J_neg = Q_neg - Q_I_neg in
+      let Q_J_pos = filterQuery J Q_pos in
+      let SQ_J_pos = squery_of_query I J Q_J_pos in
+      let SQ_J_neg = squery_of_query I J Q_J_neg in
+      let X = {(t, genericJoin J (query_of_squery SQ_J_pos t) (query_of_squery SQ_J_neg t)) |
+        t . t \<in> R_I} in
+      (\<Union>(t, x) \<in> X. {merge xx t | xx . xx \<in> x}))"
+  by (subst genericJoin.simps) (simp only: Let_def squery_correct)
 
 fun wrapperGenericJoin :: "'a query \<Rightarrow> 'a query \<Rightarrow> 'a table" where
   "wrapperGenericJoin Q_pos Q_neg =

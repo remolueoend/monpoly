@@ -6,6 +6,7 @@ session "Generic_Join_Devel" (AFP) = HOL +
   theories
 	Generic_Join
 	Generic_Join_Correctness
+	Proj_Code
 	Examples_Join
   document_files
     "root.bib"
