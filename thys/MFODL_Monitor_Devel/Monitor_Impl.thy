@@ -4,6 +4,7 @@ theory Monitor_Impl
     Optimized_MTL
     "HOL-Library.Code_Target_Nat"
     Containers.Containers
+    "Generic_Join_Devel.Proj_Code"
 begin
 (*>*)
 
@@ -481,7 +482,7 @@ lemma mk_db_code[code]:
       split: if_splits option.splits)
 
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
-declare New_max.genericJoin.simps[folded remove_Union_def, code]
+declare New_max.genericJoin_code[folded remove_Union_def, code]
 declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
 
 (*<*)

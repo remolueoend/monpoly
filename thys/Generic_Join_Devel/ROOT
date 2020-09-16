@@ -1,5 +1,5 @@
 chapter AFP
-session "Generic_Join_Devel" (AFP) = HOL +
+session "Generic_Join_Devel" (AFP) = "Containers" +
   options [timeout = 1200]
   sessions
 	"MFOTL_Monitor_Devel"
