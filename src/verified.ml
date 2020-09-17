@@ -3322,6 +3322,8 @@ type 'a semilattice_set = Abs_semilattice_set of ('a -> 'a -> 'a);;
 type ('a, 'b, 'c) mstate_ext =
   Mstate_ext of nat * ('a, 'b) mformula * nat * 'c;;
 
+type ('b, 'a) comp_fun_commute = Abs_comp_fun_commute of ('b -> 'a -> 'a);;
+
 type 'a x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod =
   Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod of
     ('a option * ('a list * 'a list));;
@@ -4497,6 +4499,11 @@ let rec safe_regex (_B1, _B2, _B3, _B4, _B5)
 let rec inf_cfi _A
   = Abs_comp_fun_idem (inf _A.semilattice_inf_lattice.inf_semilattice_inf);;
 
+let rec sum_cfc _B
+  xa = Abs_comp_fun_commute
+         (comp (plus _B.monoid_add_comm_monoid_add.semigroup_add_monoid_add.plus_semigroup_add)
+           xa);;
+
 let rec productb _A _B
   dxs1 dxs2 =
     Abs_dlist
@@ -4513,13 +4520,6 @@ let rec interval
                        ((fun i -> less_eq_enat (Enat i) r),
                          not (equal_enat r Infinity_enat)))
                 else rep_I (failwith "undefined"));;
-
-let rec arg_min_list _B
-  f x1 = match f, x1 with f, [x] -> x
-    | f, x :: y :: zs ->
-        (let m = arg_min_list _B f (y :: zs) in
-          (if less_eq _B.order_linorder.preorder_order.ord_preorder (f x) (f m)
-            then x else m));;
 
 let rec init_args i n l r pos = Args_ext (i, n, l, r, pos, ());;
 
@@ -5148,77 +5148,83 @@ let rec to_mregex_exec
 
 let rec to_mregex r = to_mregex_exec r [];;
 
-let rec insort_key _B
-  f x xa2 = match f, x, xa2 with f, x, [] -> [x]
-    | f, x, y :: ys ->
-        (if less_eq _B.order_linorder.preorder_order.ord_preorder (f x) (f y)
-          then x :: y :: ys else y :: insort_key _B f x ys);;
+let rec comp_fun_commute_apply (Abs_comp_fun_commute x) = x;;
 
-let rec sort_key _B f xs = foldr (insort_key _B f) xs [];;
-
-let rec sorted_list_of_set (_A1, _A2, _A3, _A4)
-  = function
-    RBT_set rbt ->
+let rec set_fold_cfc (_A1, _A2)
+  f b x2 = match f, b, x2 with
+    f, b, RBT_set rbt ->
       (match ccompare _A2
         with None ->
-          failwith "sorted_list_of_set RBT_set: ccompare = None"
-            (fun _ -> sorted_list_of_set (_A1, _A2, _A3, _A4) (RBT_set rbt))
-        | Some _ -> sort_key _A4 (fun x -> x) (keysb _A2 rbt))
-    | DList_set dxs ->
+          failwith "set_fold_cfc RBT_set: ccompare = None"
+            (fun _ -> set_fold_cfc (_A1, _A2) f b (RBT_set rbt))
+        | Some _ -> foldb _A2 (comp_fun_commute_apply f) rbt b)
+    | f, b, DList_set dxs ->
         (match ceq _A1
           with None ->
-            failwith "sorted_list_of_set DList_set: ceq = None"
-              (fun _ -> sorted_list_of_set (_A1, _A2, _A3, _A4) (DList_set dxs))
-          | Some _ -> sort_key _A4 (fun x -> x) (list_of_dlist _A1 dxs))
-    | Set_Monad xs -> sort_key _A4 (fun x -> x) (remdups _A3 xs);;
+            failwith "set_fold_cfc DList_set: ceq = None"
+              (fun _ -> set_fold_cfc (_A1, _A2) f b (DList_set dxs))
+          | Some _ -> foldc _A1 (comp_fun_commute_apply f) dxs b)
+    | f, b, Set_Monad xs ->
+        (match ceq _A1
+          with None ->
+            failwith "set_fold_cfc Set_Monad: ceq = None"
+              (fun _ -> set_fold_cfc (_A1, _A2) f b (Set_Monad xs))
+          | Some eq -> fold (comp_fun_commute_apply f) (list_remdups eq xs) b)
+    | f, b, Collect_set p ->
+        failwith "set_fold_cfc not supported on Collect_set"
+          (fun _ -> set_fold_cfc (_A1, _A2) f b (Collect_set p))
+    | f, b, Complement a ->
+        failwith "set_fold_cfc not supported on Complement"
+          (fun _ -> set_fold_cfc (_A1, _A2) f b (Complement a));;
+
+let rec sum (_A1, _A2, _A3) _B
+  f a = (if finite (_A1, _A2, _A3) a
+          then set_fold_cfc (_A2, _A3) (sum_cfc _B f)
+                 (zero _B.monoid_add_comm_monoid_add.zero_monoid_add) a
+          else zero _B.monoid_add_comm_monoid_add.zero_monoid_add);;
 
 let rec score (_A1, _A2)
-  q i = (let relevant =
-           image ((ceq_prod
-                    (ceq_set
-                      (cenum_nat, ceq_nat,
-                        cproper_interval_nat.ccompare_cproper_interval))
-                    (ceq_set
-                      (cenum_list, (ceq_list (ceq_option _A1)),
-                        (cproper_interval_list
-                          (ccompare_option _A2)).ccompare_cproper_interval))),
-                   (ccompare_prod
-                     (ccompare_set
-                       (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
-                         set_impl_nat))
-                     (ccompare_set
-                       (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                         (cproper_interval_list (ccompare_option _A2)),
-                         set_impl_list))))
-             (ceq_nat, ccompare_nat, set_impl_nat)
-             (fun (_, a) ->
-               card (card_UNIV_list, (ceq_list (ceq_option _A1)),
-                      (ccompare_list (ccompare_option _A2)))
-                 a)
-             (filter
-               ((ceq_prod
-                  (ceq_set
-                    (cenum_nat, ceq_nat,
-                      cproper_interval_nat.ccompare_cproper_interval))
-                  (ceq_set
-                    (cenum_list, (ceq_list (ceq_option _A1)),
-                      (cproper_interval_list
-                        (ccompare_option _A2)).ccompare_cproper_interval))),
-                 (ccompare_prod
-                   (ccompare_set
-                     (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
-                       set_impl_nat))
-                   (ccompare_set
-                     (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                       (cproper_interval_list (ccompare_option _A2)),
-                       set_impl_list))))
-               (fun (sign, _) -> member (ceq_nat, ccompare_nat) i sign) q)
-           in
-         let a =
-           sorted_list_of_set (ceq_nat, ccompare_nat, equal_nat, linorder_nat)
-             relevant
-           in
-          foldl plus_nata zero_nata a);;
+  q i = sum ((finite_UNIV_prod (finite_UNIV_set finite_UNIV_nat)
+               (finite_UNIV_set finite_UNIV_list)),
+              (ceq_prod
+                (ceq_set
+                  (cenum_nat, ceq_nat,
+                    cproper_interval_nat.ccompare_cproper_interval))
+                (ceq_set
+                  (cenum_list, (ceq_list (ceq_option _A1)),
+                    (cproper_interval_list
+                      (ccompare_option _A2)).ccompare_cproper_interval))),
+              (ccompare_prod
+                (ccompare_set
+                  (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
+                    set_impl_nat))
+                (ccompare_set
+                  (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                    (cproper_interval_list (ccompare_option _A2)),
+                    set_impl_list))))
+          comm_monoid_add_nat
+          (fun (_, a) ->
+            card (card_UNIV_list, (ceq_list (ceq_option _A1)),
+                   (ccompare_list (ccompare_option _A2)))
+              a)
+          (filter
+            ((ceq_prod
+               (ceq_set
+                 (cenum_nat, ceq_nat,
+                   cproper_interval_nat.ccompare_cproper_interval))
+               (ceq_set
+                 (cenum_list, (ceq_list (ceq_option _A1)),
+                   (cproper_interval_list
+                     (ccompare_option _A2)).ccompare_cproper_interval))),
+              (ccompare_prod
+                (ccompare_set
+                  (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
+                    set_impl_nat))
+                (ccompare_set
+                  (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                    (cproper_interval_list (ccompare_option _A2)),
+                    set_impl_list))))
+            (fun (sign, _) -> member (ceq_nat, ccompare_nat) i sign) q);;
 
 let rec eval_until
   i nt x2 = match i, nt, x2 with i, nt, [] -> ([], [])
@@ -6048,12 +6054,36 @@ let rec merge_option = function (None, None) -> None
 
 let rec merge t1 t2 = mapa merge_option (zip t1 t2);;
 
-let rec arg_max_list
-  f l = (let m =
-           maxa (ceq_nat, ccompare_nat, lattice_nat, linorder_nat)
-             (set (ceq_nat, ccompare_nat, set_impl_nat) (mapa f l))
-           in
-          arg_min_list linorder_nat (fun x -> minus_nata m (f x)) l);;
+let rec insort_key _B
+  f x xa2 = match f, x, xa2 with f, x, [] -> [x]
+    | f, x, y :: ys ->
+        (if less_eq _B.order_linorder.preorder_order.ord_preorder (f x) (f y)
+          then x :: y :: ys else y :: insort_key _B f x ys);;
+
+let rec sort_key _B f xs = foldr (insort_key _B f) xs [];;
+
+let rec sorted_list_of_set (_A1, _A2, _A3, _A4)
+  = function
+    RBT_set rbt ->
+      (match ccompare _A2
+        with None ->
+          failwith "sorted_list_of_set RBT_set: ccompare = None"
+            (fun _ -> sorted_list_of_set (_A1, _A2, _A3, _A4) (RBT_set rbt))
+        | Some _ -> sort_key _A4 (fun x -> x) (keysb _A2 rbt))
+    | DList_set dxs ->
+        (match ceq _A1
+          with None ->
+            failwith "sorted_list_of_set DList_set: ceq = None"
+              (fun _ -> sorted_list_of_set (_A1, _A2, _A3, _A4) (DList_set dxs))
+          | Some _ -> sort_key _A4 (fun x -> x) (list_of_dlist _A1 dxs))
+    | Set_Monad xs -> sort_key _A4 (fun x -> x) (remdups _A3 xs);;
+
+let rec arg_max_list _B
+  f x1 = match f, x1 with f, [x] -> x
+    | f, x :: y :: zs ->
+        (let m = arg_max_list _B f (y :: zs) in
+          (if less_eq _B.order_linorder.preorder_order.ord_preorder (f m) (f x)
+            then x else m));;
 
 let rec max_getIJ (_A1, _A2)
   q_pos q_neg v =
@@ -6078,7 +6108,7 @@ let rec max_getIJ (_A1, _A2)
                     (cproper_interval_list (ccompare_option _A2)),
                     set_impl_list))))
             q_neg
-        then (let x = arg_max_list (score (_A1, _A2) q_pos) l in
+        then (let x = arg_max_list linorder_nat (score (_A1, _A2) q_pos) l in
                (insert (ceq_nat, ccompare_nat) x
                   (set_empty (ceq_nat, ccompare_nat)
                     (of_phantom set_impl_nata)),
@@ -6086,7 +6116,7 @@ let rec max_getIJ (_A1, _A2)
                    (insert (ceq_nat, ccompare_nat) x
                      (set_empty (ceq_nat, ccompare_nat)
                        (of_phantom set_impl_nata)))))
-        else (let x = arg_max_list (score (_A1, _A2) q_neg) l in
+        else (let x = arg_max_list linorder_nat (score (_A1, _A2) q_neg) l in
                (minus_set (ceq_nat, ccompare_nat) v
                   (insert (ceq_nat, ccompare_nat) x
                     (set_empty (ceq_nat, ccompare_nat)
@@ -6155,79 +6185,210 @@ let rec new_max_getIJ_genericJoin (_A1, _A2)
               projectQuery (_A1, _A2) i (filterQuery (_A1, _A2) i q_pos) in
             let q_I_neg = filterQueryNeg (_A1, _A2) i q_neg in
             let r_I = new_max_getIJ_genericJoin (_A1, _A2) i q_I_pos q_I_neg in
-            let q_J_neg =
-              minus_set
-                ((ceq_prod
-                   (ceq_set
-                     (cenum_nat, ceq_nat,
-                       cproper_interval_nat.ccompare_cproper_interval))
-                   (ceq_set
-                     (cenum_list, (ceq_list (ceq_option _A1)),
-                       (cproper_interval_list
-                         (ccompare_option _A2)).ccompare_cproper_interval))),
-                  (ccompare_prod
-                    (ccompare_set
-                      (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
-                        set_impl_nat))
-                    (ccompare_set
-                      (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                        (cproper_interval_list (ccompare_option _A2)),
-                        set_impl_list))))
-                q_neg q_I_neg
-              in
-            let q_J_pos = filterQuery (_A1, _A2) j q_pos in
-            let sQ_J_pos = squery_of_query (_A1, _A2) i j q_J_pos in
-            let sQ_J_neg = squery_of_query (_A1, _A2) i j q_J_neg in
-            let x =
-              image ((ceq_list (ceq_option _A1)),
-                      (ccompare_list (ccompare_option _A2)))
-                ((ceq_prod (ceq_list (ceq_option _A1))
-                   (ceq_set
-                     (cenum_list, (ceq_list (ceq_option _A1)),
-                       (cproper_interval_list
-                         (ccompare_option _A2)).ccompare_cproper_interval))),
-                  (ccompare_prod (ccompare_list (ccompare_option _A2))
-                    (ccompare_set
-                      (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                        (cproper_interval_list (ccompare_option _A2)),
-                        set_impl_list))),
-                  (set_impl_prod set_impl_list set_impl_set))
-                (fun t ->
-                  (t, new_max_getIJ_genericJoin (_A1, _A2) j
-                        (query_of_squery (_A1, _A2) sQ_J_pos t)
-                        (query_of_squery (_A1, _A2) sQ_J_neg t)))
-                r_I
-              in
-             sup_setb
-               (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
-                 (cproper_interval_list (ccompare_option _A2)), set_impl_list)
-               (image
-                 ((ceq_prod (ceq_list (ceq_option _A1))
-                    (ceq_set
-                      (cenum_list, (ceq_list (ceq_option _A1)),
-                        (cproper_interval_list
-                          (ccompare_option _A2)).ccompare_cproper_interval))),
-                   (ccompare_prod (ccompare_list (ccompare_option _A2))
-                     (ccompare_set
-                       (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                         (cproper_interval_list (ccompare_option _A2)),
-                         set_impl_list))))
-                 ((ceq_set
-                    (cenum_list, (ceq_list (ceq_option _A1)),
-                      (cproper_interval_list
-                        (ccompare_option _A2)).ccompare_cproper_interval)),
-                   (ccompare_set
-                     (finite_UNIV_list, (ceq_list (ceq_option _A1)),
-                       (cproper_interval_list (ccompare_option _A2)),
-                       set_impl_list)),
-                   set_impl_set)
-                 (fun (t, a) ->
-                   image ((ceq_list (ceq_option _A1)),
-                           (ccompare_list (ccompare_option _A2)))
-                     ((ceq_list (ceq_option _A1)),
-                       (ccompare_list (ccompare_option _A2)), set_impl_list)
-                     (fun xx -> merge xx t) a)
-                 x)));;
+             (if is_empty
+                   (card_UNIV_list, (ceq_list (ceq_option _A1)),
+                     (cproper_interval_list (ccompare_option _A2)))
+                   r_I
+               then set_empty
+                      ((ceq_list (ceq_option _A1)),
+                        (ccompare_list (ccompare_option _A2)))
+                      (of_phantom set_impl_lista)
+               else (let q_J_neg =
+                       minus_set
+                         ((ceq_prod
+                            (ceq_set
+                              (cenum_nat, ceq_nat,
+                                cproper_interval_nat.ccompare_cproper_interval))
+                            (ceq_set
+                              (cenum_list, (ceq_list (ceq_option _A1)),
+                                (cproper_interval_list
+                                  (ccompare_option
+                                    _A2)).ccompare_cproper_interval))),
+                           (ccompare_prod
+                             (ccompare_set
+                               (finite_UNIV_nat, ceq_nat, cproper_interval_nat,
+                                 set_impl_nat))
+                             (ccompare_set
+                               (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                 (cproper_interval_list (ccompare_option _A2)),
+                                 set_impl_list))))
+                         q_neg q_I_neg
+                       in
+                     let q_J_pos = filterQuery (_A1, _A2) j q_pos in
+                     let sQ_J_pos =
+                       squery_of_query (_A1, _A2) i j
+                         (image
+                           ((ceq_prod
+                              (ceq_set
+                                (cenum_nat, ceq_nat,
+                                  cproper_interval_nat.ccompare_cproper_interval))
+                              (ceq_set
+                                (cenum_list, (ceq_list (ceq_option _A1)),
+                                  (cproper_interval_list
+                                    (ccompare_option
+                                      _A2)).ccompare_cproper_interval))),
+                             (ccompare_prod
+                               (ccompare_set
+                                 (finite_UNIV_nat, ceq_nat,
+                                   cproper_interval_nat, set_impl_nat))
+                               (ccompare_set
+                                 (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                   (cproper_interval_list
+                                     (ccompare_option _A2)),
+                                   set_impl_list))))
+                           ((ceq_prod
+                              (ceq_set
+                                (cenum_nat, ceq_nat,
+                                  cproper_interval_nat.ccompare_cproper_interval))
+                              (ceq_set
+                                (cenum_list, (ceq_list (ceq_option _A1)),
+                                  (cproper_interval_list
+                                    (ccompare_option
+                                      _A2)).ccompare_cproper_interval))),
+                             (ccompare_prod
+                               (ccompare_set
+                                 (finite_UNIV_nat, ceq_nat,
+                                   cproper_interval_nat, set_impl_nat))
+                               (ccompare_set
+                                 (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                   (cproper_interval_list
+                                     (ccompare_option _A2)),
+                                   set_impl_list))),
+                             (set_impl_prod set_impl_set set_impl_set))
+                           (fun (va, t) ->
+                             (let vaa = inf_seta (ceq_nat, ccompare_nat) va i in
+                              let r =
+                                image ((ceq_list (ceq_option _A1)),
+(ccompare_list (ccompare_option _A2)))
+                                  ((ceq_list (ceq_option _A1)),
+                                    (ccompare_list (ccompare_option _A2)),
+                                    set_impl_list)
+                                  (restrict vaa) r_I
+                                in
+                               (va, filter
+                                      ((ceq_list (ceq_option _A1)),
+(ccompare_list (ccompare_option _A2)))
+                                      (fun ta ->
+member ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+  (restrict vaa ta) r)
+                                      t)))
+                           q_J_pos)
+                       in
+                     let sQ_J_neg =
+                       squery_of_query (_A1, _A2) i j
+                         (image
+                           ((ceq_prod
+                              (ceq_set
+                                (cenum_nat, ceq_nat,
+                                  cproper_interval_nat.ccompare_cproper_interval))
+                              (ceq_set
+                                (cenum_list, (ceq_list (ceq_option _A1)),
+                                  (cproper_interval_list
+                                    (ccompare_option
+                                      _A2)).ccompare_cproper_interval))),
+                             (ccompare_prod
+                               (ccompare_set
+                                 (finite_UNIV_nat, ceq_nat,
+                                   cproper_interval_nat, set_impl_nat))
+                               (ccompare_set
+                                 (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                   (cproper_interval_list
+                                     (ccompare_option _A2)),
+                                   set_impl_list))))
+                           ((ceq_prod
+                              (ceq_set
+                                (cenum_nat, ceq_nat,
+                                  cproper_interval_nat.ccompare_cproper_interval))
+                              (ceq_set
+                                (cenum_list, (ceq_list (ceq_option _A1)),
+                                  (cproper_interval_list
+                                    (ccompare_option
+                                      _A2)).ccompare_cproper_interval))),
+                             (ccompare_prod
+                               (ccompare_set
+                                 (finite_UNIV_nat, ceq_nat,
+                                   cproper_interval_nat, set_impl_nat))
+                               (ccompare_set
+                                 (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                   (cproper_interval_list
+                                     (ccompare_option _A2)),
+                                   set_impl_list))),
+                             (set_impl_prod set_impl_set set_impl_set))
+                           (fun (va, t) ->
+                             (let vaa = inf_seta (ceq_nat, ccompare_nat) va i in
+                              let r =
+                                image ((ceq_list (ceq_option _A1)),
+(ccompare_list (ccompare_option _A2)))
+                                  ((ceq_list (ceq_option _A1)),
+                                    (ccompare_list (ccompare_option _A2)),
+                                    set_impl_list)
+                                  (restrict vaa) r_I
+                                in
+                               (va, filter
+                                      ((ceq_list (ceq_option _A1)),
+(ccompare_list (ccompare_option _A2)))
+                                      (fun ta ->
+member ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+  (restrict vaa ta) r)
+                                      t)))
+                           q_J_neg)
+                       in
+                     let x =
+                       image ((ceq_list (ceq_option _A1)),
+                               (ccompare_list (ccompare_option _A2)))
+                         ((ceq_prod (ceq_list (ceq_option _A1))
+                            (ceq_set
+                              (cenum_list, (ceq_list (ceq_option _A1)),
+                                (cproper_interval_list
+                                  (ccompare_option
+                                    _A2)).ccompare_cproper_interval))),
+                           (ccompare_prod (ccompare_list (ccompare_option _A2))
+                             (ccompare_set
+                               (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                 (cproper_interval_list (ccompare_option _A2)),
+                                 set_impl_list))),
+                           (set_impl_prod set_impl_list set_impl_set))
+                         (fun t ->
+                           (t, new_max_getIJ_genericJoin (_A1, _A2) j
+                                 (query_of_squery (_A1, _A2) sQ_J_pos t)
+                                 (query_of_squery (_A1, _A2) sQ_J_neg t)))
+                         r_I
+                       in
+                      sup_setb
+                        (finite_UNIV_list, cenum_list,
+                          (ceq_list (ceq_option _A1)),
+                          (cproper_interval_list (ccompare_option _A2)),
+                          set_impl_list)
+                        (image
+                          ((ceq_prod (ceq_list (ceq_option _A1))
+                             (ceq_set
+                               (cenum_list, (ceq_list (ceq_option _A1)),
+                                 (cproper_interval_list
+                                   (ccompare_option
+                                     _A2)).ccompare_cproper_interval))),
+                            (ccompare_prod (ccompare_list (ccompare_option _A2))
+                              (ccompare_set
+                                (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                  (cproper_interval_list (ccompare_option _A2)),
+                                  set_impl_list))))
+                          ((ceq_set
+                             (cenum_list, (ceq_list (ceq_option _A1)),
+                               (cproper_interval_list
+                                 (ccompare_option
+                                   _A2)).ccompare_cproper_interval)),
+                            (ccompare_set
+                              (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                                (cproper_interval_list (ccompare_option _A2)),
+                                set_impl_list)),
+                            set_impl_set)
+                          (fun (t, a) ->
+                            image ((ceq_list (ceq_option _A1)),
+                                    (ccompare_list (ccompare_option _A2)))
+                              ((ceq_list (ceq_option _A1)),
+                                (ccompare_list (ccompare_option _A2)),
+                                set_impl_list)
+                              (fun xx -> merge xx t) a)
+                          x)))));;
 
 let rec new_max_getIJ_wrapperGenericJoin (_A1, _A2)
   q_pos q_neg =

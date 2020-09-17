@@ -57,16 +57,6 @@ fun semiJoin :: "'a atable \<Rightarrow> (nat set \<times> 'a tuple) \<Rightarro
 fun newQuery :: "vertices \<Rightarrow> 'a query \<Rightarrow> (nat set \<times> 'a tuple) \<Rightarrow> 'a query" where
   "newQuery V Q (st, t) = Set.image (\<lambda>tab. projectTable V (semiJoin tab (st, t))) Q"
 
-fun squery_of_query :: "vertices \<Rightarrow> vertices \<Rightarrow> 'a query \<Rightarrow> 'a squery" where
-  "squery_of_query I J Q = (I, J, Set.image (\<lambda>(V, T).
-    (V, Equiv_Relations.proj (Set.image (\<lambda>t. (restrict (V \<inter> I) t, restrict J t)) T))) Q)"
-
-fun query_of_squery :: "'a squery \<Rightarrow> 'a tuple \<Rightarrow> 'a query" where
-  "query_of_squery (I, J, SQ) t = Set.image (\<lambda>(V, f). (V \<inter> J, f (restrict (V \<inter> I) t))) SQ"
-
-lemma squery_correct: "newQuery J Q (I, t) = query_of_squery (squery_of_query I J Q) t"
-  by (auto simp: Equiv_Relations.proj_def image_image intro!: image_cong)
-
 fun merge_option :: "'a option \<times> 'a option \<Rightarrow> 'a option" where
   "merge_option (None, None) = None"
 | "merge_option (Some x, None) = Some x"
@@ -88,11 +78,24 @@ function (sequential) genericJoin :: "vertices \<Rightarrow> 'a query \<Rightarr
       let R_I = genericJoin I Q_I_pos Q_I_neg in
       let Q_J_neg = Q_neg - Q_I_neg in
       let Q_J_pos = filterQuery J Q_pos in
-      let X = {(t, genericJoin J (newQuery J Q_J_pos (I, t)) (newQuery J Q_J_neg (I, t))) | t . t \<in> R_I} in
+      let X = {(t, genericJoin J (newQuery J Q_J_pos (I, t)) (newQuery J Q_J_neg (I, t)))
+        | t . t \<in> R_I} in
       (\<Union>(t, x) \<in> X. {merge xx t | xx . xx \<in> x}))"
 by pat_completeness auto
 termination
   by (relation "measure (\<lambda>(V, Q_pos, Q_neg). card V)") (auto simp add: getIJProperties)
+
+fun squery_of_query :: "vertices \<Rightarrow> vertices \<Rightarrow> 'a query \<Rightarrow> 'a squery" where
+  "squery_of_query I J Q = (I, J, Set.image (\<lambda>(V, T).
+    (V, Equiv_Relations.proj (Set.image (\<lambda>t. (restrict (V \<inter> I) t, restrict J t)) T))) Q)"
+
+fun query_of_squery :: "'a squery \<Rightarrow> 'a tuple \<Rightarrow> 'a query" where
+  "query_of_squery (I, J, SQ) t = Set.image (\<lambda>(V, f). (V \<inter> J, f (restrict (V \<inter> I) t))) SQ"
+
+lemma squery_correct: "t \<in> R \<Longrightarrow> newQuery J Q (I, t) = query_of_squery (squery_of_query I J
+  (Set.image (\<lambda>(V, T). let R' = restrict (V \<inter> I) ` R in
+    (V, Set.filter (\<lambda>t. restrict (V \<inter> I) t \<in> R') T)) Q)) t"
+  by (auto simp: Equiv_Relations.proj_def image_image intro!: image_cong rev_image_eqI) simp+
 
 lemma genericJoin_code[code]:
   "genericJoin V Q_pos Q_neg =
@@ -103,14 +106,20 @@ lemma genericJoin_code[code]:
       let Q_I_pos = projectQuery I (filterQuery I Q_pos) in
       let Q_I_neg = filterQueryNeg I Q_neg in
       let R_I = genericJoin I Q_I_pos Q_I_neg in
-      let Q_J_neg = Q_neg - Q_I_neg in
-      let Q_J_pos = filterQuery J Q_pos in
-      let SQ_J_pos = squery_of_query I J Q_J_pos in
-      let SQ_J_neg = squery_of_query I J Q_J_neg in
-      let X = {(t, genericJoin J (query_of_squery SQ_J_pos t) (query_of_squery SQ_J_neg t)) |
-        t . t \<in> R_I} in
-      (\<Union>(t, x) \<in> X. {merge xx t | xx . xx \<in> x}))"
-  by (subst genericJoin.simps) (simp only: Let_def squery_correct)
+      (if Set.is_empty R_I then {} else
+        let Q_J_neg = Q_neg - Q_I_neg in
+        let Q_J_pos = filterQuery J Q_pos in
+        let SQ_J_pos = squery_of_query I J (Set.image (\<lambda>(V, T).
+          let V' = V \<inter> I; R' = restrict V' ` R_I in
+          (V, Set.filter (\<lambda>t. restrict V' t \<in> R') T)) Q_J_pos) in
+        let SQ_J_neg = squery_of_query I J (Set.image (\<lambda>(V, T).
+          let V' = V \<inter> I; R' = restrict V' ` R_I in
+          (V, Set.filter (\<lambda>t. restrict V' t \<in> R') T)) Q_J_neg) in
+        let X = {(t, genericJoin J (query_of_squery SQ_J_pos t) (query_of_squery SQ_J_neg t))
+          | t . t \<in> R_I} in
+        (\<Union>(t, x) \<in> X. {merge xx t | xx . xx \<in> x})))"
+  by (subst genericJoin.simps)
+     (fastforce simp only: Let_def Set.is_empty_def squery_correct split: if_splits)
 
 fun wrapperGenericJoin :: "'a query \<Rightarrow> 'a query \<Rightarrow> 'a table" where
   "wrapperGenericJoin Q_pos Q_neg =
@@ -130,17 +139,16 @@ end
 subsection \<open>An instantation\<close>
 
 fun score :: "'a query \<Rightarrow> nat \<Rightarrow> nat" where
-  "score Q i = (let relevant = Set.image (\<lambda>(_, x). card x) (Set.filter (\<lambda>(sign, _). i \<in> sign) Q) in
-    let l = sorted_list_of_set relevant in
-    foldl (+) 0 l
-)"
+  "score Q i = sum (\<lambda>(_, x). card x) (Set.filter (\<lambda>(sign, _). i \<in> sign) Q)"
 
-fun arg_max_list :: "('a \<Rightarrow> nat) \<Rightarrow> 'a list \<Rightarrow> 'a" where
-  "arg_max_list f l = (let m = Max (set (map f l)) in arg_min_list (\<lambda>x. m - f x) l)"
+fun arg_max_list :: "('a \<Rightarrow> ('b::linorder)) \<Rightarrow> 'a list \<Rightarrow> 'a" where
+  "arg_max_list f [x] = x"
+| "arg_max_list f (x#y#zs) = (let m = arg_max_list f (y#zs) in if f m \<le> f x then x else m)"
 
 lemma arg_max_list_element:
   assumes "length l \<ge> 1" shows "arg_max_list f l \<in> set l"
-  by (metis One_nat_def arg_max_list.simps arg_min_list_in assms le_imp_less_Suc less_irrefl list.size(3))
+  using assms
+  by (induction l rule: induct_list012) (auto simp: Let_def)
 
 fun max_getIJ :: "'a query \<Rightarrow> 'a query \<Rightarrow> vertices \<Rightarrow> vertices \<times> vertices" where
   "max_getIJ Q_pos Q_neg V = (
