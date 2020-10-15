@@ -54,6 +54,8 @@ type formula =
   | Equal of (term * term)
   | Less of (term * term)
   | LessEq of (term * term)
+  | Substring of (term * term)
+  | Matches of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
   | Neg of formula
@@ -231,6 +233,7 @@ let rec direct_subformulas = function
   | Equal (t1,t2) -> []
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
+  | Substring (t1, t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
@@ -310,7 +313,9 @@ let is_regular = function
 let rec is_mfodl = function 
   | Equal (t1,t2) 
   | Less (t1,t2) 
-  | LessEq (t1,t2) -> false
+  | LessEq (t1,t2) 
+  | Substring (t1,t2)
+  | Matches (t1,t2) -> false
   | Pred p -> false
   | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
@@ -337,7 +342,9 @@ let rec is_mfodl = function
 let rec free_vars = function
   | Equal (t1,t2)
   | Less (t1,t2)
-  | LessEq (t1,t2) ->
+  | LessEq (t1,t2)
+  | Matches (t1,t2)
+  | Substring (t1,t2) ->
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
   | Pred p -> Predicate.pvars p
   | Let (_,_,f) -> free_vars f
@@ -521,6 +528,10 @@ let string_of_formula str g =
         Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2
       | LessEq (t1,t2) ->
         Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2
+      | Substring (t1,t2) ->
+        Predicate.string_of_term t1 ^ " SUBSTRING " ^ Predicate.string_of_term t2
+      | Matches (t1,t2) ->
+        Predicate.string_of_term t1 ^ " MATCHES " ^ Predicate.string_of_term t2
       | Pred p -> Predicate.string_of_predicate p
       | _ ->
         (if par && not top then "(" else "")
@@ -532,7 +543,7 @@ let string_of_formula str g =
         | Exists (vl,f) ->
           "EXISTS " 
           ^ 
-          (Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl))
+          (Misc.string_of_list_ext "" "" "print_formula, " Predicate.string_of_term (List.map (fun v -> Var v) vl))
           ^
           ". "
           ^
@@ -775,6 +786,10 @@ let string_of_formula str g =
           "(" ^ (Predicate.string_of_term t1) ^ " < " ^ (Predicate.string_of_term t2) ^ ")"
         | LessEq (t1,t2) ->
           "(" ^ (Predicate.string_of_term t1) ^ " <= " ^ (Predicate.string_of_term t2) ^ ")"
+        | Substring (t1,t2) ->
+          "(" ^ (Predicate.string_of_term t1) ^ " SUBSTRING " ^ (Predicate.string_of_term t2) ^ ")"
+        | Matches (t1,t2) ->
+          "(" ^ (Predicate.string_of_term t1) ^ " MATCHES " ^ (Predicate.string_of_term t2) ^ ")"
         | Pred p -> Predicate.string_of_predicate p
         | _ ->
            

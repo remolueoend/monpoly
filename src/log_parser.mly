@@ -69,6 +69,7 @@
     | "int" -> TInt
     | "string" -> TStr
     | "float" -> TFloat
+    | "regexp" -> TRegexp
     | t -> let spos = Parsing.symbol_start_pos() in
            let str = Printf.sprintf
              "[Log_parser.check_fields] Unknown type %s in signature at line %d."

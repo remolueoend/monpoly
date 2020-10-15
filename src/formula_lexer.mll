@@ -64,8 +64,8 @@ let rational = ('-')? digit+ '.' digit*
 let unit =  digit+ letter
 let any_string = (letter | digit | '_' | '-' | '/' | ':' | '\'' | '\"')*
 let string = (letter | digit | '_') any_string
-let str_cst = ('\'' any_string '\'') | ('\"' any_string '\"') |
-    ('\'' '[' any_string ']' '\'') | ('\"' '[' any_string ']' '\"')
+let str_cst = ('\'' [^'\'']* '\'') | ('\"' [^'\"']* '\"')
+let regexp_cst = 'r' str_cst
 
 rule
   token = parse
@@ -91,11 +91,15 @@ rule
   | "_"                         { f "LD" lexbuf; LD }
   | "<-"                        { f "LARROW" lexbuf; LARROW }
   | "<="                        { f "LESSEQ" lexbuf; LESSEQ }
+  | "SUBSTRING"                 { f "SUBSTRING" lexbuf; SUBSTRING }
+  | "MATCHES"                   { f "MATCHES" lexbuf; MATCHES }
+  | "R2S"                       { f "R2S" lexbuf; R2S }
+  | "S2R"                       { f "S2R" lexbuf; S2R }
   | "<"                         { f "LESS" lexbuf; LESS }
   | ">="                        { f "GTREQ" lexbuf; GTREQ }
   | ">"                         { f "GTR" lexbuf; GTR }
   | "="                         { f "EQ" lexbuf; EQ }
-  | "MOD"                       { f "NOT" lexbuf; MOD }
+  | "MOD"                       { f "MOD" lexbuf; MOD }
   | "f2i"                       { f "F2I" lexbuf; F2I }
   | "i2f"                       { f "I2F" lexbuf; I2F }
   | "FALSE"                     { f "FALSE" lexbuf; FALSE }
@@ -131,6 +135,7 @@ rule
   | integer as lxm              { f "INT" lexbuf; INT (float_of_string lxm) }
   | rational as lxm             { f "RAT" lexbuf; RAT (float_of_string lxm) }
   | str_cst as lxm              { f "STR_CST" lexbuf; STR_CST lxm }
+  | regexp_cst as lxm           { f "REGEXP" lexbuf; REGEXP_CST lxm }
   | string as lxm               { f "STR" lexbuf; STR lxm }
 
   | "(*"                        { f "multi-line comment" lexbuf; comment lexbuf }

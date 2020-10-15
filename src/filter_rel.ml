@@ -56,7 +56,9 @@ let get_predicates f =
   let rec get_preds preds = function
     | Equal (t1,t2)
     | Less (t1,t2)
-    | LessEq (t1,t2) -> preds
+    | LessEq (t1,t2)
+    | Matches (t1,t2)
+    | Substring (t1,t2) -> preds
     | Pred p ->  p :: preds
     | Neg f
     | Exists (_,f)
@@ -129,7 +131,9 @@ let get_tuple_filter f =
   let rec get_tuples tuples = function (* formula *)
     | Equal (t1,t2)
     | Less (t1,t2)
-    | LessEq (t1,t2) -> tuples
+    | LessEq (t1,t2)
+    | Substring (t1,t2)
+    | Matches (t1,t2) -> tuples
     | Pred p ->  (tuples_from_args (get_name p) 0 (get_args p)) @ tuples
     | Neg f
     | Exists (_,f)

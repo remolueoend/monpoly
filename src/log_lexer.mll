@@ -80,7 +80,7 @@ let uc = ['A'-'Z']
 let letter = uc | lc
 let digit = ['0'-'9']
 let integer = digit*
-let string = (letter | digit | '_' | '[' | ']' | '/' | ':' | '-' | '.' | '!')* | '"'[^'"']*'"'
+let string = (letter | digit | '_' | '[' | ']' | '/' | ':' | '-' | '.' | '!')* | 'r'? '"' [^'"']* '"'
 
 rule
   token = parse

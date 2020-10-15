@@ -51,6 +51,8 @@ let elim_double_negation f =
     | Equal (t1, t2) -> Equal (t1, t2)
     | Less (t1, t2) -> Less (t1, t2)
     | LessEq (t1, t2) -> LessEq (t1, t2)
+    | Substring (t1, t2) -> Substring (t1, t2)
+    | Matches (t1, t2) -> Matches (t1, t2)
     | Pred p -> Pred p
     | Let (p,f1,f2) -> Let (p,elim f1, elim f2)
 
@@ -96,6 +98,8 @@ let simplify_terms f =
     | Equal (t1, t2) -> Equal (st t1, st t2)
     | Less (t1, t2) -> Less (st t1, st t2)
     | LessEq (t1, t2) -> LessEq (st t1, st t2)
+    | Substring (t1, t2) -> Substring (st t1, st t2)
+    | Matches (t1, t2) -> Matches (st t1, st t2)
 
     | Pred p ->
       let name, _, tlist = Predicate.get_info p in
@@ -140,7 +144,7 @@ let simplify_terms f =
 let rec elim_syntactic_sugar g =
   let rec elim f =
     match f with
-    | Equal _ | Less _ | LessEq _ | Pred _ -> f
+    | Equal _ | Less _ | LessEq _ | Pred _ | Substring _ | Matches _ -> f
 
     | Let (p,f1,f2) -> Let (p, elim f1, elim f2)
     | Neg f -> Neg (elim f)
@@ -207,7 +211,7 @@ let push_negation g =
 
     | Neg f -> Neg (push f)
     | Let (p,f1,f2) -> Let (p,f1, push f2)
-    | Equal _ | Less _ | LessEq _ | Pred _ -> f
+    | Equal _ | Less _ | LessEq _ | Pred _ | Substring _ | Matches _ -> f
     | And (f1, f2) -> And (push f1, push f2)
     | Or (f1, f2) -> Or (push f1, push f2)
     | Implies (f1, f2) -> Implies (push f1, push f2)
@@ -275,9 +279,13 @@ let is_special_case fv1 fv2 f2 =
     | Equal (_, _)
     | Less (_, _)
     | LessEq (_, _)
+    | Substring (_, _)
+    | Matches (_, _)
     | Neg (Equal (_, _))
     | Neg (Less (_, _))
     | Neg (LessEq (_, _))
+    | Neg (Substring (_, _))
+    | Neg (Matches (_, _))
       -> true
     | _ -> false
   else
@@ -300,6 +308,8 @@ let is_and_relop = function
     | Equal (_, _)
     | Less (_, _)
     | LessEq (_, _)
+    | Substring (_, _)
+    | Matches (_, _)
     | Neg (Equal (_, _))
     | Neg (Less (_, _))
     | Neg (LessEq (_, _)) -> true
@@ -328,7 +338,7 @@ let rec is_monitorable f =
      | _ -> (false, Some (f, msg_EQUAL))
     )
 
-  | Less _ | LessEq _ ->
+  | Less _ | LessEq _ | Substring _ ->
     (false, Some (f, msg_LESS))
 
   | Neg (Equal (t1, t2)) ->
@@ -453,6 +463,7 @@ let rec rr = function
     (match t1, t2 with
      | Var x, Cst c -> ([x], true)
      | _ -> ([], true))
+  | Substring (t1, t2) -> ([], true)
 
   | Neg (Equal (t1, t2)) ->
     (match t1, t2 with
@@ -769,6 +780,8 @@ function
   | Less _
   | LessEq _
   | Pred _
+  | Substring _
+  | Matches _
     -> true
 
   | Neg f
@@ -822,6 +835,8 @@ function
   | Less _
   | LessEq _
   | Pred _
+  | Substring _
+  | Matches _
     -> true
 
   | Neg f
@@ -866,6 +881,8 @@ let rec is_future = function
   | Equal _
   | Less _
   | LessEq _
+  | Substring _
+  | Matches _
   | Pred _
     -> false
 
@@ -932,6 +949,8 @@ and is_re_future = function
   | Less _
   | LessEq _
   | Pred _
+  | Substring _
+  | Matches _
     -> true
 
   | Neg f
@@ -969,7 +988,9 @@ let expand_let f =
   let rec expand_let_rec m = function
   | Equal _
   | Less _
-  | LessEq _ as f -> f
+  | LessEq _
+  | Matches _
+  | Substring _ as f -> f
 
   | Pred (p)  -> 
     let (n,_,ts) = get_info p in
@@ -1039,15 +1060,17 @@ let (|<=|) t1 t2 = match t1, t2 with
 let type_clash t1 t2 = match t1, t2 with 
    | TCst a, TCst b -> a<>b
    | TSymb (TNum,_), TCst TStr
-   | TCst TStr, TSymb (TNum,_) -> true
+   | TSymb (TNum,_), TCst TRegexp
+   | TCst TStr, TSymb (TNum,_)
+   | TCst TRegexp, TSymb (TNum,_) -> true
    | _ -> false
-
 let more_spec_type t1 t2 = if t1 |<=| t2 then t1 else t2 
 
 let string_of_type = function
 | TCst TInt -> "Int"
 | TCst TFloat -> "Float"
 | TCst TStr -> "String"
+| TCst TRegexp -> "Regexp"
 | TSymb (TNum,a) -> "(Num t" ^ (string_of_int a) ^ ") =>  t" ^ (string_of_int a)
 | TSymb (_,a) -> "t" ^ (string_of_int a)
 
@@ -1160,7 +1183,21 @@ let  type_check_term_debug d (sch, vars) typ term =
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TInt) t in
         type_error (TCst TInt) t_typ t;
         let v = propagate_constraints t_typ (TCst TInt) v in
-        (s,v,(TCst TFloat))
+        (s,v,(TCst TFloat))            
+      | R2s t as tt ->
+        type_error (TCst TStr) typ tt;
+        let vars = propagate_constraints typ (TCst TStr) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TRegexp) t in
+        type_error (TCst TRegexp) t_typ t;
+        let v = propagate_constraints t_typ (TCst TRegexp) v in
+        (s,v,(TCst TStr))         
+      | S2r t as tt ->
+        type_error (TCst TRegexp) typ tt;
+        let vars = propagate_constraints typ (TCst TRegexp) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TStr) t in
+        type_error (TCst TStr) t_typ t;
+        let v = propagate_constraints t_typ (TCst TStr) v in
+        (s,v,(TCst TRegexp))
       | UMinus t as tt -> 
         let exp_typ = new_type_symbol TNum vars in
         type_error exp_typ typ tt;
@@ -1233,6 +1270,25 @@ let rec type_check_formula (sch, vars) f =
     let v2 = propagate_constraints t2_typ exp_typ v2 in
     type_error t1_typ t2_typ t2;
     let v2 = propagate_constraints t1_typ t2_typ v2 in
+    (s2,v2,f)
+  | Substring (t1,t2) as f -> 
+    let exp_typ = TCst TStr in                                                (* Define constant *)
+    let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ t1 in    (* Type check t1 *)
+    type_error exp_typ t1_typ t1;                                             (* Type error exp, t1 *)
+    let v1 = propagate_constraints t1_typ exp_typ v1 in                       (* Propagate constraints t1, exp *)
+    let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ t2 in       (* Type check t2 *)
+    type_error exp_typ t2_typ t2;                                             (* Type error exp, t2 *)
+    let v2 = propagate_constraints t2_typ exp_typ v2 in                       (* Propagate constraints t2, exp *)                     
+    (s2,v2,f)
+  | Matches (t1,t2) as f ->  
+    let exp_typ_1 = TCst TStr in                                              (* Define constant *)
+    let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ_1 t1 in  (* Type check t1 *)
+    type_error exp_typ_1 t1_typ t1;                                           (* Type error exp, t1 *)
+    let v1 = propagate_constraints t1_typ exp_typ_1 v1 in                     (* Propagate constraints t1, exp *)  
+    let exp_typ_2 = TCst TRegexp in                                           (* Define constant *)
+    let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ_2 t2 in     (* Type check t2 *)
+    type_error exp_typ_2 t2_typ t2;                                           (* Type error exp, t2 *)
+    let v2 = propagate_constraints t2_typ exp_typ_2 v2 in                     (* Propagate constraints t2, exp *)                     
     (s2,v2,f)
   | Pred p as f ->
     let name = Predicate.get_name p in

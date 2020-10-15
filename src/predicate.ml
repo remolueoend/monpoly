@@ -49,9 +49,10 @@ type cst =
   | Str of string
   | Float of float
   | ZInt of Z.t
+  | Regexp of (string * Str.regexp)
 
-type tcst = TInt | TStr | TFloat
-type tcl = TNum | TAny 
+type tcst = TInt | TStr | TFloat | TRegexp
+type tcl = TNum | TAny
 type tsymb = TSymb of (tcl * int) | TCst of tcst
 
 (* type term =  *)
@@ -66,6 +67,8 @@ type 'a eterm =
   | Cst of cst
   | F2i of 'a eterm
   | I2f of 'a eterm
+  | R2s of 'a eterm
+  | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm
   | Minus of 'a eterm * 'a eterm
   | UMinus of 'a eterm
@@ -98,12 +101,14 @@ let type_of_cst = function
   | Str _ -> TStr
   | Float _ -> TFloat
   | ZInt _ -> TInt
+  | Regexp _ -> TRegexp
 
 let cst_of_str t v = 
   match t with
   | TInt   -> (try Int (int_of_string v) with Failure _ -> raise (Type_error ("Expecting int for type TInt [cst_of_ts]")))
   | TStr   -> Str v
-  | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TInt [cst_of_ts]")))
+  | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TFloat [cst_of_ts]")))
+  | TRegexp -> (try Regexp (v, Str.regexp v) with Failure _ -> raise (Type_error ("Expecting regexp for type TRegexp [cst_of_ts]")))
 
 let cst_of_str_basic v = 
   if (Str.string_match (Str.regexp "^\".+\"$") v 0) then begin
@@ -118,7 +123,7 @@ let cst_of_str_basic v =
 let rec tvars = function
   | Var v -> [v]
   | Cst c -> []
-  | F2i t | I2f t | UMinus t -> tvars t
+  | F2i t | I2f t | UMinus t | R2s t | S2r t -> tvars t
   | Plus (t1, t2)
   | Minus (t1, t2)
   | Mult (t1, t2)
@@ -133,6 +138,8 @@ let substitute_vars m =
   | Cst c as t -> t
   | F2i t -> F2i (substitute_vars_rec t)
   | I2f t -> I2f (substitute_vars_rec t)
+  | R2s t -> R2s (substitute_vars_rec t)
+  | S2r t -> S2r (substitute_vars_rec t)
   | UMinus t -> UMinus (substitute_vars_rec t)
   | Plus (t1, t2) -> Plus (substitute_vars_rec t1, substitute_vars_rec t2)
   | Minus (t1, t2) -> Minus (substitute_vars_rec t1, substitute_vars_rec t2)
@@ -152,6 +159,13 @@ let eval_eterm f t =
     | F2i t -> (match eval t with
         | Float c -> Int (int_of_float c)
         | _ -> failwith "[Predicate.eval_eterm, f2i] wrong types")
+    | R2s t -> (match eval t with
+        | Regexp (p, r) -> Str p
+        | _ -> failwith "[Predicate.eval_eterm, r2s] wrong types")
+    | S2r t -> (match eval t with
+        | Str s -> Regexp (s, try Str.regexp s
+            with _ -> failwith ("[Predicate.eval_eterm, s2r] Invalid Regexp '" ^ s ^ "'"))
+        | _ -> failwith "[Predicate.eval_eterm, r2s] wrong types")
     | Plus (t1, t2) ->
       (match eval t1, eval t2 with
        | Int c1, Int c2 -> Int (c1 + c2)
@@ -250,22 +264,26 @@ let print_tcst t =
   | TInt -> print_string "int"
   | TStr -> print_string "string"
   | TFloat -> print_string "float"
+  | TRegexp -> print_string "regexp"
 
 let string_of_var var =
   var
 
-let string_of_cst qm c =
-  match c with
+let rec string_of_cst qm c =
+  let format_string s =
+    if s = "" then "\"\""
+      else if qm then
+        if (s.[0] = '\"' && s.[(String.length s)-1] = '\"') then
+          s
+        else "\"" ^ s ^ "\""
+      else s
+  in match c with
   | Int i -> string_of_int i
   | Float f -> Printf.sprintf "%g" f
-  | Str s ->
-    if s = "" then "\"\""
-    else if qm then
-      if s.[0] = '\"' && s.[(String.length s)-1] = '\"' then s
-      else "\"" ^ s ^ "\""
-    else s
+  | Str s -> format_string s
   | ZInt i -> Z.to_string i
-
+  | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
+  
 
 let print_cst qm c = print_string (string_of_cst qm c)
 
@@ -279,6 +297,8 @@ let rec string_of_term term =
       | Cst c -> true, string_of_cst true c
       | F2i t ->  false, "f2i(" ^ (t2s true t) ^ ")"
       | I2f t ->  false, "i2f(" ^ (t2s true t) ^ ")"
+      | R2s t ->  false, "r2s(" ^ (t2s true t) ^ ")"
+      | S2r t ->  false, "s2r(" ^ (t2s true t) ^ ")"
       | UMinus t ->  false, "-" ^ (t2s' t)
       | Plus (t1, t2) -> false, (t2s' t1) ^ " + " ^ (t2s' t2)
       | Minus (t1, t2) -> false, (t2s' t1) ^ " - " ^ (t2s' t2)
@@ -312,6 +332,7 @@ let print_vartypes_list vartypes_list =
        | TInt -> print_string "int"
        | TStr -> print_string "string"
        | TFloat -> print_string "float"
+       | TRegexp -> print_string "regexp"
     )
     vartypes_list;
   print_newline()

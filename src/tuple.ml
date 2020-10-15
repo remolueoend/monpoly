@@ -70,11 +70,25 @@ let make_tuple2 sl tl =
           with Failure _ ->
             raise (Type_error ("Expected type int for field number "
                                ^ (string_of_int !pos))))
-       | TStr -> Str s
+       | TStr -> Str (
+         if (String.length s < 2 || s.[0] <> '\"' || s.[String.length s - 1] <> '\"') then s
+         else String.sub s 1 (String.length s - 2)
+       )
        | TFloat ->
          (try Float (float_of_string s)
           with Failure _ ->
             raise (Type_error ("Expected type float for field number "
+                               ^ (string_of_int !pos))))
+       | TRegexp ->
+         let s = (
+           let len = String.length s in
+           if (len < 3 || s.[0] <> 'r' || s.[1] <> '\"' || s.[len-1] <> '\"') then
+             raise (Type_error ("Invalid regexp for field number " ^ (string_of_int !pos)))
+           else String.sub s 2 (len-3)
+         ) in 
+         (try Regexp (s, Str.regexp s)
+          with _ ->
+            raise (Type_error ("Regexp compilation failed for field number "
                                ^ (string_of_int !pos))))
     )
     sl tl
@@ -187,6 +201,8 @@ let rec get_pos_term attr = function
   | Cst c -> Cst c
   | I2f t -> I2f (get_pos_term attr t)
   | F2i t -> F2i (get_pos_term attr t)
+  | R2s t -> R2s (get_pos_term attr t)
+  | S2r t -> S2r (get_pos_term attr t)
   | UMinus t -> UMinus (get_pos_term attr t)
   | Plus (t1, t2) -> Plus (get_pos_term attr t1, get_pos_term attr t2)
   | Minus (t1, t2) -> Minus (get_pos_term attr t1, get_pos_term attr t2)
@@ -195,15 +211,43 @@ let rec get_pos_term attr = function
   | Mod (t1, t2) -> Mod (get_pos_term attr t1, get_pos_term attr t2)
 
 
+let substring cs1 cs2 =
+  let s1, s2 = match cs1, cs2 with 
+    | Str s1, Str s2 -> s1, s2 
+    | _ -> failwith "[Tuple.substring] internal error, expected strings"
+  in
+  let l1 = String.length s1
+  and l2 = String.length s2 in
+  let rec aux i =
+    i >= 0 && (
+      let sub = String.sub s2 i l1 in
+      String.equal sub s1 || aux (i - 1)
+    )
+  in
+  l1 <= l2 && aux (l2 - l1)
+
+let matches cs cr =
+  let s, p, r = match cs, cr with
+    | Str s, Regexp (p, r) -> s, p, r
+    | _ -> failwith "[Tuple.matches] internal error, expected string as lhs and regexp as rhs"
+  in try
+    Str.search_forward (Str.regexp p) s 0; true
+  with Not_found -> false
+  
+
 let get_filter attr formula =
   let pos_t1, pos_t2 =
     match formula with
     | Equal (t1, t2)
     | Less (t1, t2)
     | LessEq (t1, t2)
+    | Substring (t1, t2)
+    | Matches (t1, t2)
     | Neg (Equal (t1, t2))
     | Neg (Less (t1, t2))
     | Neg (LessEq (t1, t2))
+    | Neg (Substring (t1, t2))
+    | Neg (Matches (t1, t2))
       ->
       get_pos_term attr t1, get_pos_term attr t2
     | _ -> failwith "[Tuple.get_filter, pos] internal error"
@@ -213,14 +257,14 @@ let get_filter attr formula =
     | Equal (t1, t2) -> (=)
     | Less (t1, t2) -> (<)
     | LessEq (t1, t2) -> (<=)
+    | Substring (t1, t2) -> substring
+    | Matches (t1, t2) -> matches
     | Neg (Equal (t1, t2)) -> (<>)
     | Neg (Less (t1, t2)) -> (>=)
     | Neg (LessEq (t1, t2)) -> (>)
     | _ -> failwith "[Tuple.get_filter, cond] internal error"
   in
   satisfiesf2 cond pos_t1 pos_t2
-
-
 
 (* return a transformation function on tuples *)
 let get_tf attr = function
