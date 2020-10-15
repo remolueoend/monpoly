@@ -1,0 +1,5 @@
+(EXISTS p. pattern(p) AND "szemljic@student.ethz.ch" MATCHES S2R(R2S(p)))
+OR
+(EXISTS t. text(t) AND t MATCHES S2R(R2S(r"äb+$")))
+OR
+(EXISTS p. pattern(p) AND R2S(p) = "äbcd")
