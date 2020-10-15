@@ -11,3 +11,4 @@
 /src/log_parser.mli
 /thys/*/*.ocaml
 /monpoly
+/src/monpoly
