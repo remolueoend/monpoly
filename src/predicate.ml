@@ -49,7 +49,7 @@ type cst =
   | Str of string
   | Float of float
   | ZInt of Z.t
-  | Regexp of (string * Str.regexp)
+  | Regexp of (string * Str.regexp) (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
 
 type tcst = TInt | TStr | TFloat | TRegexp
 type tcl = TNum | TAny
