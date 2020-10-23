@@ -57,7 +57,7 @@ let get_predicates f =
     | Equal (t1,t2)
     | Less (t1,t2)
     | LessEq (t1,t2) -> preds
-    | Pred p ->  p :: preds
+    | Pred p -> Predicate.get_name p :: preds
     | Neg f
     | Exists (_,f)
     | ForAll (_,f)
@@ -74,12 +74,15 @@ let get_predicates f =
     | Equiv (f1,f2)
     | Since (_,f1,f2)
     | Until (_,f1,f2) -> (get_preds preds f1) @ (get_preds preds f2)
-    | Frex (_, r) 
+    | Frex (_, r)
     | Prex (_, r) -> get_re_preds preds r
-    | Let (_,_,_) -> failwith "Internal error"
-  and get_re_preds preds = function 
+    | Let (p,f1,f2) ->
+        let pname = Predicate.get_name p in
+        let preds2 = List.filter (fun x -> x <> pname) (get_preds [] f2) in
+        get_preds preds f1 @ preds2
+  and get_re_preds preds = function
     | Wild -> preds
-    | Test f -> (get_preds preds f) 
+    | Test f -> (get_preds preds f)
     | Concat (r1,r2)
     | Plus (r1,r2) -> (get_re_preds preds r1) @ (get_re_preds preds r2)
     | Star r -> (get_re_preds preds r)
@@ -87,7 +90,7 @@ let get_predicates f =
   get_preds [] f
 
 let set_pred_names f =
-  predicate_filter := List.map Predicate.get_name (get_predicates f);
+  predicate_filter := get_predicates f;
   if Misc.debugging Dbg_filter then
     begin
       Printf.printf "--- predicate_filter: ---\n";
@@ -147,9 +150,13 @@ let get_tuple_filter f =
     | Equiv (f1,f2)
     | Since (_,f1,f2)
     | Until (_,f1,f2) -> get_tuples (get_tuples tuples f1) f2
-    | Frex (_,r) 
+    | Frex (_,r)
     | Prex (_,r) -> get_re_tuples tuples r
-    | Let (_,_,_) -> failwith "Internal error"
+    | Let (p,f1,f2) ->
+        let pname = Predicate.get_name p in
+        let tuples2 = List.filter (fun (x,_,_) -> x <> pname) (get_tuples [] f2)
+        in
+        get_tuples tuples f1 @ tuples2
   and get_re_tuples tuples = function (* regex *)
     | Wild -> tuples
     | Test f -> get_tuples tuples f
