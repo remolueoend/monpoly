@@ -53,11 +53,13 @@ let rec print_preds = function
     print_preds t
 
 let get_predicates f =
-  let rec get_preds preds = function
+  let rec get_preds bound preds = function
     | Equal (t1,t2)
     | Less (t1,t2)
     | LessEq (t1,t2) -> preds
-    | Pred p -> Predicate.get_name p :: preds
+    | Pred p ->
+        let pn = Predicate.get_name p in
+        if List.mem pn bound then preds else pn :: preds
     | Neg f
     | Exists (_,f)
     | ForAll (_,f)
@@ -67,27 +69,26 @@ let get_predicates f =
     | Eventually (_,f)
     | Once (_,f)
     | Always (_,f)
-    | PastAlways (_,f) -> get_preds preds f
+    | PastAlways (_,f) -> get_preds bound preds f
     | And (f1,f2)
     | Or (f1,f2)
     | Implies (f1,f2)
     | Equiv (f1,f2)
     | Since (_,f1,f2)
-    | Until (_,f1,f2) -> (get_preds preds f1) @ (get_preds preds f2)
+    | Until (_,f1,f2) -> get_preds bound (get_preds bound preds f1) f2
     | Frex (_, r)
-    | Prex (_, r) -> get_re_preds preds r
+    | Prex (_, r) -> get_re_preds bound preds r
     | Let (p,f1,f2) ->
-        let pname = Predicate.get_name p in
-        let preds2 = List.filter (fun x -> x <> pname) (get_preds [] f2) in
-        get_preds preds f1 @ preds2
-  and get_re_preds preds = function
+        let bound2 = Predicate.get_name p :: bound in
+        get_preds bound2 (get_preds bound preds f1) f2
+  and get_re_preds bound preds = function
     | Wild -> preds
-    | Test f -> (get_preds preds f)
+    | Test f -> get_preds bound preds f
     | Concat (r1,r2)
-    | Plus (r1,r2) -> (get_re_preds preds r1) @ (get_re_preds preds r2)
-    | Star r -> (get_re_preds preds r)
+    | Plus (r1,r2) -> get_re_preds bound (get_re_preds bound preds r1) r2
+    | Star r -> get_re_preds bound preds r
   in
-  get_preds [] f
+  Misc.remove_duplicates (get_preds [] [] f)
 
 let set_pred_names f =
   predicate_filter := get_predicates f;
@@ -129,11 +130,15 @@ let get_tuple_filter f =
       | Cst(c) -> (p,i,Is_cst(c)) :: (tuples_from_args p (i+1) t)
       | _ -> failwith "[Filter_rel.tuples_from_args] internal error"
   in
-  let rec get_tuples tuples = function (* formula *)
+  let rec get_tuples bound tuples = function (* formula *)
     | Equal (t1,t2)
     | Less (t1,t2)
     | LessEq (t1,t2) -> tuples
-    | Pred p ->  (tuples_from_args (get_name p) 0 (get_args p)) @ tuples
+    | Pred p ->
+        let pn = Predicate.get_name p in
+        if List.mem pn bound
+        then tuples
+        else (tuples_from_args pn 0 (get_args p)) @ tuples
     | Neg f
     | Exists (_,f)
     | ForAll (_,f)
@@ -143,26 +148,24 @@ let get_tuple_filter f =
     | Eventually (_,f)
     | Once (_,f)
     | Always (_,f)
-    | PastAlways (_,f) -> get_tuples tuples f
+    | PastAlways (_,f) -> get_tuples bound tuples f
     | And (f1,f2)
     | Or (f1,f2)
     | Implies (f1,f2)
     | Equiv (f1,f2)
     | Since (_,f1,f2)
-    | Until (_,f1,f2) -> get_tuples (get_tuples tuples f1) f2
+    | Until (_,f1,f2) -> get_tuples bound (get_tuples bound tuples f1) f2
     | Frex (_,r)
-    | Prex (_,r) -> get_re_tuples tuples r
+    | Prex (_,r) -> get_re_tuples bound tuples r
     | Let (p,f1,f2) ->
-        let pname = Predicate.get_name p in
-        let tuples2 = List.filter (fun (x,_,_) -> x <> pname) (get_tuples [] f2)
-        in
-        get_tuples tuples f1 @ tuples2
-  and get_re_tuples tuples = function (* regex *)
+        let bound2 = Predicate.get_name p :: bound in
+        get_tuples bound2 (get_tuples bound tuples f1) f2
+  and get_re_tuples bound tuples = function (* regex *)
     | Wild -> tuples
-    | Test f -> get_tuples tuples f
+    | Test f -> get_tuples bound tuples f
     | Concat (r1,r2)
-    | Plus (r1,r2) -> get_re_tuples (get_re_tuples tuples r1) r2
-    | Star r -> get_re_tuples tuples r
+    | Plus (r1,r2) -> get_re_tuples bound (get_re_tuples bound tuples r1) r2
+    | Star r -> get_re_tuples bound tuples r
   in
   (* filter out from stage1 filter
      all (p,i) instances which occur as variables somewhere within the formula
@@ -184,7 +187,7 @@ let get_tuple_filter f =
     in
     convert_type (remove_is_var (remove_duplicates filter_stage1))
   in
-  filter_is_var (get_tuples [] f)
+  filter_is_var (get_tuples [] [] f)
 
 let is_cst_from_csts csts =
   remove_duplicates (List.map (fun (p,i,c) -> (p,i)) csts)
