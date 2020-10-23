@@ -183,7 +183,7 @@
 
 formula:
   | LPA formula RPA                 { f "f()"; $2 }
-  | FALSE                           { f "FALSE"; Less (Cst (Int 0), Cst (Int 0)) }
+  | FALSE                           { f "FALSE"; Equal (Cst (Int 0), Cst (Int 1)) }
   | TRUE                            { f "TRUE"; Equal (Cst (Int 0), Cst (Int 0)) }
   | predicate                       { f "f(pred)"; $1 }
   | LET predicate EQ formula IN formula  
