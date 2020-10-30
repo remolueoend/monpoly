@@ -8,6 +8,7 @@ module Sk = Dllist
 module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
+type linfo = {mutable llast: (int * timestamp) NEval.cell}
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable ptsq: timestamp}
 type ninfo = {mutable init: bool}
@@ -67,6 +68,7 @@ type comp_two = relation -> relation -> relation
 type extformula =
   | ERel of relation
   | EPred of predicate * comp_one * info
+  | ELet of predicate * extformula * extformula * linfo
   | ENeg of extformula
   | EAnd of comp_two * extformula * extformula * ainfo
   | EOr of comp_two * extformula * extformula * ainfo

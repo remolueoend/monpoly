@@ -27,6 +27,11 @@ type state = (int * timestamp * bool * mformula * (int * timestamp) array * int 
   neval dllist is converted to an array representation.
  *)
 let ext_to_m ff neval =
+  let el2m linf =
+    if linf.llast == NEval.void then -2
+    else if not (NEval.is_last neval linf.llast) && NEval.get_next neval linf.llast == NEval.get_first_cell neval then -1
+    else NEval.get_index linf.llast neval
+  in
   let eze2m ezinf =
       {mezauxrels = ezinf.ezauxrels}
   in
@@ -83,6 +88,7 @@ let ext_to_m ff neval =
   let rec e2m = function
     | ERel           (rel)                                                  -> MRel         (rel)
     | EPred          (pred, c1, inf)                                        -> MPred        (pred, c1, inf)
+    | ELet           (pred, ext1, ext2, linf)                               -> MLet         (pred, e2m ext1, e2m ext2, el2m linf)
     | ENeg           (ext)                                                  -> MNeg         (e2m ext)
     | EAnd           (c2, ext1, ext2, ainf)                                 -> MAnd         (c2, (e2m ext1), (e2m ext2), ainf)
     | EOr            (c2, ext1, ext2, ainf)                                 -> MOr          (c2, (e2m ext1), (e2m ext2), ainf)
@@ -118,6 +124,14 @@ let m_to_ext mf neval =
     else crt   
   in    
 
+  let ml2e mlast =
+    let llast =
+      if      mlast = -2 then NEval.void
+      else if mlast = -2 then NEval.new_cell (-1,MFOTL.ts_invalid)  neval
+      else                    NEval.get_cell_at_index mlast neval
+    in
+    {llast = llast}
+  in
   let mez2e intv mezinf =
    (* contents of inf:
        ezlastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
@@ -275,6 +289,7 @@ let m_to_ext mf neval =
   let rec m2e = function
     | MRel           (rel)                                                 -> ERel         (rel)
     | MPred          (pred, c1, inf)                                       -> EPred        (pred, c1, inf)
+    | MLet           (pred, mf1, mf2, mlast)                               -> ELet         (pred, m2e mf1, m2e mf2, ml2e mlast)
     | MNeg           (mf)                                                  -> ENeg         ((m2e mf))
     | MAnd           (c2, mf1, mf2, ainf)                                  -> EAnd         (c2, (m2e mf1), (m2e mf2), ainf)
     | MOr            (c2, mf1, mf2, ainf)                                  -> EOr          (c2, (m2e mf1), (m2e mf2), ainf)

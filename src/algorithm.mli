@@ -55,15 +55,15 @@ val combine: string -> unit
 (** [resume log] loads the monitor state from file [resumefile] and
     then monitors the log [log]. *)
 
-val monitor_string: Db.schema -> string -> formula -> unit
+val monitor_string: string -> formula -> unit
 (** [monitor log f] monitors the log string [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
     the tuples satisfying formula [f]. *)
 
-val monitor: Db.schema -> string -> formula -> unit
+val monitor: string -> formula -> unit
 (** [monitor log f] monitors the log [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
     the tuples satisfying formula [f]. *)
 
 val test_filter: string -> formula -> unit
-val run_test: Db.schema -> string -> formula -> unit
+val run_test: string -> formula -> unit

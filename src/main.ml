@@ -144,7 +144,7 @@ let main () =
 
         let check_mon = if !verified then Verified_adapter.is_monitorable sign
                         else is_monitorable in
-        let f = if !verified then (check_let f; f) else expand_let f in
+        let _ = if !verified then check_let f else true in
         let is_mon, pf, vartypes = check_formula check_mon sign f in
         if !sigout then
           Predicate.print_vartypes_list vartypes
@@ -160,7 +160,7 @@ let main () =
               let _ = Log.get_signature !sigfile in
               (* Test Slicing implementation *)
               if !slicer_file <> "" then
-                Algorithm.run_test sign !slicer_file pf
+                Algorithm.run_test !slicer_file pf
               (* start monitoring *)
               else if !Algorithm.resumefile <> "" then
                 Algorithm.resume !logfile
@@ -169,7 +169,7 @@ let main () =
               else if !verified then
                 Algorithm_verified.monitor sign !logfile pf
               else
-                Algorithm.monitor sign !logfile pf
+                Algorithm.monitor !logfile pf
           end
       end
 

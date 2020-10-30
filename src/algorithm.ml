@@ -588,6 +588,45 @@ let neval_get_crt neval last crt q =
   else
     NEval.get_next neval last
 
+let add_let_index f n rels =
+  let rec update = function
+    | EPred (p, comp, inf) ->
+      if Predicate.get_name p = n then
+        List.iter (fun (i,tsi,rel) -> Queue.add (i,tsi, comp rel) inf) rels
+      else ()
+
+    | ELet (p,f1,f2,inf) ->
+      update f1;
+      if Predicate.get_name p = n then () else update f2
+
+    | ERel _ -> ()
+
+    | ENeg f1
+    | EExists (_,f1)
+    | EAggOnce (f1,_,_,_,_,_)
+    | EAggMMOnce (f1,_,_,_,_,_)
+    | EAggreg (_,f1)
+    | ENext (_,f1,_)
+    | EPrev (_,f1,_)
+    | EOnceA (_,f1,_)
+    | EOnceZ (_,f1,_)
+    | EOnce (_,f1,_)
+    | EEventuallyZ (_,f1,_)
+    | EEventually (_,f1,_) ->
+      update f1
+
+    | EAnd (_,f1,f2,_)
+    | EOr (_,f1,f2,_)
+    | ESinceA (_,_,f1,f2,_)
+    | ESince (_,_,f1,f2,_)
+    | ENUntil (_,_,f1,f2,_)
+    | EUntil (_,_,f1,f2,_) ->
+      update f1;
+      update f2
+  in
+  update f
+
+
 
 (* Arguments:
    - [f] the current formula
@@ -619,9 +658,29 @@ let rec eval f neval crt discard =
         print_predinf  ": " inf
       end;
 
-    let (cq,ctsq,rel) = Queue.pop inf in
-    assert (cq = q && ctsq = tsq);
-    Some rel
+    if Queue.is_empty inf
+    then None
+    else begin
+      let (cq,ctsq,rel) = Queue.pop inf in
+      assert (cq = q && ctsq = tsq);
+      Some rel
+    end
+
+  | ELet (p, f1, f2, inf) ->
+      let rec eval_f1 rels =
+        if neval_is_last neval inf.llast then
+          rels
+        else
+          let crt1 = neval_get_crt neval inf.llast crt q in
+          let (i, tsi) = NEval.get_data crt1 in
+          match eval f1 neval crt1 false with
+          | Some rel ->
+            inf.llast <- crt1;
+            eval_f1 ((i, tsi, rel) :: rels)
+          | None -> rels
+      in
+      add_let_index f2 (Predicate.get_name p) (List.rev (eval_f1 []));
+      eval f2 neval crt discard
 
   | ENeg f1 ->
     (match eval f1 neval crt discard with
@@ -1273,23 +1332,30 @@ let rec eval f neval crt discard =
     e_update ()
 
 let add_index f i tsi db =
-  let rec update = function
+  let rec update lets = function
     | EPred (p, comp, inf) ->
-      let rel =
-        (try
-           let t = Db.get_table db p in
-           Table.get_relation t
-         with Not_found ->
-         match Predicate.get_name p with
-         | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
-         | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
-         | "tpts" ->
-           Relation.singleton (Tuple.make_tuple [Int i; Float tsi])
-         | _ -> Relation.empty
-        )
-      in
-      let rel = comp rel in
-      Queue.add (i,tsi,rel) inf
+      if List.mem (Predicate.get_name p) lets
+      then ()
+      else
+        let rel =
+          (try
+             let t = Db.get_table db p in
+             Table.get_relation t
+           with Not_found ->
+           match Predicate.get_name p with
+           | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
+           | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
+           | "tpts" ->
+             Relation.singleton (Tuple.make_tuple [Int i; Float tsi])
+           | _ -> Relation.empty
+          )
+        in
+        let rel = comp rel in
+        Queue.add (i,tsi,rel) inf
+
+    | ELet (p,f1,f2,inf) ->
+      update lets f1;
+      update (Predicate.get_name p :: lets) f2
 
     | ERel _ -> ()
 
@@ -1305,7 +1371,7 @@ let add_index f i tsi db =
     | EOnce (_,f1,_)
     | EEventuallyZ (_,f1,_)
     | EEventually (_,f1,_) ->
-      update f1
+      update lets f1
 
     | EAnd (_,f1,f2,_)
     | EOr (_,f1,f2,_)
@@ -1313,10 +1379,10 @@ let add_index f i tsi db =
     | ESince (_,_,f1,f2,_)
     | ENUntil (_,_,f1,f2,_)
     | EUntil (_,_,f1,f2,_) ->
-      update f1;
-      update f2
+      update lets f1;
+      update lets f2
   in
-  update f
+  update [] f
 
 let process_index ff closed neval i =
   if !Misc.verbose then
@@ -1454,10 +1520,13 @@ let aggreg_empty_rel op glist t =
 
 
 
-let rec add_ext dbschema f =
+let rec add_ext f =
   match f with
   | Pred p ->
     EPred (p, Relation.eval_pred p, Queue.create())
+
+  | Let (p, f1, f2) ->
+    ELet (p, add_ext f1, add_ext f2, {llast = NEval.void})
 
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in
@@ -1467,10 +1536,10 @@ let rec add_ext dbschema f =
     let rel = Relation.eval_not_equal t1 t2 in
     ERel rel
 
-  | Neg f -> ENeg (add_ext dbschema f)
+  | Neg f -> ENeg (add_ext f)
 
   | Exists (vl, f1) ->
-    let ff1 = add_ext dbschema f1 in
+    let ff1 = add_ext f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Pervasives.compare pos in
@@ -1478,8 +1547,8 @@ let rec add_ext dbschema f =
     EExists (comp,ff1)
 
   | Or (f1, f2) ->
-    let ff1 = add_ext dbschema f1 in
-    let ff2 = add_ext dbschema f2 in
+    let ff1 = add_ext f1 in
+    let ff2 = add_ext f2 in
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
     let comp =
@@ -1499,13 +1568,13 @@ let rec add_ext dbschema f =
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
-    let ff1 = add_ext dbschema f1 in
+    let ff1 = add_ext f1 in
     let f2_is_special = Rewriting.is_special_case attr1 attr2 f2 in
     let ff2 =
       if f2_is_special then ERel Relation.empty
       else match f2 with
-        | Neg f2' -> add_ext dbschema f2'
-        | _ -> add_ext dbschema f2
+        | Neg f2' -> add_ext f2'
+        | _ -> add_ext f2
     in
     let comp =
       if f2_is_special then
@@ -1688,7 +1757,7 @@ let rec add_ext dbschema f =
     }
     in
 
-    EAggOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
+    EAggOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
   | Aggreg (t_y, y, (Min as op), x, glist, Once (intv, f))
@@ -1796,7 +1865,7 @@ let rec add_ext dbschema f =
     }
     in
 
-    EAggMMOnce ((add_ext dbschema f), intv, init_state, update_state_old, update_state_new, get_result)
+    EAggMMOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
 
 
 
@@ -1830,7 +1899,7 @@ let rec add_ext dbschema f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext dbschema f)
+    EAggreg (comp, add_ext f)
 
   | Aggreg (t_y, y, Med, x, glist, f) ->
     let attr = MFOTL.free_vars f in
@@ -1858,7 +1927,7 @@ let rec add_ext dbschema f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext dbschema f)
+    EAggreg (comp, add_ext f)
 
   | Aggreg (t_y, y, op, x, glist, f)  ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -1891,14 +1960,14 @@ let rec add_ext dbschema f =
           ) map;
         !new_rel
     in
-    EAggreg (comp, add_ext dbschema f)
+    EAggreg (comp, add_ext f)
 
   | Prev (intv, f) ->
-    let ff = add_ext dbschema f in
+    let ff = add_ext f in
     EPrev (intv, ff, {ptsq = MFOTL.ts_invalid})
 
   | Next (intv, f) ->
-    let ff = add_ext dbschema f in
+    let ff = add_ext f in
     ENext (intv, ff, {init = true})
 
   | Since (intv,f1,f2) ->
@@ -1919,8 +1988,8 @@ let rec add_ext dbschema f =
         let matches2 = Table.get_matches attr2 attr1 in
         fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
     in
-    let ff1 = add_ext dbschema ef1 in
-    let ff2 = add_ext dbschema f2 in
+    let ff1 = add_ext ef1 in
+    let ff2 = add_ext f2 in
     if snd intv = Inf then
       let inf = {sres = Relation.empty; sarel2 = None; saauxrels = Mqueue.create()} in
       ESinceA (comp,intv,ff1,ff2,inf)
@@ -1929,12 +1998,12 @@ let rec add_ext dbschema f =
       ESince (comp,intv,ff1,ff2,inf)
 
   | Once ((_, Inf) as intv, f) ->
-    let ff = add_ext dbschema f in
+    let ff = add_ext f in
     EOnceA (intv,ff,{ores = Relation.empty;
                      oaauxrels = Mqueue.create()})
 
   | Once (intv,f) ->
-    let ff = add_ext dbschema f in
+    let ff = add_ext f in
     if fst intv = CBnd MFOTL.ts_null then
       EOnceZ (intv,ff,{oztree = LNode {l = -1;
                                        r = -1;
@@ -1957,8 +2026,8 @@ let rec add_ext dbschema f =
        | _ -> f1,false
       )
     in
-    let ff1 = add_ext dbschema ef1 in
-    let ff2 = add_ext dbschema f2 in
+    let ff1 = add_ext ef1 in
+    let ff2 = add_ext f2 in
     if neg then
       let comp =
         let posl = List.map (fun v -> Misc.get_pos v attr2) attr1 in
@@ -1988,7 +2057,7 @@ let rec add_ext dbschema f =
 
 
   | Eventually (intv,f) ->
-    let ff = add_ext dbschema f in
+    let ff = add_ext f in
     if fst intv = CBnd MFOTL.ts_null then
       EEventuallyZ (intv,ff,{eztree = LNode {l = -1;
                                              r = -1;
@@ -2303,10 +2372,10 @@ let rec check_log lexbuf ff closed neval i =
   loop ff i
 
 
-let monitor_lexbuf dbschema  lexbuf f =
-  check_log lexbuf (add_ext dbschema f) (MFOTL.free_vars f = []) (NEval.empty()) 0
+let monitor_lexbuf lexbuf f =
+  check_log lexbuf (add_ext f) (MFOTL.free_vars f = []) (NEval.empty()) 0
 
-let monitor_string dbschema log f =
+let monitor_string log f =
   (let lexbuf = Lexing.from_string log in
    lastts := MFOTL.ts_invalid;
    crt_tp := -1;
@@ -2314,12 +2383,12 @@ let monitor_string dbschema log f =
    Log.tp := 0;
    Log.skipped_tps := 0;
    Log.last := false;
-   monitor_lexbuf dbschema lexbuf f;
+   monitor_lexbuf lexbuf f;
    Lexing.flush_input lexbuf;)
 
-let monitor dbschema logfile =
+let monitor logfile =
   let lexbuf = Log.log_open logfile in
-  monitor_lexbuf dbschema lexbuf
+  monitor_lexbuf lexbuf
 
 
 let test_filter logfile f =
@@ -2437,7 +2506,7 @@ let rec test_log lexbuf ff evaluation =
   loop ff
 
 
-let run_test dbschema testfile formula =
+let run_test testfile formula =
   let lexbuf = Log.log_open testfile in
   Printf.printf "Testing slicing configurations\n";
-  test_log lexbuf (add_ext dbschema formula) (NEval.empty())
+  test_log lexbuf (add_ext formula) (NEval.empty())
