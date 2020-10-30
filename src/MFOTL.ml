@@ -234,6 +234,7 @@ let rec direct_subformulas = function
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
   | Substring (t1, t2) -> []
+  | Matches (t1, t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
@@ -543,7 +544,7 @@ let string_of_formula str g =
         | Exists (vl,f) ->
           "EXISTS " 
           ^ 
-          (Misc.string_of_list_ext "" "" "print_formula, " Predicate.string_of_term (List.map (fun v -> Var v) vl))
+          (Misc.string_of_list_ext "" "" ", " Predicate.string_of_term (List.map (fun v -> Var v) vl))
           ^
           ". "
           ^
