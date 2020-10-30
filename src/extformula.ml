@@ -8,6 +8,7 @@ module Sk = Dllist
 module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
+type linfo = {mutable llast: (int * timestamp) NEval.cell}
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable ptsq: timestamp}
 type ninfo = {mutable init: bool}
@@ -71,6 +72,7 @@ type comp_two = relation -> relation -> relation
 type extformula =
   | ERel of relation
   | EPred of predicate * comp_one * info
+  | ELet of predicate * extformula * extformula * linfo
   | ENeg of extformula
   | EAnd of comp_two * extformula * extformula * ainfo
   | EOr of comp_two * extformula * extformula * ainfo
@@ -100,6 +102,7 @@ type extformula =
   let rec contains_eventually = function
   | ERel           (rel)                                      -> false
   | EPred          (p, comp, inf)                             -> false
+  | ELet           (p, f1, f2, inf)                           -> contains_eventually f1 || contains_eventually f2
   | ENeg           (f1)                                       -> contains_eventually f1
   | EAnd           (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
   | EOr            (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
@@ -176,6 +179,17 @@ let print_predinf str inf =
   print_string str;
   print_inf inf;
   print_newline()
+
+let print_linf str inf =
+  Printf.printf "%s{" str;
+  if inf.llast == NEval.void then
+    print_string "last=None; "
+  else
+    begin
+      let (i,tsi) = NEval.get_data inf.llast in
+      Printf.printf "last=(%d,%s)" i (MFOTL.string_of_ts tsi)
+    end;
+  print_endline "}"
 
 let print_ozinf str inf =
   print_string str;
@@ -384,6 +398,13 @@ let print_extf str ff =
 
         | _ ->
           (match f with
+            | ELet (p,f1,f2,linf) ->
+              print_string "LET: ";
+              Predicate.print_predicate p;
+              print_linf " linf=" linf;
+              print_f_rec (d+1) f1;
+              print_f_rec (d+1) f2
+
             | EAnd (_,f1,f2,ainf) ->
               print_ainf "AND: ainf=" ainf.arel;
               print_string "\n";

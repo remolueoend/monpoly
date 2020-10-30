@@ -1518,7 +1518,13 @@ let aggreg_empty_rel op glist t =
   else
     Relation.empty
 
+<<<<<<< HEAD
+let rec add_ext dbschema f =
+=======
+
+
 let rec add_ext f =
+>>>>>>> master
   match f with
   | Pred p ->
     EPred (p, Relation.eval_pred p, Queue.create())

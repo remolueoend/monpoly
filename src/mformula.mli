@@ -34,6 +34,7 @@ type muninfo = { mlast1   :  int;
 type mformula =
   | MRel of relation
   | MPred of predicate * comp_one * info
+  | MLet of predicate * mformula * mformula * int
   | MNeg of mformula
   | MAnd of comp_two * mformula * mformula * ainfo
   | MOr of comp_two * mformula * mformula * ainfo

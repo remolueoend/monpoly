@@ -1518,6 +1518,8 @@ let aggreg_empty_rel op glist t =
   else
     Relation.empty
 
+
+
 let rec add_ext f =
   match f with
   | Pred p ->
@@ -2071,7 +2073,7 @@ let rec add_ext f =
                             elastev = NEval.void;
                             eauxrels = Dllist.empty()})
 
-  | _ -> failwith ("[add_ext] internal error")
+  | _ -> failwith "[add_ext] internal error"
 
 (*
   STATE MANAGEMENT CALLS
