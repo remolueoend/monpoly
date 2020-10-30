@@ -344,7 +344,11 @@ let rec is_monitorable f =
     then (true, None)
     else (false, Some (f, msg_PRED))
 
-  | Let (_,_,_) -> failwith "[Rewriting.is_monitorable] internal error"
+  | Let (p,f1,f2) ->
+    let (is_mon1, r1) = is_monitorable f1 in
+    if not is_mon1
+    then (is_mon1, r1)
+    else is_monitorable f2
 
   | Neg f1 ->
     if MFOTL.free_vars f1 = [] then
