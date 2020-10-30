@@ -90,8 +90,10 @@ let convert_formula dbschema f =
   | Less (t1,t2) -> Less (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | LessEq (t1,t2) -> LessEq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Pred (p,_,tl) -> Pred (p, List.map (fun t -> convert_term fvl bvl t) tl)
-  | Let (p,f1,f2) -> let (n,a,ts) = Predicate.get_info p in
-                     Let (n, convert_formula_vars (MFOTL.free_vars f1) [] f1, convert_formula_vars fvl bvl f2)
+  | Let (p,f1,f2) ->
+      let (n,a,ts) = Predicate.get_info p in
+      let fvl1 = List.flatten (List.map Predicate.tvars ts) in
+      Let (n, convert_formula_vars fvl1 [] f1, convert_formula_vars fvl bvl f2)
   | Neg f -> Neg (convert_formula_vars fvl bvl f)
   | And (f1,f2) -> And (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
   | Or (f1,f2) -> Or (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)

@@ -918,7 +918,7 @@ and is_re_future = function
   | Plus (r1,r2) -> (is_re_future r1) || (is_re_future r2)
   | Star r -> (is_re_future r)
 
-  let rec check_let = function
+let rec check_let = function
   | Let (p,f1,f2) -> 
     let (n,a,ts) = get_info p in
     let check_params = List.for_all (fun t -> match t with Var _ -> true | _ -> false) ts in
