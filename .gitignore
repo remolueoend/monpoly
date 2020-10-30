@@ -3,6 +3,9 @@
 *.cmx
 .*
 *~
+*.mfotl
+*.sig
+*.log
 /src/formula_lexer.ml
 /src/formula_parser.ml
 /src/formula_parser.mli
