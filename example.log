@@ -1,6 +1,0 @@
-@0 text ("äbc")
-@1 pattern (r"^[a-z]+$")
-@2 text ("äbbb")
-@3 pattern (r"^[a-z]+@[a-z.]+$")
-@4 pattern (r"äbcd")
-@5 pattern (r"äbcde")
