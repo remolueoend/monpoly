@@ -518,7 +518,9 @@ let comp_agg_once tsq intv state update_state_old update_state_new get_result re
           begin
             ignore (Queue.pop state.other_rels);
             let arel' = update_state_new state arel in
-            Queue.push (tsj, arel') state.tw_rels;
+            (* keep old tuples around if and only if the interval is bounded *)
+            if snd intv <> Inf then
+              Queue.push (tsj, arel') state.tw_rels;
             consider_other_rels ()
           end
           (* else, that is, not (MFOTL.in_right_ext diff intv) *)
@@ -1663,7 +1665,7 @@ let rec add_ext f =
         else len = 1, Med_aux (len - 1, remove cst xlist)
     in
 
-    let update_state_new state rel =
+    let update_state_new_mset state rel =
       let new_rel = ref [] in
       Relation.iter
         (fun tuple ->
@@ -1685,6 +1687,28 @@ let rec add_ext f =
                Hashtbl.add state.hres gtuple (init_agg_values cst)
         ) rel;
       !new_rel
+    in
+
+    (* optimized implementation for unbounded intervals *)
+    let update_state_new_all state rel =
+      Relation.iter
+        (fun tuple ->
+           let gtuple = Tuple.projections posG tuple in
+           let cst = Tuple.get_at_pos tuple posx in
+           try
+             let agg_values = Hashtbl.find state.hres gtuple in
+             let _, new_values = update_agg_values true agg_values cst in
+             Hashtbl.replace state.hres gtuple new_values
+           with Not_found ->
+             Hashtbl.add state.hres gtuple (init_agg_values cst)
+        ) rel;
+      []
+    in
+
+    let update_state_new =
+      if snd intv = Inf
+      then update_state_new_all
+      else update_state_new_mset
     in
 
     let update_state_old state rel =
