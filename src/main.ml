@@ -93,6 +93,7 @@ let testfilteropt = ref false
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
 let verified = ref false
+let unfold_let = ref false
 
 (* Printexc.record_backtrace true;; *)
 
@@ -142,7 +143,7 @@ let main () =
         let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
 
-        let _ = if !verified then check_let f else true in
+        let f = if !unfold_let then expand_let f else (check_let f; f) in
         let check_mon = if !verified then Verified_adapter.is_monitorable sign
                         else is_monitorable in
         let is_mon, pf, vartypes = check_formula check_mon sign f in
@@ -200,6 +201,7 @@ let _ =
     "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
     "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
     "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
+    "-unfold_let", Arg.Set unfold_let, "\tUnfold LET expressions in the formula";
   ]
     (fun _ -> ())
     usage_string;
