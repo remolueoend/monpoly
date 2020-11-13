@@ -72,7 +72,7 @@ type comp_two = relation -> relation -> relation
 type extformula =
   | ERel of relation
   | EPred of predicate * comp_one * info
-  | ELet of predicate * extformula * extformula * linfo
+  | ELet of predicate * comp_one * extformula * extformula * linfo
   | ENeg of extformula
   | EAnd of comp_two * extformula * extformula * ainfo
   | EOr of comp_two * extformula * extformula * ainfo
@@ -102,7 +102,7 @@ type extformula =
   let rec contains_eventually = function
   | ERel           (rel)                                      -> false
   | EPred          (p, comp, inf)                             -> false
-  | ELet           (p, f1, f2, inf)                           -> contains_eventually f1 || contains_eventually f2
+  | ELet           (p, comp, f1, f2, inf)                     -> contains_eventually f1 || contains_eventually f2
   | ENeg           (f1)                                       -> contains_eventually f1
   | EAnd           (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
   | EOr            (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
@@ -398,7 +398,7 @@ let print_extf str ff =
 
         | _ ->
           (match f with
-            | ELet (p,f1,f2,linf) ->
+            | ELet (p,_,f1,f2,linf) ->
               print_string "LET: ";
               Predicate.print_predicate p;
               print_linf " linf=" linf;

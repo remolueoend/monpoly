@@ -68,7 +68,7 @@ type comp_two = relation -> relation -> relation
 type extformula =
   | ERel of relation
   | EPred of predicate * comp_one * info
-  | ELet of predicate * extformula * extformula * linfo
+  | ELet of predicate * comp_one * extformula * extformula * linfo
   | ENeg of extformula
   | EAnd of comp_two * extformula * extformula * ainfo
   | EOr of comp_two * extformula * extformula * ainfo

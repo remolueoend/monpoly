@@ -88,7 +88,7 @@ let ext_to_m ff neval =
   let rec e2m = function
     | ERel           (rel)                                                  -> MRel         (rel)
     | EPred          (pred, c1, inf)                                        -> MPred        (pred, c1, inf)
-    | ELet           (pred, ext1, ext2, linf)                               -> MLet         (pred, e2m ext1, e2m ext2, el2m linf)
+    | ELet           (pred, c1, ext1, ext2, linf)                           -> MLet         (pred, c1, e2m ext1, e2m ext2, el2m linf)
     | ENeg           (ext)                                                  -> MNeg         (e2m ext)
     | EAnd           (c2, ext1, ext2, ainf)                                 -> MAnd         (c2, (e2m ext1), (e2m ext2), ainf)
     | EOr            (c2, ext1, ext2, ainf)                                 -> MOr          (c2, (e2m ext1), (e2m ext2), ainf)
@@ -289,7 +289,7 @@ let m_to_ext mf neval =
   let rec m2e = function
     | MRel           (rel)                                                 -> ERel         (rel)
     | MPred          (pred, c1, inf)                                       -> EPred        (pred, c1, inf)
-    | MLet           (pred, mf1, mf2, mlast)                               -> ELet         (pred, m2e mf1, m2e mf2, ml2e mlast)
+    | MLet           (pred, c1, mf1, mf2, mlast)                           -> ELet         (pred, c1, m2e mf1, m2e mf2, ml2e mlast)
     | MNeg           (mf)                                                  -> ENeg         ((m2e mf))
     | MAnd           (c2, mf1, mf2, ainf)                                  -> EAnd         (c2, (m2e mf1), (m2e mf2), ainf)
     | MOr            (c2, mf1, mf2, ainf)                                  -> EOr          (c2, (m2e mf1), (m2e mf2), ainf)
