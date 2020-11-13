@@ -42,7 +42,7 @@ type muninfo = { mlast1   :  int;
 type mformula =
   | MRel of relation
   | MPred of predicate * comp_one * info
-  | MLet of predicate * mformula * mformula * int
+  | MLet of predicate * comp_one * mformula * mformula * int
   | MNeg of mformula
   | MAnd of comp_two * mformula * mformula * ainfo
   | MOr of comp_two * mformula * mformula * ainfo
@@ -76,7 +76,7 @@ let free_vars f =
   let rec get_pred = function
   | MRel           (_)                    -> []
   | MPred          (p, c, _)              -> (pvars p)
-  | MLet           (_, f1, f2, _)         -> get_pred f2
+  | MLet           (_, _, f1, f2, _)      -> get_pred f2
   | MNeg           (f1)                   -> get_pred f1
   | MAnd           (c, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
   | MOr            (c, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
@@ -104,7 +104,7 @@ let predicates f =
   let rec get_pred = function
   | MRel           (_)                    -> []
   | MPred          (p, _, _)              -> p :: []
-  | MLet           (p, f1, f2, _)         -> Misc.union (get_pred f1)
+  | MLet           (p, _, f1, f2, _)      -> Misc.union (get_pred f1)
       (List.filter (fun q -> Predicate.get_name p <> Predicate.get_name q) (get_pred f2))
   | MNeg           (f1)                   -> get_pred f1
   | MAnd           (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)

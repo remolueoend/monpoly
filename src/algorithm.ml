@@ -597,7 +597,7 @@ let add_let_index f n rels =
         List.iter (fun (i,tsi,rel) -> Queue.add (i,tsi, comp rel) inf) rels
       else ()
 
-    | ELet (p,f1,f2,inf) ->
+    | ELet (p, comp, f1, f2, inf) ->
       update f1;
       if Predicate.get_name p = n then () else update f2
 
@@ -668,7 +668,7 @@ let rec eval f neval crt discard =
       Some rel
     end
 
-  | ELet (p, f1, f2, inf) ->
+  | ELet (p, comp, f1, f2, inf) ->
       let rec eval_f1 rels =
         if neval_is_last neval inf.llast then
           rels
@@ -678,7 +678,7 @@ let rec eval f neval crt discard =
           match eval f1 neval crt1 false with
           | Some rel ->
             inf.llast <- crt1;
-            eval_f1 ((i, tsi, rel) :: rels)
+            eval_f1 ((i, tsi, comp rel) :: rels)
           | None -> rels
       in
       add_let_index f2 (Predicate.get_name p) (List.rev (eval_f1 []));
@@ -1355,7 +1355,7 @@ let add_index f i tsi db =
         let rel = comp rel in
         Queue.add (i,tsi,rel) inf
 
-    | ELet (p,f1,f2,inf) ->
+    | ELet (p, comp, f1, f2, inf) ->
       update lets f1;
       update (Predicate.get_name p :: lets) f2
 
@@ -1528,7 +1528,11 @@ let rec add_ext f =
     EPred (p, Relation.eval_pred p, Queue.create())
 
   | Let (p, f1, f2) ->
-    ELet (p, add_ext f1, add_ext f2, {llast = NEval.void})
+    let attr1 = MFOTL.free_vars f1 in
+    let attrp = Predicate.pvars p in
+    let new_pos = List.map snd (Table.get_matches attr1 attrp) in
+    let comp = Relation.reorder new_pos in
+    ELet (p, comp, add_ext f1, add_ext f2, {llast = NEval.void})
 
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in

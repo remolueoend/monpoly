@@ -760,7 +760,7 @@ let combine_neval nv1 nv2 =
 let rec print_ef = function
   | ERel           (rel)                                      -> Printf.printf "Rel:"; Relation.print_rel "" rel; print_endline "";
   | EPred          (p, comp, inf)                             -> print_endline "Pred:"; Queue.iter(fun e-> let _,_,r = e in Relation.print_rel "" r) inf; print_endline "";
-  | ELet           (p, f1, f2, inf)                           -> print_endline "Let";print_ef f1; print_ef f2
+  | ELet           (p, comp, f1, f2, inf)                     -> print_endline "Let";print_ef f1; print_ef f2
   | ENeg           (f1)                                       -> print_endline "Neg";print_ef f1
   | EAnd           (c, f1, f2, ainf)                          -> print_endline "And";print_ef f1; print_ef f2
   | EOr            (c, f1, f2, ainf)                          -> print_endline "Or";print_ef f1; print_ef f2
