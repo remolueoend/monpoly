@@ -677,7 +677,7 @@ let rec eval f neval crt discard =
           let (i, tsi) = NEval.get_data crt1 in
           match eval f1 neval crt1 false with
           | Some rel ->
-            inf.llast <- crt1;
+            inf.llast <- if NEval.is_last neval crt1 then NEval.void else crt1;
             eval_f1 ((i, tsi, comp rel) :: rels)
           | None -> rels
       in
