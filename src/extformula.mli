@@ -8,7 +8,10 @@ module Sk = Dllist
 module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
-type linfo = {mutable llast: (int * timestamp) NEval.cell}
+type linfo = {
+  mutable llast: (int * timestamp) NEval.cell;
+  mutable llastq: int
+}
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable ptsq: timestamp}
 type ninfo = {mutable init: bool}

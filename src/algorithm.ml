@@ -670,7 +670,7 @@ let rec eval f neval crt discard =
 
   | ELet (p, comp, f1, f2, inf) ->
       let rec eval_f1 rels =
-        if neval_is_last neval inf.llast then
+        if inf.llastq = q then
           rels
         else
           let crt1 = neval_get_crt neval inf.llast crt q in
@@ -678,6 +678,7 @@ let rec eval f neval crt discard =
           match eval f1 neval crt1 false with
           | Some rel ->
             inf.llast <- if NEval.is_last neval crt1 then NEval.void else crt1;
+            inf.llastq <- i;
             eval_f1 ((i, tsi, comp rel) :: rels)
           | None -> rels
       in
@@ -1532,7 +1533,7 @@ let rec add_ext f =
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
     let comp = Relation.reorder new_pos in
-    ELet (p, comp, add_ext f1, add_ext f2, {llast = NEval.void})
+    ELet (p, comp, add_ext f1, add_ext f2, {llast = NEval.void; llastq = -1})
 
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in
