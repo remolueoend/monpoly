@@ -8,7 +8,10 @@ module Sk = Dllist
 module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
-type linfo = {mutable llast: (int * timestamp) NEval.cell}
+type linfo = {
+  mutable llast: (int * timestamp) NEval.cell;
+  mutable llastq: int
+}
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable ptsq: timestamp}
 type ninfo = {mutable init: bool}
@@ -187,8 +190,9 @@ let print_linf str inf =
   else
     begin
       let (i,tsi) = NEval.get_data inf.llast in
-      Printf.printf "last=(%d,%s)" i (MFOTL.string_of_ts tsi)
+      Printf.printf "last=(%d,%s); " i (MFOTL.string_of_ts tsi)
     end;
+  Printf.printf "lastq=%d" inf.llastq;
   print_endline "}"
 
 let print_ozinf str inf =

@@ -143,7 +143,15 @@ let main () =
         let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
 
-        let f = if !unfold_let then expand_let f else (check_let f; f) in
+        let f =
+          if !unfold_let then
+            expand_let f
+          else
+            begin
+              ignore(check_let f);
+              f
+            end
+        in
         let check_mon = if !verified then Verified_adapter.is_monitorable sign
                         else is_monitorable in
         let is_mon, pf, vartypes = check_formula check_mon sign f in
