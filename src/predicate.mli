@@ -67,6 +67,8 @@ type 'a eterm =
   | Cst of cst
   | F2i of 'a eterm
   | I2f of 'a eterm
+  | DayOfMonth of 'a eterm
+  | Month of 'a eterm
   | R2s of 'a eterm
   | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm

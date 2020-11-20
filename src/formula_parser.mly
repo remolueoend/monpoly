@@ -140,7 +140,7 @@
 
 %token FALSE TRUE
 %token LPA RPA LSB RSB COM SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
-%token PLUS MINUS SLASH MOD F2I I2F R2S S2R
+%token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH R2S S2R
 %token <string> STR STR_CST REGEXP_CST
 %token <float> INT RAT
 %token <int*char> TU
@@ -166,9 +166,9 @@
 %nonassoc RPA
 
 
-%left PLUS MINUS          /* lowest precedence */
-%left STAR DIV            /* medium precedence */
-%nonassoc UMINUS F2I I2F  /* highest precedence */
+%left PLUS MINUS                       /* lowest precedence */
+%left STAR DIV                         /* medium precedence */
+%nonassoc UMINUS F2I I2F DAY_OF_MONTH  /* highest precedence */
 
 %start formula
 %type <MFOTL.formula> formula
@@ -279,19 +279,21 @@ pred:
 
 
 term:
-  | term PLUS term          { f "term(plus)"; Plus ($1, $3) }
-  | term MINUS term         { f "term(minus)"; Minus ($1, $3) }
-  | term STAR term          { f "term(mult)"; Mult ($1, $3) }
-  | term SLASH term         { f "term(div)"; Div ($1, $3) }
-  | term MOD term           { f "term(mod)"; Mod ($1, $3) }
-  | MINUS term %prec UMINUS { f "term(uminus)"; UMinus $2 }
-  | LPA term RPA            { f "term(paren)"; $2 }
-  | F2I LPA term RPA        { f "term(f2i)"; F2i $3 }
-  | I2F LPA term RPA        { f "term(i2f)"; I2f $3 }
-  | R2S LPA term RPA        { f "term(r2s)"; R2s $3 }
-  | S2R LPA term RPA        { f "term(s2r)"; S2r $3 }
-  | cst                     { f "term(cst)"; Cst $1 }
-  | var                     { f "term(var)"; Var $1 }
+  | term PLUS term            { f "term(plus)"; Plus ($1, $3) }
+  | term MINUS term           { f "term(minus)"; Minus ($1, $3) }
+  | term STAR term            { f "term(mult)"; Mult ($1, $3) }
+  | term SLASH term           { f "term(div)"; Div ($1, $3) }
+  | term MOD term             { f "term(mod)"; Mod ($1, $3) }
+  | MINUS term %prec UMINUS   { f "term(uminus)"; UMinus $2 }
+  | LPA term RPA              { f "term(paren)"; $2 }
+  | F2I LPA term RPA          { f "term(f2i)"; F2i $3 }
+  | I2F LPA term RPA          { f "term(i2f)"; I2f $3 }
+  | DAY_OF_MONTH LPA term RPA { f "term(day_of_month)"; DayOfMonth $3 }
+  | MONTH LPA term RPA        { f "term(month)"; Month $3 }
+  | R2S LPA term RPA          { f "term(r2s)"; R2s $3 }
+  | S2R LPA term RPA          { f "term(s2r)"; S2r $3 }
+  | cst                       { f "term(cst)"; Cst $1 }
+  | var                       { f "term(var)"; Var $1 }
 
 
 cst:

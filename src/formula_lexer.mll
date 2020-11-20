@@ -102,6 +102,8 @@ rule
   | "MOD"                       { f "MOD" lexbuf; MOD }
   | "f2i"                       { f "F2I" lexbuf; F2I }
   | "i2f"                       { f "I2F" lexbuf; I2F }
+  | "DAY_OF_MONTH"              { f "DAY_OF_MONTH" lexbuf; DAY_OF_MONTH }
+  | "MONTH"                     { f "MONTH" lexbuf; MONTH }
   | "FALSE"                     { f "FALSE" lexbuf; FALSE }
   | "TRUE"                      { f "TRUE" lexbuf; TRUE }
   | "LET"                       { f "LET" lexbuf; LET }

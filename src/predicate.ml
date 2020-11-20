@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library. If not, see
  * http://www.gnu.org/licenses/lgpl-2.1.html.
- *
+ *7
  * As a special exception to the GNU Lesser General Public License,
  * you may link, statically or dynamically, a "work that uses the
  * Library" with a publicly distributed version of the Library to
@@ -67,6 +67,8 @@ type 'a eterm =
   | Cst of cst
   | F2i of 'a eterm
   | I2f of 'a eterm
+  | DayOfMonth of 'a eterm
+  | Month of 'a eterm
   | R2s of 'a eterm
   | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm
