@@ -1188,6 +1188,34 @@ let  type_check_term_debug d (sch, vars) typ term =
         type_error (TCst TInt) t_typ t;
         let v = propagate_constraints t_typ (TCst TInt) v in
         (s,v,(TCst TFloat))            
+      | FormatDate t as tt ->
+        type_error (TCst TStr) typ tt;
+        let vars = propagate_constraints typ (TCst TStr) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+        type_error (TCst TFloat) t_typ t;
+        let v = propagate_constraints t_typ (TCst TFloat) v in
+        (s,v,(TCst TStr))             
+      | Year t as tt ->
+        type_error (TCst TInt) typ tt;
+        let vars = propagate_constraints typ (TCst TInt) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+        type_error (TCst TFloat) t_typ t;
+        let v = propagate_constraints t_typ (TCst TFloat) v in
+        (s,v,(TCst TInt))             
+      | Month t as tt ->
+        type_error (TCst TInt) typ tt;
+        let vars = propagate_constraints typ (TCst TInt) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+        type_error (TCst TFloat) t_typ t;
+        let v = propagate_constraints t_typ (TCst TFloat) v in
+        (s,v,(TCst TInt))             
+      | DayOfMonth t as tt ->
+        type_error (TCst TInt) typ tt;
+        let vars = propagate_constraints typ (TCst TInt) vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+        type_error (TCst TFloat) t_typ t;
+        let v = propagate_constraints t_typ (TCst TFloat) v in
+        (s,v,(TCst TInt))             
       | R2s t as tt ->
         type_error (TCst TStr) typ tt;
         let vars = propagate_constraints typ (TCst TStr) vars in

@@ -69,6 +69,8 @@ type 'a eterm =
   | I2f of 'a eterm
   | DayOfMonth of 'a eterm
   | Month of 'a eterm
+  | Year of 'a eterm
+  | FormatDate of 'a eterm
   | R2s of 'a eterm
   | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm

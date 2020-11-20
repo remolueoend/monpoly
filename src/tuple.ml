@@ -201,6 +201,10 @@ let rec get_pos_term attr = function
   | Cst c -> Cst c
   | I2f t -> I2f (get_pos_term attr t)
   | F2i t -> F2i (get_pos_term attr t)
+  | Month t -> Month (get_pos_term attr t)
+  | DayOfMonth t -> DayOfMonth (get_pos_term attr t)
+  | Year t -> Year (get_pos_term attr t)
+  | FormatDate t -> FormatDate (get_pos_term attr t)
   | R2s t -> R2s (get_pos_term attr t)
   | S2r t -> S2r (get_pos_term attr t)
   | UMinus t -> UMinus (get_pos_term attr t)

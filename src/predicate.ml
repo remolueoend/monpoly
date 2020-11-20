@@ -69,6 +69,8 @@ type 'a eterm =
   | I2f of 'a eterm
   | DayOfMonth of 'a eterm
   | Month of 'a eterm
+  | Year of 'a eterm
+  | FormatDate of 'a eterm
   | R2s of 'a eterm
   | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm
@@ -125,7 +127,7 @@ let cst_of_str_basic v =
 let rec tvars = function
   | Var v -> [v]
   | Cst c -> []
-  | F2i t | I2f t | UMinus t | R2s t | S2r t -> tvars t
+  | F2i t | I2f t | DayOfMonth t | Month t | Year t | FormatDate t | UMinus t | R2s t | S2r t -> tvars t
   | Plus (t1, t2)
   | Minus (t1, t2)
   | Mult (t1, t2)
@@ -140,6 +142,10 @@ let substitute_vars m =
   | Cst c as t -> t
   | F2i t -> F2i (substitute_vars_rec t)
   | I2f t -> I2f (substitute_vars_rec t)
+  | Month t -> Month (substitute_vars_rec t)
+  | DayOfMonth t -> DayOfMonth (substitute_vars_rec t)
+  | Year t -> Year (substitute_vars_rec t)
+  | FormatDate t -> FormatDate (substitute_vars_rec t)
   | R2s t -> R2s (substitute_vars_rec t)
   | S2r t -> S2r (substitute_vars_rec t)
   | UMinus t -> UMinus (substitute_vars_rec t)
@@ -161,6 +167,20 @@ let eval_eterm f t =
     | F2i t -> (match eval t with
         | Float c -> Int (int_of_float c)
         | _ -> failwith "[Predicate.eval_eterm, f2i] wrong types")
+    | DayOfMonth t -> (match eval t with
+        | Float t -> Int ((Unix.gmtime t).tm_mday)
+        | _ -> failwith "[Predicate.eval_eterm, DayOfMonth] wrong types")
+    | Month t -> (match eval t with
+        | Float t -> Int ((Unix.gmtime t).tm_mon+1)
+        | _ -> failwith "[Predicate.eval_eterm, Month] wrong types")
+    | Year t -> (match eval t with
+        | Float t -> Int ((Unix.gmtime t).tm_year+1900)
+        | _ -> failwith "[Predicate.eval_eterm, year] wrong types")
+    | FormatDate t -> (match eval t with
+        | Float t -> 
+            let tm = Unix.gmtime t in
+              Str (Printf.sprintf "%04d-%02d-%02d" (tm.tm_year+1900) (tm.tm_mon+1) tm.tm_mday)
+        | _ -> failwith "[Predicate.eval_eterm, Month] wrong types")
     | R2s t -> (match eval t with
         | Regexp (p, r) -> Str p
         | _ -> failwith "[Predicate.eval_eterm, r2s] wrong types")
@@ -301,6 +321,10 @@ let rec string_of_term term =
       | I2f t ->  false, "i2f(" ^ (t2s true t) ^ ")"
       | R2s t ->  false, "r2s(" ^ (t2s true t) ^ ")"
       | S2r t ->  false, "s2r(" ^ (t2s true t) ^ ")"
+      | Year t ->  false, "YEAR(" ^ (t2s true t) ^ ")"
+      | Month t ->  false, "MONTH(" ^ (t2s true t) ^ ")"
+      | DayOfMonth t ->  false, "DAY_OF_MONTH(" ^ (t2s true t) ^ ")"
+      | FormatDate t ->  false, "FORMAT_DATE(" ^ (t2s true t) ^ ")"
       | UMinus t ->  false, "-" ^ (t2s' t)
       | Plus (t1, t2) -> false, (t2s' t1) ^ " + " ^ (t2s' t2)
       | Minus (t1, t2) -> false, (t2s' t1) ^ " - " ^ (t2s' t2)
