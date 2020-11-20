@@ -670,7 +670,8 @@ let rec eval f neval crt discard =
 
   | ELet (p, comp, f1, f2, inf) ->
       let rec eval_f1 rels =
-        if inf.llastq = q then
+        let (lastq, _) = NEval.get_last neval in
+        if inf.llastq = lastq then
           rels
         else
           let crt1 = neval_get_crt neval inf.llast crt q in
