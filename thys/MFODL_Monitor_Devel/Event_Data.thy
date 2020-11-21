@@ -7,6 +7,40 @@ theory Event_Data
 begin
 (*>*)
 
+section \<open>Code adaptation for 8-bit strings\<close>
+
+typedef string8 = "UNIV :: char list set" ..
+
+setup_lifting type_definition_string8
+
+instantiation string8 :: "{equal, linorder}"
+begin
+
+lift_definition equal_string8 :: "string8 \<Rightarrow> string8 \<Rightarrow> bool" is HOL.equal .
+lift_definition less_eq_string8 :: "string8 \<Rightarrow> string8 \<Rightarrow> bool" is ord_class.lexordp_eq .
+lift_definition less_string8 :: "string8 \<Rightarrow> string8 \<Rightarrow> bool" is ord_class.lexordp .
+
+instance by intro_classes
+    (transfer; auto simp: equal_eq lexordp_conv_lexordp_eq lexordp_eq_linear
+      intro: lexordp_eq_refl lexordp_eq_trans lexordp_eq_antisym)+
+
+end
+
+lifting_forget string8.lifting
+
+declare [[code drop: "HOL.equal :: string8 \<Rightarrow> _" "(\<le>) :: string8 \<Rightarrow> _" "(<) :: string8 \<Rightarrow> _"]]
+
+code_printing
+  type_constructor string8 \<rightharpoonup> (OCaml) "string"
+  | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(=)"
+  | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<=)"
+  | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<)"
+
+derive (eq) ceq string8
+derive (linorder) compare string8
+derive (compare) ccompare string8
+
+
 section \<open>Event parameters\<close>
 
 definition div_to_zero :: "integer \<Rightarrow> integer \<Rightarrow> integer" where
@@ -22,7 +56,7 @@ lemma "b \<noteq> 0 \<Longrightarrow> div_to_zero a b * b + mod_to_zero a b = a"
   by (auto simp: minus_mod_eq_mult_div[symmetric] div_minus_right mod_minus_right ac_simps)
 
 
-datatype event_data = EInt integer | EFloat double | EString String.literal
+datatype event_data = EInt integer | EFloat double | EString string8
 
 derive (eq) ceq event_data
 derive ccompare event_data
@@ -37,7 +71,7 @@ fun less_eq_event_data where
 | "EFloat x \<le> EInt y \<longleftrightarrow> x \<le> double_of_integer y"
 | "EFloat x \<le> EFloat y \<longleftrightarrow> x \<le> y"
 | "EFloat _ \<le> EString _ \<longleftrightarrow> False"
-| "EString x \<le> EString y \<longleftrightarrow> lexordp_eq (String.explode x) (String.explode y)"
+| "EString x \<le> EString y \<longleftrightarrow> x \<le> y"
 | "EString _ \<le> _ \<longleftrightarrow> False"
 
 definition less_event_data :: "event_data \<Rightarrow> event_data \<Rightarrow> bool"  where
