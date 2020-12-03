@@ -1256,7 +1256,7 @@ let rec inter_list _A
           xc)
         Empty);;
 
-let rec filterd _A
+let rec filtere _A
   xb xc = Mapping_RBTa (rbtreeify (filtera xb (entries (impl_ofa _A xc))));;
 
 let rec comp_sinter_with
@@ -1300,7 +1300,7 @@ let rec meet _A
       (rbt_comp_inter_with_key (the (ccompare _A)) xc (impl_ofa _A xd)
         (impl_ofa _A xe));;
 
-let rec filterc _A xb xc = Abs_dlist (filtera xb (list_of_dlist _A xc));;
+let rec filterd _A xb xc = Abs_dlist (filtera xb (list_of_dlist _A xc));;
 
 let rec comp f g = (fun x -> f (g x));;
 
@@ -1334,13 +1334,13 @@ let rec inf_seta (_A1, _A2)
           with None ->
             failwith "inter DList_set Set_Monad: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (DList_set dxs1) (Set_Monad xs))
-          | Some eq -> DList_set (filterc _A1 (list_member eq xs) dxs1))
+          | Some eq -> DList_set (filterd _A1 (list_member eq xs) dxs1))
     | DList_set dxs1, DList_set dxs2 ->
         (match ceq _A1
           with None ->
             failwith "inter DList_set DList_set: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (DList_set dxs1) (DList_set dxs2))
-          | Some _ -> DList_set (filterc _A1 (memberc _A1 dxs2) dxs1))
+          | Some _ -> DList_set (filterd _A1 (memberc _A1 dxs2) dxs1))
     | DList_set dxs, RBT_set rbt ->
         (match ccompare _A2
           with None ->
@@ -1363,7 +1363,7 @@ let rec inf_seta (_A1, _A2)
           with None ->
             failwith "inter Set_Monad DList_set: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (Set_Monad xs) (DList_set dxs2))
-          | Some eq -> DList_set (filterc _A1 (list_member eq xs) dxs2))
+          | Some eq -> DList_set (filterd _A1 (list_member eq xs) dxs2))
     | Set_Monad xs, RBT_set rbt1 ->
         (match ccompare _A2
           with None ->
@@ -1378,7 +1378,7 @@ let rec inf_seta (_A1, _A2)
               (fun _ -> inf_seta (_A1, _A2) g (RBT_set rbt2))
           | Some _ ->
             RBT_set
-              (filterd _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt2))
+              (filtere _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt2))
     | RBT_set rbt1, g ->
         (match ccompare _A2
           with None ->
@@ -1386,21 +1386,21 @@ let rec inf_seta (_A1, _A2)
               (fun _ -> inf_seta (_A1, _A2) (RBT_set rbt1) g)
           | Some _ ->
             RBT_set
-              (filterd _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt1))
+              (filtere _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt1))
     | h, DList_set dxs2 ->
         (match ceq _A1
           with None ->
             failwith "inter DList_set2: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) h (DList_set dxs2))
           | Some _ ->
-            DList_set (filterc _A1 (fun x -> member (_A1, _A2) x h) dxs2))
+            DList_set (filterd _A1 (fun x -> member (_A1, _A2) x h) dxs2))
     | DList_set dxs1, h ->
         (match ceq _A1
           with None ->
             failwith "inter DList_set1: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (DList_set dxs1) h)
           | Some _ ->
-            DList_set (filterc _A1 (fun x -> member (_A1, _A2) x h) dxs1))
+            DList_set (filterd _A1 (fun x -> member (_A1, _A2) x h) dxs1))
     | i, Set_Monad xs -> Set_Monad (filtera (fun x -> member (_A1, _A2) x i) xs)
     | Set_Monad xs, i -> Set_Monad (filtera (fun x -> member (_A1, _A2) x i) xs)
     | j, Collect_set a -> Collect_set (fun x -> a x && member (_A1, _A2) x j)
@@ -2557,7 +2557,7 @@ let rec equal_event_dataa
     | EString x3, EInt x1 -> false
     | EInt x1, EFloat x2 -> false
     | EFloat x2, EInt x1 -> false
-    | EString x3, EString y3 -> ((x3 : string) = y3)
+    | EString x3, EString y3 -> Pervasives.(=) x3 y3
     | EFloat x2, EFloat y2 -> equal_double x2 y2
     | EInt x1, EInt y1 -> Z.equal x1 y1;;
 
@@ -2689,23 +2689,21 @@ let linorder_integer = ({order_linorder = order_integer} : Z.t linorder);;
 
 let equal_integer = ({equal = Z.equal} : Z.t equal);;
 
-let ord_literal =
-  ({less_eq = (fun a b -> ((a : string) <= b));
-     less = (fun a b -> ((a : string) < b))}
-    : string ord);;
+let ord_string8 =
+  ({less_eq = Pervasives.(<=); less = Pervasives.(<)} : string ord);;
 
-let preorder_literal = ({ord_preorder = ord_literal} : string preorder);;
+let preorder_string8 = ({ord_preorder = ord_string8} : string preorder);;
 
-let order_literal = ({preorder_order = preorder_literal} : string order);;
+let order_string8 = ({preorder_order = preorder_string8} : string order);;
 
-let linorder_literal = ({order_linorder = order_literal} : string linorder);;
+let linorder_string8 = ({order_linorder = order_string8} : string linorder);;
 
-let equal_literal = ({equal = (fun a b -> ((a : string) = b))} : string equal);;
+let equal_string8 = ({equal = Pervasives.(=)} : string equal);;
 
 let rec comparator_event_data
   x0 x1 = match x0, x1 with
     EString x, EString yb ->
-      comparator_of (equal_literal, linorder_literal) x yb
+      comparator_of (equal_string8, linorder_string8) x yb
     | EString x, EFloat ya -> Gt
     | EString x, EInt y -> Gt
     | EFloat x, EString yb -> Lt
@@ -2830,59 +2828,6 @@ let rec comparator_trm
 let ccompare_trma : (trm -> trm -> ordera) option = Some comparator_trm;;
 
 let ccompare_trm = ({ccompare = ccompare_trma} : trm ccompare);;
-
-let rec of_bool _A = function true -> one _A.one_zero_neq_one
-                     | false -> zero _A.zero_zero_neq_one;;
-
-type char = Chara of bool * bool * bool * bool * bool * bool * bool * bool;;
-
-let one_integera : Z.t = (Z.of_int 1);;
-
-let zero_integer = ({zero = Z.zero} : Z.t zero);;
-
-let one_integer = ({one = one_integera} : Z.t one);;
-
-let zero_neq_one_integer =
-  ({one_zero_neq_one = one_integer; zero_zero_neq_one = zero_integer} :
-    Z.t zero_neq_one);;
-
-let rec integer_of_char
-  (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
-    Z.add (Z.mul
-            (Z.add
-              (Z.mul
-                (Z.add
-                  (Z.mul
-                    (Z.add
-                      (Z.mul
-                        (Z.add
-                          (Z.mul
-                            (Z.add
-                              (Z.mul
-                                (Z.add
-                                  (Z.mul (of_bool zero_neq_one_integer b7)
-                                    (Z.of_int 2))
-                                  (of_bool zero_neq_one_integer b6))
-                                (Z.of_int 2))
-                              (of_bool zero_neq_one_integer b5))
-                            (Z.of_int 2))
-                          (of_bool zero_neq_one_integer b4))
-                        (Z.of_int 2))
-                      (of_bool zero_neq_one_integer b3))
-                    (Z.of_int 2))
-                  (of_bool zero_neq_one_integer b2))
-                (Z.of_int 2))
-              (of_bool zero_neq_one_integer b1))
-            (Z.of_int 2))
-      (of_bool zero_neq_one_integer b0);;
-
-let rec nat_of_char c = Nat (integer_of_char c);;
-
-let rec less_eq_char c1 c2 = less_eq_nat (nat_of_char c1) (nat_of_char c2);;
-
-let rec less_char c1 c2 = less_nat (nat_of_char c1) (nat_of_char c2);;
-
-let ord_char = ({less_eq = less_eq_char; less = less_char} : char ord);;
 
 let rec equal_option _A = ({equal = equal_optiona _A} : ('a option) equal);;
 
@@ -3035,19 +2980,6 @@ let ccompare_mregexa : (mregex -> mregex -> ordera) option
 
 let ccompare_mregex = ({ccompare = ccompare_mregexa} : mregex ccompare);;
 
-let rec compare_literal x = comparator_of (equal_literal, linorder_literal) x;;
-
-let ccompare_literala : (string -> string -> ordera) option
-  = Some compare_literal;;
-
-let ccompare_literal = ({ccompare = ccompare_literala} : string ccompare);;
-
-let mapping_impl_literala : (string, mapping_impla) phantom
-  = Phantom Mapping_RBT;;
-
-let mapping_impl_literal =
-  ({mapping_impl = mapping_impl_literala} : string mapping_impl);;
-
 type enat = Enat of nat | Infinity_enat;;
 
 let rec equal_enat x0 x1 = match x0, x1 with Enat nat, Infinity_enat -> false
@@ -3167,43 +3099,20 @@ let rec cproper_interval_prod _A _B =
      cproper_interval = cproper_interval_proda _A _B}
     : ('a * 'b) cproper_interval);;
 
+let rec compare_string8 x = comparator_of (equal_string8, linorder_string8) x;;
+
+let ccompare_string8a : (string -> string -> ordera) option
+  = Some compare_string8;;
+
+let ccompare_string8 = ({ccompare = ccompare_string8a} : string ccompare);;
+
+let mapping_impl_string8a : (string, mapping_impla) phantom
+  = Phantom Mapping_RBT;;
+
+let mapping_impl_string8 =
+  ({mapping_impl = mapping_impl_string8a} : string mapping_impl);;
+
 let equal_event_data = ({equal = equal_event_dataa} : event_data equal);;
-
-let rec lexordp_eqa _A
-  xs ys =
-    (match xs with [] -> true
-      | x :: xsa ->
-        (match ys with [] -> false
-          | y :: ysa ->
-            (if less _A x y then true
-              else (if less _A y x then false else lexordp_eqa _A xsa ysa))));;
-
-let rec bit_cut_integer
-  k = (if Z.equal k Z.zero then (Z.zero, false)
-        else (let (r, s) =
-                (fun k l -> if Z.equal Z.zero l then (Z.zero, l) else Z.div_rem
-                  (Z.abs k) (Z.abs l))
-                  k (Z.of_int 2)
-                in
-               ((if Z.lt Z.zero k then r else Z.sub (Z.neg r) s),
-                 Z.equal s (Z.of_int 1))));;
-
-let rec char_of_integer
-  k = (let (q0, b0) = bit_cut_integer k in
-       let (q1, b1) = bit_cut_integer q0 in
-       let (q2, b2) = bit_cut_integer q1 in
-       let (q3, b3) = bit_cut_integer q2 in
-       let (q4, b4) = bit_cut_integer q3 in
-       let (q5, b5) = bit_cut_integer q4 in
-       let (q6, b6) = bit_cut_integer q5 in
-       let a = bit_cut_integer q6 in
-       let (_, aa) = a in
-        Chara (b0, b1, b2, b3, b4, b5, b6, aa));;
-
-let rec explode
-  s = mapa char_of_integer
-        (let s = s in let rec exp i l = if i < 0 then l else exp (i - 1) (let k = Char.code (String.get s i) in
-      if k < 128 then Z.of_int k :: l else failwith "Non-ASCII character in literal") in exp (String.length s - 1) []);;
 
 let rec less_eq_event_data
   x0 x1 = match x0, x1 with EInt x, EInt y -> Z.leq x y
@@ -3212,7 +3121,7 @@ let rec less_eq_event_data
     | EFloat x, EInt y -> Pervasives.(<=) x (Z.to_float y)
     | EFloat x, EFloat y -> Pervasives.(<=) x y
     | EFloat uw, EString ux -> false
-    | EString x, EString y -> lexordp_eqa ord_char (explode x) (explode y)
+    | EString x, EString y -> Pervasives.(<=) x y
     | EString uy, EInt v -> false
     | EString uy, EFloat v -> false;;
 
@@ -4052,6 +3961,8 @@ let rec these (_A1, _A2, _A3)
         (filter ((ceq_option _A1), (ccompare_option _A2))
           (fun x -> not (is_none x)) a);;
 
+let rec filterb xb xc = Alist (filtera xb (impl_of xc));;
+
 let rec lookup _A xa = map_of _A (impl_of xa);;
 
 let rec updatea _A xc xd xe = Alist (update _A xc xd (impl_of xe));;
@@ -4130,13 +4041,21 @@ let rec deletea (_A1, _A2)
     | k, Assoc_List_Mapping al -> Assoc_List_Mapping (deleteb _A2 k al)
     | k, Mapping m -> Mapping (fun_upd _A2 m k None);;
 
-let rec filterb _A
-  p (RBT_Mapping t) =
-    (match ccompare _A
-      with None ->
-        failwith "filter RBT_Mapping: ccompare = None"
-          (fun _ -> filterb _A p (RBT_Mapping t))
-      | Some _ -> RBT_Mapping (filterd _A (fun (a, b) -> p a b) t));;
+let rec filterc _A
+  p x1 = match p, x1 with
+    p, RBT_Mapping t ->
+      (match ccompare _A
+        with None ->
+          failwith "filter RBT_Mapping: ccompare = None"
+            (fun _ -> filterc _A p (RBT_Mapping t))
+        | Some _ -> RBT_Mapping (filtere _A (fun (a, b) -> p a b) t))
+    | p, Assoc_List_Mapping al ->
+        Assoc_List_Mapping (filterb (fun (a, b) -> p a b) al)
+    | p, Mapping m ->
+        Mapping
+          (fun k ->
+            (match m k with None -> None
+              | Some v -> (if p k v then Some v else None)));;
 
 let rec lookupa (_A1, _A2) = function RBT_Mapping t -> lookupc _A1 t
                              | Assoc_List_Mapping al -> lookup _A2 al;;
@@ -5392,7 +5311,7 @@ let rec eval_step_mmuaux (_A1, _A2)
        let Some m = lookupa (ccompare_nat, equal_nat) a2_map (minus_nata tp len)
          in
        let ma =
-         filterb (ccompare_list (ccompare_option _A2))
+         filterc (ccompare_list (ccompare_option _A2))
            (fun _ -> ts_tp_lt (args_ivl args) ts (minus_nata tp len)) m
          in
        let t =
@@ -5724,7 +5643,7 @@ let rec add_new_mmuaux
            in
          let a1_mapa =
            (if pos
-             then filterb (ccompare_list (ccompare_option ccompare_event_data))
+             then filterc (ccompare_list (ccompare_option ccompare_event_data))
                     (fun asa _ ->
                       member
                         ((ceq_list (ceq_option ceq_event_data)),
@@ -6891,7 +6810,7 @@ let rec filter_join (_A1, _A2, _A3, _A4)
           (finite (_A1.finite_UNIV_card_UNIV, _A2, _A3) a &&
             less_nat (card (_A1, _A2, _A3) a) (size _A3 m))
       then set_fold_cfi (_A2, _A3) (filter_not_in_cfi (_A3, _A4)) m a
-      else filterb _A3
+      else filterc _A3
              (fun asa _ ->
                (if pos then member (_A2, _A3) asa a
                  else not (member (_A2, _A3) asa a)))
@@ -6947,13 +6866,13 @@ let rec join_mmsaux (_A1, _A2, _A3)
                                        (data_in,
  (tuple_ina, tuple_sincea))))))))
                  else (let tuple_ina =
-                         filterb (ccompare_list (ccompare_option _A2))
+                         filterc (ccompare_list (ccompare_option _A2))
                            (fun asa _ ->
                              proj_tuple_in_join (_A1, _A2) pos maskL asa x)
                            tuple_in
                          in
                        let tuple_sincea =
-                         filterb (ccompare_list (ccompare_option _A2))
+                         filterc (ccompare_list (ccompare_option _A2))
                            (fun asa _ ->
                              proj_tuple_in_join (_A1, _A2) pos maskL asa x)
                            tuple_since
@@ -7029,7 +6948,7 @@ let rec gc_mmsaux (_A1, _A2)
                      (linearize data_in))))
          in
        let tuple_sincea =
-         filterb (ccompare_list (ccompare_option _A2))
+         filterc (ccompare_list (ccompare_option _A2))
            (fun asa _ ->
              member
                ((ceq_list (ceq_option _A1)),
@@ -7444,7 +7363,7 @@ let rec meval
         (let (xs, phia) = meval m t db phi in
          let (ys, psia) =
            meval n t
-             (updateb (ccompare_literal, equal_literal) p
+             (updateb (ccompare_string8, equal_string8) p
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
@@ -7457,7 +7376,7 @@ let rec meval
            in
           (ys, MLet (p, m, phia, psia)))
     | n, t, db, MPred (e, ts) ->
-        ((match lookupa (ccompare_literal, equal_literal) db e
+        ((match lookupa (ccompare_string8, equal_string8) db e
            with None ->
              [set_empty
                 ((ceq_list (ceq_option ceq_event_data)),
@@ -7712,7 +7631,7 @@ let rec minit
   phi = (let n = nfv phi in Mstate_ext (zero_nata, minit0 n phi, n, ()));;
 
 let rec mk_db
-  t = of_alist (ccompare_literal, equal_literal, mapping_impl_literal)
+  t = of_alist (ccompare_string8, equal_string8, mapping_impl_string8)
         (map_filter
           (fun (p, x) ->
             (if is_empty
@@ -7720,7 +7639,7 @@ let rec mk_db
                     (cproper_interval_list ccompare_event_data))
                   x
               then None else Some (p, [x])))
-          (clearjunk equal_literal t));;
+          (clearjunk equal_string8 t));;
 
 let rec mstate_n (Mstate_ext (mstate_i, mstate_m, mstate_n, more)) = mstate_n;;
 
@@ -7842,7 +7761,7 @@ let rec vmeval
                       ((ceq_option ceq_fun), (ccompare_option ccompare_fun),
                         (set_impl_option set_impl_fun))
                       (matcha ts) x)))
-           (match lookupa (ccompare_literal, equal_literal) db e
+           (match lookupa (ccompare_string8, equal_string8) db e
              with None ->
                [set_empty
                   ((ceq_list ceq_event_data),
@@ -7854,7 +7773,7 @@ let rec vmeval
         (let (xs, phia) = vmeval m t db phi in
          let (ys, psia) =
            vmeval n t
-             (updateb (ccompare_literal, equal_literal) p
+             (updateb (ccompare_string8, equal_string8) p
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
