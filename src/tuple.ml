@@ -235,7 +235,8 @@ let matches cs cr =
     | Str s, Regexp (p, r) -> s, p, r
     | _ -> failwith "[Tuple.matches] internal error, expected string as lhs and regexp as rhs"
   in try
-    Str.search_forward (Str.regexp p) s 0; true
+    let _ = Str.search_forward (Str.regexp p) s 0 in
+    true
   with Not_found -> false
   
 

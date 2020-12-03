@@ -338,7 +338,7 @@ let rec is_monitorable f =
      | _ -> (false, Some (f, msg_EQUAL))
     )
 
-  | Less _ | LessEq _ | Substring _ ->
+  | Less _ | LessEq _ | Substring _ | Matches _ ->
     (false, Some (f, msg_LESS))
 
   | Neg (Equal (t1, t2)) ->

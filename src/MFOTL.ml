@@ -97,6 +97,7 @@ let ts_of_string err_place str =
 let ts_of_cst c =
   match c with
   | ZInt _
+  | Regexp _
   | Int _ -> failwith "[MFOTL.ts_of_cst] conversion not possible"
   | Str s -> float_of_string s
   | Float f -> f
@@ -164,6 +165,7 @@ let aggreg_default_value op t = match op, t with
   | _, TFloat -> Float 0.
   | _, TInt -> Int 0
   | _, TStr -> Str ""
+  | _, TRegexp -> Regexp ("", Str.regexp "")
 
 
 let map mapf mapr =
@@ -171,6 +173,8 @@ let rec formula_map = function
   | Equal (_,_)
   | Less (_,_)
   | LessEq (_,_) 
+  | Matches (_,_) 
+  | Substring (_,_) 
   | Pred _ as f -> mapf f
   | Let (p,f1,f2) -> 
     let f1 = formula_map f1 in
@@ -233,6 +237,7 @@ let rec direct_subformulas = function
   | Equal (t1,t2) -> []
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
+  | Matches (t1,t2) -> []
   | Substring (t1, t2) -> []
   | Matches (t1, t2) -> []
   | Pred p -> []
@@ -400,6 +405,8 @@ let rec substitute_vars m =
   | Equal (t1, t2) -> Equal (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | Less  (t1, t2) -> Less (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | LessEq (t1, t2) -> LessEq (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Matches (t1, t2) -> Matches (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Substring (t1, t2) -> Substring (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
 
   | Pred (p) -> 
     let (n,a,ts) = Predicate.get_info p in

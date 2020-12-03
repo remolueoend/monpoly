@@ -182,7 +182,9 @@ formula:
   | TRUE                            { f "TRUE"; Equal (Cst (Int 0), Cst (Int 0)) }
   | predicate                       { f "f(pred)"; $1 }
   | LET predicate EQ formula IN formula  
-                                    { f "f(let)"; let Pred p = $2 in Let (p,$4,$6) }
+                                    { f "f(let)"; match $2 with 
+                                                  | Pred p -> Let (p,$4,$6)
+                                                  | _ -> failwith "[formula_parser.mly] expected predicate"}
   | term EQ term                    { f "f(eq)"; check (Equal ($1,$3)) }
   | term LESSEQ term                { f "f(leq)"; check (LessEq ($1,$3)) }
   | term LESS term                  { f "f(less)"; check (Less ($1,$3)) }
