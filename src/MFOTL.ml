@@ -434,7 +434,24 @@ let rec substitute_vars m =
         let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
         let fresh_var_map = List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
         substitute_vars (no_bv@fresh_var_map) f) 
-  | Aggreg (rty, y, op, x, g, f) -> Aggreg (rty, y,op,x,g, substitute_vars m f)
+  | Aggreg (rty, y, op, x, g, f) ->
+      let fv = free_vars f in
+      let bvars = Misc.diff fv g in
+      let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
+      let bv_rename = Misc.inter tvars bvars in
+      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let no_bv = (List.filter (fun (x,_) -> not (List.mem x bvars)) m) in
+      let m' = no_bv @ List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
+
+      let subst m v = try List.assoc v m with Not_found -> Var v in
+      let unvar = function
+        | Var x -> x
+        | _ -> failwith "[MFOTL.substitute_vars] not implemented"
+      in
+      let y = unvar (subst m y) in
+      let x = try List.assoc x fresh_var_map with Not_found -> x in
+      let g = List.map (fun x -> unvar (subst m' x)) g in
+      Aggreg (rty, y,op,x,g, substitute_vars m' f)
   | Prev (i, f) -> Prev (i,substitute_vars m f)
   | Next (i, f) -> Next (i,substitute_vars m f)
   | Once (i, f) -> Once (i, substitute_vars m f)
