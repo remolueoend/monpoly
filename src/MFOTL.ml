@@ -239,7 +239,6 @@ let rec direct_subformulas = function
   | LessEq (t1,t2) -> []
   | Matches (t1,t2) -> []
   | Substring (t1, t2) -> []
-  | Matches (t1, t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
@@ -502,6 +501,8 @@ let rec type_of_fma = function
   | Equal (t1,t2) -> "Eq"
   | Less (t1,t2) -> "Less"
   | LessEq (t1,t2) -> "LessEq"
+  | Substring (t1, t2) -> "Substring"
+  | Matches (t1, t2) -> "Matches"
   | Pred p -> "Pred"
   | Let (p,f1,f2) -> "Let"
   | Neg f -> "Neg"
