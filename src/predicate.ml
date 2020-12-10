@@ -157,6 +157,9 @@ let substitute_vars m =
   in
   substitute_vars_rec 
 
+let safe_gmtime t =
+  Unix.gmtime (if t > 4102444800.0 then 4102444800.0 else t)
+
 let eval_eterm f t =
   let rec eval = function
     | Cst c -> c
@@ -168,18 +171,18 @@ let eval_eterm f t =
         | Float c -> Int (int_of_float c)
         | _ -> failwith "[Predicate.eval_eterm, f2i] wrong types")
     | DayOfMonth t -> (match eval t with
-        | Float t -> Int ((Unix.gmtime t).tm_mday)
+        | Float t -> Int ((safe_gmtime t).tm_mday)
         | _ -> failwith "[Predicate.eval_eterm, DayOfMonth] wrong types")
     | Month t -> (match eval t with
-        | Float t -> Int ((Unix.gmtime t).tm_mon+1)
+        | Float t -> Int ((safe_gmtime t).tm_mon+1)
         | _ -> failwith "[Predicate.eval_eterm, Month] wrong types")
     | Year t -> (match eval t with
-        | Float t -> Int ((Unix.gmtime t).tm_year+1900)
+        | Float t -> Int ((safe_gmtime t).tm_year+1900)
         | _ -> failwith "[Predicate.eval_eterm, year] wrong types")
     | FormatDate t -> (match eval t with
         | Float t -> 
-            let tm = Unix.gmtime t in
-              Str (Printf.sprintf "%04d-%02d-%02d" (tm.tm_year+1900) (tm.tm_mon+1) tm.tm_mday)
+            let tm = safe_gmtime t in
+            Str (Printf.sprintf "%04d-%02d-%02d" (tm.tm_year + 1900) (tm.tm_mon + 1) tm.tm_mday)
         | _ -> failwith "[Predicate.eval_eterm, Month] wrong types")
     | R2s t -> (match eval t with
         | Regexp (p, r) -> Str p
