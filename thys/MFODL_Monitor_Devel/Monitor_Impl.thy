@@ -125,9 +125,9 @@ lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
 
 thm default_maux.meval.simps(2)
 
-lemma meval_MPred: "meval n t db (MPred e ts) =
-  (case Mapping.lookup db e of None \<Rightarrow> [{}] | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
-  (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match ts v)))) Xs, MPred e ts)"
+lemma meval_MPred: "meval n ts db (MPred e tms) =
+  (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
+  (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
   by (force split: option.splits simp: Option.these_def image_iff)
 
 lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred default_maux.meval.simps(3-)
