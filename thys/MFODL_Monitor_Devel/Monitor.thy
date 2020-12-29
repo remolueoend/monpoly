@@ -29,6 +29,7 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.Neg (Formula.Eq (Formula.Var x) (Formula.Var y))) = (x = y)"
 | "mmonitorable_exec (Formula.Pred e ts) = list_all (\<lambda>t. Formula.is_Var t \<or> Formula.is_Const t) ts"
 | "mmonitorable_exec (Formula.Let p \<phi> \<psi>) = ({0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
+| "mmonitorable_exec (Formula.LetPrev p \<phi> \<psi>) = ({0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Or \<phi> \<psi>) = (fv \<phi> = fv \<psi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.And \<phi> \<psi>) = (mmonitorable_exec \<phi> \<and>
@@ -56,18 +57,18 @@ lemma cases_Neg_iff:
 
 lemma safe_formula_mmonitorable_exec: "safe_formula \<phi> \<Longrightarrow> Formula.future_bounded \<phi> \<Longrightarrow> mmonitorable_exec \<phi>"
 proof (induct \<phi> rule: safe_formula.induct)
-  case (8 \<phi> \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
   case (9 \<phi> \<psi>)
   then show ?case
     unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
     by (auto simp: cases_Neg_iff)
 next
-  case (10 l)
-  from "10.prems"(2) have bounded: "Formula.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
+  case (10 \<phi> \<psi>)
+  then show ?case
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
+    by (auto simp: cases_Neg_iff)
+next
+  case (11 l)
+  from "11.prems"(2) have bounded: "Formula.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
     using that by (auto simp: list.pred_set)
   obtain poss negs where posnegs: "(poss, negs) = partition safe_formula l" by simp
   obtain posm negm where posnegm: "(posm, negm) = partition mmonitorable_exec l" by simp
@@ -75,13 +76,13 @@ next
   proof (rule subsetI)
     fix x assume "x \<in> set poss"
     then have "x \<in> set l" "safe_formula x" using posnegs by simp_all
-    then have "mmonitorable_exec x" using "10.hyps"(1) bounded by blast
+    then have "mmonitorable_exec x" using "11.hyps"(1) bounded by blast
     then show "x \<in> set posm" using \<open>x \<in> set poss\<close> posnegm posnegs by simp
   qed
   then have "set negm \<subseteq> set negs" using posnegm posnegs by auto
   obtain "poss \<noteq> []" "list_all safe_formula (map remove_neg negs)"
     "(\<Union>x\<in>set negs. fv x) \<subseteq> (\<Union>x\<in>set poss. fv x)"
-    using "10.prems"(1) posnegs by simp
+    using "11.prems"(1) posnegs by simp
   then have "posm \<noteq> []" using \<open>set poss \<subseteq> set posm\<close> by auto
   moreover have "list_all mmonitorable_exec (map remove_neg negm)"
   proof -
@@ -99,14 +100,14 @@ next
         case True
         then obtain z where "y = Formula.Neg z" by blast
         then show ?thesis
-          using "10.hyps"(2)[OF posnegs refl] \<open>x = remove_neg y\<close> \<open>y \<in> set negs\<close> posnegs bounded
+          using "11.hyps"(2)[OF posnegs refl] \<open>x = remove_neg y\<close> \<open>y \<in> set negs\<close> posnegs bounded
             \<open>safe_formula x\<close> by fastforce
       next
         case False
         then have "remove_neg y = y" by (cases y) simp_all
         then have "y = x" unfolding \<open>x = remove_neg y\<close> by simp
         show ?thesis
-          using "10.hyps"(1) \<open>y \<in> set negs\<close> posnegs \<open>safe_formula x\<close> unfolding \<open>y = x\<close>
+          using "11.hyps"(1) \<open>y \<in> set negs\<close> posnegs \<open>safe_formula x\<close> unfolding \<open>y = x\<close>
           by auto
       qed
     qed
@@ -117,21 +118,21 @@ next
     by fastforce
   ultimately show ?case using posnegm by simp
 next
-  case (15 \<phi> I \<psi>)
-  then show ?case
-    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
-    by (auto simp: cases_Neg_iff)
-next
   case (16 \<phi> I \<psi>)
   then show ?case
     unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
     by (auto simp: cases_Neg_iff)
 next
-  case (17 I r)
+  case (17 \<phi> I \<psi>)
+  then show ?case
+    unfolding safe_formula.simps future_bounded.simps mmonitorable_exec.simps
+    by (auto simp: cases_Neg_iff)
+next
+  case (18 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 next
-  case (18 I r)
+  case (19 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 qed (auto simp add: is_simple_eq_def list.pred_set)
@@ -144,38 +145,38 @@ lemma is_constraint_future_bounded: "is_constraint \<phi> \<Longrightarrow> Form
 
 lemma mmonitorable_exec_mmonitorable: "mmonitorable_exec \<phi> \<Longrightarrow> mmonitorable \<phi>"
 proof (induct \<phi> rule: mmonitorable_exec.induct)
-  case (7 \<phi> \<psi>)
+  case (8 \<phi> \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (auto simp: cases_Neg_iff intro: safe_assignment_future_bounded is_constraint_future_bounded)
 next
-  case (8 l)
+  case (9 l)
   obtain poss negs where posnegs: "(poss, negs) = partition safe_formula l" by simp
   obtain posm negm where posnegm: "(posm, negm) = partition mmonitorable_exec l" by simp
   have pos_monitorable: "list_all mmonitorable_exec posm" using posnegm by (simp add: list_all_iff)
   have neg_monitorable: "list_all mmonitorable_exec (map remove_neg negm)"
-    using "8.prems" posnegm by (simp add: list_all_iff)
+    using "9.prems" posnegm by (simp add: list_all_iff)
   have "set posm \<subseteq> set poss"
-    using "8.hyps"(1) posnegs posnegm unfolding mmonitorable_def by auto
+    using "9.hyps"(1) posnegs posnegm unfolding mmonitorable_def by auto
   then have "set negs \<subseteq> set negm"
     using posnegs posnegm by auto
 
-  have "poss \<noteq> []" using "8.prems" posnegm \<open>set posm \<subseteq> set poss\<close> by auto
+  have "poss \<noteq> []" using "9.prems" posnegm \<open>set posm \<subseteq> set poss\<close> by auto
   moreover have "list_all safe_formula (map remove_neg negs)"
-    using neg_monitorable "8.hyps"(2)[OF posnegm refl] \<open>set negs \<subseteq> set negm\<close>
+    using neg_monitorable "9.hyps"(2)[OF posnegm refl] \<open>set negs \<subseteq> set negm\<close>
     unfolding mmonitorable_def by (auto simp: list_all_iff)
   moreover have "\<Union> (fv ` set negm) \<subseteq> \<Union> (fv ` set posm)"
-    using "8.prems" posnegm by simp
+    using "9.prems" posnegm by simp
   then have "\<Union> (fv ` set negs) \<subseteq> \<Union> (fv ` set poss)"
     using \<open>set posm \<subseteq> set poss\<close> \<open>set negs \<subseteq> set negm\<close> by fastforce
   ultimately have "safe_formula (Formula.Ands l)" using posnegs by simp
   moreover have "Formula.future_bounded (Formula.Ands l)"
   proof -
     have "list_all Formula.future_bounded posm"
-      using pos_monitorable "8.hyps"(1) posnegm unfolding mmonitorable_def
+      using pos_monitorable "9.hyps"(1) posnegm unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
     moreover have fnegm: "list_all Formula.future_bounded (map remove_neg negm)"
-      using neg_monitorable "8.hyps"(2) posnegm unfolding mmonitorable_def
+      using neg_monitorable "9.hyps"(2) posnegm unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
     then have "list_all Formula.future_bounded negm"
     proof -
@@ -192,22 +193,22 @@ next
   qed
   ultimately show ?case unfolding mmonitorable_def ..
 next
-  case (13 \<phi> I \<psi>)
+  case (14 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (fastforce simp: cases_Neg_iff)
 next
-  case (14 \<phi> I \<psi>)
+  case (15 \<phi> I \<psi>)
   then show ?case
     unfolding mmonitorable_def mmonitorable_exec.simps safe_formula.simps
     by (fastforce simp: one_enat_def cases_Neg_iff)
 next
-  case (15 I r)
+  case (16 I r)
   then show ?case
     by (auto elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
         simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff regex.pred_set)
 next
-  case (16 I r)
+  case (17 I r)
   then show ?case
     by (auto 0 3 elim!: safe_regex_mono[rotated] dest: safe_regex_safe[rotated]
         simp: mmonitorable_regex_def mmonitorable_def cases_Neg_iff regex.pred_set)
@@ -675,6 +676,7 @@ datatype (dead 'msaux, dead 'muaux) mformula =
   MRel "event_data table"
   | MPred Formula.name "Formula.trm list"
   | MLet Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula"
+  | MLetPrev Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data table list"
   | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
   | MAndAssign "('msaux, 'muaux) mformula" "nat \<times> Formula.trm"
   | MAndRel "('msaux, 'muaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
@@ -692,6 +694,7 @@ datatype (dead 'msaux, dead 'muaux) mformula =
 
 record ('msaux, 'muaux) mstate =
   mstate_i :: nat
+  mstate_j :: nat
   mstate_m :: "('msaux, 'muaux) mformula"
   mstate_n :: nat
 
@@ -842,6 +845,7 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
 | "minit0 n (Formula.Pred e ts) = MPred e ts"
 | "minit0 n (Formula.Let p \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
+| "minit0 n (Formula.LetPrev p \<phi> \<psi>) = MLetPrev p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>) [{}]"
 | "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
 | "minit0 n (Formula.And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
       MAndAssign (minit0 n \<phi>) (split_assignment (fv \<phi>) \<psi>)
@@ -885,7 +889,7 @@ termination (in maux)
       dest!: to_mregex_ok[OF sym] atms_size)
 
 definition (in maux) minit :: "Formula.formula \<Rightarrow> ('msaux, 'muaux) mstate" where
-  "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_m = minit0 n \<phi>, mstate_n = n\<rparr>)"
+  "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_j = 0, mstate_m = minit0 n \<phi>, mstate_n = n\<rparr>)"
 
 definition (in maux) minit_safe where
   "minit_safe \<phi> = (if mmonitorable_exec \<phi> then minit \<phi> else undefined)"
@@ -1078,7 +1082,47 @@ lemma lookahead_ts_code[code]: "lookahead_ts nts' nts ts t =
                    | [] \<Rightarrow> t)))"
   by (auto simp: lookahead_ts_def hd_append hd_rev split: list.splits)
 
-primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.database \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow>
+fun letprev_meval0 where
+  "letprev_meval0 eval xs lookahead p ts db \<phi> =
+     (let (xs, \<phi>') = eval ts (Mapping.update p (map (image (map the)) xs) db) \<phi>;
+          ys = take lookahead xs;
+          zs = drop lookahead xs
+     in if size \<phi>' \<noteq> size \<phi> then undefined
+     else if ys = [] then (ys, zs, \<phi>')
+     else let (ys', zs', \<phi>') = letprev_meval0 eval ys (lookahead - length ys) p [] Mapping.empty \<phi>'
+       in (ys @ ys', zs @ zs', \<phi>'))"
+
+declare letprev_meval0.simps[simp del]
+
+lemma letprev_meval0_cong[fundef_cong]: 
+  assumes "(\<And>ts db \<psi>. size \<psi> = size \<phi> \<Longrightarrow>  eval ts db \<psi> = eval' ts db \<psi>)"
+  shows "letprev_meval0 eval xs lookahead p ts db \<phi> = letprev_meval0 eval' xs lookahead p ts db \<phi>"
+  using assms
+  apply (induct eval xs lookahead p ts db \<phi> arbitrary: eval' rule: letprev_meval0.induct)
+  subgoal premises IH for eval xs lookahead p ts db \<phi> eval'
+    apply (subst (1 2) letprev_meval0.simps)
+    apply (auto split: prod.splits simp: Let_def IH simp del: length_take)
+    done
+  done
+
+lemma size_letprev_meval: "(\<And>ts db \<psi>. size \<psi> = size \<phi> \<Longrightarrow> size (snd (eval ts db \<psi>)) = size \<psi>) \<Longrightarrow>
+  size (snd (snd (letprev_meval0 eval xs lookahead p ts db \<phi>))) = size \<phi>"
+  apply (induct eval xs lookahead p ts db \<phi> rule: letprev_meval0.induct)
+  apply (subst letprev_meval0.simps)
+  apply (auto split: prod.splits simp: Let_def)
+    apply (metis snd_conv)
+   apply (metis snd_conv)
+  apply (metis snd_conv)
+  done
+
+context maux
+begin
+
+context
+  fixes lookahead :: nat
+begin
+
+function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.database \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow>
     event_data table list \<times> ('msaux, 'muaux) mformula" where
   "meval n ts db (MRel rel) = (replicate (length ts) rel, MRel rel)"
 | "meval n ts db (MPred e tms) = (map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these
@@ -1086,6 +1130,10 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
 | "meval n ts db (MLet p m \<phi> \<psi>) =
     (let (xs, \<phi>) = meval m ts db \<phi>; (ys, \<psi>) = meval n ts (Mapping.update p (map (image (map the)) xs) db) \<psi>
     in (ys, MLet p m \<phi> \<psi>))"
+| "meval n ts db (MLetPrev p m \<phi> \<psi> buf) =
+    (let (xs, buf, \<phi>) = letprev_meval0 (meval m) buf lookahead p ts db \<phi>;
+         (ys, \<psi>) = meval n ts (Mapping.update p (map (image (map the)) xs) db) \<psi>
+    in (ys, MLetPrev p m \<phi> \<psi> buf))"
 | "meval n ts db (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf) =
     (let (xs, \<phi>) = meval n ts db \<phi>; (ys, \<psi>) = meval n ts db \<psi>;
       (zs, buf) = mbuf2_take (\<lambda>r1 r2. bin_join n A_\<phi> r1 pos A_\<psi> r2) (mbuf2_add xs ys buf)
@@ -1143,20 +1191,72 @@ primrec (in maux) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.data
       nt = lookahead_ts nts' nts ts t;
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
+  by pat_completeness auto
+
+lemma size_list_cong: "xs = ys \<Longrightarrow> (\<And>x. x \<in> set xs \<Longrightarrow> f x = g x) \<Longrightarrow> size_list f xs = size_list g ys"
+  by (induct xs arbitrary: ys) auto
+
+lemma map_split_map: "map_split f (map g xs) = map_split (f o g) xs"
+  by (induct xs) auto
+
+lemma map_split_eq_Pair_iff: "map_split f xs = (ys, zs) \<longleftrightarrow> ys = map (fst o f) xs \<and> zs = map (snd o f) xs"
+  by (induct xs arbitrary: ys zs) (auto split: prod.splits)
+
+lemma
+  psize_snd_meval: "meval_dom (n, t, db, \<phi>) \<Longrightarrow> size (snd (meval n t db \<phi>)) = size \<phi>"
+  apply (induct rule: meval.pinduct)
+  apply (auto simp only: prod.inject meval.psimps Let_def snd_conv mformula.size map_split_map id_o map_split_eq_Pair_iff size_list_map o_apply cong: size_list_cong split: prod.splits if_splits)
+  apply (metis snd_conv size_letprev_meval)
+  done
+
+lemma total_meval: "All meval_dom"
+  by (relation "measure (\<lambda>(_, _, _, \<phi>). size \<phi>)") (auto simp: termination_simp psize_snd_meval)
+
+lemmas size_snd_meval = psize_snd_meval[OF total_meval[THEN spec]]
+
+termination meval
+  by (rule total_meval)
+
+definition "letprev_meval m = letprev_meval0 (meval m)"
+
+lemma letprev_meval_code[code]: 
+  "letprev_meval m xs l p ts db \<phi> =
+     (let (xs, \<phi>') = meval m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>;
+          ys = take l xs;
+          zs = drop l xs
+     in if ys = [] then (ys, zs, \<phi>')
+        else let (ys', zs', \<phi>') = letprev_meval m ys (l - length ys) p [] Mapping.empty \<phi>'
+             in (ys @ ys', zs @ zs', \<phi>'))"
+  apply (subst letprev_meval0.simps[where eval="meval m" for m t, folded letprev_meval_def])
+  apply (auto split: prod.splits simp: Let_def)
+  apply (metis size_snd_meval snd_conv)+
+  done
+
+declare meval.simps[simp del]
+lemmas meval_simps[simp, code] = meval.simps[folded letprev_meval_def]
+
+end
+
+end
 
 definition (in maux) mstep :: "Formula.database \<times> ts \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mstate" where
   "mstep tdb st =
-     (let (xs, m) = meval (mstate_n st) [snd tdb] (fst tdb) (mstate_m st)
+     (let (xs, m) = meval (mstate_j st + 1 - mstate_i st) (mstate_n st) [snd tdb] (fst tdb) (mstate_m st)
      in (List.enumerate (mstate_i st) xs,
-      \<lparr>mstate_i = mstate_i st + length xs, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
+      \<lparr>mstate_i = mstate_i st + length xs, mstate_j = mstate_j st + 1, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
 
 subsection \<open>Verdict delay\<close>
 
 context fixes \<sigma> :: Formula.trace begin
 
+fun letprev_progress0 where
+  "letprev_progress0 prog 0 = 0"
+| "letprev_progress0 prog (Suc j) = min (Suc (prog (letprev_progress0 prog j) j)) (Suc j)"
+
 fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
   "progress P (Formula.Pred e ts) j = (case P e of None \<Rightarrow> j | Some k \<Rightarrow> k)"
 | "progress P (Formula.Let p \<phi> \<psi>) j = progress (P(p \<mapsto> progress P \<phi> j)) \<psi> j"
+| "progress P (Formula.LetPrev p \<phi> \<psi>) j = progress (P(p \<mapsto> letprev_progress0 (\<lambda>k. progress (P(p \<mapsto> k)) \<phi>) j)) \<psi> j"
 | "progress P (Formula.Eq t1 t2) j = j"
 | "progress P (Formula.Less t1 t2) j = j"
 | "progress P (Formula.LessEq t1 t2) j = j"
@@ -1176,9 +1276,15 @@ fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.form
     Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress P) r j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
 
 definition "progress_regex P = min_regex_default (progress P)"
+definition "letprev_progress p P \<phi> = letprev_progress0 (\<lambda>k. progress (P(p \<mapsto> k)) \<phi>)"
+
+lemma letprev_progress_simps[simp]:
+  "letprev_progress p P \<phi> 0 = 0"
+  "letprev_progress p P \<phi> (Suc j) = min (Suc (progress (P(p \<mapsto> letprev_progress p P \<phi> j)) \<phi> j)) (Suc j)"
+  unfolding letprev_progress_def by auto
 
 declare progress.simps[simp del]
-lemmas progress_simps[simp] = progress.simps[folded progress_regex_def[THEN fun_cong, THEN fun_cong]]
+lemmas progress_simps[simp] = progress.simps[folded progress_regex_def[THEN fun_cong, THEN fun_cong] letprev_progress_def]
 
 end
 
@@ -1209,8 +1315,18 @@ lemma pred_mapping_mono_strong: "pred_mapping Q P \<Longrightarrow>
   (\<And>p. p \<in> dom P \<Longrightarrow> Q (the (P p)) \<Longrightarrow> R (the (P p))) \<Longrightarrow> pred_mapping R P"
   by (auto simp: pred_mapping_alt)
 
+lemma letprev_progress0_mono: "j \<le> j' \<Longrightarrow>
+  (\<And>j j' k k'. j \<le> j' \<Longrightarrow> k \<le> k' \<Longrightarrow> prog k j \<le> prog' k' j') \<Longrightarrow>
+  letprev_progress0 prog j \<le> letprev_progress0 prog' j'"
+proof (induct j arbitrary: j')
+  case (Suc j)
+  show ?case
+    by (rule letprev_progress0.elims[of prog' j', OF refl])
+      (insert Suc, auto simp only: letprev_progress0.simps intro!: rel_mapping_map_upd min.mono)
+qed simp
+
 lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
-proof (induction \<phi> arbitrary: P P')
+proof (induction \<phi> arbitrary: j j' P P')
   case (Pred e ts)
   then show ?case
     by (force simp: rel_mapping_alt dom_def split: option.splits)
@@ -1220,22 +1336,34 @@ next
     by (auto simp: image_iff intro!: Min.coboundedI[THEN order_trans])
 next
   case (Until \<phi> I \<psi>)
-  from Until(1,2)[of P P'] Until.prems show ?case
+  from Until(1,2)[of j j' P P'] Until.prems show ?case
     by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
 next
   case (MatchF I r)
-  from MatchF(1)[of _ P P'] MatchF.prems show ?case
+  from MatchF(1)[of _ j j' P P'] MatchF.prems show ?case
     by (auto 0 3 simp: Min_le_iff progress_regex_def dest: memR_nonzeroD less_\<tau>D spec[of _ j']
       elim!: order_trans less_le_trans intro!: cInf_superset_mono)
-qed (force simp: Min_le_iff progress_regex_def split: option.splits)+
+next
+  case (LetPrev p \<phi>1 \<phi>2)
+  show ?case
+    unfolding progress.simps
+    apply (rule LetPrev(2)[OF LetPrev(3)])
+    apply (rule rel_mapping_map_upd[OF letprev_progress0_mono[OF LetPrev(3,1)] LetPrev(4)])
+     apply assumption
+    apply (erule rel_mapping_map_upd[OF _ LetPrev(4)])
+    done
+qed (fastforce simp: Min_le_iff progress_regex_def split: option.splits)+
 
 lemma rel_mapping_reflp: "reflp Q \<Longrightarrow> rel_mapping Q P P"
   by (auto simp: rel_mapping_alt reflp_def)
 
 lemmas progress_mono = progress_mono_gen[OF _ rel_mapping_reflp[unfolded reflp_def], simplified]
 
+lemma letprev_progress0_le: "letprev_progress0 prog j \<le> j"
+  by (induct j) auto
+
 lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
-proof (induction \<phi> arbitrary: P)
+proof (induction \<phi> arbitrary: P j)
   case (Pred e ts)
   then show ?case
     by (auto simp: pred_mapping_alt dom_def split: option.splits)
@@ -1251,7 +1379,7 @@ next
   case (MatchF I r)
   then show ?case
     by (auto intro!: cInf_lower)
-qed (force simp: Min_le_iff progress_regex_def split: option.splits)+
+qed (force simp: Min_le_iff progress_regex_def letprev_progress_def letprev_progress0_le split: option.splits)+
 
 lemma progress_le: "progress \<sigma> Map.empty \<phi> j \<le> j"
   using progress_le_gen[of _ Map.empty] by auto
@@ -1336,6 +1464,26 @@ lemma rel_mapping_max_mapping_fun_upd: "dom P2 \<subseteq> dom P1 \<Longrightarr
   rel_mapping (\<le>) P2 (max_mapping P1 P2(p \<mapsto> y))"
   by (auto simp: rel_mapping_alt max_mapping_def split: option.splits)
 
+(*
+lemma letprev_progress_ge_gen:
+  assumes ge: "(\<forall>i S. \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> prog P j)" and p: "p \<notin> S"
+      and mono: "\<And>j j' P P'. j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> prog P j \<le> prog P' j'"
+    shows "\<exists>P j. dom P = S \<and> range_mapping i j (letprev_progress0 prog p P j)"
+  using ge p
+  apply -
+  apply (drule spec[of _ i])
+  apply (drule spec[of _ "insert p S"])
+  apply (erule exE conjE)+
+  subgoal for P j
+  apply (rule exI[of _ "P(p := None)"] exI[of _ "Suc (max i j)"] conjI)+
+     apply auto []
+    apply (auto elim!: pred_mapping_mono intro!: pred_mapping_map_upd simp: le_Suc_eq)
+    apply (erule order_trans)
+    apply (rule mono)
+      apply (auto simp: min_def)
+    sorry
+*)
+
 lemma progress_ge_gen: "Formula.future_bounded \<phi> \<Longrightarrow>
    \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j"
 proof (induction \<phi> arbitrary: i S)
@@ -1347,7 +1495,7 @@ next
   case (Let p \<phi> \<psi>)
   from Let.prems obtain P2 j2 where P2: "dom P2 = insert p S" "range_mapping i j2 P2"
     "i \<le> progress \<sigma> P2 \<psi> j2"
-    by (atomize_elim, intro Let(2)) (force simp: pred_mapping_alt rel_mapping_alt dom_def)+
+    by (atomize_elim, intro Let(2)) auto
   from Let.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (the (P2 p)) j1 P1"
     "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
     by (atomize_elim, intro Let(1)) auto
@@ -1372,6 +1520,69 @@ next
       by (auto intro!: progress_mono_gen simp: le1 rel_mapping_alt)
     finally show "i \<le> ..." .
   qed
+next
+  case (LetPrev p \<phi> \<psi>)
+  from LetPrev.prems obtain P2 j2 where P2: "dom P2 = insert p S" "range_mapping i j2 P2"
+    "i \<le> progress \<sigma> P2 \<psi> j2"
+    by (atomize_elim, intro LetPrev(2)) auto
+  from LetPrev.prems obtain P1 j1 where P1: "dom P1 = S" "range_mapping (the (P2 p)) j1 P1"
+    "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
+    by (atomize_elim, intro LetPrev(1)) auto
+  let ?P12 = "max_mapping P1 P2"
+  from P1 P2 have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2)"
+    by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
+  from P1 P2 have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> letprev_progress \<sigma> p P1 \<phi> j1)) \<psi> (max j1 j2)"
+    apply (intro progress_mono_gen)
+     apply (auto simp: rel_mapping_alt max_mapping_def)
+   
+    sorry
+  show ?case
+    unfolding progress.simps
+  proof (intro exI[of _ "?P12(p := P1 p)"] exI[of _ "max j1 j2"] conjI)
+    show "dom (?P12(p := P1 p)) = S"
+      using P1 P2 by (auto simp: dom_def max_mapping_def)
+  next
+    show "range_mapping i (max j1 j2) (?P12(p := P1 p))"
+      using P1 P2 by (force simp add: pred_mapping_alt dom_def max_mapping_def split: option.splits)
+  next
+    have "i \<le> progress \<sigma> P2 \<psi> j2" by fact
+    also have "... \<le> progress \<sigma> (?P12(p \<mapsto> letprev_progress \<sigma> p P1 \<phi> j1)) \<psi> (max j1 j2)"
+      using le2 by blast
+    also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p \<mapsto> letprev_progress0 (\<lambda>k. progress \<sigma> (?P12(p := P1 p)(p \<mapsto> k)) \<phi>) (max j1 j2))) \<psi> (max j1 j2)"
+      using P1 P2 by (auto intro!: progress_mono_gen letprev_progress0_mono rel_mapping_map_upd rel_mapping_reflp
+        simp: le1 letprev_progress_def subset_insertI max_mapping_cobounded1 reflp_def)
+    finally show "i \<le> ..." .
+  qed
+(*
+  from LetPrev.prems obtain P2 j2 where P2: "dom P2 = insert p S" "range_mapping i j2 P2"
+    "i \<le> progress \<sigma> P2 \<psi> j2"
+    by (atomize_elim, intro LetPrev(2)) auto
+  from LetPrev.prems obtain P1 j1 where P1: "dom P1 = insert p S" "range_mapping (the (P2 p)) j1 P1"
+    "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
+    by (atomize_elim, intro LetPrev(1)) auto
+  let ?P12 = "max_mapping P1 P2"
+  let ?P1 = "letprev_progress0 (\<lambda>P. Monitor.progress \<sigma> P \<phi>) p P1 j1"
+  from P1 P2 have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := ?P1 p)) \<phi> (max j1 j2)"
+    by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
+  from P1 P2 have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> ?P1 \<phi> j1)) \<psi> (max j1 j2)"
+    by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
+  show ?case
+    unfolding progress.simps
+  proof (intro exI[of _ "?P12(p := ?p)"] exI[of _ "max j1 j2"] conjI)
+    show "dom (?P12(p := None)) = S"
+      using P1 P2 by (auto simp: dom_def max_mapping_def split: option.splits)
+  next
+    show "range_mapping i (max j1 j2) (?P12(p := ?p))"
+      using P1 P2 (*by (force simp add: pred_mapping_alt dom_def max_mapping_def split: option.splits)*) sorry
+  next
+    have "i \<le> progress \<sigma> P2 \<psi> j2" by fact
+    also have "... \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
+      using le2 by blast
+    also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p\<mapsto>progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2))) \<psi> (max j1 j2)"
+      by (auto intro!: progress_mono_gen simp: le1 rel_mapping_alt)
+    finally show "i \<le> ..." .
+  qed
+*)
 next
   case (Eq _ _)
   then show ?case
@@ -1590,10 +1801,24 @@ lemma cInf_restrict_nat:
   shows "Inf A = Inf {y \<in> A. y \<le> x}"
   using assms by (auto intro!: antisym intro: cInf_greatest cInf_lower Inf_nat_def1)
 
+lemma letprev_progress0_cong: "\<forall>P. \<forall>i \<le> j. prog P i = prog' P i \<Longrightarrow>
+  letprev_progress0 prog p P j = letprev_progress0 prog' p P j"
+  apply (induct prog p P j arbitrary: prog' rule: letprev_progress0.induct)
+   apply simp
+  subgoal for prog p P j prog'
+    apply simp
+    apply (rule arg_cong2[OF refl])
+    apply simp
+    apply (rule arg_cong2[OF _ refl, where f=min])
+    apply (rule arg_cong2[OF _ refl, where f=prog'])
+    apply (auto simp: min_def le_Suc_eq)
+    done
+  done
+
 lemma progress_time_conv:
   assumes "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i"
   shows "progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
-  using assms proof (induction \<phi> arbitrary: P)
+using assms proof (induction \<phi> arbitrary: P j)  
   case (Until \<phi>1 I \<phi>2)
   have *: "i \<le> j - 1 \<longleftrightarrow> i < j" if "j \<noteq> 0" for i
     using that by auto
@@ -1618,7 +1843,7 @@ next
     by (cases "bounded I"; cases j)
       ((auto 6 0 simp: progress_le_gen progress_regex_def intro!: box_equals[OF arg_cong[where f=Inf]
             cInf_restrict_nat[symmetric, where x="j-1"] cInf_restrict_nat[symmetric, where x="j-1"]]) [])+
-qed (auto simp: progress_regex_def)
+qed (auto simp: progress_regex_def intro!: arg_cong[OF letprev_progress0_cong])
 
 lemma Inf_UNIV_nat: "(Inf UNIV :: nat) = 0"
   by (simp add: cInf_eq_minimum)
