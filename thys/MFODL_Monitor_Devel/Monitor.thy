@@ -1233,7 +1233,7 @@ lemma letprev_meval_code[code]:
   done
 
 declare meval.simps[simp del]
-lemmas meval_simps[simp, code] = meval.simps[folded letprev_meval_def]
+lemmas meval_simps[simp] = meval.simps[folded letprev_meval_def]
 
 end
 

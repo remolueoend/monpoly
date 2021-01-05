@@ -114,6 +114,7 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
   and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
   and mupdate_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)"
   and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and letprev_meval = "maux.letprev_meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
@@ -123,14 +124,12 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
 
-thm default_maux.meval.simps(2)
-
-lemma meval_MPred: "meval n ts db (MPred e tms) =
+lemma meval_MPred: "meval lookahead n ts db (MPred e tms) =
   (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
   (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
   by (force split: option.splits simp: Option.these_def image_iff)
 
-lemmas meval_code[code] = default_maux.meval.simps(1) meval_MPred default_maux.meval.simps(3-)
+lemmas meval_code[code] = default_maux.meval_simps(1) meval_MPred default_maux.meval_simps(3-)
 
 definition mk_db :: "(Formula.name \<times> event_data list set) list \<Rightarrow> _" where
   "mk_db t = Monitor.mk_db (\<Union>n \<in> set (map fst t). (\<lambda>v. (n, v)) ` the (map_of t n))"
