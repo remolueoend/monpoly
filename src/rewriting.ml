@@ -1028,7 +1028,7 @@ let expand_let f =
     else Pred (p)
 
   | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
-  | LetPrev (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
+  | LetPrev (p, f1, f2) -> failwith "Internal error"
 
   | Neg f -> Neg (expand_let_rec m f)
   | Exists (v, f) -> Exists (v,expand_let_rec m f)
