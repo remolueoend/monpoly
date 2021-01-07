@@ -36,6 +36,12 @@ code_printing
   | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<=)"
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<)"
 
+code_printing
+  type_constructor string8 \<rightharpoonup> (Eval) "string"
+  | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "="
+  | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<="
+  | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<"
+
 derive (eq) ceq string8
 derive (linorder) compare string8
 derive (compare) ccompare string8
