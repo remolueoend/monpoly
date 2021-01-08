@@ -74,14 +74,16 @@ lemma "mmonitorable \<phi>\<^sub>e\<^sub>x" by eval
 definition "s0 = minit \<phi>\<^sub>e\<^sub>x"
 definition "m1 = mstep (Mapping.update A [{[EInt 0], [EInt 1]}] Mapping.empty, 1) s0"
 definition "m2 = mstep (Mapping.empty, 2) (snd m1)"
-definition "m3 = mstep (Mapping.update A [{[EInt 5]}] Mapping.empty, 12) (snd m2)"
-definition "m4 = mstep (Mapping.update A [{[EInt 6]}] Mapping.empty, 13) (snd m3)"
+definition "m3 = mstep (Mapping.update A [{[EInt 2]}] Mapping.empty, 2) (snd m2)"
+definition "m4 = mstep (Mapping.update A [{[EInt 5]}] Mapping.empty, 12) (snd m3)"
+definition "m5 = mstep (Mapping.update A [{[EInt 6]}] Mapping.empty, 13) (snd m4)"
 
 value s0
 value m1
 value m2
 value m3
 value m4
+value m5
 
 (*<*)
 end
