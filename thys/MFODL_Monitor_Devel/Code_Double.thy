@@ -513,7 +513,18 @@ code_printing
   | constant "double_of_integer :: integer \<Rightarrow> double" \<rightharpoonup> (OCaml) "Z.to'_float"
   | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (OCaml) "Z.of'_float"
 
-SML_export \<open>
+code_printing
+  code_module FloatUtil \<rightharpoonup> (Eval)
+\<open>
+signature FLOATUTIL = sig
+val compare : real -> real -> int
+val iszero : real -> bool
+val isinfinite : real -> bool
+val nan : real
+val toReal : int -> real
+val fromReal : real -> int
+end
+structure FloatUtil : FLOATUTIL = struct
 fun compare x y = (case Real.compare (x, y) of
     LESS => ~1
   | EQUAL => 0
@@ -524,6 +535,7 @@ fun isinfinite x = (Real.class x = IEEEReal.INF);
 val nan = Real./ (1.0, 0.0);
 fun toReal x = Real.fromLargeInt (IntInf.toLarge x);
 fun fromReal x = IntInf.fromLarge (Real.toLargeInt (IEEEReal.TO_ZERO) x);
+end
 \<close>
 
 code_printing
@@ -539,14 +551,14 @@ code_printing
   | constant "(<) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (Eval) "Real.< ((_), (_))"
   | constant "sqrt_double :: double \<Rightarrow> double" \<rightharpoonup> (Eval) "Math.sqrt"
   | constant "infinity :: double" \<rightharpoonup> (Eval) "Real.posInf"
-  | constant "nan :: double" \<rightharpoonup> (Eval) "nan"
-  | constant "is_zero :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "iszero"
-  | constant "is_infinite :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "isinfinite"
+  | constant "nan :: double" \<rightharpoonup> (Eval) "FloatUtil.nan"
+  | constant "is_zero :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "FloatUtil.iszero"
+  | constant "is_infinite :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "FloatUtil.isinfinite"
   | constant "is_nan :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "Real.isNan"
   | constant "copysign_double :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.copySign ((_), (_))"
-  | constant "compare_double :: double \<Rightarrow> double \<Rightarrow> integer" \<rightharpoonup> (Eval) "compare"
-  | constant "double_of_integer :: integer \<Rightarrow> double" \<rightharpoonup> (Eval) "toReal"
-  | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (Eval) "Z.of'_float"
+  | constant "compare_double :: double \<Rightarrow> double \<Rightarrow> integer" \<rightharpoonup> (Eval) "FloatUtil.compare"
+  | constant "double_of_integer :: integer \<Rightarrow> double" \<rightharpoonup> (Eval) "FloatUtil.toReal"
+  | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (Eval) "FloatUtil.fromReal"
 
 (*<*)
 end
