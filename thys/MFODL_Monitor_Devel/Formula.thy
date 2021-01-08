@@ -951,8 +951,13 @@ lemma safe_get_and: "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (ge
 lemma sat_get_and: "sat \<sigma> V v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> V v i) (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
 
-fun convert_multiway :: "formula \<Rightarrow> formula" where
-  "convert_multiway (Neg \<phi>) = Neg (convert_multiway \<phi>)"
+primrec convert_multiway :: "formula \<Rightarrow> formula" where
+  "convert_multiway (Pred p ts) = (Pred p ts)"
+| "convert_multiway (Eq t u) = (Eq t u)"
+| "convert_multiway (Less t u) = (Less t u)"
+| "convert_multiway (LessEq t u) = (LessEq t u)"
+| "convert_multiway (Let p \<phi> \<psi>) = Let p (convert_multiway \<phi>) (convert_multiway \<psi>)"
+| "convert_multiway (Neg \<phi>) = Neg (convert_multiway \<phi>)"
 | "convert_multiway (Or \<phi> \<psi>) = Or (convert_multiway \<phi>) (convert_multiway \<psi>)"
 | "convert_multiway (And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
       And (convert_multiway \<phi>) \<psi>
@@ -961,6 +966,7 @@ fun convert_multiway :: "formula \<Rightarrow> formula" where
     else if is_constraint \<psi> then
       And (convert_multiway \<phi>) \<psi>
     else Ands (convert_multiway \<psi> # get_and_list (convert_multiway \<phi>)))"
+| "convert_multiway (Ands \<phi>s) = Ands (map convert_multiway \<phi>s)"
 | "convert_multiway (Exists \<phi>) = Exists (convert_multiway \<phi>)"
 | "convert_multiway (Agg y \<omega> b f \<phi>) = Agg y \<omega> b f (convert_multiway \<phi>)"
 | "convert_multiway (Prev I \<phi>) = Prev I (convert_multiway \<phi>)"
@@ -969,8 +975,6 @@ fun convert_multiway :: "formula \<Rightarrow> formula" where
 | "convert_multiway (Until \<phi> I \<psi>) = Until (convert_multiway \<phi>) I (convert_multiway \<psi>)"
 | "convert_multiway (MatchP I r) = MatchP I (Regex.map_regex convert_multiway r)"
 | "convert_multiway (MatchF I r) = MatchF I (Regex.map_regex convert_multiway r)"
-| "convert_multiway (Let p \<phi> \<psi>) = Let p (convert_multiway \<phi>) (convert_multiway \<psi>)"
-| "convert_multiway \<phi> = \<phi>"
 
 abbreviation "convert_multiway_regex \<equiv> Regex.map_regex convert_multiway"
 
@@ -1010,6 +1014,12 @@ lemma fv_convert_multiway: "safe_formula \<phi> \<Longrightarrow> fvi b (convert
 proof (induction \<phi> arbitrary: b rule: safe_formula.induct)
   case (9 \<phi> \<psi>)
   then show ?case by (cases \<psi>) (auto simp: fv_get_and Un_commute)
+next
+  case (10 l)
+  then show ?case using convert_multiway_remove_neg
+    unfolding convert_multiway.simps fvi.simps list.set_map image_image Let_def
+    by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
+      (fastforce simp: list.pred_set)
 next
   case (15 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
@@ -1181,6 +1191,12 @@ next
       by simp
   qed
 next
+  case (Ands l)
+  then show ?case
+    using convert_multiway_remove_neg fv_convert_multiway
+    apply (auto simp: list.pred_set filter_map filter_empty_conv subset_eq)
+    by (metis fvi_remove_neg)
+next
   case (Neg \<phi>)
   have "safe_formula (Neg \<phi>') \<longleftrightarrow> safe_formula \<phi>'" if "fv \<phi>' = {}" for \<phi>'
     using that by (cases "Neg \<phi>'" rule: safe_formula.cases) simp_all
@@ -1198,6 +1214,9 @@ next
       elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
 qed (auto simp add: fv_convert_multiway nfv_convert_multiway)
+
+lemma future_bounded_remove_neg: "future_bounded (remove_neg \<phi>) = future_bounded \<phi>"
+  by (cases \<phi>) auto
 
 lemma future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
 proof (induction \<phi> rule: safe_formula_induct)
@@ -1242,7 +1261,7 @@ next
   then show ?case
     by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
         elim: safe_regex_safe_formula[THEN disjE_Not2])
-qed auto
+qed (auto simp: list.pred_set convert_multiway_remove_neg future_bounded_remove_neg)
 
 lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"
 proof (induction \<phi> arbitrary: V v i rule: safe_formula_induct)
@@ -1290,6 +1309,15 @@ next
   case (Let p \<phi> \<psi>)
   then show ?case
     by (auto simp add: nfv_convert_multiway fun_upd_def)
+next
+  case (Ands l)
+  have sat_remove_neg: "(sat \<sigma> V v i (remove_neg \<phi>) \<longleftrightarrow> sat \<sigma> V v i (remove_neg \<psi>)) \<longleftrightarrow>
+        (sat \<sigma> V v i \<phi> \<longleftrightarrow> sat \<sigma> V v i \<psi>)" if "is_Neg \<phi> \<longleftrightarrow> is_Neg \<psi>" for V v i \<phi> \<psi>
+    using that by (cases \<phi>; cases \<psi>) (auto simp add: is_Neg_def)
+  have is_Neg_cm: "is_Neg (convert_multiway \<phi>) \<longleftrightarrow> is_Neg \<phi>" for \<phi>
+    by (cases \<phi>) auto
+  from Ands show ?case
+    by (fastforce simp: list.pred_set convert_multiway_remove_neg sat_remove_neg[OF is_Neg_cm])
 qed (auto cong: nat.case_cong)
 
 end (*context*)
