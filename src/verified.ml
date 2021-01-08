@@ -8368,7 +8368,12 @@ let rec rbt_insert
   x = (fun k -> insertb (ccompare_list ccompare_event_data) k ()) x;;
 
 let rec convert_multiway
-  = function Neg phi -> Neg (convert_multiway phi)
+  = function Pred (p, ts) -> Pred (p, ts)
+    | Eq (t, u) -> Eq (t, u)
+    | Less (t, u) -> Less (t, u)
+    | LessEq (t, u) -> LessEq (t, u)
+    | Let (p, phi, psi) -> Let (p, convert_multiway phi, convert_multiway psi)
+    | Neg phi -> Neg (convert_multiway phi)
     | Or (phi, psi) -> Or (convert_multiway phi, convert_multiway psi)
     | And (phi, psi) ->
         (if safe_assignment (fvi zero_nata phi) psi
@@ -8379,6 +8384,7 @@ let rec convert_multiway
                  else (if is_constraint psi then And (convert_multiway phi, psi)
                         else Ands (convert_multiway psi ::
                                     get_and_list (convert_multiway phi)))))
+    | Ands phi_s -> Ands (mapa convert_multiway phi_s)
     | Exists phi -> Exists (convert_multiway phi)
     | Agg (y, omega, b, f, phi) -> Agg (y, omega, b, f, convert_multiway phi)
     | Prev (i, phi) -> Prev (i, convert_multiway phi)
@@ -8388,13 +8394,7 @@ let rec convert_multiway
     | Until (phi, i, psi) ->
         Until (convert_multiway phi, i, convert_multiway psi)
     | MatchP (i, r) -> MatchP (i, map_regex convert_multiway r)
-    | MatchF (i, r) -> MatchF (i, map_regex convert_multiway r)
-    | Pred (v, va) -> Pred (v, va)
-    | Let (v, va, vb) -> Let (v, va, vb)
-    | Eq (v, va) -> Eq (v, va)
-    | Less (v, va) -> Less (v, va)
-    | LessEq (v, va) -> LessEq (v, va)
-    | Ands v -> Ands v;;
+    | MatchF (i, r) -> MatchF (i, map_regex convert_multiway r);;
 
 let rec vminit_safe
   phi = (if mmonitorable_exec phi then vminit phi else failwith "undefined");;
