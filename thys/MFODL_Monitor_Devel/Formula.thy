@@ -969,6 +969,7 @@ fun convert_multiway :: "formula \<Rightarrow> formula" where
 | "convert_multiway (Until \<phi> I \<psi>) = Until (convert_multiway \<phi>) I (convert_multiway \<psi>)"
 | "convert_multiway (MatchP I r) = MatchP I (Regex.map_regex convert_multiway r)"
 | "convert_multiway (MatchF I r) = MatchF I (Regex.map_regex convert_multiway r)"
+| "convert_multiway (Let p \<phi> \<psi>) = Let p (convert_multiway \<phi>) (convert_multiway \<psi>)"
 | "convert_multiway \<phi> = \<phi>"
 
 abbreviation "convert_multiway_regex \<equiv> Regex.map_regex convert_multiway"
@@ -1042,6 +1043,9 @@ next
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
 qed (auto simp del: convert_multiway.simps(3))
+
+lemma nfv_convert_multiway: "safe_formula \<phi> \<Longrightarrow> nfv (convert_multiway \<phi>) = nfv \<phi>"
+  unfolding nfv_def by (auto simp: fv_convert_multiway)
 
 lemma get_and_nonempty:
   assumes "safe_formula \<phi>"
@@ -1193,7 +1197,7 @@ next
     by (auto 0 3 simp: atms_def fv_convert_multiway intro!: safe_regex_map_regex
       elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
-qed (auto simp: fv_convert_multiway)
+qed (auto simp add: fv_convert_multiway nfv_convert_multiway)
 
 lemma future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
 proof (induction \<phi> rule: safe_formula_induct)
@@ -1241,7 +1245,7 @@ next
 qed auto
 
 lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"
-proof (induction \<phi> arbitrary: v i rule: safe_formula_induct)
+proof (induction \<phi> arbitrary: V v i rule: safe_formula_induct)
   case (And_safe \<phi> \<psi>)
   let ?a = "And \<phi> \<psi>"
   let ?b = "convert_multiway ?a"
@@ -1271,7 +1275,7 @@ next
   then have "Regex.match (sat \<sigma> V v) (convert_multiway_regex r) = Regex.match (sat \<sigma> V v) r"
     unfolding match_map_regex
     by (intro Regex.match_fv_cong)
-      (auto 0 4 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
+      (auto 0 5 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
   then show ?case
     by auto
 next
@@ -1279,9 +1283,13 @@ next
   then have "Regex.match (sat \<sigma> V v) (convert_multiway_regex r) = Regex.match (sat \<sigma> V v) r"
     unfolding match_map_regex
     by (intro Regex.match_fv_cong)
-      (auto 0 4 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
+      (auto 0 5 simp: atms_def elim!: disjE_Not2 dest!: safe_regex_safe_formula)
   then show ?case
     by auto
+next
+  case (Let p \<phi> \<psi>)
+  then show ?case
+    by (auto simp add: nfv_convert_multiway fun_upd_def)
 qed (auto cong: nat.case_cong)
 
 end (*context*)
