@@ -1884,6 +1884,11 @@ next
     using And_Not.IH
     by (auto simp: get_and_nonempty Min.union safe_progress_get_and)
 next
+  case (Ands l)
+  then show ?case
+    unfolding progress.simps convert_multiway.simps
+    by (force simp: list.pred_set convert_multiway_remove_neg intro!: Sup.SUP_cong)
+next
   case (MatchP I r)
   from MatchP show ?case
     unfolding progress.simps regex.map convert_multiway.simps regex.set_map image_image
