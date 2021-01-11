@@ -53,6 +53,7 @@ let elim_double_negation f =
     | LessEq (t1, t2) -> LessEq (t1, t2)
     | Pred p -> Pred p
     | Let (p,f1,f2) -> Let (p,elim f1, elim f2)
+    | LetPrev (p,f1,f2) -> LetPrev (p,elim f1, elim f2)
 
     | Neg (Neg f) -> elim f
 
@@ -102,6 +103,7 @@ let simplify_terms f =
       let new_tlist = List.map st tlist in
       Pred (Predicate.make_predicate (name, new_tlist))
     | Let (p,f1,f2) -> Let (p, s f1, s f2)
+    | LetPrev (p,f1,f2) -> LetPrev (p, s f1, s f2)
     | Neg f -> Neg (s f)
     | And (f1, f2) -> And (s f1, s f2)
     | Or (f1, f2) -> Or (s f1, s f2)
@@ -143,6 +145,7 @@ let rec elim_syntactic_sugar g =
     | Equal _ | Less _ | LessEq _ | Pred _ -> f
 
     | Let (p,f1,f2) -> Let (p, elim f1, elim f2)
+    | LetPrev (p,f1,f2) -> LetPrev (p, elim f1, elim f2)
     | Neg f -> Neg (elim f)
     | And (f1, f2) -> And (elim f1, elim f2)
     | Or (f1, f2) -> Or (elim f1, elim f2)
@@ -207,6 +210,7 @@ let push_negation g =
 
     | Neg f -> Neg (push f)
     | Let (p,f1,f2) -> Let (p,f1, push f2)
+    | LetPrev (p,f1,f2) -> LetPrev (p,f1, push f2)
     | Equal _ | Less _ | LessEq _ | Pred _ -> f
     | And (f1, f2) -> And (push f1, push f2)
     | Or (f1, f2) -> Or (push f1, push f2)
@@ -345,6 +349,12 @@ let rec is_monitorable f =
     else (false, Some (f, msg_PRED))
 
   | Let (p,f1,f2) ->
+    let (is_mon1, r1) = is_monitorable f1 in
+    if not is_mon1
+    then (is_mon1, r1)
+    else is_monitorable f2
+
+  | LetPrev (p,f1,f2) ->
     let (is_mon1, r1) = is_monitorable f1 in
     if not is_mon1
     then (is_mon1, r1)
@@ -787,6 +797,8 @@ function
   | Equiv (f1, f2)
   | Let (_,f1,f2)
     -> (check_intervals f1) && (check_intervals f2)
+  | LetPrev (_,f1,f2)
+    -> (check_intervals f1) && (check_intervals f2)
 
   | Eventually (intv, f)
   | Always (intv, f)
@@ -847,6 +859,8 @@ function
   | Since (_, f1, f2)
   | Let (_,f1,f2)
     -> (check_bounds f1) && (check_bounds f2)
+  | LetPrev (_,f1,f2)
+    -> (check_bounds f1) && (check_bounds f2)
 
   | Eventually (intv, f)
   | Always (intv, f)
@@ -891,6 +905,8 @@ let rec is_future = function
   | Since (_, f1, f2)
   | Let (_,f1,f2)
     -> (is_future f1) || (is_future f2)
+  | LetPrev (_,f1,f2)
+    -> (is_future f1) || (is_future f2)
 
   | Next (_, _)
   | Eventually (_, _)
@@ -927,6 +943,32 @@ let rec check_let = function
     then 
       let string_of_vars = List.fold_left (fun s v -> s ^ " " ^ string_of_var v) "" in
       let str = Printf.sprintf "[Rewriting.check_let] LET %s's parameters %s do not coincide with \
+      free variables %s of %s" n (string_of_vars prms) (string_of_vars fv1) (string_of_formula "" f1)
+      in failwith str
+    else ();
+    check_let f2
+
+  | LetPrev (p,f1,f2) -> 
+    let (n,a,ts) = get_info p in
+    let check_params = List.for_all (fun t -> match t with Var _ -> true | _ -> false) ts in
+    if not check_params
+    then 
+      let string_of_terms = List.fold_left (fun s v -> s ^ " " ^ string_of_term v) "" in
+      let str = Printf.sprintf "[Rewriting.check_let] LETPREV %s's parameters %s must be variables" n (string_of_terms ts) 
+      in failwith str
+    else ();
+    let prms = List.flatten (List.map tvars ts) in 
+    let fv1 = free_vars f1 in
+    if (List.length fv1) != a
+    then 
+      let str = Printf.sprintf "[Rewriting.check_let] LETPREV %s's arity %n must match the number \
+      of free variables of %s " n a (string_of_formula "" f1)
+      in failwith str
+    else ();
+    if not (Misc.subset fv1 prms && Misc.subset prms fv1)
+    then 
+      let string_of_vars = List.fold_left (fun s v -> s ^ " " ^ string_of_var v) "" in
+      let str = Printf.sprintf "[Rewriting.check_let] LETPREV %s's parameters %s do not coincide with \
       free variables %s of %s" n (string_of_vars prms) (string_of_vars fv1) (string_of_formula "" f1)
       in failwith str
     else ();
@@ -986,6 +1028,7 @@ let expand_let f =
     else Pred (p)
 
   | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
+  | LetPrev (p, f1, f2) -> failwith "Internal error"
 
   | Neg f -> Neg (expand_let_rec m f)
   | Exists (v, f) -> Exists (v,expand_let_rec m f)
@@ -1274,6 +1317,21 @@ let rec type_check_formula (sch, vars) f =
     let (s2, v2, f2) = type_check_formula (delta,vars) f2 in
     let new_delta = List.filter (fun (p,_) -> not (n=p)) s2 in
     (shadowed_pred@new_delta, v2, Let(p,f1,f2))
+
+  | LetPrev (p, f1, f2) -> 
+    let (n,_,ts) = get_info p in
+    let new_vars = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") ts in (* We allow only variables here with check_let *)
+    let new_typed_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] new_vars in
+    let new_sig = List.map (fun (_,t) -> t) new_typed_vars in
+    let (s1,v1,f1) = type_check_formula ((n,new_sig)::sch, new_typed_vars) f1 in
+    assert((List.length v1) = (List.length new_typed_vars));
+    let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
+    let new_sig = List.map (fun (_,t) -> t) new_sig in
+    let (shadowed_pred,rest) = List.partition (fun (p,_) -> n=p) s1 in
+    let delta = (n,new_sig)::rest in
+    let (s2, v2, f2) = type_check_formula (delta,vars) f2 in
+    let new_delta = List.filter (fun (p,_) -> not (n=p)) s2 in
+    (shadowed_pred@new_delta, v2, LetPrev(p,f1,f2))
 
   | Neg f -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Neg f)
   | Prev (intv,f) -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Prev (intv,f))

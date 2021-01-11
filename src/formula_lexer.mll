@@ -101,6 +101,7 @@ rule
   | "FALSE"                     { f "FALSE" lexbuf; FALSE }
   | "TRUE"                      { f "TRUE" lexbuf; TRUE }
   | "LET"                       { f "LET" lexbuf; LET }
+  | "LETPREV"                   { f "LETPREV" lexbuf; LETPREV }
   | "IN"                        { f "IN" lexbuf; IN }
   | "NOT"                       { f "NOT" lexbuf; NOT }
   | "AND"                       { f "AND" lexbuf; AND }

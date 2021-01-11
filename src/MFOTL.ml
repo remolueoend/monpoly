@@ -56,6 +56,7 @@ type formula =
   | LessEq of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
+  | LetPrev of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -174,6 +175,10 @@ let rec formula_map = function
     let f1 = formula_map f1 in
     let f2 = formula_map f2 in
     mapf (Let (p,f1,f2))
+  | LetPrev (p,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (LetPrev (p,f1,f2))
   | Neg f -> mapf (Neg (formula_map f))
   | And (f1,f2) ->
     let f1 = formula_map f1 in
@@ -233,6 +238,7 @@ let rec direct_subformulas = function
   | LessEq (t1,t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
+  | LetPrev (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
   | And (f1,f2) -> [f1;f2]
   | Or (f1,f2) -> [f1;f2]
@@ -313,6 +319,7 @@ let rec is_mfodl = function
   | LessEq (t1,t2) -> false
   | Pred p -> false
   | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
+  | LetPrev (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -341,6 +348,7 @@ let rec free_vars = function
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
   | Pred p -> Predicate.pvars p
   | Let (_,_,f) -> free_vars f
+  | LetPrev (_,_,f) -> free_vars f
   | Neg f -> free_vars f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -398,6 +406,7 @@ let rec substitute_vars m =
     Pred (Predicate.make_predicate (n,List.map (Predicate.substitute_vars m) ts))
     
   | Let (p, f1, f2) -> Let (p, f1, substitute_vars m f2)
+  | LetPrev (p, f1, f2) -> LetPrev (p, f1, substitute_vars m f2)
 
   | Neg f -> Neg (substitute_vars m f)
   | Exists (v, f) -> 
@@ -506,6 +515,7 @@ let rec type_of_fma = function
   | LessEq (t1,t2) -> "LessEq"
   | Pred p -> "Pred"
   | Let (p,f1,f2) -> "Let"
+  | LetPrev (p,f1,f2) -> "LetPrev"
   | Neg f -> "Neg"
   | And (f1,f2) -> "And"
   | Or (f1,f2) -> "Or"
@@ -687,6 +697,27 @@ let string_of_formula str g =
 
             | Let (p,f1,f2) ->
               "LET"
+              ^
+              " "
+              ^
+              (string_f_rec false true (Pred p))
+              ^
+              " = "
+              ^
+              (string_f_rec false true f1)
+              ^
+              "\n"
+              ^ 
+              padding
+              ^
+              "IN"
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)  
+
+            | LetPrev (p,f1,f2) ->
+              "LETPREV"
               ^
               " "
               ^
