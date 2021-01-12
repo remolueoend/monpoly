@@ -45,6 +45,7 @@ abbreviation "Eventually I \<psi> \<equiv> Formula.Until TT I \<psi>"
 context includes string8.lifting begin
 lift_definition p :: string8 is "''p''" .
 lift_definition A :: string8 is "''A''" .
+lift_definition B :: string8 is "''B''" .
 end
 
 declare [[code drop: p A]]
@@ -54,17 +55,20 @@ code_printing
 \<open>
 signature CONCRETESTRINGS = sig
 val p : string;
-val a : string
+val a : string;
+val b : string
 end
 structure ConcreteStrings : CONCRETESTRINGS = struct
 val p = "p";
 val a = "A";
+val b = "B";
 end
 \<close>
 
 code_printing
   constant p \<rightharpoonup> (Eval) "ConcreteStrings.p"
-| constant A \<rightharpoonup> (Eval) "ConcreteStrings.a"
+  | constant A \<rightharpoonup> (Eval) "ConcreteStrings.a"
+| constant B \<rightharpoonup> (Eval) "ConcreteStrings.b"
 
 definition "\<phi>\<^sub>e\<^sub>x = Formula.Let p (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0]))
   (Formula.Pred p [Formula.Var 0])"
