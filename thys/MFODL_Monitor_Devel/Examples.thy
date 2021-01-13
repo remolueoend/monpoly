@@ -72,8 +72,11 @@ code_printing
 
 definition "\<phi>\<^sub>e\<^sub>x = Formula.Let p (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0]))
   (Formula.Pred p [Formula.Var 0])"
+definition "\<phi>\<^sub>e\<^sub>x\<^sub>2 = Formula.Let p (Formula.And (Eventually (interval 0 10) (Formula.Pred B [Formula.Var 0])) (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0])))
+  (Formula.Pred p [Formula.Var 0])"
 
 lemma "mmonitorable \<phi>\<^sub>e\<^sub>x" by eval
+lemma "mmonitorable \<phi>\<^sub>e\<^sub>x\<^sub>2" by eval
 
 definition "s0 = minit \<phi>\<^sub>e\<^sub>x"
 definition "m1 = mstep (Mapping.update A [{[EInt 0], [EInt 1]}] Mapping.empty, 1) s0"
