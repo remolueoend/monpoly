@@ -13,6 +13,9 @@ typedef string8 = "UNIV :: char list set" ..
 
 setup_lifting type_definition_string8
 
+lift_definition string8_literal :: "String.literal \<Rightarrow> string8" is String.explode .
+declare [[coercion string8_literal]]
+
 instantiation string8 :: "{equal, linorder}"
 begin
 
@@ -28,7 +31,9 @@ end
 
 lifting_forget string8.lifting
 
-declare [[code drop: "HOL.equal :: string8 \<Rightarrow> _" "(\<le>) :: string8 \<Rightarrow> _" "(<) :: string8 \<Rightarrow> _"]]
+declare [[code drop: string8_literal "HOL.equal :: string8 \<Rightarrow> _"
+      "(\<le>) :: string8 \<Rightarrow> _" "(<) :: string8 \<Rightarrow> _"
+      "Code_Evaluation.term_of :: string8 \<Rightarrow> _"]]
 
 code_printing
   type_constructor string8 \<rightharpoonup> (OCaml) "string"
@@ -36,11 +41,20 @@ code_printing
   | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<=)"
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<)"
 
+ML \<open>
+structure String8 =
+struct
+  fun to_term x = @{term Abs_string8} $ HOLogic.mk_string x;
+end;
+\<close>
+
 code_printing
   type_constructor string8 \<rightharpoonup> (Eval) "string"
+  | constant "string8_literal :: String.literal \<Rightarrow> string8" \<rightharpoonup> (Eval) "_"
   | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "="
   | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<="
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<"
+  | constant "Code_Evaluation.term_of :: string8 \<Rightarrow> term" \<rightharpoonup> (Eval) "String8.to'_term"
 
 derive (eq) ceq string8
 derive (linorder) compare string8
