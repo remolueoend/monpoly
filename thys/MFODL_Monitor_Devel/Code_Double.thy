@@ -1,6 +1,7 @@
 (*<*)
 theory Code_Double
   imports IEEE_Floating_Point.IEEE_Properties
+    IEEE_Floating_Point.Conversion_IEEE_Float
     "HOL-Library.Code_Target_Int"
     Containers.Collection_Eq
     Containers.Collection_Order
@@ -469,6 +470,7 @@ declare [[code drop:
       "less_eq :: double \<Rightarrow> _"
       "less :: double \<Rightarrow> _"
       "divide :: double \<Rightarrow> _"
+      "Code_Evaluation.term_of :: double \<Rightarrow> _"
       sqrt_double infinity nan is_zero is_infinite is_nan copysign_double fcompare_double
       double_of_integer integer_of_double
       ]]
@@ -512,6 +514,66 @@ code_printing
   | constant "compare_double :: double \<Rightarrow> double \<Rightarrow> integer" \<rightharpoonup> (OCaml) "FloatUtil.compare"
   | constant "double_of_integer :: integer \<Rightarrow> double" \<rightharpoonup> (OCaml) "Z.to'_float"
   | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (OCaml) "Z.of'_float"
+
+ML \<open>
+signature REALUTIL = sig
+  val nan : real
+  val iszero : real -> bool
+  val isinfinite : real -> bool
+  val copysign : real -> real -> real
+  val compare : real -> real -> int
+  val toInt : real -> int
+  val toTerm : real -> term
+end
+structure RealUtil : REALUTIL = struct
+  val nan = Real./ (1.0, 0.0);
+  fun iszero x = (Real.class x = IEEEReal.ZERO);
+  fun isinfinite x = (Real.class x = IEEEReal.INF);
+  fun copysign x y = if Real.isNan y then nan else Real.copySign (x, y);
+
+  fun compare x y = (case Real.compare (x, y) of
+      LESS => ~1
+    | EQUAL => 0
+    | GREATER => 1);
+
+  fun toInt x = Real.toInt IEEEReal.TO_ZERO x;
+
+  fun toTerm x =
+    (case Real.class x of
+      IEEEReal.NAN => @{const nan}
+    | IEEEReal.INF => if Real.signBit x then @{term "- infinity"} else @{term "infinity"}
+    | _ => case Real.toManExp x of {man = m, exp = e} =>
+      let
+        val i = Real.floor (Real.* (m, Math.pow (2.0, 53.0)));
+        val e = e - 53;
+      in
+        @{term abs_double} $ (@{term "of_finite_Float :: Float.float \<Rightarrow> (11, 52) float"} $
+          (@{term Float} $ HOLogic.mk_number @{typ int} i $ HOLogic.mk_number @{typ int} e))
+      end);
+end\<close>
+
+code_printing
+  type_constructor double \<rightharpoonup> (Eval) "real"
+  | constant "uminus :: double \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.~"
+  | constant "(+) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.+ ((_), (_))"
+  | constant "(*) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.* ((_), (_))"
+  | constant "(/) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.'/ ((_), (_))"
+  | constant "(-) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.- ((_), (_))"
+  | constant "0 :: double" \<rightharpoonup> (Eval) "0.0"
+  | constant "1 :: double" \<rightharpoonup> (Eval) "1.0"
+  | constant "(\<le>) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (Eval) "Real.<= ((_), (_))"
+  | constant "(<) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (Eval) "Real.< ((_), (_))"
+  | constant "sqrt_double :: double \<Rightarrow> double" \<rightharpoonup> (Eval) "Math.sqrt"
+  | constant "infinity :: double" \<rightharpoonup> (Eval) "Real.posInf"
+  | constant "nan :: double" \<rightharpoonup> (Eval) "RealUtil.nan"
+  | constant "is_zero :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "RealUtil.iszero"
+  | constant "is_infinite :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "RealUtil.isinfinite"
+  | constant "is_nan :: double \<Rightarrow> bool" \<rightharpoonup> (Eval) "Real.isNan"
+  | constant "copysign_double :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (Eval) "RealUtil.copysign"
+  | constant "compare_double :: double \<Rightarrow> double \<Rightarrow> integer" \<rightharpoonup> (Eval) "RealUtil.compare"
+  | constant "double_of_integer :: integer \<Rightarrow> double" \<rightharpoonup> (Eval) "Real.fromInt"
+  | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (Eval) "RealUtil.toInt"
+  | constant "Code_Evaluation.term_of :: double \<Rightarrow> term" \<rightharpoonup> (Eval) "RealUtil.toTerm"
 
 hide_const (open) fcompare_double
 
