@@ -683,7 +683,7 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (LessEq t1 t2) = False"
 | "safe_formula (Pred e ts) = (\<forall>t\<in>set ts. is_Var t \<or> is_Const t)"
 | "safe_formula (Let p \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
-| "safe_formula (LetPrev p \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
+| "safe_formula (LetPrev p \<phi> \<psi>) = (safe_letprev p False \<phi> \<and> {0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (Neg \<phi>) = (fv \<phi> = {} \<and> safe_formula \<phi>)"
 | "safe_formula (Or \<phi> \<psi>) = (fv \<psi> = fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (And \<phi> \<psi>) = (safe_formula \<phi> \<and>
@@ -736,6 +736,33 @@ lemma finite_atms[simp]: "finite (atms r)"
 lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
   by blast
 
+(*
+lemma safe_letprev_induct[consumes 1, case_names Eq Less LessEq Pred
+    And Ands Neg Or Exists Agg
+    Prev_Pred_ p Prev_Pred Prev Next Since Until]:
+  assumes "safe_letprev p b \<phi>"
+    and Eq: "\<And>x y p b. P p b (Less x y)"
+    and Less: "\<And>x y p b. P p b (Less x y)"
+    and LessEq: "\<And>x y p b. P p b (LessEq x y)" 
+    and Pred: "\<And>e ts p b. e\<noteq>p \<Longrightarrow> P p b (Pred e ts)"
+    and And: "\<And>\<phi> \<psi> p b. safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b \<psi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b \<psi> \<Longrightarrow> P p b (And \<phi> \<psi>)"
+    and Ands: "\<And>l pos neg p b. (pos, neg) = partition (safe_letprev p b) l \<Longrightarrow> neg = [] \<Longrightarrow>
+      list_all (P p b) pos \<Longrightarrow> P p b (Ands l)"
+    and Neg: "\<And>\<phi> p b. safe_letprev p b \<phi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b (Neg \<phi>)"
+    and Or: "\<And>\<phi> \<psi> p b. safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b \<psi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b \<psi> \<Longrightarrow> P p b (Or \<phi> \<psi>)"
+    and Exists: "\<And>\<phi> p b. safe_letprev p b \<phi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b (Exists \<phi>)"
+    and Agg: "\<And>y \<omega> b' f \<phi> p b. safe_letprev p b \<phi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b (Agg y \<omega> b' f \<phi>)"
+    and Prev_Pred_p: "\<And>I e ts p b. e=p \<Longrightarrow> b=False \<Longrightarrow> P p b (Prev I (Pred e ts))"
+    and Prev_Pred: "\<And>I e ts p b. e\<noteq>p \<Longrightarrow> P p b (Prev I (Pred e ts))"
+    and Prev: "\<And>I \<phi> p b. safe_letprev p b \<phi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b (Prev I \<phi>)"
+    and Next: "\<And>I \<phi> p b. safe_letprev p b \<phi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b (Next I \<phi>)"
+    and Since: "\<And>\<phi> I \<psi> p b. safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b \<psi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b \<psi> \<Longrightarrow> P p b (Since \<phi> I \<psi>)"
+    and Until: "\<And>\<phi> I \<psi> p b. safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b \<psi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b \<psi> \<Longrightarrow> P p b (Until \<phi> I \<psi>)"
+  shows "(P p b \<phi>)"
+  using assms(1) proof (induction \<phi> rule: safe_letprev.induct)
+  qed (auto simp: assms)
+*)
+
 lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let LetPrev
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
     Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
@@ -746,7 +773,7 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
     and neq_Var: "\<And>x. P (Neg (Eq (Var x) (Var x)))"
     and Pred: "\<And>e ts. \<forall>t\<in>set ts. is_Var t \<or> is_Const t \<Longrightarrow> P (Pred e ts)"
     and Let: "\<And>p \<phi> \<psi>. {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Let p \<phi> \<psi>)"
-    and Let: "\<And>p \<phi> \<psi>. {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (LetPrev p \<phi> \<psi>)"
+    and Let: "\<And>p \<phi> \<psi>. safe_letprev p False \<phi> \<Longrightarrow> {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (LetPrev p \<phi> \<psi>)"
     and And_assign: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (And \<phi> \<psi>)"
     and And_safe: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> \<not> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow>
       P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And \<phi> \<psi>)"
@@ -1192,6 +1219,9 @@ lemma get_and_nonempty:
 lemma future_bounded_get_and:
   "list_all future_bounded (get_and_list \<phi>) = future_bounded \<phi>"
   by (induction \<phi>) simp_all
+
+lemma safe_letprev_convert_multiway: "safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b (convert_multiway \<phi>)"
+  sorry
 
 lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
 proof (induction \<phi> rule: safe_formula_induct)
