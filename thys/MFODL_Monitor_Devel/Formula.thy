@@ -655,6 +655,27 @@ definition safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool"
      | Eq t (Var x) \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
      | _ \<Rightarrow> False)"
 
+fun safe_letprev :: "name \<Rightarrow> bool \<Rightarrow> formula \<Rightarrow> bool" where
+   "safe_letprev p b (Eq t1 t2) = True"
+|  "safe_letprev p b (Less t1 t2) = True"        
+|  "safe_letprev p b (LessEq t1 t2) = True"
+|  "safe_letprev p b (Pred e ts) = (if e=p then False else True)"
+|  "safe_letprev p b (Let e \<phi> \<psi>) = False" (*TODO*)
+|  "safe_letprev p b (LetPrev e \<phi> \<psi>) = False" (*TODO*)
+|  "safe_letprev p b (Neg \<phi>) = safe_letprev p b \<phi>"
+|  "safe_letprev p b (Or \<phi> \<psi>) = (safe_letprev p b \<phi> \<and> safe_letprev p b \<psi>)"
+|  "safe_letprev p b (And \<phi> \<psi>) = (safe_letprev p b \<phi> \<and> safe_letprev p b \<psi>)"
+|  "safe_letprev p b (Ands l) = (let (pos, neg) = partition (safe_letprev p b) l in neg = [])"
+|  "safe_letprev p b (Exists \<phi>) = safe_letprev p b \<phi>"
+|  "safe_letprev p b (Agg y \<omega> b' f \<phi>) = safe_letprev p b \<phi>"
+|  "safe_letprev p b (Prev I (Pred e ts)) = (if e=p then (if b then False else True) else True)"
+|  "safe_letprev p b (Prev I \<phi>) = safe_letprev p True \<phi>"
+|  "safe_letprev p b (Next I \<phi>) = safe_letprev p True \<phi>"
+|  "safe_letprev p b (Since \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
+|  "safe_letprev p b (Until \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
+|  "safe_letprev p b (MatchP I r) = False" (*TODO*)
+|  "safe_letprev p b (MatchF I r) = False" (*TODO*)
+
 fun safe_formula :: "formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
 | "safe_formula (Neg (Eq (Var x) (Var y))) = (x = y)"
