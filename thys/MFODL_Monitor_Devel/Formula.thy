@@ -673,8 +673,8 @@ fun safe_letprev :: "name \<Rightarrow> bool \<Rightarrow> formula \<Rightarrow>
 |  "safe_letprev p b (Next I \<phi>) = safe_letprev p True \<phi>"
 |  "safe_letprev p b (Since \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
 |  "safe_letprev p b (Until \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
-|  "safe_letprev p b (MatchP I r) = False" (*TODO*)
-|  "safe_letprev p b (MatchF I r) = False" (*TODO*)
+|  "safe_letprev p b (MatchP I r) = False" (*Regex.safe_letprev_regex (\<lambda>\<phi>. safe_letprev p b \<phi>) r"*) (*TODO*)
+|  "safe_letprev p b (MatchF I r) = False" (*Regex.safe_letprev_regex (\<lambda>\<phi>. safe_letprev p b \<phi>) r"*) (*TODO*)
 
 fun safe_formula :: "formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
@@ -760,7 +760,7 @@ lemma safe_letprev_induct[consumes 1, case_names Eq Less LessEq Pred
     and Until: "\<And>\<phi> I \<psi> p b. safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b \<psi> \<Longrightarrow> P p b \<phi> \<Longrightarrow> P p b \<psi> \<Longrightarrow> P p b (Until \<phi> I \<psi>)"
   shows "(P p b \<phi>)"
   using assms(1) proof (induction \<phi> rule: safe_letprev.induct)
-  qed (auto simp: assms)
+  qed auto
 *)
 
 lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let LetPrev
@@ -1221,7 +1221,7 @@ lemma future_bounded_get_and:
   by (induction \<phi>) simp_all
 
 lemma safe_letprev_convert_multiway: "safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b (convert_multiway \<phi>)"
-  sorry
+  sorry (*by (induction p b \<phi> rule: safe_letprev.induct)(simp_all)*) (*TODO*)
 
 lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
 proof (induction \<phi> rule: safe_formula_induct)
@@ -1364,6 +1364,10 @@ next
     by (auto 0 3 simp: atms_def fv_convert_multiway intro!: safe_regex_map_regex
       elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
+next
+  case (LetPrev p \<phi> \<psi>)
+  then show ?case
+    by (auto simp: safe_letprev_convert_multiway nfv_convert_multiway fv_convert_multiway)
 qed (auto simp: fv_convert_multiway nfv_convert_multiway)
 
 lemma future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"

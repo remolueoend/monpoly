@@ -29,7 +29,7 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.Neg (Formula.Eq (Formula.Var x) (Formula.Var y))) = (x = y)"
 | "mmonitorable_exec (Formula.Pred e ts) = list_all (\<lambda>t. Formula.is_Var t \<or> Formula.is_Const t) ts"
 | "mmonitorable_exec (Formula.Let p \<phi> \<psi>) = ({0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
-| "mmonitorable_exec (Formula.LetPrev p \<phi> \<psi>) = ({0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
+| "mmonitorable_exec (Formula.LetPrev p \<phi> \<psi>) = (Formula.safe_letprev p False \<phi> \<and> {0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Or \<phi> \<psi>) = (fv \<phi> = fv \<psi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.And \<phi> \<psi>) = (mmonitorable_exec \<phi> \<and>
@@ -1534,8 +1534,7 @@ next
   from P1 P2 have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> letprev_progress \<sigma> p P1 \<phi> j1)) \<psi> (max j1 j2)"
     apply (intro progress_mono_gen)
      apply (auto simp: rel_mapping_alt max_mapping_def)
-   
-    sorry
+    sorry (*TODO*)
   show ?case
     unfolding progress.simps
   proof (intro exI[of _ "?P12(p := P1 p)"] exI[of _ "max j1 j2"] conjI)
@@ -1910,6 +1909,10 @@ next
       with 1 2 show ?thesis by (auto intro!: Let.prems(5))
     qed
   qed
+next
+  case (LetPrev p \<phi> \<psi>)
+  show ?case 
+    sorry (*TODO*)
 next
   case (Eq t1 t2)
   show ?case by simp
