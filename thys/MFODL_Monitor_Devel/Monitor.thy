@@ -1801,13 +1801,12 @@ lemma cInf_restrict_nat:
   using assms by (auto intro!: antisym intro: cInf_greatest cInf_lower Inf_nat_def1)
 
 lemma letprev_progress0_cong: "\<forall>P. \<forall>i \<le> j. prog P i = prog' P i \<Longrightarrow>
-  letprev_progress0 prog p P j = letprev_progress0 prog' p P j"
-  apply (induct prog p P j arbitrary: prog' rule: letprev_progress0.induct)
+  letprev_progress0 prog j = letprev_progress0 prog' j"
+  apply (induct prog j arbitrary: prog' rule: letprev_progress0.induct)
    apply simp
-  subgoal for prog p P j prog'
+  subgoal for prog j prog'
     apply simp
     apply (rule arg_cong2[OF refl])
-    apply simp
     apply (rule arg_cong2[OF _ refl, where f=min])
     apply (rule arg_cong2[OF _ refl, where f=prog'])
     apply (auto simp: min_def le_Suc_eq)
