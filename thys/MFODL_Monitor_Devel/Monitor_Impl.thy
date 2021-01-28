@@ -98,6 +98,7 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   and vminit_safe = "maux.minit_safe (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: Formula.formula \<Rightarrow> _"
   and vmupdate_since = "maux.update_since add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table)"
   and vmeval = "maux.meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
+  and letprev_vmeval = "maux.letprev_meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmstep = "maux.mstep add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmsteps0_stateless = "maux.msteps0_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmsteps_stateless = "maux.msteps_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
@@ -129,7 +130,14 @@ lemma meval_MPred: "meval lookahead n ts db (MPred e tms) =
   (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
   by (force split: option.splits simp: Option.these_def image_iff)
 
+lemma vmeval_MPred: "vmeval lookahead n ts db (MPred e tms) =
+  (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
+  (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
+  by (force split: option.splits simp: Option.these_def image_iff)
+
+declare [[code drop: meval vmeval]]
 lemmas meval_code[code] = default_maux.meval_simps(1) meval_MPred default_maux.meval_simps(3-)
+lemmas vmeval_code[code] = verimon_maux.meval_simps(1) vmeval_MPred verimon_maux.meval_simps(3-)
 
 definition mk_db :: "(Formula.name \<times> event_data list set) list \<Rightarrow> _" where
   "mk_db t = Monitor.mk_db (\<Union>n \<in> set (map fst t). (\<lambda>v. (n, v)) ` the (map_of t n))"
@@ -485,6 +493,10 @@ lemma mk_db_code[code]:
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin_code[folded remove_Union_def, code]
 declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
+
+declare regex.pred_inject[code]
+
+declare regex.pred_set[THEN fun_cong, symmetric, code_unfold]
 
 (*<*)
 end
