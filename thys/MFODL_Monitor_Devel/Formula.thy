@@ -1223,7 +1223,7 @@ lemma safe_letprev_convert_multiway: "safe_letprev p b \<phi> \<Longrightarrow> 
   apply (induction p b \<phi> rule: safe_letprev.induct)
                    apply simp_all
    apply safe
-  sledgehammer
+  find_theorems get_and_list safe_formula
   sorry (*by (induction p b \<phi> rule: safe_letprev.induct)(simp_all)*) (*TODO*)
 
 lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
