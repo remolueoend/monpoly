@@ -676,7 +676,7 @@ datatype (dead 'msaux, dead 'muaux) mformula =
   MRel "event_data table"
   | MPred Formula.name "Formula.trm list"
   | MLet Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula"
-  | MLetPrev Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data table list"
+  | MLetPrev Formula.name nat nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data table list"
   | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
   | MAndAssign "('msaux, 'muaux) mformula" "nat \<times> Formula.trm"
   | MAndRel "('msaux, 'muaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
@@ -845,7 +845,7 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
 | "minit0 n (Formula.Pred e ts) = MPred e ts"
 | "minit0 n (Formula.Let p \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
-| "minit0 n (Formula.LetPrev p \<phi> \<psi>) = MLetPrev p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>) [{}]"
+| "minit0 n (Formula.LetPrev p \<phi> \<psi>) = MLetPrev p (Formula.nfv \<phi>) 0 (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>) [{}]"
 | "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
 | "minit0 n (Formula.And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
       MAndAssign (minit0 n \<phi>) (split_assignment (fv \<phi>) \<psi>)
@@ -1119,7 +1119,7 @@ context maux
 begin
 
 context
-  fixes lookahead :: nat
+  fixes j :: nat
 begin
 
 function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.database \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow>
@@ -1130,10 +1130,10 @@ function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> Formula.
 | "meval n ts db (MLet p m \<phi> \<psi>) =
     (let (xs, \<phi>) = meval m ts db \<phi>; (ys, \<psi>) = meval n ts (Mapping.update p (map (image (map the)) xs) db) \<psi>
     in (ys, MLet p m \<phi> \<psi>))"
-| "meval n ts db (MLetPrev p m \<phi> \<psi> buf) =
-    (let (xs, buf, \<phi>) = letprev_meval0 (meval m) buf lookahead p ts db \<phi>;
+| "meval n ts db (MLetPrev p m i \<phi> \<psi> buf) =
+    (let (xs, buf, \<phi>) = letprev_meval0 (meval m) buf (j - i) p ts db \<phi>;
          (ys, \<psi>) = meval n ts (Mapping.update p (map (image (map the)) xs) db) \<psi>
-    in (ys, MLetPrev p m \<phi> \<psi> buf))"
+    in (ys, MLetPrev p m (i + length xs) \<phi> \<psi> buf))"
 | "meval n ts db (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf) =
     (let (xs, \<phi>) = meval n ts db \<phi>; (ys, \<psi>) = meval n ts db \<psi>;
       (zs, buf) = mbuf2_take (\<lambda>r1 r2. bin_join n A_\<phi> r1 pos A_\<psi> r2) (mbuf2_add xs ys buf)
@@ -1241,7 +1241,7 @@ end
 
 definition (in maux) mstep :: "Formula.database \<times> ts \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mstate" where
   "mstep tdb st =
-     (let (xs, m) = meval (mstate_j st + 1 - mstate_i st) (mstate_n st) [snd tdb] (fst tdb) (mstate_m st)
+     (let (xs, m) = meval (mstate_j st + 1) (mstate_n st) [snd tdb] (fst tdb) (mstate_m st)
      in (List.enumerate (mstate_i st) xs,
       \<lparr>mstate_i = mstate_i st + length xs, mstate_j = mstate_j st + 1, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
 
@@ -1251,7 +1251,7 @@ context fixes \<sigma> :: Formula.trace begin
 
 fun letprev_progress0 where
   "letprev_progress0 prog 0 = 0"
-| "letprev_progress0 prog (Suc j) = min (Suc (prog (letprev_progress0 prog j) j)) (Suc j)"
+| "letprev_progress0 prog (Suc j) = min (Suc (prog (letprev_progress0 prog j) (Suc j))) (Suc j)"
 
 fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
   "progress P (Formula.Pred e ts) j = (case P e of None \<Rightarrow> j | Some k \<Rightarrow> k)"
@@ -1280,7 +1280,7 @@ definition "letprev_progress p P \<phi> = letprev_progress0 (\<lambda>k. progres
 
 lemma letprev_progress_simps[simp]:
   "letprev_progress p P \<phi> 0 = 0"
-  "letprev_progress p P \<phi> (Suc j) = min (Suc (progress (P(p \<mapsto> letprev_progress p P \<phi> j)) \<phi> j)) (Suc j)"
+  "letprev_progress p P \<phi> (Suc j) = min (Suc (progress (P(p \<mapsto> letprev_progress p P \<phi> j)) \<phi> (Suc j))) (Suc j)"
   unfolding letprev_progress_def by auto
 
 declare progress.simps[simp del]
@@ -2395,6 +2395,12 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
       (V(p \<mapsto> \<lambda>i. {v. length v = m \<and> Formula.sat \<sigma> V v i \<phi>'})) n R \<psi> \<psi>' \<Longrightarrow>
     {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MLet p m \<phi> \<psi>) (Formula.Let p \<phi>' \<psi>')"
+  | LetPrev: "wf_mformula \<sigma> j P V m UNIV \<phi> \<phi>' \<Longrightarrow> i = letprev_progress \<sigma> p P \<phi>' j \<Longrightarrow>
+    list_all2 (\<lambda>X. undefined) [j + 1 ..< progress \<sigma> P \<phi>' j] buf \<Longrightarrow> \<comment> \<open>fixme\<close>
+    wf_mformula \<sigma> j (P(p \<mapsto> letprev_progress \<sigma> p P \<phi>' j))
+      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) n R \<psi> \<psi>' \<Longrightarrow> \<comment> \<open>safe\<close>
+    {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MLetPrev p m i \<phi> \<psi> buf) (Formula.LetPrev p \<phi>' \<psi>')"
   | And: "wf_mformula \<sigma> j P V n R \<phi> \<phi>' \<Longrightarrow> wf_mformula \<sigma> j P V n R \<psi> \<psi>' \<Longrightarrow>
     if pos then \<chi> = Formula.And \<phi>' \<psi>'
       else \<chi> = Formula.And \<phi>' (Formula.Neg \<psi>') \<and> Formula.fv \<psi>' \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
@@ -3301,7 +3307,7 @@ proof -
               else \<not> Formula.sat \<sigma> V (map the v) ne \<phi>)) (snd a)"
           by (auto simp: True[symmetric] zero_enat_def[symmetric])
         ultimately show ?thesis using qtable2 t True
-          by (auto simp: sat_Since_rec[where i=ne] sat.simps(6) elim!: qtable_union)
+          by (auto simp: sat_Since_rec[where i=ne] sat.simps(7) elim!: qtable_union)
       next
         case False
         with auxlist' Cons t have "X = rel2"
@@ -3321,7 +3327,7 @@ proof -
         using in_auxlist0_1 by blast+
       with False auxlist' Cons show ?thesis
         unfolding auxlist'_eq using qtable2
-        by (fastforce simp: sat_Since_rec[where i=ne] sat.simps(6)
+        by (fastforce simp: sat_Since_rec[where i=ne] sat.simps(7)
             diff_diff_right[where i="\<tau> \<sigma> ne" and j="\<tau> \<sigma> _ + \<tau> \<sigma> ne" and k="\<tau> \<sigma> (ne - 1)",
               OF trans_le_add2, simplified] elim!: qtable_cong[OF _ refl] order_trans dest: le_\<tau>_less)
     qed
@@ -4905,7 +4911,7 @@ lemma list_all2_replicate2[simp]: "list_all2 R xs (replicate m x) \<longleftrigh
 
 lemma (in maux) meval:
   assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' V db"
-  shows "case meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
+  shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'))
     [progress \<sigma> P \<phi>' j..<progress \<sigma> P' \<phi>' (j + \<delta>)] xs"
   using assms
@@ -4961,7 +4967,7 @@ next
       (V(p \<mapsto> \<lambda>i. {v. length v = m \<and> Formula.sat \<sigma> V v i \<phi>1'}))
       n R \<phi>2 \<phi>2'"
     by (cases rule: wf_mformula.cases) auto
-  obtain xs \<phi>1_new where e1: "meval m (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1 = (xs, \<phi>1_new)" and
+  obtain xs \<phi>1_new where e1: "meval (j + \<delta>) m (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1 = (xs, \<phi>1_new)" and
       wf1: "wf_mformula \<sigma> (j + \<delta>) P' V m UNIV \<phi>1_new \<phi>1'" and
       res1: "list_all2 (\<lambda>i. qtable m (fv \<phi>1') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>1'))
        [progress \<sigma> P \<phi>1' j..<progress \<sigma> P' \<phi>1' (j + \<delta>)] xs"
@@ -4989,7 +4995,7 @@ next
     \<psi>''_eqs: "\<psi>'' = formula.Eq (trm.Var x) t \<or> \<psi>'' = formula.Eq t (trm.Var x)"
     by (cases rule: wf_mformula.cases)
   from wf_\<phi> wf_envs obtain xs \<phi>\<^sub>n where
-    meval_eq: "meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> = (xs, \<phi>\<^sub>n)" and
+    meval_eq: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> = (xs, \<phi>\<^sub>n)" and
     wf_\<phi>\<^sub>n: "wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>''" and
     xs: "list_all2 (\<lambda>i. qtable n (fv \<phi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>''))
         [progress \<sigma> P \<phi>'' j..<progress \<sigma> P' \<phi>'' (j + \<delta>)] xs"
@@ -5186,8 +5192,8 @@ next
   from MPrev.prems show ?case
   proof (cases rule: wf_mformula.cases)
     case (Prev \<psi>)
-    let ?xs = "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
-    let ?\<phi> = "snd (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
+    let ?xs = "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
+    let ?\<phi> = "snd (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
     let ?ls = "fst (mprev_next I (buf @ ?xs) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]))"
     let ?rs = "fst (snd (mprev_next I (buf @ ?xs) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])))"
     let ?ts = "snd (snd (mprev_next I (buf @ ?xs) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])))"
@@ -5223,9 +5229,9 @@ next
       "min (progress \<sigma> P' \<psi> (j + \<delta>) - Suc 0) (j + \<delta> - Suc 0) = progress \<sigma> P' \<psi> (j + \<delta>) - Suc 0"
       using wf_envs_progress_le[OF MNext.prems(2), of \<psi>] by auto
 
-    let ?xs = "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
+    let ?xs = "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
     let ?ys = "case (?xs, first) of (_ # xs, True) \<Rightarrow> xs | _ \<Rightarrow> ?xs"
-    let ?\<phi> = "snd (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
+    let ?\<phi> = "snd (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
     let ?ls = "fst (mprev_next I ?ys (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]))"
     let ?rs = "fst (snd (mprev_next I ?ys (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])))"
     let ?ts = "snd (snd (mprev_next I ?ys (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])))"
@@ -5282,8 +5288,8 @@ next
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>''' \<union> Formula.fv \<psi>'') (mem_restr R)
       (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Since \<phi>''' I \<psi>'')))
       [progress \<sigma> P (Formula.Since \<phi>''' I \<psi>'') j..<progress \<sigma> P' (Formula.Since \<phi>''' I \<psi>'') (j + \<delta>)] (fst (zs, aux'))"
-    if eval_\<phi>: "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>) = xs"
-      and eval_\<psi>: "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>) = ys"
+    if eval_\<phi>: "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>) = xs"
+      and eval_\<psi>: "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>) = ys"
       and eq: "mbuf2t_take (\<lambda>r1 r2 t (zs, aux).
         case update_since args r1 r2 t aux of (z, x) \<Rightarrow> (zs @ [z], x))
         ([], aux) (mbuf2_add xs ys buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) = ((zs, aux'), buf', nts')"
@@ -5346,8 +5352,8 @@ next
       intro!: list_all2_appendI list.rel_refl)
   {
     fix xs ys zs aux' aux'' buf' nts' nt
-    assume eval_\<phi>: "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>) = xs"
-      and eval_\<psi>: "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>) = ys"
+    assume eval_\<phi>: "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>) = xs"
+      and eval_\<psi>: "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>) = ys"
       and nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
       and eq1: "mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
         (aux', buf', nts')"
@@ -5528,7 +5534,7 @@ next
     list_all2 (\<lambda>i. qtable n (Formula.fv_regex r) (mem_restr R)
       (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.MatchP I r)))
       [progress \<sigma> P (Formula.MatchP I r) j..<progress \<sigma> P' (Formula.MatchP I r) (j + \<delta>)] (fst (zs, aux'))"
-    if eval: "map (fst o meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db) \<phi>s = xss"
+    if eval: "map (fst o meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db) \<phi>s = xss"
       and eq: "mbufnt_take (\<lambda>rels t (zs, aux).
         case update_matchP n I mr mrs rels t aux of (z, x) \<Rightarrow> (zs @ [z], x))
         ([], aux) (mbufn_add xss buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) = ((zs, aux'), buf', nts')"
@@ -5579,7 +5585,7 @@ next
       intro!: list_all2_appendI list.rel_refl)
   {
     fix xss zs aux' aux'' buf' nts' nt
-    assume eval: "map (fst o meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db) \<phi>s = xss"
+    assume eval: "map (fst o meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db) \<phi>s = xss"
       and nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
       and eq1: "mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
         (aux', buf', nts')"
