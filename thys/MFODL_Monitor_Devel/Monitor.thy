@@ -1811,13 +1811,7 @@ lemma letprev_progress0_cong: "\<forall>P. \<forall>i \<le> j. prog P i = prog' 
     apply (rule arg_cong2[OF _ refl, where f=prog'])
     apply (auto simp: min_def le_Suc_eq)
     done
-  done  
-
-lemma lambda_progress: 
-  assumes "progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
-  shows "(\<lambda> k. progress \<sigma> (P(p\<mapsto>k)) \<phi>) = (\<lambda> k. progress \<sigma>' (P(p\<mapsto>k)) \<phi>)"
-  sorry
-  
+  done
 
 lemma progress_time_conv:
   assumes "\<forall>i<j. \<tau> \<sigma> i = \<tau> \<sigma>' i"
@@ -1850,10 +1844,7 @@ next
 next
   case(LetPrev p \<phi> \<psi>)
   with LetPrev show ?case
-    apply (auto intro!: arg_cong[OF letprev_progress0_cong])
-    apply (auto simp: letprev_progress_def)
-    sorry (*TODO*)
-    (*apply (auto simp add: lambda_progress)*)
+    by (auto intro!: arg_cong[OF letprev_progress0_cong] simp: letprev_progress_def simp del: fun_upd_apply)
 qed (auto simp: progress_regex_def intro!: arg_cong[OF letprev_progress0_cong])
 
 lemma Inf_UNIV_nat: "(Inf UNIV :: nat) = 0"
