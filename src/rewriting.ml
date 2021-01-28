@@ -566,6 +566,7 @@ let rec rr = function
   | Frex (_,r) -> rr_re true r 
   | Prex (_,r) -> rr_re false r 
   | Let (_,_,f) -> rr f
+  | LetPrev (_,_,f) -> rr f
   | _ -> failwith "[Rewriting.rr] internal error"
   and rr_re future = function 
   | Wild -> ([],true)
