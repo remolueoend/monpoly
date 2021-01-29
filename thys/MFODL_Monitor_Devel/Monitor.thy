@@ -1088,7 +1088,7 @@ function letprev_meval0 where
           (ys', \<phi>') = eval ts (Mapping.update p (map (image (map the)) xs) db) \<phi>;
           buf' = drop (j - i) buf @ ys'
      in if size \<phi>' \<noteq> size \<phi> then undefined
-     else if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', [], \<phi>')
+     else if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', buf', \<phi>')
      else letprev_meval0 eval j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>')"
   by auto
 termination
@@ -1230,7 +1230,7 @@ lemma letprev_meval_code[code]:
      (let xs = take (j - i) buf;
           (ys', \<phi>') = meval j m ts (Mapping.update p (map (image (map the)) xs) db) \<phi>;
           buf' = drop (j - i) buf @ ys' in
-     if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', [], \<phi>')
+     if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', buf', \<phi>')
      else letprev_meval m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>')"
   apply (subst letprev_meval0.simps[where eval="meval j m" and j=j for j m t, folded letprev_meval_def])
   apply (auto split: prod.splits simp: Let_def)
@@ -5079,7 +5079,7 @@ next
     by (cases rule: wf_mformula.cases)
       (auto simp: progress_constraint progress_le list.rel_map fv_formula_of_constraint
         Un_absorb2 wf_mformula_wf_set[unfolded wf_set_def] split: prod.splits
-        dest!: MAndRel.IH[where db1=db and P1=P and P'1=P'] eval_constraint_sat_eq[THEN iffD2]
+        dest!: MAndRel.IH[where db=db and P=P and P'=P'] eval_constraint_sat_eq[THEN iffD2]
         intro!: wf_mformula.AndRel
         elim!: list.rel_mono_strong qtable_filter eval_constraint_sat_eq[THEN iffD1])
 next
