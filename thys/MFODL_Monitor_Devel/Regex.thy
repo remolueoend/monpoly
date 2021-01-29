@@ -365,24 +365,6 @@ next
   qed
 qed auto
 
-context
-  fixes safe :: "'a \<Rightarrow> bool"
-begin
-
-qualified fun safe_letprev_regex :: "'a regex \<Rightarrow> bool" where
-  "safe_letprev_regex (Skip n) = True"
-| "safe_letprev_regex (Test \<phi>) = safe \<phi>"
-| "safe_letprev_regex (Plus r s) = (safe_letprev_regex r \<and> safe_letprev_regex s)"
-| "safe_letprev_regex (Times r s) = (safe_letprev_regex s \<and> safe_letprev_regex r)"
-| "safe_letprev_regex (Star r) = safe_letprev_regex r"
-
-end
-
-lemma safe_letprev_regex_mono:
-  "(\<And>x. x \<in> atms r \<Longrightarrow> safe x \<Longrightarrow> safe' x) \<Longrightarrow>
-  Regex.safe_letprev_regex safe r \<Longrightarrow> Regex.safe_letprev_regex safe' r"
-  by (induct r rule: safe_letprev_regex.induct) auto
-
 end
 
 (*<*)
