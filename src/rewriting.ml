@@ -658,7 +658,9 @@ let rec rewrite f =
 
   | And (f', Exists (v, f1)) ->
     if propagate_cond f' f1 then
-      And (f', Exists (v, rewrite (And (f', f1))))
+      let (v', m) = fresh_var_mapping (free_vars (And (f', f1))) v in
+      let m' = List.map (fun (v, n) -> (v, Var n)) m in
+      And (f', Exists (replace m v, rewrite (And (f', substitute_vars m' f1))))
     else
       let f' = rewrite f' in
       let f1 = rewrite f1 in
