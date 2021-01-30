@@ -655,25 +655,45 @@ definition safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool"
      | Eq t (Var x) \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
      | _ \<Rightarrow> False)"
 
+fun contains_pred :: "name \<Rightarrow> formula \<Rightarrow> bool" where
+   "contains_pred p (Eq t1 t2) = False"
+|  "contains_pred p (Less t1 t2) = False"        
+|  "contains_pred p (LessEq t1 t2) = False"
+|  "contains_pred p (Pred e ts) = (if e=p then True else False)"
+|  "contains_pred p (Let e \<phi> \<psi>) = (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
+|  "contains_pred p (LetPrev e \<phi> \<psi>) =  (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
+|  "contains_pred p (Neg \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Or \<phi> \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
+|  "contains_pred p (And \<phi> \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
+|  "contains_pred p (Ands l) = (\<forall>\<phi>\<in>set l. contains_pred p \<phi>)"
+|  "contains_pred p (Exists \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Agg y \<omega> b' f \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Prev I \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Next I \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Since \<phi> I \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
+|  "contains_pred p (Until \<phi> I \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
+|  "contains_pred p (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+|  "contains_pred p (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+
 fun safe_letprev :: "name \<Rightarrow> bool \<Rightarrow> formula \<Rightarrow> bool" where
-   "safe_letprev p b (Eq t1 t2) = True"
-|  "safe_letprev p b (Less t1 t2) = True"        
-|  "safe_letprev p b (LessEq t1 t2) = True"
-|  "safe_letprev p b (Pred e ts) = (if e=p then (if b then False else True) else True)"
-|  "safe_letprev p b (Let e \<phi> \<psi>) = False" (*TODO*)
-|  "safe_letprev p b (LetPrev e \<phi> \<psi>) = False" (*TODO*)
-|  "safe_letprev p b (Neg \<phi>) = safe_letprev p b \<phi>"
-|  "safe_letprev p b (Or \<phi> \<psi>) = (safe_letprev p b \<phi> \<and> safe_letprev p b \<psi>)"
-|  "safe_letprev p b (And \<phi> \<psi>) = (safe_letprev p b \<phi> \<and> safe_letprev p b \<psi>)"
-|  "safe_letprev p b (Ands l) = (\<forall>\<phi>\<in>set l. safe_letprev p b \<phi>)"
-|  "safe_letprev p b (Exists \<phi>) = safe_letprev p b \<phi>"
-|  "safe_letprev p b (Agg y \<omega> b' f \<phi>) = safe_letprev p b \<phi>"
-|  "safe_letprev p b (Prev I \<phi>) = safe_letprev p True \<phi>"
-|  "safe_letprev p b (Next I \<phi>) = safe_letprev p True \<phi>"
-|  "safe_letprev p b (Since \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
-|  "safe_letprev p b (Until \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
-|  "safe_letprev p b (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p b \<phi>)"
-|  "safe_letprev p b (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p b \<phi>)"
+   "safe_letprev p temp_path (Eq t1 t2) = True"
+|  "safe_letprev p temp_path (Less t1 t2) = True"        
+|  "safe_letprev p temp_path (LessEq t1 t2) = True"
+|  "safe_letprev p temp_path (Pred e ts) = (if e=p then (if temp_path then False else True) else True)"
+|  "safe_letprev p temp_path (Let e \<phi> \<psi>) = (p=e \<or> (\<not>(contains_pred p \<phi>) \<and> safe_letprev p temp_path \<psi>) \<or> (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi> \<and> safe_letprev e temp_path \<psi>))"
+|  "safe_letprev p temp_path (LetPrev e \<phi> \<psi>) = (p=e \<or> (\<not>(contains_pred p \<phi>) \<and> safe_letprev p temp_path \<psi>) \<or> (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi> \<and> safe_letprev e temp_path \<psi>))"
+|  "safe_letprev p temp_path (Neg \<phi>) = safe_letprev p temp_path \<phi>"
+|  "safe_letprev p temp_path (Or \<phi> \<psi>) = (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi>)"
+|  "safe_letprev p temp_path (And \<phi> \<psi>) = (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi>)"
+|  "safe_letprev p temp_path (Ands l) = (\<forall>\<phi>\<in>set l. safe_letprev p temp_path \<phi>)"
+|  "safe_letprev p temp_path (Exists \<phi>) = safe_letprev p temp_path \<phi>"
+|  "safe_letprev p temp_path (Agg y \<omega> b' f \<phi>) = safe_letprev p temp_path \<phi>"
+|  "safe_letprev p temp_path (Prev I \<phi>) = safe_letprev p True \<phi>"
+|  "safe_letprev p temp_path (Next I \<phi>) = safe_letprev p True \<phi>"
+|  "safe_letprev p temp_path (Since \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
+|  "safe_letprev p temp_path (Until \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
+|  "safe_letprev p temp_path (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p temp_path \<phi>)"
+|  "safe_letprev p temp_path (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p temp_path \<phi>)"
 
 fun safe_formula :: "formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
@@ -1113,6 +1133,12 @@ lemma safe_get_and: "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (ge
 lemma sat_get_and: "sat \<sigma> V v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> V v i) (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
 
+lemma safe_letprev_get_and: "safe_letprev p temp_path \<phi> \<Longrightarrow> list_all (safe_letprev p temp_path) (get_and_list \<phi>)"
+  by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
+
+lemma contain_pred_get_and: "\<not> contains_pred p \<phi>  \<Longrightarrow> \<not> list_all (contains_pred p) (get_and_list \<phi>)"
+  by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
+
 fun convert_multiway :: "formula \<Rightarrow> formula" where
   "convert_multiway (Neg \<phi>) = Neg (convert_multiway \<phi>)"
 | "convert_multiway (Or \<phi> \<psi>) = Or (convert_multiway \<phi>) (convert_multiway \<psi>)"
@@ -1219,12 +1245,76 @@ lemma future_bounded_get_and:
   "list_all future_bounded (get_and_list \<phi>) = future_bounded \<phi>"
   by (induction \<phi>) simp_all
 
+lemma safe_letprev_regex: "\<And>x. x\<in>regex.atms r \<Longrightarrow> safe_letprev p b x \<Longrightarrow>
+               safe_letprev p b (convert_multiway x) \<Longrightarrow>
+         x \<in> regex.atms (convert_multiway_regex r) \<Longrightarrow>
+         safe_letprev p b x"
+  sorry
+
+lemma contains_pred_convert_multiway: "\<not> (contains_pred p \<phi>) \<Longrightarrow> \<not> (contains_pred p (convert_multiway \<phi>))"
+proof (induction p \<phi> rule: contains_pred.induct)
+  case(9 p \<phi> \<psi>)
+  with 9 show ?case
+    sorry
+    (*by(simp add:Ball_set bex_Un contain_pred_get_and)*)
+next
+  case(17 p I r)
+  show ?case
+    sorry
+next
+  case (18 p I r)
+  show ?case
+    sorry
+qed(auto)
+
 lemma safe_letprev_convert_multiway: "safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b (convert_multiway \<phi>)"
-  apply (induction p b \<phi> rule: safe_letprev.induct)
-                   apply simp_all
-   apply safe
+  (*apply (induction p b \<phi> rule: safe_letprev.induct)
+  apply simp_all
+  apply(auto)
+  apply (simp add: list_all_iff safe_letprev_get_and)
+
+  (*apply (auto simp add: list_all_iff safe_letprev_get_and_rev fv_get_and)*)
+  done*)
   find_theorems get_and_list safe_formula
-  sorry (*by (induction p b \<phi> rule: safe_letprev.induct)(simp_all)*) (*TODO*)
+  thm safe_letprev.induct
+proof (induction p b \<phi> rule: safe_letprev.induct)
+  case (5 p b e \<phi> \<psi>)
+  with 5 show?case by (auto simp add: contains_pred_convert_multiway)
+  (*proof (cases "e=p")
+    case True
+    then show ?thesis by (auto)
+  next
+    case False
+    then show ?thesis proof (cases "\<not> (contains_pred p \<phi>) \<and> safe_letprev p b \<psi>")
+      case True
+      with 5 show ?thesis by(auto simp add: contains_pred_convert_multiway) (*TODO*)
+    next
+      case False
+      with 5 show ?thesis by(auto)
+    qed
+  qed
+*)
+next
+  case (6 p b e \<phi> \<psi>)
+  with 6 show?case by (auto simp add: contains_pred_convert_multiway)
+next
+  case(9 p b \<phi> \<psi>)
+  with 9 show ?case
+    apply(simp add:Ball_set ball_Un safe_letprev_get_and)
+    done
+next
+  case(17 p b I r)
+  with 17 show ?case sorry
+next
+  case (18p b I r)
+  show ?case
+    sorry
+  (*unfolding safe_letprev.simps convert_multiway.simps
+  apply simp_all
+  apply(auto)
+    apply (simp add: list_all_iff safe_letprev_get_and fv_get_and)
+    done*)
+qed(auto)(*(simp_all)*) (*TODO*)
 
 lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
 proof (induction \<phi> rule: safe_formula_induct)
