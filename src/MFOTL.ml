@@ -404,7 +404,7 @@ let rec substitute_vars m =
       let fv = free_vars f in
       let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
       let bv_rename = List.filter (fun x -> List.mem x tvars) v in
-      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let (_,fresh_var_map) = fresh_var_mapping (Misc.union fv tvars) bv_rename in
       Exists (
         Misc.replace fresh_var_map v,
         let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
@@ -414,7 +414,7 @@ let rec substitute_vars m =
       let fv = free_vars f in
       let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
       let bv_rename = List.filter (fun x -> List.mem x tvars) v in
-      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let (_,fresh_var_map) = fresh_var_mapping (Misc.union fv tvars) bv_rename in
       ForAll (
         Misc.replace fresh_var_map v,
         let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
@@ -425,7 +425,7 @@ let rec substitute_vars m =
       let bvars = Misc.diff fv g in
       let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
       let bv_rename = Misc.inter tvars bvars in
-      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let (_,fresh_var_map) = fresh_var_mapping (Misc.union fv tvars) bv_rename in
       let no_bv = (List.filter (fun (x,_) -> not (List.mem x bvars)) m) in
       let m' = no_bv @ List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
 
