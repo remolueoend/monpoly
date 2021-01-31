@@ -663,17 +663,17 @@ fun contains_pred :: "name \<Rightarrow> formula \<Rightarrow> bool" where
 |  "contains_pred p (Let e \<phi> \<psi>) = (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
 |  "contains_pred p (LetPrev e \<phi> \<psi>) =  (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
 |  "contains_pred p (Neg \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Or \<phi> \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
-|  "contains_pred p (And \<phi> \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
-|  "contains_pred p (Ands l) = (\<forall>\<phi>\<in>set l. contains_pred p \<phi>)"
+|  "contains_pred p (Or \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (And \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (Ands l) = (\<exists>\<phi>\<in>set l. contains_pred p \<phi>)"
 |  "contains_pred p (Exists \<phi>) = contains_pred p \<phi>"
 |  "contains_pred p (Agg y \<omega> b' f \<phi>) = contains_pred p \<phi>"
 |  "contains_pred p (Prev I \<phi>) = contains_pred p \<phi>"
 |  "contains_pred p (Next I \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Since \<phi> I \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
-|  "contains_pred p (Until \<phi> I \<psi>) = (contains_pred p \<phi> \<and> contains_pred p \<psi>)"
-|  "contains_pred p (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
-|  "contains_pred p (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+|  "contains_pred p (Since \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (Until \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (MatchP I r) = (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+|  "contains_pred p (MatchF I r) =  (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
 
 fun safe_letprev :: "name \<Rightarrow> bool \<Rightarrow> formula \<Rightarrow> bool" where
    "safe_letprev p temp_path (Eq t1 t2) = True"
@@ -1136,8 +1136,8 @@ lemma sat_get_and: "sat \<sigma> V v i \<phi> \<longleftrightarrow> list_all (sa
 lemma safe_letprev_get_and: "safe_letprev p temp_path \<phi> \<Longrightarrow> list_all (safe_letprev p temp_path) (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
 
-lemma contain_pred_get_and: "\<not> contains_pred p \<phi>  \<Longrightarrow> \<not> list_all (contains_pred p) (get_and_list \<phi>)"
-  by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
+lemma not_contains_pred_get_and: "\<And>x.\<not>contains_pred p \<phi> \<Longrightarrow> x \<in> set (get_and_list \<phi>) \<Longrightarrow> \<not> contains_pred p x"
+    by (induction \<phi> rule: get_and_list.induct) (simp_all)
 
 fun convert_multiway :: "formula \<Rightarrow> formula" where
   "convert_multiway (Neg \<phi>) = Neg (convert_multiway \<phi>)"
@@ -1251,12 +1251,10 @@ lemma safe_letprev_regex: "\<And>x. x\<in>regex.atms r \<Longrightarrow> safe_le
          safe_letprev p b x"
   sorry
 
-lemma contains_pred_convert_multiway: "\<not> (contains_pred p \<phi>) \<Longrightarrow> \<not> (contains_pred p (convert_multiway \<phi>))"
+lemma contains_pred_convert_multiway: "\<not> (contains_pred p \<phi>) \<Longrightarrow> \<not>(contains_pred p (convert_multiway \<phi>))"
 proof (induction p \<phi> rule: contains_pred.induct)
   case(9 p \<phi> \<psi>)
-  with 9 show ?case
-    sorry
-    (*by(simp add:Ball_set bex_Un contain_pred_get_and)*)
+  with 9 show ?case by(auto simp: not_contains_pred_get_and)
 next
   case(17 p I r)
   show ?case
