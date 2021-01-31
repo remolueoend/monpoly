@@ -1245,74 +1245,37 @@ lemma future_bounded_get_and:
   "list_all future_bounded (get_and_list \<phi>) = future_bounded \<phi>"
   by (induction \<phi>) simp_all
 
-lemma safe_letprev_regex: "\<And>x. x\<in>regex.atms r \<Longrightarrow> safe_letprev p b x \<Longrightarrow>
-               safe_letprev p b (convert_multiway x) \<Longrightarrow>
-         x \<in> regex.atms (convert_multiway_regex r) \<Longrightarrow>
-         safe_letprev p b x"
-  sorry
-
 lemma contains_pred_convert_multiway: "\<not> (contains_pred p \<phi>) \<Longrightarrow> \<not>(contains_pred p (convert_multiway \<phi>))"
 proof (induction p \<phi> rule: contains_pred.induct)
   case(9 p \<phi> \<psi>)
-  with 9 show ?case by(auto simp: not_contains_pred_get_and)
+  then show ?case by(auto simp: not_contains_pred_get_and)
 next
   case(17 p I r)
-  show ?case
-    sorry
+  then show ?case by (auto simp add: regex.set_map)
 next
-  case (18 p I r)
-  show ?case
-    sorry
+  case(18 p I r)
+  then show ?case by (auto simp add: regex.set_map)
 qed(auto)
 
 lemma safe_letprev_convert_multiway: "safe_letprev p b \<phi> \<Longrightarrow> safe_letprev p b (convert_multiway \<phi>)"
-  (*apply (induction p b \<phi> rule: safe_letprev.induct)
-  apply simp_all
-  apply(auto)
-  apply (simp add: list_all_iff safe_letprev_get_and)
-
-  (*apply (auto simp add: list_all_iff safe_letprev_get_and_rev fv_get_and)*)
-  done*)
-  find_theorems get_and_list safe_formula
-  thm safe_letprev.induct
 proof (induction p b \<phi> rule: safe_letprev.induct)
   case (5 p b e \<phi> \<psi>)
-  with 5 show?case by (auto simp add: contains_pred_convert_multiway)
-  (*proof (cases "e=p")
-    case True
-    then show ?thesis by (auto)
-  next
-    case False
-    then show ?thesis proof (cases "\<not> (contains_pred p \<phi>) \<and> safe_letprev p b \<psi>")
-      case True
-      with 5 show ?thesis by(auto simp add: contains_pred_convert_multiway) (*TODO*)
-    next
-      case False
-      with 5 show ?thesis by(auto)
-    qed
-  qed
-*)
+  then show?case by (auto simp add: contains_pred_convert_multiway)
 next
   case (6 p b e \<phi> \<psi>)
-  with 6 show?case by (auto simp add: contains_pred_convert_multiway)
+  then show?case by (auto simp add: contains_pred_convert_multiway)
 next
   case(9 p b \<phi> \<psi>)
-  with 9 show ?case
+  then show ?case
     apply(simp add:Ball_set ball_Un safe_letprev_get_and)
     done
 next
   case(17 p b I r)
-  with 17 show ?case sorry
+  then show ?case by (auto simp add: regex.set_map)
 next
-  case (18p b I r)
-  show ?case
-    sorry
-  (*unfolding safe_letprev.simps convert_multiway.simps
-  apply simp_all
-  apply(auto)
-    apply (simp add: list_all_iff safe_letprev_get_and fv_get_and)
-    done*)
-qed(auto)(*(simp_all)*) (*TODO*)
+  case(18 p b I r)
+  then show ?case by (auto simp add: regex.set_map)
+qed(auto)
 
 lemma safe_convert_multiway: "safe_formula \<phi> \<Longrightarrow> safe_formula (convert_multiway \<phi>)"
 proof (induction \<phi> rule: safe_formula_induct)
