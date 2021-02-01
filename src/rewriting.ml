@@ -706,7 +706,7 @@ let rec rewrite f =
 
   | And (f', Since (intv, f1, f2)) when (snd intv <> Inf) ->
     if propagate_cond f' f1 then
-      let f1' = rewrite (And (Eventually (intv, f'), f1)) in
+      let f1' = rewrite (And (Eventually (init_interval intv, f'), f1)) in
       And (f', Since (intv, f1', f2))
     else if propagate_cond f' f2 then
       let f2' = rewrite (And (Eventually (intv, f'), f2)) in
@@ -719,7 +719,7 @@ let rec rewrite f =
 
   | And (f', Until (intv, f1, f2)) ->
     if propagate_cond f' f1 then
-      let f1' = rewrite (And (Once (intv, f'), f1)) in
+      let f1' = rewrite (And (Once (init_interval intv, f'), f1)) in
       And (f', Until (intv, f1', f2))
     else if propagate_cond f' f2 then
       let f2' = rewrite (And (Once (intv, f'), f2)) in

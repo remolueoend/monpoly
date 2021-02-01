@@ -155,6 +155,7 @@ let in_left_ext v intv =
 let in_interval v intv =
   in_right_ext v intv && in_left_ext v intv
 
+let init_interval (_, b) = (CBnd 0., b)
 
 let aggreg_default_value op t = match op, t with
   | Min, TFloat -> Float infinity

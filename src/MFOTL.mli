@@ -94,7 +94,7 @@ type formula =
   | Until of (interval * formula * formula)
   | Frex of (interval * regex)
   | Prex of (interval * regex)
-and regex = 
+and regex =
   | Wild
   | Test of formula
   | Concat of (regex * regex)
@@ -115,6 +115,7 @@ val ts_minus: timestamp -> timestamp -> tsdiff
 val in_left_ext: tsdiff -> interval -> bool
 val in_right_ext: tsdiff -> interval -> bool
 val in_interval: tsdiff -> interval -> bool
+val init_interval: interval -> interval
 
 
 (** Default values for aggregations on empty sets: *)
