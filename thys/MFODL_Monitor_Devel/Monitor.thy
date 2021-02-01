@@ -2092,8 +2092,13 @@ lemma safe_progress_get_and: "safe_formula \<phi> \<Longrightarrow>
 
 lemma progress_convert_multiway: "safe_formula \<phi> \<Longrightarrow> progress \<sigma> P (convert_multiway \<phi>) j = progress \<sigma> P \<phi> j"
 proof (induction \<phi> arbitrary: P rule: safe_formula_induct)
-  case LetPrev
-  then show ?case sorry
+  case (LetPrev p \<phi> \<psi>)
+  then show ?case                  
+    apply (auto intro!: arg_cong[OF letprev_progress0_cong] simp add: letprev_progress_def simp del: fun_upd_apply)
+    sorry (*TODO*)
+    (*apply (induction j)
+     apply(auto)
+    done*)
 next
   case (And_safe \<phi> \<psi>)
   let ?c = "convert_multiway (Formula.And \<phi> \<psi>)"
@@ -2570,7 +2575,8 @@ next
     by (auto simp: pred_mapping_alt dom_def intro!: wf_mformula.Let Let(4,5))
 next
   case (LetPrev p \<phi> \<psi>)
-  then show ?case sorry
+  with fvi_less_nfv show ?case 
+    by (auto simp: pred_mapping_alt dom_def intro!: wf_mformula.LetPrev)
 next
   case (And_assign \<phi> \<psi>)
   then have 1: "\<forall>x\<in>fv \<psi>. x < n" by simp
@@ -4986,7 +4992,7 @@ next
     by (auto simp: fun_upd_def intro!: wf_mformula.Let)
 next
   case (MLetPrev p m \<phi>1 \<phi>2 first i buf)
-  then show ?case sorry
+  then show ?case sorry (*TODO*)
 next
   case (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)
   from MAnd.prems show ?case
