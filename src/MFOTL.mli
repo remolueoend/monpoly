@@ -140,6 +140,8 @@ val is_mfodl: formula -> bool
 val free_vars: formula -> var list
   (** [free_vars f] returns the list of free variables of [f]. *)
 
+val fresh_var_mapping: string list -> var list -> string list * (var * string) list
+
 val substitute_vars: (Predicate.var * Predicate.var Predicate.eterm) list -> formula -> formula
  (** [substitute_vars m f] is a capture avoiding substitution f[m]  *)
 
