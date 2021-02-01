@@ -28,11 +28,9 @@ type state = (int * timestamp * bool * mformula * (int * timestamp) array * int 
  *)
 let ext_to_m ff neval =
   let el2m linf =
-    let mlast = if linf.llast == NEval.void then -2
-      else if not (NEval.is_last neval linf.llast) && NEval.get_next neval linf.llast == NEval.get_first_cell neval then -1
-      else NEval.get_index linf.llast neval
-    in
-    (mlast, linf.llastq)
+    let mnext = if linf.lnext == NEval.void then -2 else
+      NEval.get_index linf.lnext neval in
+    (mnext, linf.lnextq)
   in
   let eze2m ezinf =
       {mezauxrels = ezinf.ezauxrels}
@@ -126,13 +124,12 @@ let m_to_ext mf neval =
     else crt   
   in    
 
-  let ml2e (mlast, mlastq) =
-    let llast =
-      if      mlast = -2 then NEval.void
-      else if mlast = -2 then NEval.new_cell (-1,MFOTL.ts_invalid)  neval
-      else                    NEval.get_cell_at_index mlast neval
+  let ml2e (mnext, mnextq) =
+    let lnext =
+      if   mnext = -2 then NEval.void
+      else                 NEval.get_cell_at_index mnext neval
     in
-    {llast = llast; llastq = mlastq}
+    {lnext = lnext; lnextq = mnextq}
   in
   let mez2e intv mezinf =
    (* contents of inf:
