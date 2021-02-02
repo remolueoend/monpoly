@@ -9,8 +9,8 @@ module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
 type linfo = {
-  mutable lnext: (int * timestamp) NEval.cell;
-  mutable lnextq: int
+  mutable llast: (int * timestamp) NEval.cell;
+  mutable llastq: int
 }
 type ainfo = {mutable arel: relation option}
 type pinfo = {mutable ptsq: timestamp}
@@ -185,14 +185,14 @@ let print_predinf str inf =
 
 let print_linf str inf =
   Printf.printf "%s{" str;
-  if inf.lnext == NEval.void then
-    print_string "lnext=None; "
+  if inf.llast == NEval.void then
+    print_string "last=None; "
   else
     begin
-      let (i,tsi) = NEval.get_data inf.lnext in
-      Printf.printf "lnext=(%d,%s); " i (MFOTL.string_of_ts tsi)
+      let (i,tsi) = NEval.get_data inf.llast in
+      Printf.printf "last=(%d,%s); " i (MFOTL.string_of_ts tsi)
     end;
-  Printf.printf "lnextq=%d" inf.lnextq;
+  Printf.printf "lastq=%d" inf.llastq;
   print_endline "}"
 
 let print_ozinf str inf =
