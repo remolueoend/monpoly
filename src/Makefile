@@ -23,7 +23,7 @@ OCAMLEXE = $(OCAML) $(FLAGS) $(LIBS)
 
 
 # The list of interface files
-MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli perf.mli \
+MLI = mqueue.mli dllist.mli misc.mli predicate.mli MFOTL.mli neval.mli perf.mli \
       tuple.mli relation.mli table.mli db.mli \
       rewriting.mli filter_rel.mli filter_empty_tp.mli sliding.mli \
 	  helper.mli domain_set.mli extformula.mli mformula.mli marshalling.mli splitting.mli intmap.mli \
