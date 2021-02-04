@@ -1302,6 +1302,9 @@ lemma rel_mapping_alt: "rel_mapping Q P P' = (dom P = dom P' \<and> (\<forall>p 
   unfolding rel_mapping_def rel_fun_def rel_option_iff dom_def
   by (force split: option.splits)
 
+lemma rel_mapping_reflp: "reflp Q \<Longrightarrow> rel_mapping Q P P"
+  by (auto simp: rel_mapping_alt reflp_def)
+
 lemma rel_mapping_map_upd[simp]: "Q x y \<Longrightarrow> rel_mapping Q P P' \<Longrightarrow> rel_mapping Q (P(p \<mapsto> x)) (P'(p \<mapsto> y))"
   by (auto simp: rel_mapping_alt)
 
@@ -1328,99 +1331,123 @@ proof (induct j arbitrary: j')
       (insert Suc, auto simp only: letprev_progress0.simps Suc_le_mono intro!: rel_mapping_map_upd min.mono)
 qed simp
 
-lemma "\<forall>i. Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j \<le> j \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P 
-  \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j \<Longrightarrow> 
-  \<exists>i \<le> j. i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j"
-  apply (induct p \<phi> arbitrary: P rule: safe_letprev.induct)
-                   apply simp_all
-  subgoal for p x P
-             apply (intro exI[of _ "if x \<noteq> p then (case P x of Some x \<Rightarrow> x | _ \<Rightarrow> j) else j"])
-    apply (force split: option.splits simp: pred_mapping_alt)
-    done
-  subgoal for p q \<phi> \<psi> P
-    apply (cases "p = q"; cases "contains_pred q \<phi>"; clarsimp)
-     apply (drule meta_spec, drule meta_mp, assumption, erule exE)
-    subgoal for i
-      apply (rule exI[of _ "Monitor.progress \<sigma> (P(q \<mapsto> i)) \<psi> j"])
-      try0
-      oops
+lemma bounded_fixpoint_ex:
+  fixes f :: "nat \<Rightarrow> nat"
+  shows "mono f \<Longrightarrow> (\<forall>x \<le> j. f x \<le> j) \<Longrightarrow> \<exists>y \<le> j. y = f y"
+  apply (induct j)
+   apply simp
+  apply (simp add: mono_def)
+  by (metis eq_iff le_Suc_eq)
 
-lemma csup_empty: "Sup {} = (0::nat)"
-  sledgehammer
+lemma bounded_fixpoint_ex_above:
+  fixes f :: "nat \<Rightarrow> nat"
+  shows "mono f \<Longrightarrow> (\<forall>x \<in> {i .. j}. f x \<in> {i .. j}) \<Longrightarrow> i \<le> j \<Longrightarrow> \<exists>y \<in> {i .. j}. y = f y"
+  apply (induct j)
+   apply simp
+   apply (simp add: mono_def)
+  by (metis atLeastAtMostSuc_conv atLeastAtMost_iff insert_iff not_less_eq_eq)
 
-lemma letprev_pred_mapping: "\<forall>i. Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j \<le> j \<Longrightarrow>
-  pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
-  pred_mapping (\<lambda>x. x \<le> j) (P(p \<mapsto> \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
-  apply (induction j)
-   apply(auto intro!: pred_mapping_map_upd cSup_least)
-  apply (simp add: le_Suc_eq)
-  find_theorems "Sup _ \<le> _"
-  thm cSup_least
-  find_theorems "Sup {}"
-  sorry (*TODO*)
+lemma progress_fixpoint_ex:
+  assumes "(\<And>P. pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> Monitor.progress \<sigma> P \<phi> j \<le> j)"
+  and "(\<And>P P'. pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j)"
+  shows "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+    \<exists>i \<le> j. i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j"
+  by (rule bounded_fixpoint_ex)
+    (auto simp: mono_def reflp_def intro!: assms rel_mapping_map_upd rel_mapping_reflp)
 
-lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
-proof (induction \<phi> arbitrary: P j)
-  case (Pred e ts)
-  then show ?case
-    by (auto simp: pred_mapping_alt dom_def split: option.splits)
-next
-  case (Ands l)
-  then show ?case
-    by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
-next
-  case (Until \<phi> I \<psi>)
-  then show ?case
-    by (auto intro!: cInf_lower)
-next
-  case (MatchF I r)
-  then show ?case
-    by (auto intro!: cInf_lower)
-next
-  case (LetPrev p \<phi> \<psi>)
-  then show ?case
-    by (force simp add: letprev_pred_mapping)
-qed (force simp: Min_le_iff progress_regex_def letprev_progress_def split: option.splits)+
+lemma progress_fixpoint_ex_above:
+  assumes "(\<And>j P. pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> Monitor.progress \<sigma> P \<phi> j \<le> j)"
+  and "(\<And>j j' P P'. j \<le> j' \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j') P' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j')"
+  and "j \<le> j'" "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'" "rel_mapping (\<le>) P P'" "i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j"
+  shows "\<exists>x \<le> j'. x = Monitor.progress \<sigma> (P'(p \<mapsto> min (Suc x) j')) \<phi> j' \<and> i \<le> x"
+proof -
+  have "\<exists>x \<in> {i .. j'}. x = Monitor.progress \<sigma> (P'(p \<mapsto> min (Suc x) j')) \<phi> j'"
+    using assms(3)
+    by (intro bounded_fixpoint_ex_above)
+      (auto simp: mono_def reflp_def
+         intro!: assms(1,2) pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp
+           pred_mapping_mono[OF assms(4)] pred_mapping_mono[OF assms(5)] assms(6)
+           ord_eq_le_trans[OF assms(7)] elim: order_trans[rotated])
+  then show ?thesis
+    by auto
+qed
 
-lemma progress_le: "progress \<sigma> Map.empty \<phi> j \<le> j"
-  using progress_le_gen[of _ Map.empty] by auto
-
+(*
 lemma progress_mapping_mono: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> (\<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}) \<le>  (\<Squnion> {i. i \<le> j' \<and> i = Monitor.progress \<sigma> (P'(p \<mapsto> min (Suc i) j')) \<phi> j'})"
   apply(induction j')
    apply(rule cSup_mono; simp)
   sorry (*TODO*)
+*)
 
-lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
-proof (induction \<phi> arbitrary: j j' P P')
-  case (Pred e ts)
+lemma progress_le_gen: "\<And>j P. pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j" and
+ progress_mono_gen: "\<And>j j' P P'. j \<le> j' \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+   pred_mapping (\<lambda>x. x \<le> j') P' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
+proof (induction \<phi>)
+  case (Pred e ts) case 1
+  then show ?case
+    by (auto simp: pred_mapping_alt dom_def split: option.splits)
+next
+  case (Pred e ts) case 2
   then show ?case
     by (force simp: rel_mapping_alt dom_def split: option.splits)
 next
-  case (Ands l)
-  then show ?case
+  case (Ands l) case 1
+  with Ands show ?case
+    by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
+next
+  case (Ands l) case 2
+  with Ands show ?case
     by (auto simp: image_iff intro!: Min.coboundedI[THEN order_trans])
 next
-  case (Until \<phi> I \<psi>)
-  from Until(1,2)[of j j' P P'] Until.prems show ?case
+  case (Until \<phi> I \<psi>) case 1
+  then show ?case
+    by (auto intro!: cInf_lower)
+next
+  case (Until \<phi> I \<psi>) case 2
+  with Until(2,4)[of j j' P P'] show ?case
     by (auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j'] intro!: cInf_superset_mono)
 next
-  case (MatchF I r)
-  from MatchF(1)[of _ j j' P P'] MatchF.prems show ?case
+  case (MatchF I r) case 1
+  then show ?case
+    by (auto intro!: cInf_lower)
+next
+  case (MatchF I r) case 2
+  with MatchF(2)[of _ j j' P P'] show ?case
     by (auto 0 3 simp: Min_le_iff progress_regex_def dest: memR_nonzeroD less_\<tau>D spec[of _ j']
       elim!: order_trans less_le_trans intro!: cInf_superset_mono)
 next
-  case (LetPrev p \<phi>1 \<phi>2)
+  case (LetPrev p \<phi>1 \<phi>2) case 1
   show ?case
-    unfolding progress.simps
-    apply (rule LetPrev(2)[OF LetPrev(3)])
-    apply (rule rel_mapping_map_upd[OF progress_mapping_mono[OF LetPrev(3,4)] LetPrev(4)])
+    apply (unfold progress.simps)
+    apply (rule LetPrev(3))
+    apply (rule pred_mapping_map_upd[OF _ 1])
+    apply (rule cSup_least)
+     apply (auto intro!: progress_fixpoint_ex LetPrev 1)
+    done
+next
+  case (LetPrev p \<phi>1 \<phi>2) case 2
+  show ?case
+    apply (unfold progress.simps)
+    apply (rule LetPrev(4)[OF 2(1)])
+    apply (rule pred_mapping_map_upd[OF _ 2(2)])
+    apply (rule cSup_least)
+     apply (auto intro!: progress_fixpoint_ex LetPrev 2) [2]
+    apply (rule pred_mapping_map_upd[OF _ 2(3)])
+    apply (rule cSup_least)
+     apply (auto intro!: progress_fixpoint_ex LetPrev 2) [2]
+    apply (rule rel_mapping_map_upd[OF _ 2(4)])
+    apply (rule cSup_mono)
+      apply (auto intro!: progress_fixpoint_ex progress_fixpoint_ex_above LetPrev 2)
     done
 qed (fastforce simp: Min_le_iff progress_regex_def split: option.splits)+
 
-lemma rel_mapping_reflp: "reflp Q \<Longrightarrow> rel_mapping Q P P"
-  by (auto simp: rel_mapping_alt reflp_def)
+lemma progress_mono:
+  "j \<le> j' \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+  Monitor.progress \<sigma> P \<phi> j \<le> Monitor.progress \<sigma> P \<phi> j'"
+  by (rule progress_mono_gen) (auto elim: pred_mapping_mono simp: rel_mapping_reflp reflp_def)
 
-lemmas progress_mono = progress_mono_gen[OF _ rel_mapping_reflp[unfolded reflp_def], simplified]
+lemma progress_le: "progress \<sigma> Map.empty \<phi> j \<le> j"
+  using progress_le_gen[of _ Map.empty] by auto
 
 lemma letprev_progress0_le: "letprev_progress0 prog j \<le> j"
   by (induct j) auto
