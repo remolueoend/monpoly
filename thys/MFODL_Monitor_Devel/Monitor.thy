@@ -1328,7 +1328,8 @@ proof (induct j arbitrary: j')
       (insert Suc, auto simp only: letprev_progress0.simps Suc_le_mono intro!: rel_mapping_map_upd min.mono)
 qed simp
 
-lemma "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+lemma "\<forall>i. Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j \<le> j \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P 
+  \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j \<Longrightarrow> 
   \<exists>i \<le> j. i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j"
   apply (induct p \<phi> arbitrary: P rule: safe_letprev.induct)
                    apply simp_all
@@ -1342,6 +1343,10 @@ lemma "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le>
     subgoal for i
       apply (rule exI[of _ "Monitor.progress \<sigma> (P(q \<mapsto> i)) \<psi> j"])
       try0
+      oops
+
+lemma csup_empty: "Sup {} = (0::nat)"
+  sledgehammer
 
 lemma letprev_pred_mapping: "\<forall>i. Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j \<le> j \<Longrightarrow>
   pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
@@ -1350,6 +1355,8 @@ lemma letprev_pred_mapping: "\<forall>i. Monitor.progress \<sigma> (P(p \<mapsto
    apply(auto intro!: pred_mapping_map_upd cSup_least)
   apply (simp add: le_Suc_eq)
   find_theorems "Sup _ \<le> _"
+  thm cSup_least
+  find_theorems "Sup {}"
   sorry (*TODO*)
 
 lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
