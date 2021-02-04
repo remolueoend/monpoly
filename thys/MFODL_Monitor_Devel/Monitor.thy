@@ -1311,6 +1311,9 @@ lemma rel_mapping_map_upd[simp]: "Q x y \<Longrightarrow> rel_mapping Q P P' \<L
 lemma pred_mapping_map_upd[simp]: "Q x \<Longrightarrow> pred_mapping Q P \<Longrightarrow> pred_mapping Q (P(p \<mapsto> x))"
   by (auto simp: pred_mapping_alt)
 
+lemma pred_mapping_fun_upd[simp]: "(case x of Some x \<Rightarrow> Q x | _ \<Rightarrow> True) \<Longrightarrow> pred_mapping Q P \<Longrightarrow> pred_mapping Q (P(p := x))"
+  by (auto simp: pred_mapping_alt)
+
 lemma pred_mapping_empty[simp]: "pred_mapping Q Map.empty"
   by (auto simp: pred_mapping_alt)
 
@@ -1552,9 +1555,9 @@ lemma letprev_progress_ge_gen:
     sorry
 *)
 
-lemma progress_letprev_progress: "safe_letprev p b \<phi> \<Longrightarrow> \<exists> P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j \<Longrightarrow>\<exists> P j. dom P = S \<and> range_mapping i j P \<and> i \<le> letprev_progress \<sigma> p P \<phi> j"
+lemma progress_letprev_progress: "safe_letprev p \<phi> \<Longrightarrow> \<exists> P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j \<Longrightarrow>\<exists> P j. dom P = S \<and> range_mapping i j P \<and> i \<le> letprev_progress \<sigma> p P \<phi> j"
   apply(auto simp: letprev_progress_def)
-  sorry (*TODO*) (*Delete?*)
+  oops (*TODO*) (*Delete?*)
 
 lemma progress_ge_gen: "Formula.future_bounded \<phi> \<Longrightarrow>
    \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j"
@@ -1572,10 +1575,19 @@ next
     "the (P2 p) \<le> progress \<sigma> P1 \<phi> j1"
     by (atomize_elim, intro Let(1)) auto
   let ?P12 = "max_mapping P1 P2"
-  from P1 P2 have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2)"
-    by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
-  from P1 P2 have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
-    by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
+  from P2 have P12_bound: "pred_mapping (\<lambda>x. x \<le> max j1 j2) ?P12"
+    apply (intro pred_mapping_mono[OF range_mapping_max_mapping[of i j1 P1 j2 P2]])
+      apply (auto intro!: pred_mapping_mono[OF P2(2)] pred_mapping_mono[OF P1(2)])
+    by (simp add: pred_mapping_alt)
+  from P1 P2 P12_bound have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2)"
+    apply (intro progress_mono_gen)
+    apply (auto simp: rel_mapping_alt max_mapping_def
+      elim: pred_mapping_mono intro!: pred_mapping_fun_upd split: option.splits)
+    by (metis (no_types, lifting) domI max.coboundedI1 option.sel pred_mapping_alt)
+  from P1 P2 P12_bound have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
+    by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def
+      intro!: max.coboundedI1 progress_le_gen
+      elim: pred_mapping_mono intro!: pred_mapping_map_upd)
   show ?case
     unfolding progress.simps
   proof (intro exI[of _ "?P12(p := P1 p)"] exI[of _ "max j1 j2"] conjI)
@@ -1589,7 +1601,10 @@ next
     also have "... \<le> progress \<sigma> (?P12(p \<mapsto> progress \<sigma> P1 \<phi> j1)) \<psi> (max j1 j2)"
       using le2 by blast
     also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p\<mapsto>progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2))) \<psi> (max j1 j2)"
-      by (auto intro!: progress_mono_gen simp: le1 rel_mapping_alt)
+      using P12_bound P1 apply (auto intro!: progress_mono_gen pred_mapping_map_upd 
+        pred_mapping_fun_upd max.coboundedI1 progress_le_gen
+      elim: pred_mapping_mono simp: le1 rel_mapping_alt split: option.splits)
+      by (metis (no_types, lifting) domI option.sel pred_mapping_alt)
     finally show "i \<le> ..." .
   qed
 next
