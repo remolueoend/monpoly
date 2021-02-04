@@ -241,10 +241,50 @@ lemma fvi_less_nfv_regex: "\<forall>i\<in>fv_regex \<phi>. i < nfv_regex \<phi>"
 
 subsubsection \<open>Future reach\<close>
 
+fun contains_pred :: "name \<Rightarrow> formula \<Rightarrow> bool" where
+   "contains_pred p (Eq t1 t2) = False"
+|  "contains_pred p (Less t1 t2) = False"        
+|  "contains_pred p (LessEq t1 t2) = False"
+|  "contains_pred p (Pred e ts) = (if e=p then True else False)"
+|  "contains_pred p (Let e \<phi> \<psi>) = (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
+|  "contains_pred p (LetPrev e \<phi> \<psi>) =  (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
+|  "contains_pred p (Neg \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Or \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (And \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (Ands l) = (\<exists>\<phi>\<in>set l. contains_pred p \<phi>)"
+|  "contains_pred p (Exists \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Agg y \<omega> b' f \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Prev I \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Next I \<phi>) = contains_pred p \<phi>"
+|  "contains_pred p (Since \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (Until \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
+|  "contains_pred p (MatchP I r) = (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+|  "contains_pred p (MatchF I r) =  (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+
+fun safe_letprev :: "name \<Rightarrow> bool \<Rightarrow> formula \<Rightarrow> bool" where
+   "safe_letprev p temp_path (Eq t1 t2) = True"
+|  "safe_letprev p temp_path (Less t1 t2) = True"        
+|  "safe_letprev p temp_path (LessEq t1 t2) = True"
+|  "safe_letprev p temp_path (Pred e ts) = (if e=p then (if temp_path then False else True) else True)"
+|  "safe_letprev p temp_path (Let e \<phi> \<psi>) = (p=e \<or> (\<not>(contains_pred p \<phi>) \<and> safe_letprev p temp_path \<psi>) \<or> (\<not>(contains_pred e \<psi>) \<and> safe_letprev p temp_path \<psi>) \<or> (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi> \<and> safe_letprev e temp_path \<psi>))"
+|  "safe_letprev p temp_path (LetPrev e \<phi> \<psi>) = (p=e \<or> (\<not>(contains_pred p \<phi>) \<and> safe_letprev p temp_path \<psi>) \<or> (\<not>(contains_pred e \<psi>) \<and> safe_letprev p temp_path \<psi>) \<or> (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi> \<and> safe_letprev e temp_path \<psi>))"
+|  "safe_letprev p temp_path (Neg \<phi>) = safe_letprev p temp_path \<phi>"
+|  "safe_letprev p temp_path (Or \<phi> \<psi>) = (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi>)"
+|  "safe_letprev p temp_path (And \<phi> \<psi>) = (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi>)"
+|  "safe_letprev p temp_path (Ands l) = (\<forall>\<phi>\<in>set l. safe_letprev p temp_path \<phi>)"
+|  "safe_letprev p temp_path (Exists \<phi>) = safe_letprev p temp_path \<phi>"
+|  "safe_letprev p temp_path (Agg y \<omega> b' f \<phi>) = safe_letprev p temp_path \<phi>"
+|  "safe_letprev p temp_path (Prev I \<phi>) = safe_letprev p True \<phi>"
+|  "safe_letprev p temp_path (Next I \<phi>) = safe_letprev p True \<phi>"
+|  "safe_letprev p temp_path (Since \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
+|  "safe_letprev p temp_path (Until \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
+|  "safe_letprev p temp_path (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p temp_path \<phi>)"
+|  "safe_letprev p temp_path (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p temp_path \<phi>)"
+
 qualified fun future_bounded :: "formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
 | "future_bounded (Let p \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
-| "future_bounded (LetPrev p \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
+| "future_bounded (LetPrev p \<phi> \<psi>) = (safe_letprev p False \<phi> \<and> future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Eq _ _) = True"
 | "future_bounded (Less _ _) = True"
 | "future_bounded (LessEq _ _) = True"
@@ -655,45 +695,6 @@ definition safe_assignment :: "nat set \<Rightarrow> formula \<Rightarrow> bool"
      | Eq t (Var x) \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
      | _ \<Rightarrow> False)"
 
-fun contains_pred :: "name \<Rightarrow> formula \<Rightarrow> bool" where
-   "contains_pred p (Eq t1 t2) = False"
-|  "contains_pred p (Less t1 t2) = False"        
-|  "contains_pred p (LessEq t1 t2) = False"
-|  "contains_pred p (Pred e ts) = (if e=p then True else False)"
-|  "contains_pred p (Let e \<phi> \<psi>) = (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
-|  "contains_pred p (LetPrev e \<phi> \<psi>) =  (p\<noteq>e \<and> (contains_pred p \<psi> \<or> (contains_pred p \<phi> \<and> contains_pred e \<psi>)))"
-|  "contains_pred p (Neg \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Or \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
-|  "contains_pred p (And \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
-|  "contains_pred p (Ands l) = (\<exists>\<phi>\<in>set l. contains_pred p \<phi>)"
-|  "contains_pred p (Exists \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Agg y \<omega> b' f \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Prev I \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Next I \<phi>) = contains_pred p \<phi>"
-|  "contains_pred p (Since \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
-|  "contains_pred p (Until \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
-|  "contains_pred p (MatchP I r) = (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
-|  "contains_pred p (MatchF I r) =  (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
-
-fun safe_letprev :: "name \<Rightarrow> bool \<Rightarrow> formula \<Rightarrow> bool" where
-   "safe_letprev p temp_path (Eq t1 t2) = True"
-|  "safe_letprev p temp_path (Less t1 t2) = True"        
-|  "safe_letprev p temp_path (LessEq t1 t2) = True"
-|  "safe_letprev p temp_path (Pred e ts) = (if e=p then (if temp_path then False else True) else True)"
-|  "safe_letprev p temp_path (Let e \<phi> \<psi>) = (p=e \<or> (\<not>(contains_pred p \<phi>) \<and> safe_letprev p temp_path \<psi>) \<or> (\<not>(contains_pred e \<psi>) \<and> safe_letprev p temp_path \<psi>) \<or> (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi> \<and> safe_letprev e temp_path \<psi>))"
-|  "safe_letprev p temp_path (LetPrev e \<phi> \<psi>) = (p=e \<or> (\<not>(contains_pred p \<phi>) \<and> safe_letprev p temp_path \<psi>) \<or> (\<not>(contains_pred e \<psi>) \<and> safe_letprev p temp_path \<psi>) \<or> (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi> \<and> safe_letprev e temp_path \<psi>))"
-|  "safe_letprev p temp_path (Neg \<phi>) = safe_letprev p temp_path \<phi>"
-|  "safe_letprev p temp_path (Or \<phi> \<psi>) = (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi>)"
-|  "safe_letprev p temp_path (And \<phi> \<psi>) = (safe_letprev p temp_path \<phi> \<and> safe_letprev p temp_path \<psi>)"
-|  "safe_letprev p temp_path (Ands l) = (\<forall>\<phi>\<in>set l. safe_letprev p temp_path \<phi>)"
-|  "safe_letprev p temp_path (Exists \<phi>) = safe_letprev p temp_path \<phi>"
-|  "safe_letprev p temp_path (Agg y \<omega> b' f \<phi>) = safe_letprev p temp_path \<phi>"
-|  "safe_letprev p temp_path (Prev I \<phi>) = safe_letprev p True \<phi>"
-|  "safe_letprev p temp_path (Next I \<phi>) = safe_letprev p True \<phi>"
-|  "safe_letprev p temp_path (Since \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
-|  "safe_letprev p temp_path (Until \<phi> I \<psi>) = (safe_letprev p True \<phi> \<and> safe_letprev p True \<psi>)"
-|  "safe_letprev p temp_path (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p temp_path \<phi>)"
-|  "safe_letprev p temp_path (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. safe_letprev p temp_path \<phi>)"
 
 fun safe_formula :: "formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
@@ -1467,6 +1468,9 @@ next
   then show ?case
     by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
         elim: safe_regex_safe_formula[THEN disjE_Not2])
+next
+  case (LetPrev p \<phi> \<psi>)
+  then show ?case by (auto simp: safe_letprev_convert_multiway)
 qed auto
 
 lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"

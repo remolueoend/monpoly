@@ -1252,14 +1252,14 @@ subsection \<open>Verdict delay\<close>
 
 context fixes \<sigma> :: Formula.trace begin
 
-fun letprev_progress0 where
+fun letprev_progress0:: "(nat \<Rightarrow> nat \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> nat" where
   "letprev_progress0 prog 0 = 0"
-| "letprev_progress0 prog (Suc j) = min (Suc (prog (letprev_progress0 prog j) (Suc j))) (Suc j)"
+| "letprev_progress0 prog (Suc j) = min (prog (Suc (letprev_progress0 prog j)) (Suc j)) (Suc j)"
 
 fun progress :: "(Formula.name \<rightharpoonup> nat) \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
   "progress P (Formula.Pred e ts) j = (case P e of None \<Rightarrow> j | Some k \<Rightarrow> k)"
 | "progress P (Formula.Let p \<phi> \<psi>) j = progress (P(p \<mapsto> progress P \<phi> j)) \<psi> j"
-| "progress P (Formula.LetPrev p \<phi> \<psi>) j = progress (P(p \<mapsto> letprev_progress0 (\<lambda>k. progress (P(p \<mapsto> k)) \<phi>) j)) \<psi> j"
+| "progress P (Formula.LetPrev p \<phi> \<psi>) j = progress (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress (P(p \<mapsto> min (Suc i) j)) \<phi> j}))) \<psi> j"
 | "progress P (Formula.Eq t1 t2) j = j"
 | "progress P (Formula.Less t1 t2) j = j"
 | "progress P (Formula.LessEq t1 t2) j = j"
@@ -1283,7 +1283,7 @@ definition "letprev_progress p P \<phi> = letprev_progress0 (\<lambda>k. progres
 
 lemma letprev_progress_simps[simp]:
   "letprev_progress p P \<phi> 0 = 0"
-  "letprev_progress p P \<phi> (Suc j) = min (Suc (progress (P(p \<mapsto> letprev_progress p P \<phi> j)) \<phi> (Suc j))) (Suc j)"
+  "letprev_progress p P \<phi> (Suc j) = min (progress (P(p \<mapsto>(Suc (letprev_progress p P \<phi> j)))) \<phi> (Suc j)) (Suc j)"
   unfolding letprev_progress_def by auto
 
 declare progress.simps[simp del]
@@ -1325,8 +1325,45 @@ proof (induct j arbitrary: j')
   case (Suc j)
   show ?case
     by (rule letprev_progress0.elims[of prog' j', OF refl])
-      (insert Suc, auto simp only: letprev_progress0.simps intro!: rel_mapping_map_upd min.mono)
+      (insert Suc, auto simp only: letprev_progress0.simps Suc_le_mono intro!: rel_mapping_map_upd min.mono)
 qed simp
+
+
+lemma letprev_pred_mapping: "\<And>j P. pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) (P(p \<mapsto> \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi> j}))"
+  (*apply(auto simp add: Sup_le_iff)*)
+sorry (*TODO*)
+
+lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
+proof (induction \<phi> arbitrary: P j)
+  case (Pred e ts)
+  then show ?case
+    by (auto simp: pred_mapping_alt dom_def split: option.splits)
+next
+  case (Ands l)
+  then show ?case
+    by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
+next
+  case (Until \<phi> I \<psi>)
+  then show ?case
+    by (auto intro!: cInf_lower)
+next
+  case (MatchF I r)
+  then show ?case
+    by (auto intro!: cInf_lower)
+next
+  case (LetPrev p \<phi> \<psi>)
+  then show ?case
+    apply(auto simp add: letprev_pred_mapping) 
+    sorry (*TODO*)
+qed (force simp: Min_le_iff progress_regex_def letprev_progress_def split: option.splits)+
+
+lemma progress_le: "progress \<sigma> Map.empty \<phi> j \<le> j"
+  using progress_le_gen[of _ Map.empty] by auto
+
+lemma progress_mapping_mono: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> (\<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}) \<le>  (\<Squnion> {i. i \<le> j' \<and> i = Monitor.progress \<sigma> (P'(p \<mapsto> min (Suc i) j')) \<phi> j'})"
+  apply(induction j')
+   apply(rule cSup_mono; simp)
+  sorry (*TODO*)
 
 lemma progress_mono_gen: "j \<le> j' \<Longrightarrow> rel_mapping (\<le>) P P' \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> j'"
 proof (induction \<phi> arbitrary: j j' P P')
@@ -1351,9 +1388,7 @@ next
   show ?case
     unfolding progress.simps
     apply (rule LetPrev(2)[OF LetPrev(3)])
-    apply (rule rel_mapping_map_upd[OF letprev_progress0_mono[OF LetPrev(3,1)] LetPrev(4)])
-     apply assumption
-    apply (erule rel_mapping_map_upd[OF _ LetPrev(4)])
+    apply (rule rel_mapping_map_upd[OF progress_mapping_mono[OF LetPrev(3,4)] LetPrev(4)])
     done
 qed (fastforce simp: Min_le_iff progress_regex_def split: option.splits)+
 
@@ -1364,28 +1399,6 @@ lemmas progress_mono = progress_mono_gen[OF _ rel_mapping_reflp[unfolded reflp_d
 
 lemma letprev_progress0_le: "letprev_progress0 prog j \<le> j"
   by (induct j) auto
-
-lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
-proof (induction \<phi> arbitrary: P j)
-  case (Pred e ts)
-  then show ?case
-    by (auto simp: pred_mapping_alt dom_def split: option.splits)
-next
-  case (Ands l)
-  then show ?case
-    by (auto simp: image_iff intro!: Min.coboundedI[where a="progress \<sigma> P (hd l) j", THEN order_trans])
-next
-  case (Until \<phi> I \<psi>)
-  then show ?case
-    by (auto intro!: cInf_lower)
-next
-  case (MatchF I r)
-  then show ?case
-    by (auto intro!: cInf_lower)
-qed (force simp: Min_le_iff progress_regex_def letprev_progress_def letprev_progress0_le split: option.splits)+
-
-lemma progress_le: "progress \<sigma> Map.empty \<phi> j \<le> j"
-  using progress_le_gen[of _ Map.empty] by auto
 
 lemma progress_0_gen[simp]:
   "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> progress \<sigma> P \<phi> 0 = 0"
@@ -1487,6 +1500,10 @@ lemma letprev_progress_ge_gen:
     sorry
 *)
 
+lemma progress_letprev_progress: "safe_letprev p b \<phi> \<Longrightarrow> \<exists> P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j \<Longrightarrow>\<exists> P j. dom P = S \<and> range_mapping i j P \<and> i \<le> letprev_progress \<sigma> p P \<phi> j"
+  apply(auto simp: letprev_progress_def)
+  sorry (*TODO*) (*Delete?*)
+
 lemma progress_ge_gen: "Formula.future_bounded \<phi> \<Longrightarrow>
    \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j"
 proof (induction \<phi> arbitrary: i S)
@@ -1534,7 +1551,7 @@ next
   let ?P12 = "max_mapping P1 P2"
   from P1 P2 have le1: "progress \<sigma> P1 \<phi> j1 \<le> progress \<sigma> (?P12(p := P1 p)) \<phi> (max j1 j2)"
     by (intro progress_mono_gen) (auto simp: rel_mapping_alt max_mapping_def)
-  from P1 P2 have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> letprev_progress \<sigma> p P1 \<phi> j1)) \<psi> (max j1 j2)"
+  from P1 P2 LetPrev have le2: "progress \<sigma> P2 \<psi> j2 \<le> progress \<sigma> (?P12(p \<mapsto> (Sup {i. i\<le>j1 \<and> i=progress \<sigma> (?P12(p \<mapsto> i)) \<phi> j1}))) \<psi> (max j1 j2)"
     apply (intro progress_mono_gen)
      apply (auto simp: rel_mapping_alt max_mapping_def)
     sorry (*TODO*)
@@ -1548,11 +1565,11 @@ next
       using P1 P2 by (force simp add: pred_mapping_alt dom_def max_mapping_def split: option.splits)
   next
     have "i \<le> progress \<sigma> P2 \<psi> j2" by fact
-    also have "... \<le> progress \<sigma> (?P12(p \<mapsto> letprev_progress \<sigma> p P1 \<phi> j1)) \<psi> (max j1 j2)"
+    also have "... \<le> progress \<sigma> (?P12(p \<mapsto>  (Sup {i. i\<le>j1 \<and> i=progress \<sigma> (?P12(p \<mapsto> i)) \<phi> j1}))) \<psi> (max j1 j2)"
       using le2 by blast
-    also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p \<mapsto> letprev_progress0 (\<lambda>k. progress \<sigma> (?P12(p := P1 p)(p \<mapsto> k)) \<phi>) (max j1 j2))) \<psi> (max j1 j2)"
-      using P1 P2 by (auto intro!: progress_mono_gen letprev_progress0_mono rel_mapping_map_upd rel_mapping_reflp
-        simp: le1 letprev_progress_def subset_insertI max_mapping_cobounded1 reflp_def)
+    also have "... \<le> progress \<sigma> (?P12(p := P1 p)(p \<mapsto> (Sup {i. i\<le> (max j1 j2) \<and> i=progress \<sigma> (?P12(p := P1 p)(p \<mapsto> i)) \<phi> (max j1 j2)}))) \<psi> (max j1 j2)"
+      using P1 P2 sorry (*by (auto intro!: progress_mono_gen letprev_progress0_mono rel_mapping_map_upd rel_mapping_reflp
+        simp: le1 letprev_progress_def subset_insertI max_mapping_cobounded1 reflp_def progress_mapping_mono)*) (*TODO*)
     finally show "i \<le> ..." .
   qed
 (*
@@ -1917,8 +1934,27 @@ next
   qed
 next
   case (LetPrev p \<phi> \<psi>)
-  show ?case 
-    sorry (*TODO*)
+  let ?V = "\<lambda>V \<sigma>. (V(p \<mapsto> letprev_sat (Formula.nfv \<phi>)(\<lambda> X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>)))"
+  show ?case unfolding sat.simps proof (rule LetPrev.IH(2))
+    from LetPrev.prems show "i < progress \<sigma> (P(p \<mapsto> (Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> i)) \<phi> (plen \<pi>)}))) \<psi> (plen \<pi>)"
+      by simp
+    from LetPrev.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
+      by simp
+    from LetPrev.prems show "dom (P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> i)) \<phi> (plen \<pi>)}))) = dom (?V V \<sigma>)"
+      by simp
+    from LetPrev.prems show "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> i)) \<phi> (plen \<pi>)})))"
+      sorry (*TODO*)(*by (auto intro!: pred_mapping_map_upd simp add: letprev_progress0_le letprev_progress_def)*)
+  next
+    fix p' i \<phi>'
+    assume 1: "p' \<in> dom (?V V \<sigma>)" and 2: "i < the ((P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> i)) \<phi> (plen \<pi>)}))) p')"
+    show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
+      case True
+      with LetPrev 2 show ?thesis sorry (*TODO*)
+    next
+      case False
+      with 1 2 show ?thesis by (auto intro!: LetPrev.prems(5))
+    qed
+  qed 
 next
   case (Eq t1 t2)
   show ?case by simp
@@ -2095,10 +2131,7 @@ proof (induction \<phi> arbitrary: P rule: safe_formula_induct)
   case (LetPrev p \<phi> \<psi>)
   then show ?case                  
     apply (auto intro!: arg_cong[OF letprev_progress0_cong] simp add: letprev_progress_def simp del: fun_upd_apply)
-    sorry (*TODO*)
-    (*apply (induction j)
-     apply(auto)
-    done*)
+    done 
 next
   case (And_safe \<phi> \<psi>)
   let ?c = "convert_multiway (Formula.And \<phi> \<psi>)"
