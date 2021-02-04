@@ -498,6 +498,9 @@ declare regex.pred_inject[code]
 
 declare regex.pred_set[THEN fun_cong, symmetric, code_unfold]
 
+lemma Bex_pred_regex[code_unfold]: "Bex (regex.atms x) P \<longleftrightarrow> \<not> regex.pred_regex (Not o P) x"
+  by (induct x) auto
+
 (*<*)
 end
 (*>*)
