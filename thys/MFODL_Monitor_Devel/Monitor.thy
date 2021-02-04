@@ -29,7 +29,7 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
 | "mmonitorable_exec (Formula.Neg (Formula.Eq (Formula.Var x) (Formula.Var y))) = (x = y)"
 | "mmonitorable_exec (Formula.Pred e ts) = list_all (\<lambda>t. Formula.is_Var t \<or> Formula.is_Const t) ts"
 | "mmonitorable_exec (Formula.Let p \<phi> \<psi>) = ({0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
-| "mmonitorable_exec (Formula.LetPrev p \<phi> \<psi>) = (Formula.safe_letprev p False \<phi> \<and> {0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
+| "mmonitorable_exec (Formula.LetPrev p \<phi> \<psi>) = (Formula.safe_letprev p \<phi> \<and> {0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Or \<phi> \<psi>) = (fv \<phi> = fv \<psi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.And \<phi> \<psi>) = (mmonitorable_exec \<phi> \<and>
@@ -1328,10 +1328,29 @@ proof (induct j arbitrary: j')
       (insert Suc, auto simp only: letprev_progress0.simps Suc_le_mono intro!: rel_mapping_map_upd min.mono)
 qed simp
 
+lemma "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+  \<exists>i \<le> j. i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j"
+  apply (induct p \<phi> arbitrary: P rule: safe_letprev.induct)
+                   apply simp_all
+  subgoal for p x P
+             apply (intro exI[of _ "if x \<noteq> p then (case P x of Some x \<Rightarrow> x | _ \<Rightarrow> j) else j"])
+    apply (force split: option.splits simp: pred_mapping_alt)
+    done
+  subgoal for p q \<phi> \<psi> P
+    apply (cases "p = q"; cases "contains_pred q \<phi>"; clarsimp)
+     apply (drule meta_spec, drule meta_mp, assumption, erule exE)
+    subgoal for i
+      apply (rule exI[of _ "Monitor.progress \<sigma> (P(q \<mapsto> i)) \<psi> j"])
+      try0
 
-lemma letprev_pred_mapping: "\<And>j P. pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) (P(p \<mapsto> \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi> j}))"
-  (*apply(auto simp add: Sup_le_iff)*)
-sorry (*TODO*)
+lemma letprev_pred_mapping: "\<forall>i. Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j \<le> j \<Longrightarrow>
+  pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+  pred_mapping (\<lambda>x. x \<le> j) (P(p \<mapsto> \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
+  apply (induction j)
+   apply(auto intro!: pred_mapping_map_upd cSup_least)
+  apply (simp add: le_Suc_eq)
+  find_theorems "Sup _ \<le> _"
+  sorry (*TODO*)
 
 lemma progress_le_gen: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> progress \<sigma> P \<phi> j \<le> j"
 proof (induction \<phi> arbitrary: P j)
@@ -1353,8 +1372,7 @@ next
 next
   case (LetPrev p \<phi> \<psi>)
   then show ?case
-    apply(auto simp add: letprev_pred_mapping) 
-    sorry (*TODO*)
+    by (force simp add: letprev_pred_mapping)
 qed (force simp: Min_le_iff progress_regex_def letprev_progress_def split: option.splits)+
 
 lemma progress_le: "progress \<sigma> Map.empty \<phi> j \<le> j"
