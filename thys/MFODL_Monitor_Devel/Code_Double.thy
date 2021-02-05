@@ -516,6 +516,10 @@ code_printing
   | constant "integer_of_double :: double \<Rightarrow> integer" \<rightharpoonup> (OCaml) "Z.of'_float"
 
 ML \<open>
+if Real.precision <> 53 then
+  error "SML real type must be double precision for Eval code adaptation"
+else ();
+
 signature REALUTIL = sig
   val nan : real
   val iszero : real -> bool
@@ -526,7 +530,7 @@ signature REALUTIL = sig
   val toTerm : real -> term
 end
 structure RealUtil : REALUTIL = struct
-  val nan = Real./ (1.0, 0.0);
+  val nan = 1.0 / 0.0;
   fun iszero x = (Real.class x = IEEEReal.ZERO);
   fun isinfinite x = (Real.class x = IEEEReal.INF);
   fun copysign x y = if Real.isNan y then nan else Real.copySign (x, y);
@@ -542,9 +546,10 @@ structure RealUtil : REALUTIL = struct
     (case Real.class x of
       IEEEReal.NAN => @{const nan}
     | IEEEReal.INF => if Real.signBit x then @{term "- infinity"} else @{term "infinity"}
+    | IEEEReal.ZERO => if Real.signBit x then @{term "-0 :: double"} else @{term "0 :: double"}
     | _ => case Real.toManExp x of {man = m, exp = e} =>
       let
-        val i = Real.floor (Real.* (m, Math.pow (2.0, 53.0)));
+        val i = Real.floor (m * Math.pow (2.0, 53.0));
         val e = e - 53;
       in
         @{term abs_double} $ (@{term "of_finite_Float :: Float.float \<Rightarrow> (11, 52) float"} $
