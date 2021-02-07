@@ -1855,10 +1855,12 @@ next
     then have "i' < max j1 j2" by simp
     have "progress \<sigma> P1 \<phi>1 j1 \<le> progress \<sigma> ?P12 \<phi>1 (max j1 j2)"
       using P1 P2
-      apply (auto intro!: progress_mono_gen max_mapping_cobounded1)
-      done
+      by (auto intro!: progress_mono_gen max_mapping_cobounded1)
+         (auto simp: range_mapping_to_pred_mapping pred_mapping_max_mapping)
     moreover have "progress \<sigma> P2 \<phi>2 j2 \<le> progress \<sigma> ?P12 \<phi>2 (max j1 j2)"
-      using P1(1) P2(1) (*by (auto intro!: progress_mono_gen max_mapping_cobounded2)*)
+      using P1 P2
+      by (auto intro!: progress_mono_gen max_mapping_cobounded2)
+         (auto simp: range_mapping_to_pred_mapping pred_mapping_max_mapping)
     ultimately have "i' \<le> min (progress \<sigma> ?P12 \<phi>1 (max j1 j2)) (progress \<sigma> ?P12 \<phi>2 (max j1 j2))"
       using P1(3) P2(3) by simp
     with greatest \<open>i' < max j1 j2\<close> have "memR I (\<tau> \<sigma> i' - \<tau> \<sigma> x)"
@@ -1890,9 +1892,10 @@ next
          i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"]) auto
     with False show ?thesis
       unfolding progress.simps
-      by (intro exI[of _ "Max_mapping (?pickP ` regex.atms r)"] exI[of _ "Max (?pickj ` regex.atms r)"])
-        (auto simp: Max_mapping_coboundedI
+      apply (intro exI[of _ "Max_mapping (?pickP ` regex.atms r)"] exI[of _ "Max (?pickj ` regex.atms r)"])
+      apply  (auto simp: Max_mapping_coboundedI
           order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen])
+      sorry (*TODO*)
   qed
 next
   case (MatchF I r)
@@ -1932,12 +1935,13 @@ next
     from MatchF.prems have "Regex.pred_regex Formula.future_bounded r"
       by auto
     ultimately show ?thesis using \<tau>_mono[of _ ?j \<sigma>] less_\<tau>D[of \<sigma> i] pick False
-      by (intro exI[of _ "?j"]  exI[of _ "?P"])
-        (auto 0 3 intro!: cInf_greatest
+      apply (intro exI[of _ "?j"]  exI[of _ "?P"])
+      apply(auto 0 3 intro!: cInf_greatest
           order_trans[OF le_SucI[OF order_refl] order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen]]
           range_mapping_Max_mapping[OF _ _ ballI[OF range_mapping_relax[of "Suc i'" _ _ i, OF _ _ order_refl]]]
           simp: ac_simps Suc_le_eq trans_le_add2 Max_mapping_coboundedI progress_regex_def
           dest: spec[of _ "i'"] spec[of _ ?j])
+      sorry (*TODO*)
   qed
 qed (auto split: option.splits)
 
