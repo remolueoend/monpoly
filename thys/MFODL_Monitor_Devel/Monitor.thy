@@ -1548,7 +1548,7 @@ lemma letprev_progress_ge_gen:
     sorry
 *)
 
-lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> \<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j \<Longrightarrow> \<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j})"
+lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j) \<Longrightarrow> (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
   apply(auto)
   sorry (*TODO*)
 
@@ -2014,6 +2014,9 @@ proof (induct rule: rtranclp_induct)
     by (auto elim!: rtrancl_into_rtrancl[to_pred, rotated])
 qed auto
 
+lemma test: "\<And>x. x< Sup {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j} \<Longrightarrow>i=Sup {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j} \<and> x<Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j"
+  sorry
+
 lemma sat_prefix_conv_gen:
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
   shows "i < progress \<sigma> P \<phi> (plen \<pi>) \<Longrightarrow> dom V = dom V' \<Longrightarrow> dom P = dom V \<Longrightarrow>
@@ -2089,50 +2092,32 @@ next
         subgoal 
           apply(rule LetPrev(1))
           subgoal
-            sorry
+            (*apply(rule test)*)
+            sorry (*TODO*)
           apply (simp only: dom_fun_upd)
           subgoal
-            sledgehammer
-            sorry
+            sorry (*TODO*)
           apply auto []
           apply auto []
-          apply fastforce (*SLOW*)
-          apply fastforce (*SLOW*)
+          apply (metis (full_types) domI option.sel)
+          apply (metis (full_types) domI option.sel)
           done
           apply simp
           apply (rule Collect_cong)
           apply (rule conj_cong)
           apply (rule refl)
           apply (rule LetPrev(1))
-          subgoal
-            sorry
-          
-
-        sorry(*TODO*)
-        (*apply (induct k arbitrary: V V')
-         apply simp
-         apply (rule Collect_cong)
-         apply (rule conj_cong)
-          apply (rule refl)
-         apply (rule LetPrev(1))
-            apply simp
-           apply (simp only: dom_fun_upd)
-          apply auto []
-           apply fastforce
-          apply fastforce
-         apply simp
-        apply simp
-        apply (rule Collect_cong)
-        apply (rule conj_cong)
-         apply (rule refl)
-        apply (rule LetPrev(1))
-           apply simp
+           subgoal
+            (*apply(rule test)*)
+            sorry (*TODO*)
           apply (simp only: dom_fun_upd)
-         apply auto []
-          apply fastforce
-         apply fastforce
-        apply simp
-        done*)
+          subgoal
+            sorry (*TODO*)
+          apply auto []
+          apply auto []
+          apply (metis (mono_tags, hide_lams) domI option.sel)
+          apply (metis (mono_tags, hide_lams) domI option.sel)
+          done
       with True LetPrev show ?thesis
         by simp
     next
@@ -2607,6 +2592,7 @@ fun formula_of_constraint :: "Formula.trm \<times> bool \<times> mconstraint \<t
 | "formula_of_constraint (t1, False, MLess, t2) = Formula.Neg (Formula.Less t1 t2)"
 | "formula_of_constraint (t1, False, MLessEq, t2) = Formula.Neg (Formula.LessEq t1 t2)"
 
+(*Changed*)
 inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow>
   nat \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow> Formula.formula \<Rightarrow> bool"
   for \<sigma> j where
@@ -2625,8 +2611,8 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_mformula \<sigma> j P V n R (MLet p m \<phi> \<psi>) (Formula.Let p \<phi>' \<psi>')"
   | LetPrev: "wf_mformula \<sigma> j P V m UNIV \<phi> \<phi>' \<Longrightarrow> first \<longleftrightarrow> j = 0 \<Longrightarrow>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
-      [i..<letprev_progress \<sigma> p P \<phi>' j] buf \<Longrightarrow>
-    wf_mformula \<sigma> j (P(p \<mapsto> letprev_progress \<sigma> p P \<phi>' j))
+      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf \<Longrightarrow>
+    wf_mformula \<sigma> j (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})))
       (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) n R \<psi> \<psi>' \<Longrightarrow> \<comment> \<open>safe\<close>
     {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MLetPrev p m \<phi> \<psi> first i buf) (Formula.LetPrev p \<phi>' \<psi>')"
@@ -5114,6 +5100,117 @@ next
     by (simp add: list.rel_map image_iff lookup_update')
 qed (use assms in \<open>auto simp: wf_envs_def\<close>)
 
+lemma wf_envs_update_sup:
+  assumes wf_envs: "wf_envs \<sigma> j \<delta> P P' V db"
+    and m_eq: "m = Formula.nfv \<phi>"
+    and in_fv: "{0 ..< m} \<subseteq> fv \<phi>"
+    and xs: "list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>) (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (j + \<delta>)] xs"
+    and xs': "list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>))) (map the v) i \<phi>))
+      [i..<(Sup {i. i\<le>(j+\<delta>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (j+\<delta>))) \<phi> (j+\<delta>)})] xs'"
+  shows "wf_envs \<sigma> j \<delta> (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))) (P'(p \<mapsto> (Sup {i. i\<le>(j+\<delta>) \<and> i=progress \<sigma> (P'(p \<mapsto> min (Suc i) (j+\<delta>))) \<phi> (j+\<delta>)})))
+    (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>)))
+    (Mapping.update p (map (image (map the)) xs') db)"
+  unfolding wf_envs_def
+proof (intro conjI ballI, goal_cases)
+  case 4
+  with assms show ?case
+    by(auto simp add: sup_letprev_progress_le wf_envs_def)
+next
+  case 5
+  with assms show ?case
+    by(auto simp add: sup_letprev_progress_le wf_envs_def)
+next
+  case 3
+  from assms show ?case
+    by (auto simp: wf_envs_def pred_mapping_alt progress_le progress_mono_gen
+        intro!: rel_mapping_map_upd sup_letprev_progress_mono)
+next
+  case (6 p')
+  with assms show ?case by (cases "p' \<in> dom P") (auto simp: wf_envs_def lookup_update')
+next
+  case (7 p')
+  from xs' in_fv have "list_all2 (\<lambda>x y. map the ` y = letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> \<lambda>_. X)) v i \<phi>) x)
+      [i..<(Sup {i. i\<le>(j+\<delta>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (j+\<delta>))) \<phi> (j+\<delta>)})] xs'"
+    apply (elim list.rel_mono_strong)
+    apply(auto 0 3 simp: wf_tuple_def nth_append
+      elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"])
+    sorry
+  (*from xs in_fv have "list_all2 (\<lambda>x y. map the ` y = letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> \<lambda>_. X)) v i \<phi>) x)
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (j + \<delta>)] xs"
+    apply (elim list.rel_mono_strong)
+    apply(auto 0 3 simp: wf_tuple_def nth_append
+      elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"] simp del: fun_upd_apply letprev_sat.simps)
+    sorry*)
+  moreover have "list_all2 (\<lambda>i X. X = the (V p') i) [the (P p')..<the (P' p')] (the (Mapping.lookup db p'))"
+    if "p \<noteq> p'"
+  proof -
+    from that 7 have "p' \<in> dom P" by simp
+    with wf_envs show ?thesis by (simp add: wf_envs_def)
+  qed
+  ultimately show ?case
+    apply (simp add: list.rel_map image_iff lookup_update' del: fun_upd_apply)
+    apply (auto simp add: progress_le progress_mono_gen progress_fixpoint_ex_above sup_letprev_progress_mono cSup_mono)
+    sorry
+qed (use assms in \<open>auto simp: wf_envs_def\<close>) (*TODO*)
+
+
+lemma wf_envs_update_letprev:
+  assumes wf_envs: "wf_envs \<sigma> j \<delta> P P' V db"
+    and m_eq: "m = Formula.nfv \<phi>"
+    and in_fv: "{0 ..< m} \<subseteq> fv \<phi>"
+    and xs: "list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>) (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (j + \<delta>)] xs"
+  shows "wf_envs \<sigma> j \<delta> (P(p \<mapsto> progress \<sigma> P \<phi> j)) (P'(p \<mapsto> progress \<sigma> P' \<phi> (j + \<delta>)))
+    (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>)))
+    (Mapping.update p (map (image (map the)) xs') db)"
+  unfolding wf_envs_def
+proof (intro conjI ballI, goal_cases)
+  case 4
+  with assms show ?case
+    by(auto simp add: sup_letprev_progress_le wf_envs_def)
+next
+  case 5
+  with assms show ?case
+    by(auto simp add: sup_letprev_progress_le wf_envs_def)
+next
+  case 3
+  from assms show ?case
+    by (auto simp: wf_envs_def pred_mapping_alt progress_le progress_mono_gen
+        intro!: rel_mapping_map_upd sup_letprev_progress_mono)
+next
+  case (6 p')
+  with assms show ?case by (cases "p' \<in> dom P") (auto simp: wf_envs_def lookup_update')
+next
+  case (7 p')
+  from xs in_fv have "list_all2 (\<lambda>x y. map the ` y = letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> \<lambda>_. X)) v i \<phi>) x)
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (j + \<delta>)] xs'"
+    (*apply (elim list.rel_mono_strong)*)
+    apply(auto 0 3 simp: wf_tuple_def nth_append
+      elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"])
+    sorry
+  (*from xs in_fv have "list_all2 (\<lambda>x y. map the ` y = letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> \<lambda>_. X)) v i \<phi>) x)
+      [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (j + \<delta>)] xs"
+    apply (elim list.rel_mono_strong)
+    apply(auto 0 3 simp: wf_tuple_def nth_append
+      elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"] simp del: fun_upd_apply letprev_sat.simps)
+    sorry*)
+  moreover have "list_all2 (\<lambda>i X. X = the (V p') i) [the (P p')..<the (P' p')] (the (Mapping.lookup db p'))"
+    if "p \<noteq> p'"
+  proof -
+    from that 7 have "p' \<in> dom P" by simp
+    with wf_envs show ?thesis by (simp add: wf_envs_def)
+  qed
+  ultimately show ?case
+    apply (simp add: list.rel_map image_iff lookup_update' del: fun_upd_apply)
+    apply (auto simp add: progress_le progress_mono_gen progress_fixpoint_ex_above sup_letprev_progress_mono cSup_mono)
+    done
+qed (use assms in \<open>auto simp: wf_envs_def\<close>) (*TODO*)
+(*list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
+      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf \<Longrightarrow>
+    wf_mformula \<sigma> j (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})))
+      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) n R \<psi> \<psi>'*)
+
 lemma wf_envs_P_simps[simp]:
    "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> pred_mapping (\<lambda>i. i \<le> j) P"
    "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> pred_mapping (\<lambda>i. i \<le> j + \<delta>) P'"
@@ -5213,7 +5310,41 @@ next
     by (auto simp: fun_upd_def intro!: wf_mformula.Let)
 next
   case (MLetPrev p m \<phi>1 \<phi>2 first i buf)
-  then show ?case sorry (*TODO*)
+  thm local.MLetPrev.prems
+  from MLetPrev.prems(1) obtain \<phi>1' \<phi>2' where LetPrev: "\<phi>' = Formula.LetPrev p \<phi>1' \<phi>2'" and
+    1: "wf_mformula \<sigma> j P V m UNIV \<phi>1 \<phi>1'" and
+    fv: "m = Formula.nfv \<phi>1'" "{0..<m} \<subseteq> fv \<phi>1'" and
+    2:  "wf_mformula \<sigma> j (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>1' j})))
+      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>1'))) n R \<phi>2 \<phi>2'" and
+    list: "list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>1') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>1'))) (map the v) i \<phi>1'))
+      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>1' j})] buf" and
+    first: "first \<longleftrightarrow> j = 0"
+    by (cases rule: wf_mformula.cases) auto
+    obtain xs' \<phi>1_new where e1: "meval (j + \<delta>) m (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>1 = (xs', \<phi>1_new)" and
+      wf1: "wf_mformula \<sigma> (j + \<delta>) P' V m UNIV \<phi>1_new \<phi>1'" and
+      res1: "list_all2 (\<lambda>i. qtable m (fv \<phi>1') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>1'))
+       [progress \<sigma> P \<phi>1' j..<progress \<sigma> P' \<phi>1' (j + \<delta>)] xs'"      
+      using MLetPrev(1)[OF 1(1) MLetPrev.prems(2)] by (auto simp: eqTrueI[OF mem_restr_UNIV, abs_def])
+    obtain first' where e2: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db (MLetPrev p m \<phi>1 \<phi>2 first i buf) = (xs, \<phi>\<^sub>n)" and
+        \<phi>\<^sub>n: "\<phi>\<^sub>n =  (MLetPrev p m \<phi>1 \<phi>2 first' i buf)" and
+        first': "first' \<longleftrightarrow> (j+\<delta>) = 0"
+      (*by(cases rule: meval.cases) auto*)sorry
+    have list_plus: "list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>1') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>1'))) (map the v) i \<phi>1'))
+      [i..<(Sup {i. i\<le>(j+\<delta>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (j+\<delta>))) \<phi>1' (j+\<delta>)})] buf'"
+      sorry
+  from MLetPrev(2)[OF 2 wf_envs_update_sup[OF MLetPrev.prems(2) fv res1 list_plus]] list_plus wf1 e1 fv first
+  show ?case unfolding LetPrev
+    (*apply(simp  del: fun_upd_apply)*)
+    apply (auto simp: fun_upd_def intro!: wf_mformula.LetPrev simp del: fun_upd_apply)
+    sorry (*TODO*)
+
+(*list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
+      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf \<Longrightarrow>
+    wf_mformula \<sigma> j (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})))
+      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) n R \<psi> \<psi>'
+
+wf_mformula \<sigma> j (P(p \<mapsto> progress \<sigma> P \<phi>' j))
+      (V(p \<mapsto> \<lambda>i. {v. length v = m \<and> Formula.sat \<sigma> V v i \<phi>'})) n R \<psi> \<psi>'*)
 next
   case (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)
   from MAnd.prems show ?case
