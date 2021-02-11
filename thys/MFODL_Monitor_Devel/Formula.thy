@@ -276,8 +276,8 @@ fun safe_letprev :: "name \<Rightarrow> formula \<Rightarrow> bool" where
 |  "safe_letprev p (Agg y \<omega> b' f \<phi>) = safe_letprev p \<phi>"
 |  "safe_letprev p (Prev I \<phi>) = (\<not> contains_pred p \<phi> \<and> safe_letprev p \<phi>)"
 |  "safe_letprev p (Next I \<phi>) = (\<not> contains_pred p \<phi> \<and> safe_letprev p \<phi>)"
-|  "safe_letprev p (Since \<phi> I \<psi>) = (\<not> contains_pred p \<phi> \<and> safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
-|  "safe_letprev p (Until \<phi> I \<psi>) = (\<not> contains_pred p \<phi> \<and> safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
+|  "safe_letprev p (Since \<phi> I \<psi>) = (\<not> contains_pred p \<phi> \<and> \<not> contains_pred p \<psi> \<and> safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
+|  "safe_letprev p (Until \<phi> I \<psi>) = (\<not> contains_pred p \<phi> \<and> \<not> contains_pred p \<psi> \<and> safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
 |  "safe_letprev p (MatchP I r) = (\<forall>\<phi>\<in>Regex.atms r. \<not> contains_pred p \<phi> \<and> safe_letprev p \<phi>)"
 |  "safe_letprev p (MatchF I r) =  (\<forall>\<phi>\<in>Regex.atms r. \<not> contains_pred p \<phi> \<and> safe_letprev p \<phi>)"
 

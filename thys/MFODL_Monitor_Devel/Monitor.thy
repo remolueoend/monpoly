@@ -1562,21 +1562,42 @@ lemma progress_fixpoint_ex2:
     apply (auto simp: mono_def reflp_def intro!: progress_mono_gen progress_le_gen rel_mapping_map_upd rel_mapping_reflp pred_mapping_map_upd elim: pred_mapping_mono)
   oops
 
-lemma not_contains_pred_progress: "\<not> contains_pred p \<phi> \<Longrightarrow> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = Monitor.progress \<sigma> P \<phi> j"
+lemma not_contains_pred_progress[simp]: "\<not> contains_pred p \<phi> \<Longrightarrow> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = Monitor.progress \<sigma> P \<phi> j"
   apply(induct p \<phi> arbitrary: P x rule: contains_pred.induct)
-                   apply(simp_all)
+                   apply(simp_all add: progress_regex_def)
+   apply (erule conjE)
+   apply (erule disjE_Not2)
+    apply auto []
+   apply (auto) []
+   apply (metis fun_upd_twist)
+  apply (erule disjE_Not2)
+   apply auto []
   apply auto []
-
+  apply (smt Collect_cong fun_upd_twist)
+  done
 
 lemma min_letprev_progress_upd:
-"safe_letprev p \<phi> \<Longrightarrow> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j \<ge> min x (Monitor.progress \<sigma> P \<phi> j)" 
-  apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
-  apply(simp_all)
-  defer
-  defer
-  apply (meson min_le_iff_disj)
-  apply (meson min_le_iff_disj)
-  sledgehammer
+  "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
+  Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j \<ge> min x (Monitor.progress \<sigma> P \<phi> j)" 
+  apply(induct p \<phi> arbitrary: P x rule: safe_letprev.induct)
+                   apply(simp_all add: min_le_iff_disj progress_regex_def Min_le_iff)
+      defer
+      defer
+      apply auto [2]
+    apply auto []
+    apply (meson linear order_trans)
+   apply (erule conjE)+
+   apply (erule disjE_Not2)
+    apply auto []
+  subgoal for e \<phi> \<psi> P x
+    apply (drule meta_spec2[of _ P x])
+    apply auto
+    apply (drule meta_spec2[of _ "P(e \<mapsto> Monitor.progress \<sigma> P \<phi> j)" x])
+     apply (auto simp: progress_le_gen)
+      apply (erule order_trans, rule progress_mono_gen; (auto simp: progress_le_gen reflp_def
+        intro!: pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp)?)
+    sorry
+  sorry
 
 
 lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j) \<Longrightarrow> (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
