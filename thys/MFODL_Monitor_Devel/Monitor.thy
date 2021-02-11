@@ -1885,10 +1885,11 @@ next
          i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"]) auto
     with False show ?thesis
       unfolding progress.simps
-      apply (intro exI[of _ "Max_mapping (?pickP ` regex.atms r)"] exI[of _ "Max (?pickj ` regex.atms r)"])
-      apply  (auto simp: Max_mapping_coboundedI
-          order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen])
-      sorry (*TODO*)
+      by (intro exI[of _ "Max_mapping (?pickP ` regex.atms r)"] exI[of _ "Max (?pickj ` regex.atms r)"])
+        (force simp: Max_mapping_coboundedI
+          intro!: order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen]
+            range_mapping_Max_mapping[of _ 0, simplified]
+          elim: pred_mapping_mono)
   qed
 next
   case (MatchF I r)
