@@ -2122,16 +2122,14 @@ next
     from LetPrev.prems show "dom (P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (plen \<pi>))) \<phi> (plen \<pi>)}))) = dom (?V V \<sigma>)"
       by simp
     from LetPrev.prems show "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (plen \<pi>))) \<phi> (plen \<pi>)})))"
-      apply(auto simp add: pred_mapping_alt intro: sup_letprev_progress_le) 
-      done
+      by(auto simp add: pred_mapping_alt intro: sup_letprev_progress_le) 
   next
     fix p' i \<phi>'
     assume 1: "p' \<in> dom (?V V \<sigma>)" and 2: "i < the ((P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (plen \<pi>))) \<phi> (plen \<pi>)}))) p')"
     show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
       define sup where "sup = \<Squnion> {i. i \<le> plen \<pi> \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) (plen \<pi>))) \<phi> (plen \<pi>)}"
       have [simp]: "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto> min (Suc sup) (plen \<pi>)))"
-        sorry
-      
+        by (auto simp: LetPrev(6))      
       case True
       with LetPrev 2
       have "letprev_sat (Formula.nfv \<phi>) (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) i = 
@@ -2146,7 +2144,9 @@ next
             "P(p \<mapsto> min (Suc sup) (plen \<pi>))"])
               apply (erule order.strict_trans2)
               apply (rule cSup_least)
-          subgoal sorry
+          subgoal
+            apply(auto simp: progress_fixpoint_ex progress_mono_gen progress_le_gen)
+            done
           subgoal for x
             apply safe
             apply (rule ord_eq_le_trans)
@@ -2161,12 +2161,8 @@ next
              apply (rule cSup_upper)
               apply (auto simp: reflp_def)
             done
-          subgoal
-            (*apply(rule test)*)
-            sorry (*TODO*)
           apply (simp only: dom_fun_upd)
-          subgoal
-            sorry (*TODO*)
+           apply (simp del: fun_upd_apply)
           apply (simp del: fun_upd_apply)
           apply auto []
           apply (metis (full_types) domI option.sel)
@@ -2176,14 +2172,30 @@ next
           apply (rule Collect_cong)
           apply (rule conj_cong)
           apply (rule refl)
-          apply (rule LetPrev(1))
-           subgoal
-            (*apply(rule test)*)
-            sorry (*TODO*)
-          apply (simp only: dom_fun_upd)
+          apply(rule LetPrev(1)[where P=
+            "P(p \<mapsto> min (Suc sup) (plen \<pi>))"])
+              apply (erule order.strict_trans2)
+              apply (rule cSup_least)
           subgoal
-            sorry (*TODO*)
-          apply auto []
+            apply(auto simp: progress_fixpoint_ex progress_mono_gen progress_le_gen)
+            done
+          subgoal for x
+            apply safe
+            apply (rule ord_eq_le_trans)
+             apply assumption
+            apply (rule progress_mono_gen)
+               apply simp
+            apply (rule pred_mapping_map_upd; simp)
+             apply (rule pred_mapping_map_upd; simp)
+            apply (rule rel_mapping_map_upd[OF _ rel_mapping_reflp])
+             apply (rule min.mono[OF _ order_refl])
+             apply (simp add: sup_def)
+             apply (rule cSup_upper)
+              apply (auto simp: reflp_def)
+            done
+          apply (simp only: dom_fun_upd)
+           apply (simp del: fun_upd_apply)
+          apply (simp del: fun_upd_apply)
           apply auto []
           apply (metis (mono_tags, hide_lams) domI option.sel)
           apply (metis (mono_tags, hide_lams) domI option.sel)
@@ -5299,10 +5311,9 @@ lemma wf_envs_progress_regex_le[simp]:
 
 (*Changed*)
 lemma wf_envs_progress_mono[simp]:
-   "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> a \<le> b \<Longrightarrow> a\<le>j \<Longrightarrow> b\<le>(j+\<delta>) \<Longrightarrow> progress \<sigma> P \<phi> a \<le> progress \<sigma> P' \<phi> b"
+   "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> progress \<sigma> P \<phi> j \<le> progress \<sigma> P' \<phi> (j+\<delta>)"
   unfolding wf_envs_def
-  (*by (auto simp: progress_mono_gen)*)
-  sorry
+  by (auto simp: progress_mono_gen)
 
 lemma qtable_wf_tuple_cong: "qtable n A P Q X \<Longrightarrow> A = B \<Longrightarrow> (\<And>v. wf_tuple n A v \<Longrightarrow> P v \<Longrightarrow> Q v = Q' v) \<Longrightarrow> qtable n B P Q' X"
   unfolding qtable_def table_def by blast
