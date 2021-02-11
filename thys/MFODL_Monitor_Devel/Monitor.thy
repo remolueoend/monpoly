@@ -1930,13 +1930,13 @@ next
       unfolding pick_def o_def future_bounded.simps regex.pred_set
       by (intro someI_ex[where P = "\<lambda>Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and>
          i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"]) auto
-    with False show ?thesis
+    from pick have pred_pick: "\<phi> \<in> regex.atms r \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> ?pickj \<phi>) (?pickP \<phi>)" for \<phi>
+      by (force elim: pred_mapping_mono)
+    with pick False show ?thesis
       unfolding progress.simps
       by (intro exI[of _ "Max_mapping (?pickP ` regex.atms r)"] exI[of _ "Max (?pickj ` regex.atms r)"])
-        (force simp: Max_mapping_coboundedI
-          intro!: order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen]
-            range_mapping_Max_mapping[of _ 0, simplified]
-          elim: pred_mapping_mono)
+        (auto simp: Max_mapping_coboundedI range_mapping_Max_mapping[of _ 0, simplified]
+          order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen])
   qed
 next
   case (MatchF I r)
@@ -1966,6 +1966,8 @@ next
       unfolding pick_def o_def future_bounded.simps regex.pred_set pickj_def pickP_def
       by (intro someI_ex[where P = "\<lambda>Pj. dom (fst Pj) = S \<and> range_mapping (Suc i') (snd Pj) (fst Pj) \<and>
        Suc i' \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj)"]) auto
+    from pick have pred_pick: "\<phi> \<in> regex.atms r \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> pickj \<phi>) (pickP \<phi>)" for \<phi>
+      by (force elim: pred_mapping_mono)
     let ?P = "Max_mapping (pickP ` regex.atms r)" let ?j = "Max (pickj ` regex.atms r)"
     from pick[OF \<phi>] False \<phi> have "Suc i' \<le> ?j"
       by (intro order_trans[OF pick[THEN conjunct2, THEN conjunct2], OF \<phi>] order_trans[OF progress_le_gen])
@@ -1975,14 +1977,13 @@ next
     moreover
     from MatchF.prems have "Regex.pred_regex Formula.future_bounded r"
       by auto
-    ultimately show ?thesis using \<tau>_mono[of _ ?j \<sigma>] less_\<tau>D[of \<sigma> i] pick False
-      apply (intro exI[of _ "?j"]  exI[of _ "?P"])
-      apply(auto 0 3 intro!: cInf_greatest
+    ultimately show ?thesis using \<tau>_mono[of _ ?j \<sigma>] less_\<tau>D[of \<sigma> i] pick pred_pick False
+      by (intro exI[of _ "?j"]  exI[of _ "?P"])
+        (auto 0 3 intro!: cInf_greatest range_mapping_Max_mapping[of _ 0, simplified]
           order_trans[OF le_SucI[OF order_refl] order_trans[OF pick[THEN conjunct2, THEN conjunct2] progress_mono_gen]]
           range_mapping_Max_mapping[OF _ _ ballI[OF range_mapping_relax[of "Suc i'" _ _ i, OF _ _ order_refl]]]
           simp: ac_simps Suc_le_eq trans_le_add2 Max_mapping_coboundedI progress_regex_def
           dest: spec[of _ "i'"] spec[of _ ?j])
-      sorry (*TODO*)
   qed
 qed (auto split: option.splits)
 
