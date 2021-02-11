@@ -2128,6 +2128,10 @@ next
     fix p' i \<phi>'
     assume 1: "p' \<in> dom (?V V \<sigma>)" and 2: "i < the ((P(p \<mapsto>(Sup {i. i\<le>(plen \<pi>) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (plen \<pi>))) \<phi> (plen \<pi>)}))) p')"
     show "the (?V V \<sigma> p') i = the (?V V' \<sigma>' p') i" proof (cases "p' = p")
+      define sup where "sup = \<Squnion> {i. i \<le> plen \<pi> \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) (plen \<pi>))) \<phi> (plen \<pi>)}"
+      have [simp]: "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(p \<mapsto> min (Suc sup) (plen \<pi>)))"
+        sorry
+      
       case True
       with LetPrev 2
       have "letprev_sat (Formula.nfv \<phi>) (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) i = 
@@ -2137,15 +2141,33 @@ next
          apply (rule Collect_cong)
          apply (rule conj_cong)
           apply (rule refl)
-        subgoal 
-          apply(rule LetPrev(1))
+        subgoal for V V' v
+          apply(rule LetPrev(1)[where P=
+            "P(p \<mapsto> min (Suc sup) (plen \<pi>))"])
+              apply (erule order.strict_trans2)
+              apply (rule cSup_least)
+          subgoal sorry
+          subgoal for x
+            apply safe
+            apply (rule ord_eq_le_trans)
+             apply assumption
+            apply (rule progress_mono_gen)
+               apply simp
+            apply (rule pred_mapping_map_upd; simp)
+             apply (rule pred_mapping_map_upd; simp)
+            apply (rule rel_mapping_map_upd[OF _ rel_mapping_reflp])
+             apply (rule min.mono[OF _ order_refl])
+             apply (simp add: sup_def)
+             apply (rule cSup_upper)
+              apply (auto simp: reflp_def)
+            done
           subgoal
             (*apply(rule test)*)
             sorry (*TODO*)
           apply (simp only: dom_fun_upd)
           subgoal
             sorry (*TODO*)
-          apply auto []
+          apply (simp del: fun_upd_apply)
           apply auto []
           apply (metis (full_types) domI option.sel)
           apply (metis (full_types) domI option.sel)
