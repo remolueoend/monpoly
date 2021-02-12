@@ -6,7 +6,7 @@ exception Type_error of string
 
 module Constraint_Set = Set.Make (
   struct type t = cst
-   let compare = Pervasives.compare
+   let compare = Stdlib.compare
   end)
 
 include Constraint_Set

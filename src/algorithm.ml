@@ -1508,7 +1508,7 @@ let add_ext neval f =
     let ff1 = add_ext f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
-    let pos = List.sort Pervasives.compare pos in
+    let pos = List.sort Stdlib.compare pos in
     let comp = Relation.project_away pos in
     EExists (comp,ff1)
 
@@ -1752,8 +1752,8 @@ let add_ext neval f =
   | Aggreg (t_y, y, (Max as op), x, glist, Once (intv, f)) ->
 
     let get_comp_func = function
-      | Min -> (fun x y -> - (Pervasives.compare x y))
-      | Max -> (fun x y -> Pervasives.compare x y)
+      | Min -> (fun x y -> - (Stdlib.compare x y))
+      | Max -> (fun x y -> Stdlib.compare x y)
       | _ -> failwith "[add_ext, AggMMOnce] internal error"
     in
 
@@ -1909,7 +1909,7 @@ let add_ext neval f =
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
         Hashtbl.iter (fun tuple (len, vlist) ->
-            let vlist = List.sort Pervasives.compare vlist in
+            let vlist = List.sort Stdlib.compare vlist in
             let med = Misc.median vlist len fmed in
             new_rel := Relation.add (Tuple.add_first tuple med) !new_rel;
           ) map;

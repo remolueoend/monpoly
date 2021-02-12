@@ -58,7 +58,7 @@ val compare: tuple -> tuple -> int
   (** [compare x y] returns [0] if [x] is equal to [y], a negative
       integer if [x] is less than [y], and a positive integer if [x]
       is greater than [y]. It is currently an alias to
-      {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Pervasives.html}Pervasives.compare},
+      {{:http://caml.inria.fr/pub/docs/manual-ocaml/libref/Stdlib.html}Stdlib.compare},
       hence it using the lexicographic ordering. *)
 
 exception Type_error of string

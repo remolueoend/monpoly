@@ -2,7 +2,7 @@ open Predicate
 
 module IntMap = Map.Make (
   struct type t = cst
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
   end)
 
 type int_map = int IntMap.t 

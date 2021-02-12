@@ -66,6 +66,7 @@ val new_last_ts: bool ref
 val ignore_parse_errors: bool ref
 val stop_at_out_of_order_ts: bool ref
   (** Flags corresponding to the command-line options: -verbose, -check, -no_new_last_ts, -ignore_errors, -stop_at_out_of_order_ts. *)
+
 val no_rw: bool ref
 val stop_at_first_viol: bool ref
 (** Flags corresponding to the command-line options -verbose,
@@ -149,6 +150,7 @@ val split_at_lastbutone: 'a list -> 'a list * 'a * 'a
 val get_pos: 'a -> 'a list -> int
   (** [get_pos pos l] returns the elements at position [pos] in
       [l]. *)
+
 val get_pos_no_e: 'a -> 'a list -> int
 (** [get_pos pos l] returns the elements at position [pos] in
     [l]. without throwing an exception *)

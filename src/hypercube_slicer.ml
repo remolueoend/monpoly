@@ -24,7 +24,7 @@ type hypercube_slicer = {
 
 module Result_Set = Set.Make (
   struct type t = int
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
   end)
 
 include Result_Set
@@ -47,7 +47,7 @@ let rec remove_duplicates l = match l with
   | h::t -> h::(remove_duplicates (List.filter (fun x -> x.var <> h.var) t))
 
 let build_var_ids_preds free_vars preds_form preds_sig =
-  let sorted = (List.sort Pervasives.compare free_vars) in
+  let sorted = (List.sort Stdlib.compare free_vars) in
 
   let sorted_free_vars = List.map (fun e -> Predicate.string_of_var e) sorted in
 
