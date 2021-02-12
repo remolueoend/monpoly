@@ -1446,8 +1446,8 @@ let median xlist len fmed =
             if mid = !crt + m - 1 then
               begin flag := true;  prev := c end
             else
-              begin med := c; (* that is, (c+c)/2 *) raise Break end
-          else begin med := c; raise Break end
+              begin med := fmed c c; raise Break end
+          else begin med := fmed c c; raise Break end
         else
           crt := !crt + m
       ) xlist;
