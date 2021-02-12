@@ -772,7 +772,6 @@ let rec eval f crt discard =
 
     if inf.init then
       begin
-        assert (q = 0);
         match eval f1 crt discard with
         | Some _ -> inf.init <- false
         | _ -> ()
