@@ -369,7 +369,7 @@ and free_re_vars = function
 
 let fresh_var fv =
   let rec fresh_var_rec v = 
-    let var = "__f" ^ (string_of_int v) in
+    let var = "_x" ^ (string_of_int v) in
     if List.exists (fun x -> x=var) fv
     then
       fresh_var_rec (v+1)

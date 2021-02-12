@@ -89,7 +89,6 @@ open Extformula
 open Mformula
 open Hypercube_slicer
 
-module NEval = Dllist
 module Sk = Dllist
 module Sj = Dllist
 
@@ -574,22 +573,6 @@ let comp_aggMM_once tsq intv state update_state_old update_state_new get_result 
 
 
 
-(* Is 'last' pointing to the last position in neval? *)
-(* This NEval.void hack is ugly, but it seems unavoidable, unless we
-   have a separate [neval] for each subformula *)
-let neval_is_last neval last =
-  (not (last == NEval.void)) && NEval.is_last neval last
-
-(* get the current position to be evaluated (for some subformula) *)
-let neval_get_crt neval last crt q =
-  if last == NEval.void then
-    begin
-      assert(q=0);
-      crt
-    end
-  else
-    NEval.get_next neval last
-
 let add_let_index f n rels =
   let rec update = function
     | EPred (p, comp, inf) ->
@@ -632,21 +615,20 @@ let add_let_index f n rels =
 
 (* Arguments:
    - [f] the current formula
-   - [neval] the list of non-evaluated points
-   - [crt] the current evaluation point (a time point, timestamp pair)
+   - [crt] the current evaluation point (an neval cell)
    - [discard] a boolean; if true then the result is not used
                (only a minimal amount of computation should be done);
                it should not be propagated for temporal subformulas
                (pitfall: possible source of bugs)
 *)
-let rec eval f neval crt discard =
-  let (q,tsq) = NEval.get_data crt in
+let rec eval f crt discard =
+  let (q,tsq) = Neval.get_data crt in
 
   if Misc.debugging Dbg_eval then
     begin
       print_extf "\n[eval] evaluating formula\n" f;
-      Printf.printf "at (%d,%s) with discard=%b and " q (MFOTL.string_of_ts tsq) discard;
-      print_neval "neval=" neval
+      Printf.printf "at (%d,%s) with discard=%b\n%!"
+        q (MFOTL.string_of_ts tsq) discard
     end;
 
   match f with
@@ -670,24 +652,22 @@ let rec eval f neval crt discard =
 
   | ELet (p, comp, f1, f2, inf) ->
       let rec eval_f1 rels =
-        let (lastq, _) = NEval.get_last neval in
-        if inf.llastq = lastq then
+        if Neval.is_last inf.llast then
           rels
         else
-          let crt1 = neval_get_crt neval inf.llast crt q in
-          let (i, tsi) = NEval.get_data crt1 in
-          match eval f1 neval crt1 false with
+          let crt1 = Neval.get_next inf.llast in
+          match eval f1 crt1 false with
           | Some rel ->
-            inf.llast <- if NEval.is_last neval crt1 then NEval.void else crt1;
-            inf.llastq <- i;
+            inf.llast <- crt1;
+            let (i, tsi) = Neval.get_data crt1 in
             eval_f1 ((i, tsi, comp rel) :: rels)
           | None -> rels
       in
       add_let_index f2 (Predicate.get_name p) (List.rev (eval_f1 []));
-      eval f2 neval crt discard
+      eval f2 crt discard
 
   | ENeg f1 ->
-    (match eval f1 neval crt discard with
+    (match eval f1 crt discard with
      | Some rel ->
        let res =
          if Relation.is_empty rel then (* false? *)
@@ -700,7 +680,7 @@ let rec eval f neval crt discard =
     )
 
   | EExists (comp,f1) ->
-    (match eval f1 neval crt discard with
+    (match eval f1 crt discard with
      | Some rel -> Some (comp rel)
      | None -> None
     )
@@ -709,7 +689,7 @@ let rec eval f neval crt discard =
     (* we have to store rel1, if f2 cannot be evaluated *)
     let eval_and rel1 =
       if Relation.is_empty rel1 then
-        (match eval f2 neval crt true with
+        (match eval f2 crt true with
          | Some _ ->
            inf.arel <- None;
            Some rel1
@@ -718,7 +698,7 @@ let rec eval f neval crt discard =
            None
         )
       else
-        (match eval f2 neval crt discard with
+        (match eval f2 crt discard with
          | Some rel2 ->
            inf.arel <- None;
            Some (comp rel1 rel2)
@@ -730,14 +710,14 @@ let rec eval f neval crt discard =
     (match inf.arel with
      | Some rel1 -> eval_and rel1
      | None ->
-       (match eval f1 neval crt discard with
+       (match eval f1 crt discard with
         | Some rel1 -> eval_and rel1
         | None -> None
        )
     )
 
   | EAggreg (comp, f) ->
-    (match eval f neval crt discard with
+    (match eval f crt discard with
      | Some rel -> Some (comp rel)
      | None -> None
     )
@@ -746,16 +726,16 @@ let rec eval f neval crt discard =
     (* we have to store rel1, if f2 cannot be evaluated *)
     (match inf.arel with
      | Some rel1 ->
-       (match eval f2 neval crt discard with
+       (match eval f2 crt discard with
         | Some rel2 ->
           inf.arel <- None;
           Some (comp rel1 rel2)
         | None -> None
        )
      | None ->
-       (match eval f1 neval crt discard with
+       (match eval f1 crt discard with
         | Some rel1 ->
-          (match eval f2 neval crt discard with
+          (match eval f2 crt discard with
            | Some rel2 -> Some (comp rel1 rel2)
            | None ->
              inf.arel <- Some rel1;
@@ -767,42 +747,23 @@ let rec eval f neval crt discard =
 
   | EPrev (intv,f1,inf) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Prev] inf.ptsq=%s\n%!" (MFOTL.string_of_ts inf.ptsq);
+      Printf.printf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
 
-    if q=0 then
-      begin
-        inf.ptsq <- tsq;
-        Some Relation.empty
-      end
+    if q = 0 then
+      Some Relation.empty
     else
       begin
-        assert(not (inf.ptsq = MFOTL.ts_invalid && NEval.is_first neval crt));
-        let added = ref false in
-        if NEval.is_first neval crt then
-          begin
-            NEval.add_first (q-1,inf.ptsq) neval;
-            added := true;
-          end;
-        let pcrt = NEval.get_prev neval crt in
-        begin
-          let prev_tp, prev_ts = NEval.get_data pcrt in
-          assert(prev_tp = q - 1);
-          assert(prev_ts = inf.ptsq);
-          let orel = eval f1 neval pcrt discard in
-          if !added then
-            ignore(NEval.pop_first neval);
-          match orel with
-          | Some rel1 ->
-            let res =
-              if MFOTL.in_interval (MFOTL.ts_minus tsq inf.ptsq) intv then
-                Some rel1
-              else
-                Some Relation.empty
-            in
-            inf.ptsq <- tsq;
-            res
-          | None -> None
-        end
+        let pcrt = Neval.get_next inf.plast in
+        let pq, ptsq = Neval.get_data pcrt in
+        assert(pq = q-1);
+        match eval f1 pcrt discard with
+        | Some rel1 ->
+          inf.plast <- pcrt;
+          if MFOTL.in_interval (MFOTL.ts_minus tsq ptsq) intv then
+            Some rel1
+          else
+            Some Relation.empty
+        | None -> None
       end
 
   | ENext (intv,f1,inf) ->
@@ -811,23 +772,20 @@ let rec eval f neval crt discard =
 
     if inf.init then
       begin
-        match eval f1 neval crt discard with
+        match eval f1 crt discard with
         | Some _ -> inf.init <- false
         | _ -> ()
       end;
 
-    if NEval.is_last neval crt then
+    if Neval.is_last crt then
       None
     else
       begin
-        (* ignore(NEval.pop_first neval); *)
-        let ncrt = NEval.get_next neval crt in
-        let orel = eval f1 neval ncrt discard in
-        (* NEval.add_first (q,tsq) neval; *)
-        match orel with
+        let ncrt = Neval.get_next crt in
+        let nq, ntsq = Neval.get_data ncrt in
+        assert (nq = q+1);
+        match eval f1 ncrt discard with
         | Some rel1 ->
-          let (nq,ntsq) = NEval.get_data ncrt in
-          assert(nq=q+1);
           if MFOTL.in_interval (MFOTL.ts_minus ntsq tsq) intv then
             Some rel1
           else
@@ -840,7 +798,7 @@ let rec eval f neval crt discard =
       Printf.printf "[eval,SinceA] q=%d\n%!" q;
 
     let eval_f1 rel2 comp2 =
-      (match eval f1 neval crt false with
+      (match eval f1 crt false with
        | Some rel1 ->
          inf.sarel2 <- None;
          Some (comp2 rel1 rel2)
@@ -855,7 +813,7 @@ let rec eval f neval crt discard =
     (match inf.sarel2 with
      | Some rel2 -> eval_f1 rel2 update_sauxrels
      | None ->
-       (match eval f2 neval crt false with
+       (match eval f2 crt false with
         | None -> None
         | Some rel2 -> eval_f1 rel2 update_sauxrels
        )
@@ -866,7 +824,7 @@ let rec eval f neval crt discard =
       Printf.printf "[eval,Since] q=%d\n" q;
 
     let eval_f1 rel2 comp2 =
-      (match eval f1 neval crt false with
+      (match eval f1 crt false with
        | Some rel1 ->
          inf.srel2 <- None;
          Some (comp2 rel1 rel2)
@@ -881,7 +839,7 @@ let rec eval f neval crt discard =
     (match inf.srel2 with
      | Some rel2 -> eval_f1 rel2 update_sauxrels
      | None ->
-       (match eval f2 neval crt false with
+       (match eval f2 crt false with
         | None -> None
         | Some rel2 -> eval_f1 rel2 update_sauxrels
        )
@@ -889,7 +847,7 @@ let rec eval f neval crt discard =
 
 
   | EOnceA ((c,_) as intv, f2, inf) ->
-    (match eval f2 neval crt false with
+    (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
@@ -911,7 +869,7 @@ let rec eval f neval crt discard =
     )
 
   | EAggOnce (f, intv, state, update_old, update_new, get_result) ->
-    (match eval f neval crt false with
+    (match eval f crt false with
      | Some rel -> Some (comp_agg_once
                            tsq intv state
                            update_old
@@ -922,7 +880,7 @@ let rec eval f neval crt discard =
     )
 
   | EAggMMOnce (f, intv, state, update_old, update_new, get_result) ->
-    (match eval f neval crt false with
+    (match eval f crt false with
      | Some rel -> Some (comp_aggMM_once
                            tsq intv state
                            update_old
@@ -943,7 +901,7 @@ let rec eval f neval crt discard =
      relations at equal timestamps; otherwise, when 0 is not
      included, we need to use the timepoints. *)
   | EOnceZ (intv,f2,inf) ->
-    (match eval f2 neval crt false with
+    (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
@@ -953,7 +911,7 @@ let rec eval f neval crt discard =
     )
 
   | EOnce (intv,f2,inf) ->
-    (match eval f2 neval crt false with
+    (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
@@ -986,8 +944,7 @@ let rec eval f neval crt discard =
     if inf.ufirst then
       begin
         inf.ufirst <- false;
-        assert(inf.ulast != NEval.void);
-        let (i,_) = NEval.get_data inf.ulast in
+        let (i,_) = Neval.get_data inf.ulast in
         update_old_until q tsq i intv inf discard;
         if Misc.debugging Dbg_eval then
           print_uinf "[eval,Until,after_update] inf: " inf
@@ -996,7 +953,7 @@ let rec eval f neval crt discard =
     (* we first evaluate f2, and then f1 *)
 
     let rec evalf1 i tsi rel2 ncrt =
-      (match eval f1 neval ncrt false with
+      (match eval f1 ncrt false with
        | Some rel1 ->
          update_until q tsq i tsi intv rel1 rel2 inf comp discard;
          inf.urel2 <- None;
@@ -1008,11 +965,11 @@ let rec eval f neval crt discard =
       )
 
     and evalf2 () =
-      if neval_is_last neval inf.ulast then
+      if Neval.is_last inf.ulast then
         None
       else
-        let ncrt = neval_get_crt neval inf.ulast crt q in
-        let (i,tsi) = NEval.get_data ncrt in
+        let ncrt = Neval.get_next inf.ulast in
+        let (i,tsi) = Neval.get_data ncrt in
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
@@ -1029,7 +986,7 @@ let rec eval f neval crt discard =
             (match inf.urel2 with
              | Some rel2 -> evalf1 i tsi rel2 ncrt
              | None ->
-               (match eval f2 neval ncrt false with
+               (match eval f2 ncrt false with
                 | None -> None
                 | Some rel2 -> evalf1 i tsi rel2 ncrt
                )
@@ -1050,15 +1007,15 @@ let rec eval f neval crt discard =
 
     (* evaluates the subformula f as much as possible *)
     let rec eval_subf f list last  =
-      if neval_is_last neval last then
+      if Neval.is_last last then
         last
       else
-        let ncrt = neval_get_crt neval last crt q in
-        match eval f neval ncrt false with
+        let ncrt = Neval.get_next last in
+        match eval f ncrt false with
         | None -> last
         | Some rel ->
           (* store the result and try the next time point *)
-          let i, tsi = NEval.get_data ncrt in
+          let i, tsi = Neval.get_data ncrt in
           Dllist.add_last (i, tsi, rel) list;
           eval_subf f list ncrt
     in
@@ -1070,12 +1027,12 @@ let rec eval f neval crt discard =
     (* checks whether the position to be evaluated is beyond the interval *)
     let has_lookahead last =
       let ncrt =
-        if neval_is_last neval last then
+        if Neval.is_last last then
           last
         else
-          neval_get_crt neval last crt q
+          Neval.get_next last
       in
-      let _, tsi = NEval.get_data ncrt in
+      let _, tsi = Neval.get_data ncrt in
       not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv)
     in
 
@@ -1158,18 +1115,18 @@ let rec eval f neval crt discard =
 
   | EEventuallyZ (intv,f2,inf) ->
     (* contents of inf:
-       elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
-       eauxrels: info          the auxiliary relations (up to elastev)
+       elastev: Neval.cell  last cell of neval for which f2 is evaluated
+       eauxrels: info       the auxiliary relations (up to elastev)
     *)
     if Misc.debugging Dbg_eval then
       print_ezinf "[eval,EventuallyZ] inf: " inf;
 
     let rec ez_update () =
-      if neval_is_last neval inf.ezlastev then
+      if Neval.is_last inf.ezlastev then
         None
       else
-        let ncrt = neval_get_crt neval inf.ezlastev crt q in
-        let (i,tsi) = NEval.get_data ncrt in
+        let ncrt = Neval.get_next inf.ezlastev in
+        let (i,tsi) = Neval.get_data ncrt in
         (* Printf.printf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
@@ -1238,7 +1195,7 @@ let rec eval f neval crt discard =
           end
         else (* we don't have the lookahead -> we cannot compute the result *)
           begin
-            match eval f2 neval ncrt false with
+            match eval f2 ncrt false with
             | None -> None
             | Some rel2 ->
               (* we update the auxiliary relations *)
@@ -1253,8 +1210,8 @@ let rec eval f neval crt discard =
 
   | EEventually (intv,f2,inf) ->
     (* contents of inf:
-       elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
-       eauxrels: info          the auxiliary relations (up to elastev)
+       elastev:  Neval.cell  last cell of neval for which f2 is evaluated
+       eauxrels: info        the auxiliary relations (up to elastev)
     *)
     if Misc.debugging Dbg_eval then
       print_einfn "[eval,Eventually] inf: " inf;
@@ -1265,11 +1222,11 @@ let rec eval f neval crt discard =
     elim_old_eventually q tsq intv inf;
 
     let rec e_update () =
-      if neval_is_last neval inf.elastev then
+      if Neval.is_last inf.elastev then
         None
       else
-        let ncrt = neval_get_crt neval inf.elastev crt q in
-        let (i,tsi) = NEval.get_data ncrt in
+        let ncrt = Neval.get_next inf.elastev in
+        let (i,tsi) = Neval.get_data ncrt in
         (* Printf.printf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
@@ -1322,7 +1279,7 @@ let rec eval f neval crt discard =
           end
         else
           begin
-            match eval f2 neval ncrt false with
+            match eval f2 ncrt false with
             | None -> None
             | Some rel2 ->
               (* we update the auxiliary relations *)
@@ -1388,24 +1345,23 @@ let add_index f i tsi db =
   in
   update [] f
 
-let process_index ff closed neval i =
+let process_index ff closed last i =
   if !Misc.verbose then
     Printf.printf "At time point %d:\n%!" i;
 
   let rec eval_loop () =
-    if not (NEval.is_empty neval) then
-      let first = NEval.get_first_cell neval in
-      let (q,tsq) = NEval.get_data first in
-      if tsq < MFOTL.ts_max then
-        match eval ff neval first false with
-        | Some rel ->
-          ignore(NEval.pop_first neval);
-          show_results closed i q tsq rel;
-          if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
-          else eval_loop ()
-        | None -> true
-      else false
-    else true
+    let crt = Neval.get_next !last in
+    let (q, tsq) = Neval.get_data crt in
+    if tsq < MFOTL.ts_max then
+      match eval ff crt false with
+      | Some rel ->
+        show_results closed i q tsq rel;
+        last := crt;
+        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
+        else if Neval.is_last crt then true
+        else eval_loop ()
+      | None -> true
+    else false
   in
   eval_loop ()
 
@@ -1489,8 +1445,8 @@ let median xlist len fmed =
             if mid = !crt + m - 1 then
               begin flag := true;  prev := c end
             else
-              begin med := c; (* that is, (c+c)/2 *) raise Break end
-          else begin med := c; raise Break end
+              begin med := fmed c c; raise Break end
+          else begin med := fmed c c; raise Break end
         else
           crt := !crt + m
       ) xlist;
@@ -1524,8 +1480,9 @@ let aggreg_empty_rel op glist t =
 
 
 
-let rec add_ext f =
-  match f with
+let add_ext neval f =
+  let neval0 = Neval.get_last neval in
+  let rec add_ext = function
   | Pred p ->
     EPred (p, Relation.eval_pred p, Queue.create())
 
@@ -1534,7 +1491,7 @@ let rec add_ext f =
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
     let comp = Relation.reorder new_pos in
-    ELet (p, comp, add_ext f1, add_ext f2, {llast = NEval.void; llastq = -1})
+    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0})
 
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in
@@ -1550,7 +1507,7 @@ let rec add_ext f =
     let ff1 = add_ext f1 in
     let attr1 = MFOTL.free_vars f1 in
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
-    let pos = List.sort Pervasives.compare pos in
+    let pos = List.sort Stdlib.compare pos in
     let comp = Relation.project_away pos in
     EExists (comp,ff1)
 
@@ -1794,8 +1751,8 @@ let rec add_ext f =
   | Aggreg (t_y, y, (Max as op), x, glist, Once (intv, f)) ->
 
     let get_comp_func = function
-      | Min -> (fun x y -> - (Pervasives.compare x y))
-      | Max -> (fun x y -> Pervasives.compare x y)
+      | Min -> (fun x y -> - (Stdlib.compare x y))
+      | Max -> (fun x y -> Stdlib.compare x y)
       | _ -> failwith "[add_ext, AggMMOnce] internal error"
     in
 
@@ -1951,7 +1908,7 @@ let rec add_ext f =
         let map = comp_map rel in
         let new_rel = ref Relation.empty in
         Hashtbl.iter (fun tuple (len, vlist) ->
-            let vlist = List.sort Pervasives.compare vlist in
+            let vlist = List.sort Stdlib.compare vlist in
             let med = Misc.median vlist len fmed in
             new_rel := Relation.add (Tuple.add_first tuple med) !new_rel;
           ) map;
@@ -1994,7 +1951,7 @@ let rec add_ext f =
 
   | Prev (intv, f) ->
     let ff = add_ext f in
-    EPrev (intv, ff, {ptsq = MFOTL.ts_invalid})
+    EPrev (intv, ff, {plast = neval0})
 
   | Next (intv, f) ->
     let ff = add_ext f in
@@ -2065,8 +2022,8 @@ let rec add_ext f =
         fun relj rel1 -> Relation.minus posl relj rel1
       in
       let inf = {
-        last1 = NEval.void;
-        last2 = NEval.void;
+        last1 = neval0;
+        last2 = neval0;
         listrel1 = Dllist.empty();
         listrel2 = Dllist.empty()}
       in
@@ -2076,7 +2033,7 @@ let rec add_ext f =
         let matches2 = Table.get_matches attr2 attr1 in
         fun relj rel1 -> Relation.natural_join_sc2 matches2 relj rel1
       in
-      let inf = {ulast = NEval.void;
+      let inf = {ulast = neval0;
                  ufirst = false;
                  ures = Relation.empty;
                  urel2 = None;
@@ -2093,17 +2050,19 @@ let rec add_ext f =
                                              r = -1;
                                              res = Some (Relation.empty)};
                              ezlast = Dllist.void;
-                             ezlastev = NEval.void;
+                             ezlastev = neval0;
                              ezauxrels = Dllist.empty()})
     else
       EEventually (intv,ff,{etree = LNode {l = MFOTL.ts_invalid;
                                            r = MFOTL.ts_invalid;
                                            res = Some (Relation.empty)};
                             elast = Dllist.void;
-                            elastev = NEval.void;
+                            elastev = neval0;
                             eauxrels = Dllist.empty()})
 
   | _ -> failwith "[add_ext] internal error"
+  in
+  add_ext f, ref neval0
 
 (*
   STATE MANAGEMENT CALLS
@@ -2134,15 +2093,13 @@ let read_m_from_file file =
   let ch = open_in_bin file in
   let value = (Marshal.from_channel ch : state) in
   close_in ch;
-  let (last_ts,closed,mf,a,tp,last) = value in
-  let neval = NEval.from_array a in
-  (last_ts,mf,closed,neval,tp,last)
+  value
 
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
-let marshal dumpfile ff closed neval =
-  let a, mf = Marshalling.ext_to_m ff neval in
-  let value : state = (!Log.last_ts,closed,mf,a,!Log.tp,!Log.last) in
+let marshal dumpfile ff closed neval lastev =
+  let mf = Marshalling.ext_to_m ff in
+  let value : state = (!Log.last_ts,closed,mf,neval,!lastev,!Log.tp,!Log.last) in
   (*Printf.printf "Log TP to restore: %d \n" !Log.tp;*)
   dump_to_file dumpfile value
 
@@ -2151,9 +2108,9 @@ let marshal dumpfile ff closed neval =
   information using m_to_ext function.
 *)
 let unmarshal resumefile =
-  let (last_ts,mf,closed,neval,tp,last) = read_m_from_file resumefile in
-  let ff = Marshalling.m_to_ext mf neval in
-  (last_ts,ff,closed,neval,tp,last)
+  let (last_ts,closed,mf,neval,lastev,tp,last) = read_m_from_file resumefile in
+  let ff = Marshalling.m_to_ext mf in
+  (last_ts,closed,ff,neval,ref lastev,tp,last)
 
 
 let create_empty_db =
@@ -2162,39 +2119,35 @@ let create_empty_db =
 let add_empty_db ff neval =
   crt_tp := !Log.tp -1;
   lastts := !Log.last_ts;
-  NEval.add_last (!crt_tp, !lastts) neval;
+  ignore (Neval.append (!crt_tp, !lastts) neval);
   add_index ff !crt_tp !lastts create_empty_db
 
-let catch_up_on_filtered_tp ff neval =
+let catch_up_on_filtered_tp closed i ff neval last =
   let rec eval_loop () =
-    if not (NEval.is_empty neval) then
-      let first = NEval.get_first_cell neval in
-      match eval ff neval first false with
-      | Some rel ->
-        ignore(NEval.pop_first neval);
-        if (Relation.is_empty rel) then
-          eval_loop ()
-        else ()
-      | None -> ()
-    else ()
+    let crt = Neval.get_next !last in
+    match eval ff crt false with
+    | Some rel ->
+      let (q, tsq) = Neval.get_data crt in
+      show_results closed i q tsq rel;
+      last := crt;
+      if Neval.is_last crt then () else eval_loop ()
+    | None -> ()
   in
-  (*print_neval "Neval \n" neval;
-  print_extf "Before catching up \n" ff;*)
+  (*print_extf "Before catching up \n" ff;*)
   if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then begin
-    let () = add_empty_db ff neval in
+    add_empty_db ff neval;
     eval_loop ()
   end
-  (*print_neval "Neval \n" neval;
-  print_extf "After catching up \n" ff*)
+  (*print_extf "After catching up \n" ff*)
 
-let split_save filename ff closed neval  =
+let split_save filename ff closed i neval last =
   let heavy_unproc = !slicer_heavy_unproc in
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  catch_up_on_filtered_tp ff neval;
+  catch_up_on_filtered_tp closed i ff neval last;
 
-  let a, mf = Marshalling.ext_to_m ff neval in
+  let mf = Marshalling.ext_to_m ff in
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
   let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree mf in
@@ -2204,7 +2157,7 @@ let split_save filename ff closed neval  =
   in
 
   Array.iteri (fun index mf ->
-    let value : state = (!Log.last_ts,closed,mf,a,!Log.tp,!Log.last) in
+    let value : state = (!Log.last_ts,closed,mf,neval,!last,!Log.tp,!Log.last) in
     dump_to_file (format_filename index) value
   ) result;
   Printf.printf "%s\n%!" saved_state_msg
@@ -2214,13 +2167,13 @@ let split_save filename ff closed neval  =
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
    with names of index prepended with dumpfile variable.
 *)
-let split_and_save  sconsts dumpfile i ff closed neval  =
-  catch_up_on_filtered_tp ff neval;
-  let a, mf = Marshalling.ext_to_m ff neval in
+let split_and_save  sconsts dumpfile closed i ff neval last =
+  catch_up_on_filtered_tp closed i ff neval last;
+  let mf = Marshalling.ext_to_m ff in
   let result = Splitting.split_formula sconsts mf in
 
   Array.iteri (fun index mf ->
-  let value : state = (!Log.last_ts,closed,mf,a,!Log.tp,!Log.last) in
+  let value : state = (!Log.last_ts,closed,mf,neval,!last,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result;
   Printf.printf "%s\n%!" saved_state_msg
 
@@ -2236,22 +2189,21 @@ let files_to_list f =
   is then folded over.
  *)
 let merge_formulas files =
-  if List.length files == 1 then read_m_from_file (List.hd files)
+  if List.length files == 1 then unmarshal (List.hd files)
   else
-  List.fold_right (fun s (last_ts1,ff1,closed,neval1,tp1,last) ->
-    let (last_ts,ff2,_,neval2,tp,_) = read_m_from_file s in
+    let (last_ts, closed, mf, neval, lastev, tp, last) =
+      List.fold_right (fun s (last_ts1,closed,mf1,neval,lastev,tp1,last) ->
+        let (last_ts,_,mf2,_,_,tp,_) = read_m_from_file s in
 
-    if (MFOTL.ts_minus last_ts1 last_ts) == 0. then failwith "[merge_formulas] last_ts mismatch";
-    if tp1 != tp then failwith "[merge_formulas] last_ts mismatch";
-    (*
-    Printf.printf "1 length_ %d \n" (NEval.length neval1);
-    Printf.printf "2 length_ %d \n" (NEval.length neval2);
-    *)
-    let comb_nv = Splitting.combine_neval neval1 neval2 in
+        if (MFOTL.ts_minus last_ts1 last_ts) = 0. then failwith "[merge_formulas] last_ts mismatch";
+        if tp1 <> tp then failwith "[merge_formulas] tp mismatch";
 
-    let comb_ff = Splitting.comb_m ff1 ff2 in
-    (last_ts,comb_ff,closed, comb_nv,tp,last)
-  ) (List.tl files) (read_m_from_file (List.hd files))
+        let comb_mf = Splitting.comb_m lastev mf1 mf2 in
+        (last_ts,closed, comb_mf, neval, lastev, tp,last)
+      ) (List.tl files) (read_m_from_file (List.hd files))
+    in
+    let ff = Marshalling.m_to_ext mf in
+    (last_ts, closed, ff, neval, ref lastev, tp, last)
 
 (* MONITORING FUNCTION *)
 
@@ -2289,7 +2241,7 @@ let set_slicer_parameters c p =
     Printf.printf "%s\n%!" slicing_parameters_updated_msg
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
-let rec check_log lexbuf ff closed neval i =
+let rec check_log lexbuf ff closed neval i last =
   let finish () =
     if Misc.debugging Dbg_perf then
       Perf.check_log_end i !lastts
@@ -2298,46 +2250,10 @@ let rec check_log lexbuf ff closed neval i =
     if Misc.debugging Dbg_perf then
       Perf.check_log i !lastts;
 
-    (* Helper functions for handling different monpoly commands *)
-    let save_state c params = match params with
-      | Some (Argument filename) ->
-                    catch_up_on_filtered_tp ff neval;
-                    marshal filename ff closed neval;
-                    Printf.printf "%s\n%!" saved_state_msg
-      | None -> Printf.printf "%s: No filename specified\n%!" c;
-      | _ -> print_endline "Unsupported parameters to save_state";
-    in
-    let save_and_exit c params =  match params with
-      | Some p -> if (checkExitParam p = true) then begin
-                    catch_up_on_filtered_tp ff neval;
-                    marshal !dumpfile ff closed neval;
-                    Printf.printf "%s\n%!" saved_state_msg
-        end
-        else Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i
-      | None -> Printf.printf "%s: No filename specified, continuing at timepoint %d\n%!" c !tp;
-    in
-    let split_save   c params = match params with
-      | Some p -> if (checkExitParam p = true) then
-                    split_save !dumpfile ff closed neval
-                  else
-                    Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
-      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
-    in
     let get_constraints_split_state p = match p with
       (* Other case already handled by check split param *)
       | SplitParameters sp -> sp
       | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
-    in
-    let split_state   c params = match params with
-      | Some p -> if (checkSplitParam p = true) then
-                    split_and_save (get_constraints_split_state p) !dumpfile i ff closed neval
-                  else
-                    Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
-      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
-    in
-    let set_slicer c params = match params with
-      | Some p -> set_slicer_parameters c p
-      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
     in
     match Log.get_next_entry lexbuf with
     | MonpolyCommand {c; parameters} ->
@@ -2353,18 +2269,63 @@ let rec check_log lexbuf ff closed neval i =
                print_newline ();
                Printf.printf "Terminated at timepoint: %d \n%!" !tp
             | "get_pos"   ->
-                Printf.printf "Current timepoint: %d \n%!" !tp;
-                loop ffl i
+               Printf.printf "Current timepoint: %d \n%!" !tp;
+               loop ffl i
             | "save_state" ->
-                save_state c parameters;
+              (match parameters with
+              | Some (Argument filename) ->
+                catch_up_on_filtered_tp closed !crt_tp ff neval last;
+                marshal filename ff closed neval last;
+                Printf.printf "%s\n%!" saved_state_msg;
                 loop ffl i
+              | None ->
+                Printf.printf "%s: No filename specified\n%!" c;
+                loop ffl i
+              | _ ->
+                print_endline "Unsupported parameters to save_state";
+                loop ffl i
+              )
             | "set_slicer" ->
-                set_slicer c parameters;
+              (match parameters with
+              | Some p -> set_slicer_parameters c p
+              | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp
+              );
+              loop ffl i
+            | "split_save" ->
+              (match parameters with
+              | Some p ->
+                if checkExitParam p then begin
+                  split_save !dumpfile ff closed !crt_tp neval last;
+                  loop ffl i
+                end else begin
+                  Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
+                  loop ffl i
+                end
+              | None ->
+                Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
                 loop ffl i
-            | "split_save" -> split_save c parameters;
-                loop ffl i
-            | "save_and_exit" ->  save_and_exit c parameters;
-            | "split_state" ->    split_state   c parameters;
+              )
+            | "save_and_exit" ->
+              (match parameters with
+              | Some p ->
+                if checkExitParam p then begin
+                  catch_up_on_filtered_tp closed !crt_tp ff neval last;
+                  marshal !dumpfile ff closed neval last;
+                  Printf.printf "%s\n%!" saved_state_msg
+                end
+                else Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
+              | None -> Printf.printf "%s: No filename specified at timepoint %d\n%!" c !tp
+              )
+            | "split_state" ->
+              (match parameters with
+              | Some p ->
+                if checkSplitParam p then
+                  split_and_save (get_constraints_split_state p)
+                    !dumpfile closed !crt_tp ff neval last
+                else
+                  Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
+              | None -> Printf.printf "%s: No parameters specified at timepoint %d\n%!" c !tp
+              )
             | _ ->
                 Printf.printf "UNRECOGNIZED COMMAND: %s\n%!" c;
                 loop ffl i
@@ -2376,8 +2337,8 @@ let rec check_log lexbuf ff closed neval i =
           crt_tp := tp;
           crt_ts := ts;
           add_index ff tp ts db;
-          NEval.add_last (tp, ts) neval;
-          let cont = process_index ff closed neval tp in
+          ignore (Neval.append (tp, ts) neval);
+          let cont = process_index ff closed last tp in
           lastts := ts;
           if cont then
             loop ffl (i + 1)
@@ -2403,7 +2364,9 @@ let rec check_log lexbuf ff closed neval i =
 
 
 let monitor_lexbuf lexbuf f =
-  check_log lexbuf (add_ext f) (MFOTL.free_vars f = []) (NEval.empty()) 0
+  let neval = Neval.create () in
+  let extf, last = add_ext neval f in
+  check_log lexbuf extf (MFOTL.free_vars f = []) neval 0 last
 
 let monitor_string log f =
   (let lexbuf = Lexing.from_string log in
@@ -2449,7 +2412,7 @@ let test_filter logfile f =
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
 let resume logfile =
-  let (last_ts,ff,closed,neval,tp,last) = unmarshal !resumefile in
+  let (last_ts,closed,ff,neval,lastev,tp,last) = unmarshal !resumefile in
 
   (*print_neval "Neval \n" neval;
   print_extf "State \n" ff;*)
@@ -2459,14 +2422,13 @@ let resume logfile =
   Log.last := last;
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" restored_state_msg;
-  check_log lexbuf ff closed neval 0
+  check_log lexbuf ff closed neval 0 lastev
 
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
 let combine logfile =
   let files = files_to_list !combine_files in
-  let (last_ts,mf,closed,neval,tp,last) = merge_formulas files in
-  let ff = Marshalling.m_to_ext mf neval in
+  let (last_ts,closed,ff,neval,lastev,tp,last) = merge_formulas files in
 
   (*print_neval "Combined neval \n" neval;
   print_extf "Combined formula \n" ff;*)
@@ -2478,7 +2440,7 @@ let combine logfile =
 
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" combined_state_msg;
-  check_log lexbuf ff closed neval 0
+  check_log lexbuf ff closed neval 0 lastev
 
 
 (* Testing slicer *)
@@ -2494,7 +2456,7 @@ let test_slicer ff evaluation  =
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  let a, mf = Marshalling.ext_to_m ff (NEval.empty()) in
+  let mf = Marshalling.ext_to_m ff in
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
 
@@ -2538,5 +2500,7 @@ let rec test_log lexbuf ff evaluation =
 
 let run_test testfile formula =
   let lexbuf = Log.log_open testfile in
+  let neval = Neval.create () in
+  let extf, _ = add_ext neval formula in
   Printf.printf "Testing slicing configurations\n";
-  test_log lexbuf (add_ext formula) (NEval.empty())
+  test_log lexbuf extf (Dllist.empty())

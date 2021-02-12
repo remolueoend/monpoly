@@ -46,11 +46,11 @@ module FloatUtil : sig
   val copysign : float -> float -> float
   val compare : float -> float -> Z.t
 end = struct
-  let iszero x = (Pervasives.classify_float x = Pervasives.FP_zero);;
-  let isinfinite x = (Pervasives.classify_float x = Pervasives.FP_infinite);;
-  let isnan x = (Pervasives.classify_float x = Pervasives.FP_nan);;
-  let copysign x y = if isnan y then Pervasives.nan else Pervasives.copysign x y;;
-  let compare x y = Z.of_int (Pervasives.compare x y);;
+  let iszero x = (Stdlib.classify_float x = Stdlib.FP_zero);;
+  let isinfinite x = (Stdlib.classify_float x = Stdlib.FP_infinite);;
+  let isnan x = (Stdlib.classify_float x = Stdlib.FP_nan);;
+  let copysign x y = if isnan y then Stdlib.nan else Stdlib.copysign x y;;
+  let compare x y = Z.of_int (Stdlib.compare x y);;
 end;;
 
 module Bits_Integer : sig
@@ -2557,7 +2557,7 @@ let rec equal_event_dataa
     | EString x3, EInt x1 -> false
     | EInt x1, EFloat x2 -> false
     | EFloat x2, EInt x1 -> false
-    | EString x3, EString y3 -> Pervasives.(=) x3 y3
+    | EString x3, EString y3 -> Stdlib.(=) x3 y3
     | EFloat x2, EFloat y2 -> equal_double x2 y2
     | EInt x1, EInt y1 -> Z.equal x1 y1;;
 
@@ -2689,8 +2689,7 @@ let linorder_integer = ({order_linorder = order_integer} : Z.t linorder);;
 
 let equal_integer = ({equal = Z.equal} : Z.t equal);;
 
-let ord_string8 =
-  ({less_eq = Pervasives.(<=); less = Pervasives.(<)} : string ord);;
+let ord_string8 = ({less_eq = Stdlib.(<=); less = Stdlib.(<)} : string ord);;
 
 let preorder_string8 = ({ord_preorder = ord_string8} : string preorder);;
 
@@ -2698,7 +2697,7 @@ let order_string8 = ({preorder_order = preorder_string8} : string order);;
 
 let linorder_string8 = ({order_linorder = order_string8} : string linorder);;
 
-let equal_string8 = ({equal = Pervasives.(=)} : string equal);;
+let equal_string8 = ({equal = Stdlib.(=)} : string equal);;
 
 let rec comparator_event_data
   x0 x1 = match x0, x1 with
@@ -3116,12 +3115,12 @@ let equal_event_data = ({equal = equal_event_dataa} : event_data equal);;
 
 let rec less_eq_event_data
   x0 x1 = match x0, x1 with EInt x, EInt y -> Z.leq x y
-    | EInt x, EFloat y -> Pervasives.(<=) (Z.to_float x) y
+    | EInt x, EFloat y -> Stdlib.(<=) (Z.to_float x) y
     | EInt uu, EString uv -> false
-    | EFloat x, EInt y -> Pervasives.(<=) x (Z.to_float y)
-    | EFloat x, EFloat y -> Pervasives.(<=) x y
+    | EFloat x, EInt y -> Stdlib.(<=) x (Z.to_float y)
+    | EFloat x, EFloat y -> Stdlib.(<=) x y
     | EFloat uw, EString ux -> false
-    | EString x, EString y -> Pervasives.(<=) x y
+    | EString x, EString y -> Stdlib.(<=) x y
     | EString uy, EInt v -> false
     | EString uy, EFloat v -> false;;
 
@@ -4161,18 +4160,18 @@ let rec of_alist (_A1, _A2, _A3)
 
 let rec plus_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.add x y)
-    | EInt x, EFloat y -> EFloat (Pervasives.(+.) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Pervasives.(+.) x (Z.to_float y))
-    | EFloat x, EFloat y -> EFloat (Pervasives.(+.) x y)
-    | EFloat v, EString va -> EFloat Pervasives.nan
-    | EString v, uv -> EFloat Pervasives.nan
-    | uu, EString v -> EFloat Pervasives.nan;;
+    | EInt x, EFloat y -> EFloat (Stdlib.(+.) (Z.to_float x) y)
+    | EFloat x, EInt y -> EFloat (Stdlib.(+.) x (Z.to_float y))
+    | EFloat x, EFloat y -> EFloat (Stdlib.(+.) x y)
+    | EFloat v, EString va -> EFloat Stdlib.nan
+    | EString v, uv -> EFloat Stdlib.nan
+    | uu, EString v -> EFloat Stdlib.nan;;
 
 let rec integer_of_int (Int_of_integer k) = k;;
 
 let rec double_of_event_data = function EInt x -> Z.to_float x
                                | EFloat x -> x
-                               | EString uu -> Pervasives.nan;;
+                               | EString uu -> Stdlib.nan;;
 
 let rec int_of_nat n = Int_of_integer (integer_of_nat n);;
 
@@ -4208,7 +4207,7 @@ let rec eval_agg_op
           (let xs = flatten_multiset m in
             (match xs with [] -> 0.0
               | _ :: _ ->
-                Pervasives.(/.)
+                Stdlib.(/.)
                   (double_of_event_data
                     (foldl plus_event_data (EInt Z.zero) xs))
                   (double_of_int (int_of_nat (size_list xs)))))
@@ -4220,17 +4219,16 @@ let rec eval_agg_op
               else (let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
                      (if dvd (equal_nat, semidom_modulo_nat)
                            (nat_of_integer (Z.of_int 2)) u
-                       then Pervasives.(+.)
+                       then Stdlib.(+.)
                               (double_of_event_data
                                 (nth xs (minus_nata ua one_nata)))
-                              (Pervasives.(/.)
-                                (double_of_event_data (nth xs ua))
+                              (Stdlib.(/.) (double_of_event_data (nth xs ua))
                                 (double_of_int (Int_of_integer (Z.of_int 2))))
                        else double_of_event_data (nth xs ua)))));;
 
 let rec uminus_event_data = function EInt x -> EInt (Z.neg x)
-                            | EFloat x -> EFloat (Pervasives.(~-.) x)
-                            | EString v -> EFloat Pervasives.nan;;
+                            | EFloat x -> EFloat (Stdlib.(~-.) x)
+                            | EString v -> EFloat Stdlib.nan;;
 
 let rec mod_to_zero
   x y = (let z =
@@ -4242,10 +4240,10 @@ let rec mod_to_zero
 
 let rec modulo_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (mod_to_zero x y)
-    | EFloat v, uv -> EFloat Pervasives.nan
-    | EString v, uv -> EFloat Pervasives.nan
-    | uu, EFloat v -> EFloat Pervasives.nan
-    | uu, EString v -> EFloat Pervasives.nan;;
+    | EFloat v, uv -> EFloat Stdlib.nan
+    | EString v, uv -> EFloat Stdlib.nan
+    | uu, EFloat v -> EFloat Stdlib.nan
+    | uu, EString v -> EFloat Stdlib.nan;;
 
 let rec div_to_zero
   x y = (let z =
@@ -4258,30 +4256,30 @@ let rec div_to_zero
 
 let rec divide_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (div_to_zero x y)
-    | EInt x, EFloat y -> EFloat (Pervasives.(/.) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Pervasives.(/.) x (Z.to_float y))
-    | EFloat x, EFloat y -> EFloat (Pervasives.(/.) x y)
-    | EFloat v, EString va -> EFloat Pervasives.nan
-    | EString v, uv -> EFloat Pervasives.nan
-    | uu, EString v -> EFloat Pervasives.nan;;
+    | EInt x, EFloat y -> EFloat (Stdlib.(/.) (Z.to_float x) y)
+    | EFloat x, EInt y -> EFloat (Stdlib.(/.) x (Z.to_float y))
+    | EFloat x, EFloat y -> EFloat (Stdlib.(/.) x y)
+    | EFloat v, EString va -> EFloat Stdlib.nan
+    | EString v, uv -> EFloat Stdlib.nan
+    | uu, EString v -> EFloat Stdlib.nan;;
 
 let rec times_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.mul x y)
-    | EInt x, EFloat y -> EFloat (Pervasives.( *. ) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Pervasives.( *. ) x (Z.to_float y))
-    | EFloat x, EFloat y -> EFloat (Pervasives.( *. ) x y)
-    | EFloat v, EString va -> EFloat Pervasives.nan
-    | EString v, uv -> EFloat Pervasives.nan
-    | uu, EString v -> EFloat Pervasives.nan;;
+    | EInt x, EFloat y -> EFloat (Stdlib.( *. ) (Z.to_float x) y)
+    | EFloat x, EInt y -> EFloat (Stdlib.( *. ) x (Z.to_float y))
+    | EFloat x, EFloat y -> EFloat (Stdlib.( *. ) x y)
+    | EFloat v, EString va -> EFloat Stdlib.nan
+    | EString v, uv -> EFloat Stdlib.nan
+    | uu, EString v -> EFloat Stdlib.nan;;
 
 let rec minus_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.sub x y)
-    | EInt x, EFloat y -> EFloat (Pervasives.(-.) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Pervasives.(-.) x (Z.to_float y))
-    | EFloat x, EFloat y -> EFloat (Pervasives.(-.) x y)
-    | EFloat v, EString va -> EFloat Pervasives.nan
-    | EString v, uv -> EFloat Pervasives.nan
-    | uu, EString v -> EFloat Pervasives.nan;;
+    | EInt x, EFloat y -> EFloat (Stdlib.(-.) (Z.to_float x) y)
+    | EFloat x, EInt y -> EFloat (Stdlib.(-.) x (Z.to_float y))
+    | EFloat x, EFloat y -> EFloat (Stdlib.(-.) x y)
+    | EFloat v, EString va -> EFloat Stdlib.nan
+    | EString v, uv -> EFloat Stdlib.nan
+    | uu, EString v -> EFloat Stdlib.nan;;
 
 let rec integer_of_event_data = function EInt x -> x
                                 | EFloat x -> Z.of_float x

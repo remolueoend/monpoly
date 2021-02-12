@@ -1,0 +1,3 @@
+LET islast() = NEXT[10000d,*] TRUE IN
+LET notfirst() = PREVIOUS TRUE IN
+islast() AND notfirst()

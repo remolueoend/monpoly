@@ -9,7 +9,7 @@ type formula_pred = { name: string; vars: formula_var list }
 
 module Domain_Set = Set.Make (
   struct type t = domain
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
   end)
 
 include Domain_Set

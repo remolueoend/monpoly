@@ -15,8 +15,6 @@ open Extformula
 open Marshalling
 open Mformula
 
-type state = (int * timestamp * bool * mformula * (int * timestamp) array * int * int * bool)
-
 exception Type_error of string
 
 (* SPLITTING & COMBINING STATE *)
@@ -206,6 +204,71 @@ let combine_dll2 l1 l2 =
   res
 
 
+(* TODO(JS): Not clear whether comparing the timepoints is enough. *)
+let less_cell c1 c2 = (fst (Neval.get_data c1) < fst (Neval.get_data c2))
+let eq_cell c1 c2 = (fst (Neval.get_data c1) = fst (Neval.get_data c2))
+
+let earliest_cell lastev mf =
+  let earliest = ref lastev in
+  let update c = if less_cell c !earliest then earliest := c in
+  let rec go = function
+    | MRel _
+    | MPred _ -> ()
+
+    | MLet (_, _, f1, f2, c) -> update c; go f1; go f2
+
+    | MNeg f1
+    | MExists (_, f1)
+    | MAggreg (_, f1)
+    | MAggOnce (f1, _, _, _, _, _)
+    | MAggMMOnce (f1, _, _, _, _, _)
+    | MPrev (_, f1, _)
+    | MNext (_, f1, _)
+    | MOnceA (_, f1, _)
+    | MOnceZ (_, f1, _)
+    | MOnce (_, f1, _) -> go f1
+
+    | MEventuallyZ (_, f1, inf) -> update inf.mezlastev; go f1
+    | MEventually (_, f1, inf) -> update inf.melastev; go f1
+
+    | MNUntil (_, _, f1, f2, inf) ->
+      update inf.mlast1;
+      update inf.mlast2;
+      go f1; go f2
+
+    | MUntil (_, _, f1, f2, inf) ->
+      update inf.mulast;
+      go f1; go f2
+
+    | MAnd (_, f1, f2, _)
+    | MOr (_, f1, f2, _)
+    | MSinceA (_, _, f1, f2, _)
+    | MSince (_, _, f1, f2, _) -> go f1; go f2
+  in
+  go mf; !earliest
+
+let rec find_cell_or_insert c0 cq =
+  if less_cell cq !c0 then
+    begin
+      let nc = Neval.prepend (Neval.get_data cq) !c0 in
+      c0 := nc;
+      nc
+    end
+  else
+    begin
+      let rec search cur =
+        if eq_cell cq cur then cur
+        else if Neval.is_last cur || less_cell cq (Neval.get_next cur) then
+          Neval.insert_after (Neval.get_data cq) cur
+        else
+          search (Neval.get_next cur)
+      in
+      search !c0
+    end
+
+let combine_cells c0 c1 c2 =
+  if less_cell c2 c1 then find_cell_or_insert c0 c2 else c1
+
 (* 
  State combination functions
  - Essentially just call the above combination functions and return the combined state
@@ -247,12 +310,15 @@ let combine_sinfo sinf1 sinf2  =
   let sauxrels = combine_mq sinf1.sauxrels sinf2.sauxrels in
   {srel2 = srel2; sauxrels = sauxrels}
 
-let combine_muninfo muninf1 muninf2 =
+let combine_muninfo c0 muninf1 muninf2 =
+  let mlast1 = combine_cells c0 muninf1.mlast1 muninf2.mlast1 in
+  let mlast2 = combine_cells c0 muninf1.mlast2 muninf2.mlast2 in
   let mlistrel1 = combine_dll1 muninf1.mlistrel1 muninf2.mlistrel1 in 
   let mlistrel2 = combine_dll1 muninf1.mlistrel2 muninf2.mlistrel2 in 
-  { mlast1 = muninf1.mlast1; mlast2 = muninf1.mlast2; mlistrel1 = mlistrel1; mlistrel2 = mlistrel2 }
+  { mlast1 = mlast1; mlast2 = mlast2; mlistrel1 = mlistrel1; mlistrel2 = mlistrel2 }
 
-let combine_muinfo muinf1 muinf2 =
+let combine_muinfo c0 muinf1 muinf2 =
+  let ulast = combine_cells c0 muinf1.mulast muinf2.mulast in
   (* Helper function to combine raux and saux fields *)
   let sklist l1 l2 =
     let nl = Sk.empty() in
@@ -269,7 +335,7 @@ let combine_muinfo muinf1 muinf2 =
   | (None, None) -> None
   | _ -> raise (Type_error ("Mismatched states in ainfo"))
   in
-  { mulast = muinf1.mulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
+  { mulast = ulast; mufirst = muinf1.mufirst; mures = (rel_u muinf1.mures muinf2.mures);
     murel2 = murel2; mraux = mraux; msaux = (sklist muinf1.msaux muinf2.msaux) }
 
 let combine_ozinfo ozinf1 ozinf2 =
@@ -283,20 +349,24 @@ let combine_oinfo moinf1 moinf2 =
   let moauxrels = combine_dll2 moinf1.moauxrels moinf2.moauxrels in
   { moauxrels = moauxrels; }
 
-let combine_ezinfo mezinf1 mezinf2 =
+let combine_ezinfo c0 mezinf1 mezinf2 =
+  let mezlastev = combine_cells c0 mezinf1.mezlastev mezinf2.mezlastev in
   let mezauxrels = combine_dll1 mezinf1.mezauxrels mezinf2.mezauxrels in
-  {mezauxrels = mezauxrels }
+  {mezlastev = mezlastev; mezauxrels = mezauxrels }
 
-let combine_einfo meinf1 meinf2 =
+let combine_einfo c0 meinf1 meinf2 =
+  let melastev = combine_cells c0 meinf1.melastev meinf2.melastev in
   let meauxrels = combine_dll2 meinf1.meauxrels meinf2.meauxrels in
-  {meauxrels = meauxrels}
+  {melastev = melastev; meauxrels = meauxrels}
+
 
 (*
   Combine two mformulas recursively. We must assume they have the same structure. 
   If they do not, we raise an error.
  *)
-let rec comb_m f1 f2  =
-  match (f1,f2) with
+let comb_m lastev f1 f2 =
+  let c0 = ref (earliest_cell lastev f1) in
+  let rec comb_m f1 f2 = match (f1, f2) with
     | (MRel  (rel1),          MRel(rel2))
       -> MRel (Relation.union rel1 rel2)
     | (MPred (p, comp, inf1), MPred(_, _, inf2))
@@ -330,14 +400,16 @@ let rec comb_m f1 f2  =
     | (MOnce (dt, f11, oinf1), MOnce ( _, f21, oinf2))
       -> MOnce        (dt, comb_m f11 f21, combine_oinfo oinf1 oinf2)
     | (MNUntil (c1, dt, f11, f12, muninf1), MNUntil  ( _, _, f21, f22, muninf2))
-      -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo muninf1 muninf2)
+      -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo c0 muninf1 muninf2)
     | (MUntil (c1, dt, f11, f12, muinf1), MUntil ( _, _, f21, f22, muinf2))
-      -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo muinf1 muinf2)
+      -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo c0 muinf1 muinf2)
     | (MEventuallyZ (dt, f11, ezinf1), MEventuallyZ (_, f21, ezinf2))
-      -> MEventuallyZ   (dt, comb_m f11 f21, combine_ezinfo ezinf1 ezinf2)
+      -> MEventuallyZ   (dt, comb_m f11 f21, combine_ezinfo c0 ezinf1 ezinf2)
     | (MEventually (dt, f11, einf1), MEventually (_, f21, einf2))
-      -> MEventually   (dt, comb_m f11 f21, combine_einfo einf1 einf2)
+      -> MEventually   (dt, comb_m f11 f21, combine_einfo c0 einf1 einf2)
     | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
+  in
+  comb_m f1 f2
 
 (* END COMBINING STATES *)
 
@@ -560,11 +632,11 @@ let split_state mapping mf size =
   in
   let split_mezinfo mezinf p =
     let dllists = split_dll1 mezinf.mezauxrels p in
-    Array.map (fun e -> { mezauxrels = e }) dllists
+    Array.map (fun e -> { mezlastev = mezinf.mezlastev; mezauxrels = e }) dllists
   in
   let split_meinfo meinf p =
     let dllists = split_dll2 meinf.meauxrels p in
-    Array.map (fun e -> { meauxrels = e }) dllists
+    Array.map (fun e -> { melastev = meinf.melastev; meauxrels = e }) dllists
   in
   let p1 f1 = Mformula.free_vars f1 in
   let p2 f1 f2 = free_vars2 f1 f2 in
@@ -695,67 +767,6 @@ let split_with_slicer slicer num_partitions mf =
 
 (* END SPLITTING STATE *) 
 
-(* Combines two neval lists according to the timestamp and timepoints of their elements,
-   see the combination functions at the top for a more detailed explanation *)
-
-let merge_first_elements nv1 nv2 nl =
-  let e1 = Dllist.pop_first nv1 in
-  let i1, ts1 = e1 in 
-  let e2 = Dllist.pop_first nv2 in
-  let i2, ts2 = e2 in
-  let () =
-  if ts1 < ts2 then 
-    NEval.add_first e1 nl
-  else if ts1 = ts2 then begin
-    if i1 < i2 then
-      NEval.add_first e1 nl     
-    else if i1 = i2 then
-      NEval.add_first e1 nl
-    else 
-      NEval.add_first e2 nl
-  end     
-  else
-    NEval.add_first e2 nl
-  in
-  nl 
-
-let combine_neval nv1 nv2 =  
-    let nl = NEval.empty() in
-    let rec combine l1 l2 = 
-      if Dllist.is_empty l1 && Dllist.is_empty l2 then ()
-      else if not (Dllist.is_empty l1) && Dllist.is_empty l2 then Dllist.iter (fun e -> Dllist.add_last e nl) l1
-      else if Dllist.is_empty l1 && not (Dllist.is_empty l2) then Dllist.iter (fun e -> Dllist.add_last e nl) l2
-      else begin
-        let e1 = Dllist.pop_first l1 in
-        let i1, ts1 = e1 in 
-        let e2 = Dllist.pop_first l2 in
-        let i2, ts2 = e2 in
-        if ts1 < ts2 then begin 
-          ignore(Dllist.add_first e2 l2);
-          Dllist.add_last e1 nl
-        end  
-        else if ts1 = ts2 then begin
-          if i1 < i2 then begin
-            ignore(Dllist.add_first e2 l2);
-            Dllist.add_last e1 nl
-          end    
-          else if i1 = i2 then begin
-            Dllist.add_last (i1, ts1) nl
-          end
-          else begin 
-            ignore(Dllist.add_first e1 l1);
-            Dllist.add_last e2 nl
-          end
-        end  
-        else begin 
-          ignore(Dllist.add_first e1 l1);
-          Dllist.add_last e2 nl
-        end;
-        combine l1 l2
-      end
-    in  
-    combine nv1 nv2;
-    nl
 
 let rec print_ef = function
   | ERel           (rel)                                      -> Printf.printf "Rel:"; Relation.print_rel "" rel; print_endline "";

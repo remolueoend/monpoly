@@ -15,18 +15,20 @@ type msainfo = { msres: relation;
 type msinfo  = { msrel2: relation option;
                  msauxrels: (timestamp * relation) Mqueue.t}
 
-type mezinfo = { mezauxrels:  (int * timestamp * relation) Dllist.dllist}
+type mezinfo = { mezlastev: Neval.cell;
+                 mezauxrels: (int * timestamp * relation) Dllist.dllist}
 
-type meinfo  = { meauxrels:  (timestamp * relation) Dllist.dllist}
+type meinfo  = { melastev: Neval.cell;
+                 meauxrels: (timestamp * relation) Dllist.dllist}
 
-type muinfo  = { mulast   :  int;
+type muinfo  = { mulast   :  Neval.cell;
                  mufirst  :  bool;
                  mures    :  relation;
                  murel2   :  relation option;
                  mraux    :  (int * timestamp * (int * relation) Sk.dllist) Sj.dllist;
                  msaux    :  (int * relation) Sk.dllist}
-type muninfo = { mlast1   :  int;
-                 mlast2   :  int;
+type muninfo = { mlast1   :  Neval.cell;
+                 mlast2   :  Neval.cell;
                  mlistrel1:  (int * timestamp * relation) Dllist.dllist;
                  mlistrel2:  (int * timestamp * relation) Dllist.dllist;}
 
@@ -34,7 +36,7 @@ type muninfo = { mlast1   :  int;
 type mformula =
   | MRel of relation
   | MPred of predicate * comp_one * info
-  | MLet of predicate * comp_one * mformula * mformula * (int * int)
+  | MLet of predicate * comp_one * mformula * mformula * Neval.cell
   | MNeg of mformula
   | MAnd of comp_two * mformula * mformula * ainfo
   | MOr of comp_two * mformula * mformula * ainfo
@@ -60,7 +62,7 @@ type mformula =
   | MEventuallyZ of interval * mformula * mezinfo
   | MEventually of interval * mformula * meinfo
 
-type state = (timestamp * bool * mformula * (int * timestamp) array * int * bool)
+type state = (timestamp * bool * mformula * Neval.queue * Neval.cell * int * bool)
 
 val free_vars: mformula -> Predicate.var list
 val predicates: mformula -> Predicate.predicate list

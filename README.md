@@ -1,65 +1,108 @@
-# This is a development clone of the original repository
-
-MonPoly is a monitor for checking whether log files are policy
-compliant.  Policies are specified by formulas in metric first-order
-temporal logic (MFOTL) with aggregations [1,2].  Details on MFOTL and
-the core monitoring algorithm are described in [1], while [2] presents
-the extension to function symbols and aggregation operators.  A brief
-overview of MonPoly is given in [3], while [4] presents a more
-complete overview.  Two case studies in which MonPoly was used are
-described in [5] and [6].
-
-
-Requirements
-============
-
-OCaml compiler (http://caml.inria.fr/ocaml/index.en.html)
-  MonPoly has been tested with version 4.05.0 of OCaml
-  under Linux. It should also compile and work with most not-too-old
-  versions of OCaml under other operating systems.
-
-The following additional OCaml tools are used:
-  ocamllex  for generating the lexers
-  ocamlyacc for generating the parsers
-  ocamldep  for generating dependencies between modules
-  ocamldoc  for generating the documentation (optional)
-
-On a Debian or Ubuntu system, the OCaml compiler and tools can be
-installed with the command
-  apt-get install ocaml
-For installing OCaml on other systems, see the OCaml website
-(http://caml.inria.fr/).  There you also find links to binary OCaml
-distributions for other Linux distributions (Fedora, Red Hat, and
-Gentoo), Microsoft Windows, and MacOS X.  For Microsoft Windows you
-may need to install the Cygwin environment (http://www.cygwin.com/).
-
-
-Compiling MonPoly
-=================
-
-$ make monpoly
-
-$ make clean      # optional, to delete the object and other generated files
-$ make clean-all  # also deletes the executable and the documentation
-
-
-Compiling Verimon
-=================
-
-$ make verimon   # assumes you have the Isabelle binary on your PATH
-
-$ make verimon ISABELLE=<path/to/Isabelle>  #to explicitly pass the path to the Isabelle binary
-
-Running
+MonPoly
 =======
 
+**This is a development fork of the [original
+repository](https://bitbucket.org/monpoly/monpoly).**
+
+MonPoly is a prototype monitoring tool. It checks the compliance of log files
+with respect to policies that are specified by formulas in Metric First-Order
+Temporal Logic (MFOTL).
+
+An overview of the tool, including its usage and history, can be found in this
+[paper](https://sourceforge.net/projects/monpoly/files/monpoly.pdf/download).
+
+The tool is developed as part of an academic project at ETH Zurich. For more
+details on the project please visit
+[this link](https://www.infsec.ethz.ch/research/projects/mon_enf).
+
+
+Installation
+------------
+
+To compile and install MonPoly, you need the [OCaml compiler](https://ocaml.org)
+and the [Dune build system](https://dune.readthedocs.io). MonPoly has been
+tested with version 4.11.1 of [OCaml](https://ocaml.org) under Linux. It should
+also compile under other Unix-like operating systems (e.g., Apple macOS). For
+Microsoft Windows you may need to install the [Cygwin
+environment](https://www.cygwin.com/).
+
+### Requirements
+
+The easiest way to obtain the compiler and Dune is using the [OPAM package
+manager](https://opam.ocaml.org). On a Debian or Ubuntu system, it can be
+installed with the command
+```
+apt-get install opam
+```
+For installing OPAM on other systems, see the
+[website](https://opam.ocaml.org/doc/Install.html).
+
+Use the following commands to prepare the compiler. You can use a different
+version of OCaml at your own risk.
+```
+opam init  # skip this if you have used OPAM before
+opam switch create 4.11.1
+eval $(opam env)
+```
+
+Missing dependencies including Dune can be installed with
+```
+opam install --deps-only .
+```
+
+### Quick installation
+
+To compile and install MonPoly, just do
+```
+dune build --release
+dune install
+```
+in the root directory of the project. Assuming that OPAM has been set up
+correctly, the `monpoly` command should then be available to the installing
+user. You can pass a custom installation path to the install command with the
+`--prefix=PATH` option. For example, `dune install --prefix=/usr/local` makes
+MonPoly globally available to all users.
+
+To uninstall MonPoly, do
+```
+dune uninstall
+```
+If you used `--prefix`, you must supply it again with the same path.
+
+### Manual build
+
+If you want to compile MonPoly manually, e.g., for development purposes, you may
+find the following commands useful. They assume that Dune >= 2.8 is available.
+```
+# Compile the project:
+dune build
+
+# Compile the project in release mode:
+dune build --release
+
+# Run automatic tests:
+dune test
+
+# Run the previously compiled MonPoly executable:
+dune exec -- monpoly [ARGUMENTS ...]
+
+# Remove build artifacts:
+dune clean
+```
+
+Running
+-------
+
 Usage:
+```
 monpoly -sig <file> -formula <file> [-negate] [-log <file>]
         [-help] [-version] [-debug <unit>] [-verbose]
         [-check] [-sigout] [-unix] [-mem] [-nonewlastts]
-        [-nofilterrel] [-nofilteremptytp] [-testfilter]"
+        [-nofilterrel] [-nofilteremptytp] [-testfilter]
+```
 
 The options are:
+```
     -sig              Choose the signature file
     -formula          Choose the formula file
     -negate           Analyze the negation of the input formula
@@ -71,42 +114,50 @@ The options are:
     -sigout           Show the output signature (and exit)
     -unix             Timestamps represent Unix time
     -mem              Show memory usage on stderr
-    -nonewlastts      Do not add a last maximal time-stamp
+    -nonewlastts      Do not add a last maximal timestamp
     -nofilterrel      Disable filter_rel module
     -nofilteremptytp  Disable filter_empty_tp module
     -testfilter       Test filter on the log without evaluating the formula
-
+```
 
 
 Example
-=======
+-------
 
-To run MonPoly on the "rv11" example, which is contained in the
-example directory, start MonPoly as follows from a Unix shell:
-  ./monpoly -sig examples/rv11.sig -formula examples/rv11.mfotl -log examples/rv11.log -negate
+To run MonPoly on the `rv11` example, which is contained in the
+`examples` directory, start MonPoly as follows from a Unix shell:
+```
+  $ ./monpoly -sig examples/rv11.sig -formula examples/rv11.mfotl -log examples/rv11.log -negate
+```
 
-In this example, the formula file (examples/rv11.mfotl) contains the
+In this example, the formula file (`examples/rv11.mfotl`) contains the
 policy expressed as a formula in MFOTL.  For background on MFOTL, see
 [1].  In the example, the formula is
+```
   publish(r) IMPLIES ONCE[0,7d] approve(r)
+```
 It expresses the policy that if a report is published then the report
 must have been approved within the last 7 days.
 
-The log file (examples/rv11.log) shows for each time point the tuples
+The log file (`examples/rv11.log`) shows for each time point the tuples
 in the relations.  For instance, the following 2 lines
+```
   @1307955600 approve (163)
               publish (160)
+```
 mean that at a time point with time 1307955600 the relation approve
 consists of the value 163 and the relation publish consists of the
 value 160.  If time units such as days or hours are used in the
 formula, then time is assumed to be Unix time.  MonPoly reads from
-stdin if no log file is specified with the switch -log.
+stdin if no log file is specified with the switch `-log`.
 
 The relations used in the formula and the log must be specified in the
-signature file (examples/rv11.sig).  In the example, the signature file
+signature file (`examples/rv11.sig`).  In the example, the signature file
 contains the 2 lines:
-   publish(int)
-   approve(int)
+```
+   publish(x:int)
+   approve(x:int)
+```
 These specify that there are two relations, publish and approve, each
 with a single parameter of type integer.  Relations can have multiple
 parameters (separated by a comma) and parameters can also be of type
@@ -114,26 +165,29 @@ string.
 
 When MonPoly processes the log file examples/rv11.log, it outputs to
 stdout
+```
    @1307955600 (time-point 1): (160)
    @1308477599 (time-point 2): (152)
+```
 The output means that at time point 1 (with time 1307955600) the
 policy was violated by report 160 and at time point 2 (with time
 1308477599) the policy was violated by report 152.  Note that since we
-use the -negate switch, these are the violations with respect to the
+use the `-negate` switch, these are the violations with respect to the
 given policy.  In other words, the output consists of the time points
 and the valuations at which the negation of the formula from the
 formula file is satisfied.  Error messages are written to stderr.
 
 
 File Description
-================
+----------------
 
+```
 AUTHORS                 Authors of the tool
 CHANGES                 Change log
 LICENSE                 License file
 README                  This file
-Makefile                Commands to compile the monitor
-/doc                    Directory for the documentation (generated with 'make doc')
+dune-project            Project meta data for the Dune build system
+monpoly.opam            OPAM package description (generated by Dune)
 /examples               Directory with some simple formulas and log files
 /src                    Directory with the source code
   misc.ml[i]            Miscellaneous helper functions
@@ -157,22 +211,20 @@ Makefile                Commands to compile the monitor
   filter_rel.ml[i]      Module for filtering tuples and relations
   perf.ml[i]            Module for performance evaluation
   main.ml               The tool's entry point
-/tools                  Directory with various independent modules
-  mfotl2sql.ml          Module for translating MFORT formulas to SQL queries
-  table2log.ml[i]       Module for putting PostrgreSQL output into MonPoly's format
-
-Contact
-=======
-
-If you encounter problems, please contact Eugen Zalinescu
-(eugen.zalinescu@gmail.com).
-
-We would highly appreciate it if you drop us an email when you are using
-the tool in a project.  Feedback of any kind on the tool is welcome.
-
+  dune                  Build instructions
+/tests                  Directory with automated tests (run with 'dune test')
+```
 
 References
-==========
+----------
+
+Details on MFOTL and the core monitoring algorithm are described in
+[1], while [2] presents the extension to function symbols and
+aggregation operators.  A brief overview of MonPoly is given in [3],
+while [4] presents a more complete overview.  Two case studies in
+which MonPoly was used are described in [5] and [6].
+
+
 
 [1] D. Basin, F. Klaedtke, S. Mueller, E. Zalinescu:
     "Monitoring Metric First-Order Temporal Properties"
@@ -196,4 +248,4 @@ References
 
 [6] D. Basin, G. Carroni, S. Ereth, M. Harvan, and H. Mantel:
     "Scalable Offline Monitoring of Temporal Properties"
-    Formal Methods in System Design, Volume 49, Issue 1-2, 2016. 
+    Formal Methods in System Design, Volume 49, Issue 1-2, 2016.

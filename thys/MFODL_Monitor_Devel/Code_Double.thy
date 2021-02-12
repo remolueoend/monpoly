@@ -484,29 +484,29 @@ code_printing
   val copysign : float -> float -> float
   val compare : float -> float -> Z.t
 end = struct
-  let iszero x = (Pervasives.classify_float x = Pervasives.FP_zero);;
-  let isinfinite x = (Pervasives.classify_float x = Pervasives.FP_infinite);;
-  let isnan x = (Pervasives.classify_float x = Pervasives.FP_nan);;
-  let copysign x y = if isnan y then Pervasives.nan else Pervasives.copysign x y;;
-  let compare x y = Z.of_int (Pervasives.compare x y);;
+  let iszero x = (Stdlib.classify_float x = Stdlib.FP_zero);;
+  let isinfinite x = (Stdlib.classify_float x = Stdlib.FP_infinite);;
+  let isnan x = (Stdlib.classify_float x = Stdlib.FP_nan);;
+  let copysign x y = if isnan y then Stdlib.nan else Stdlib.copysign x y;;
+  let compare x y = Z.of_int (Stdlib.compare x y);;
 end;;\<close>
 
-code_reserved OCaml Pervasives FloatUtil
+code_reserved OCaml Stdlib FloatUtil
 
 code_printing
   type_constructor double \<rightharpoonup> (OCaml) "float"
-  | constant "uminus :: double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(~-.)"
-  | constant "(+) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(+.)"
-  | constant "(*) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.( *. )"
-  | constant "(/) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.('/.)"
-  | constant "(-) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.(-.)"
+  | constant "uminus :: double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Stdlib.(~-.)"
+  | constant "(+) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Stdlib.(+.)"
+  | constant "(*) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Stdlib.( *. )"
+  | constant "(/) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Stdlib.('/.)"
+  | constant "(-) :: double \<Rightarrow> double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Stdlib.(-.)"
   | constant "0 :: double" \<rightharpoonup> (OCaml) "0.0"
   | constant "1 :: double" \<rightharpoonup> (OCaml) "1.0"
-  | constant "(\<le>) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<=)"
-  | constant "(<) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Pervasives.(<)"
-  | constant "sqrt_double :: double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Pervasives.sqrt"
-  | constant "infinity :: double" \<rightharpoonup> (OCaml) "Pervasives.infinity"
-  | constant "nan :: double" \<rightharpoonup> (OCaml) "Pervasives.nan"
+  | constant "(\<le>) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<=)"
+  | constant "(<) :: double \<Rightarrow> double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<)"
+  | constant "sqrt_double :: double \<Rightarrow> double" \<rightharpoonup> (OCaml) "Stdlib.sqrt"
+  | constant "infinity :: double" \<rightharpoonup> (OCaml) "Stdlib.infinity"
+  | constant "nan :: double" \<rightharpoonup> (OCaml) "Stdlib.nan"
   | constant "is_zero :: double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "FloatUtil.iszero"
   | constant "is_infinite :: double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "FloatUtil.isinfinite"
   | constant "is_nan :: double \<Rightarrow> bool" \<rightharpoonup> (OCaml) "FloatUtil.isnan"
