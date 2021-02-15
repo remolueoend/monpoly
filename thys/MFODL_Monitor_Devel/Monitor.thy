@@ -1237,10 +1237,24 @@ lemma letprev_meval_code[code]:
   apply (metis size_snd_meval snd_conv)+
   done
 
-thm meval.induct
-
 declare meval.simps[simp del]
 lemmas meval_simps[simp] = meval.simps[folded letprev_meval_def]
+
+lemma letprev_meval_induct[case_names step]:
+  assumes step:
+    "\<And>i ys buf p ts db \<phi>.
+      (\<And>xs ys' \<phi>' buf'.
+          xs = take (j - i) buf \<Longrightarrow>
+          (ys', \<phi>') = meval m j ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> \<Longrightarrow>
+          buf' = drop (j - i) buf @ ys' \<Longrightarrow>
+          size \<phi>' = size \<phi> \<Longrightarrow>
+          buf' \<noteq> [] \<Longrightarrow>
+          i + length xs < j \<Longrightarrow>
+          P (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>') \<Longrightarrow>
+      P i ys buf p ts db \<phi>"
+  shows "P i ys buf p ts db \<phi>"
+  by (induction eval\<equiv>"meval m j" j\<equiv>j i ys buf p ts db \<phi> rule: letprev_meval0.induct)
+   (rule step, auto)
 
 end
 
