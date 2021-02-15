@@ -93,7 +93,7 @@ let testfilteropt = ref false
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
 let verified = ref false
-let unfold_let = ref false
+let unfold_let: Rewriting.expand_mode option ref = ref None
 
 (* Printexc.record_backtrace true;; *)
 
@@ -148,14 +148,9 @@ let main () =
         let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
 
-        let f =
-          if !unfold_let then
-            expand_let f
-          else
-            begin
-              ignore(check_let f);
-              f
-            end
+        let f = match !unfold_let with
+          | Some mode -> expand_let mode f
+          | None -> ignore(check_let f); f
         in
         let check_mon = if !verified then Verified_adapter.is_monitorable sign
                         else is_monitorable in
@@ -187,6 +182,12 @@ let main () =
           end
       end
 
+let set_unfold_let = function
+  | "no" -> unfold_let := None
+  | "full" -> unfold_let := Some (Rewriting.ExpandAll)
+  | "smart" -> unfold_let := Some (Rewriting.ExpandNonshared)
+  | _ -> ()  (* impossible *)
+
 let _ =
   Arg.parse [
     "-sig", Arg.Set_string sigfile, "\t\tChoose the signature file";
@@ -214,7 +215,8 @@ let _ =
     "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
     "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
     "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
-    "-unfold_let", Arg.Set unfold_let, "\tUnfold LET expressions in the formula";
+    "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
+      "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
   ]
     (fun _ -> ())
     usage_string;

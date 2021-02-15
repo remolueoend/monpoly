@@ -352,7 +352,7 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
   in
   (lf, l)
 
-let go_down f = go_down (Rewriting.expand_let f)
+let go_down f = go_down (Rewriting.expand_let Rewriting.ExpandAll f)
 
 let is_filterable_empty_tp f =
   let (lf, l) = go_down f in

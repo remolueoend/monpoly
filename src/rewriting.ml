@@ -970,7 +970,9 @@ and check_re_let = function
   | Star r -> (check_re_let r)
 
 
-let expand_let f = 
+type expand_mode = ExpandAll | ExpandNonshared
+
+let expand_let mode f =
   let _ = check_let f in
   let rec expand_let_rec m = function
   | Equal _
@@ -987,7 +989,17 @@ let expand_let f =
       expand_let_rec (List.remove_assoc n m) (substitute_vars subm f)
     else Pred (p)
 
-  | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
+  | Let (p, f1, f2) ->
+    let name = get_name p in
+    (match mode with
+    | ExpandAll -> expand_let_rec ((name, (get_args p, f1)) :: m) f2
+    | ExpandNonshared ->
+      if count_pred_uses name f2 <= 1 then
+        expand_let_rec ((name, (get_args p, f1)) :: m) f2
+      else
+        let f1' = expand_let_rec m f1 in
+        let f2' = expand_let_rec m f2 in
+        Let (p, f1', f2'))
 
   | Neg f -> Neg (expand_let_rec m f)
   | Exists (v, f) -> Exists (v,expand_let_rec m f)

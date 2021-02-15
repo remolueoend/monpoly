@@ -462,6 +462,49 @@ and substitute_re_vars m = function
   | Plus (r1,r2) -> Plus (substitute_re_vars m r1, (substitute_re_vars m r2))
   | Star r -> Star (substitute_re_vars m r) 
 
+let count_pred_uses pred f =
+  let rec go = function
+    | Equal _
+    | Less _
+    | LessEq _ -> 0
+
+    | Pred p -> if Predicate.get_name p = pred then 1 else 0
+
+    | Let (p, f1, f2) ->
+        let c1 = go f1 in
+        let c2 = if Predicate.get_name p = pred then 0 else go f2 in
+        c1 + c2
+
+    | Neg f
+    | Exists (_, f)
+    | ForAll (_, f)
+    | Aggreg (_, _, _, _, _, f)
+    | Prev (_, f)
+    | Next (_, f)
+    | Once (_, f)
+    | PastAlways (_, f)
+    | Eventually (_, f)
+    | Always (_, f) -> go f
+
+    | Prex (_, r)
+    | Frex (_, r) -> go_re r
+
+    | And (f1, f2)
+    | Or (f1, f2)
+    | Implies (f1, f2)
+    | Equiv (f1, f2)
+    | Since (_, f1, f2)
+    | Until (_, f1, f2) -> go f1 + go f2
+  and go_re = function
+    | Wild -> 0
+    | Test f -> go f
+    | Concat (r1, r2)
+    | Plus (r1, r2) -> go_re r1 + go_re r2
+    | Star r -> go_re r
+  in
+  go f
+
+
 
 let string_of_ts ts =
   if !unixts then
