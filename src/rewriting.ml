@@ -994,11 +994,11 @@ let expand_let mode f =
     (match mode with
     | ExpandAll -> expand_let_rec ((name, (get_args p, f1)) :: m) f2
     | ExpandNonshared ->
-      if count_pred_uses name f2 <= 1 then
-        expand_let_rec ((name, (get_args p, f1)) :: m) f2
+      let f2' = expand_let_rec m f2 in
+      if count_pred_uses name f2' <= 1 then
+        expand_let_rec ((name, (get_args p, f1)) :: m) f2'
       else
         let f1' = expand_let_rec m f1 in
-        let f2' = expand_let_rec m f2 in
         Let (p, f1', f2'))
 
   | Neg f -> Neg (expand_let_rec m f)
