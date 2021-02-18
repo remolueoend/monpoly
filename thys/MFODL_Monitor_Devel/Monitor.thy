@@ -1590,6 +1590,141 @@ lemma not_contains_pred_progress[simp]: "\<not> contains_pred p \<phi> \<Longrig
   apply (smt Collect_cong fun_upd_twist)
   done
 
+lemma sup_letprev_progress_le: 
+  shows "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j} \<le> j"
+  apply(rule cSup_least)
+   apply (auto)
+  apply(auto simp add: progress_fixpoint_ex progress_mono_gen progress_le_gen)
+  done
+
+lemma safe_letprev_progress_p:
+"safe_letprev p \<phi> \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
+progress \<sigma> (P(p\<mapsto>x)) \<phi> j = min (progress \<sigma> (P(p\<mapsto>j)) \<phi> j) x"
+   apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
+                   apply(simp_all)
+  subgoal for p e \<phi> \<psi> P
+    apply(auto)
+    
+    sorry
+  subgoal for p e \<phi> \<psi> P
+    apply(auto)
+    
+    sorry
+  subgoal for p \<phi> \<psi> P
+    sorry
+  subgoal for p \<phi> \<psi> P
+    sorry
+  apply(auto)
+  sorry
+
+lemma safe_letprev_min_sup:
+"safe_letprev p \<phi> \<and> safe_letprev p \<psi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P 
+  \<Longrightarrow>  \<Squnion> {i. i \<le> j \<and> i =
+           min (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j)
+            (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<psi> j)} = 
+          min (\<Squnion> {i. i \<le> j \<and> i = (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j)}) 
+              (\<Squnion> {i. i \<le> j \<and> i = (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<psi> j)})"
+  apply(auto)
+  apply(rule cSup_eq_maximum)
+
+  sorry
+
+lemma safe_letprev_Min_sup:
+" \<forall>x\<in>set l. safe_letprev p x \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P 
+  \<Longrightarrow> \<Squnion> {i. i \<le> j \<and> i = (MIN \<phi>\<in>set l. Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j)} = 
+          (MIN \<phi>\<in>set l. (\<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
+  apply(rule cSup_eq_maximum)
+   apply(auto)
+
+  sorry
+
+lemma progress_sup_translate:
+"safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda> x. x\<le>j) P \<Longrightarrow> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}) = (progress \<sigma> (P(p \<mapsto>j)) \<phi> j)"
+  apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
+  apply(simp_all)
+  apply (metis (mono_tags, lifting) cSup_eq_maximum mem_Collect_eq order_refl)
+  apply (metis (mono_tags, lifting) cSup_eq_maximum mem_Collect_eq order_refl)
+  apply (metis (mono_tags, lifting) cSup_eq_maximum mem_Collect_eq order_refl)
+  subgoal for p e P
+    apply (auto) 
+     apply(rule cSup_eq_maximum)
+      apply(simp)
+     apply(blast)
+    apply(rule cSup_eq_maximum)
+     apply(simp)
+     apply(auto simp: pred_mapping_alt dom_def split: option.splits)
+    done
+  subgoal for p e \<phi> \<psi> P
+    apply(auto)
+       apply(rule cSup_eq_maximum)
+        apply(simp)
+        apply(auto simp add: progress_le_gen intro!: pred_mapping_map_upd)[2]
+    subgoal
+      apply(rule cSup_eq_maximum)
+       apply(simp)
+       apply(auto)[]
+        apply(auto simp add: progress_le_gen intro!: pred_mapping_map_upd)[1]
+       defer
+       apply(simp)
+      apply(auto intro!: progress_mono_gen)[]
+      sorry (*TODO*)
+    subgoal
+      sorry (*TODO*)
+    subgoal
+      apply(rule cSup_eq_maximum)
+      apply(simp)
+      sorry (*TODO*)
+    done
+  subgoal for p e \<phi> \<psi> P
+    apply(auto)
+      apply(rule cSup_eq_maximum)
+       apply(simp)
+       apply(auto simp add: sup_letprev_progress_le progress_le_gen intro!: pred_mapping_map_upd)[2]
+    subgoal
+      apply(auto intro!: not_contains_pred_progress)
+      sorry
+    subgoal
+      apply(rule cSup_eq_maximum)
+       apply(simp)
+       apply(auto simp add: sup_letprev_progress_le progress_le_gen intro!: pred_mapping_map_upd)[2]
+      sorry
+    done
+  apply(simp add: safe_letprev_min_sup)
+  apply(simp add: safe_letprev_min_sup)
+  apply(simp add: safe_letprev_Min_sup)
+  apply(auto)[]
+  apply(rule cSup_eq_maximum)
+  apply(auto)[2]
+  apply(auto)[]
+  apply(rule cSup_eq_maximum)
+  apply(auto)[2]
+  apply(rule cSup_eq_maximum)
+  apply(auto)[2]
+  (*apply(auto simp add: progress_le_gen intro!: diff_le_self)[]*)
+  defer
+  apply(rule cSup_eq_maximum)
+  apply(auto simp add: min_le_iff_disj progress_le_gen)[2]
+  apply(rule cSup_eq_maximum)
+  apply(auto simp add: cInf_lower)[2]
+    apply(simp add: progress_regex_def cSup_eq_maximum )[]
+  apply(auto)[]
+     apply (metis (mono_tags, lifting) Collect_empty_eq cSup_eq_maximum mem_Collect_eq order_refl)
+    defer
+    apply(simp add: progress_regex_def)
+    apply(auto)[]
+  apply(rule cSup_eq_maximum)
+      apply(auto simp add: cInf_lower)[]
+     apply blast
+   apply(auto simp add: Min_le_iff progress_le_gen cSup_eq_maximum cInf_lower intro!: cSup_eq_maximum)
+  sorry
+
+lemma test2: " pred_mapping (\<lambda> x. x\<le>j) P \<Longrightarrow> \<Squnion> {i. i = (MIN x\<in>regex.atms r. Monitor.progress \<sigma> P x j) \<and>
+              i \<le> j} =
+       (MIN x\<in>regex.atms r. Monitor.progress \<sigma> P x j)"
+  apply(rule cSup_eq_maximum)
+   apply(auto simp add: progress_le_gen intro!: Min_le_iff)
+  sorry
+
 lemma min_letprev_progress_upd:
   "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
   Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j \<ge> min x (Monitor.progress \<sigma> P \<phi> j)" 
@@ -1689,7 +1824,6 @@ lemma min_letprev_progress_upd1:
     apply(auto)
     sorry
   subgoal for p \<phi> \<psi> P
-    apply(auto)
     sorry
   subgoal for p \<phi> \<psi> P
     sorry
@@ -1703,7 +1837,6 @@ lemma min_letprev_progress_upd1:
   subgoal for p \<phi> \<psi> P
     sorry
   subgoal for p \<phi> I \<psi> P
-    apply(auto)
     sorry
   subgoal for p r P
     sorry
@@ -1714,14 +1847,30 @@ lemma min_letprev_progress_upd1:
 
 
 lemma min_letprev_progress_upd2:
-  "\<forall> j'. j\<le>j' \<Longrightarrow> A = {i. i\<le>j' \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j')) \<phi> j'} 
-  \<Longrightarrow> A\<noteq>{}\<Longrightarrow> \<forall> a \<in> A. a < Monitor.progress \<sigma> P \<phi> j 
-  \<Longrightarrow> \<not> (safe_letprev p \<phi>)"
+  "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j \<ge> Monitor.progress \<sigma> P \<phi> j"
+  apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
+  apply(simp_all add: min_le_iff_disj Min_le_iff)
+  apply(force simp add: pred_mapping_alt split: option.splits)[]
+  (*apply(auto simp add: progress_mono_gen progress_le_gen intro!: pred_mapping_map_upd)[]*)
+  defer (*TODO*)
+  defer (*TODO*)
+  apply(auto)[]
+  using diff_le_mono apply blast
+      apply(auto 0 3 dest: memR_nonzeroD less_\<tau>D spec[of _ j] intro!: cInf_superset_mono)[]
+  using dual_order.trans apply blast
+     apply(simp add: progress_regex_def Min_le_iff)
+     apply(auto)[]
+  apply (auto 0 3 simp: Min_le_iff progress_regex_def dest: memR_nonzeroD less_\<tau>D spec[of _ j]
+      elim!: order_trans less_le_trans intro!: cInf_superset_mono) 
+   apply(auto simp add: progress_le_gen intro!: rel_mapping_map_upd pred_mapping_map_upd progress_mono_gen)[]
+    apply(auto simp add: rel_mapping_alt)[]
+  sledgehammer
   sorry
 
 
 lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j) \<Longrightarrow> (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
-  apply(auto simp add: min_letprev_progress_upd2 progress_fixpoint_ex progress_mono_gen progress_le_gen)
+  (*apply(auto simp add: min_letprev_progress_upd2 progress_fixpoint_ex progress_mono_gen progress_le_gen)*)
+  apply(auto intro!: min_letprev_progress_upd2 progress_sup_translate)
   sorry (*TODO*)
 
 lemma pred_mapping_max_mapping:
@@ -1736,13 +1885,6 @@ lemma range_mapping_to_pred_mapping: "range_mapping a j P \<Longrightarrow> pred
 lemma progress_pred_upd: 
   shows "\<And>i. i\<le>j \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) (P(p \<mapsto> min (Suc i) j))"
   by(auto simp add: pred_mapping_alt)
-
-lemma sup_letprev_progress_le: 
-  shows "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j} \<le> j"
-  apply(rule cSup_least)
-   apply (auto)
-  apply(auto simp add: progress_fixpoint_ex progress_mono_gen progress_le_gen)
-  done
 
 lemma sup_letprev_progress_mono: 
   shows "pred_mapping (\<lambda>x. x \<le> j1) P1 \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j2) P2 \<Longrightarrow> j1\<le>j2 \<Longrightarrow> rel_mapping (\<le>) P1 P2 \<Longrightarrow>Sup {i. i\<le>j1 \<and> i=progress \<sigma> (P1(p \<mapsto> min (Suc i) j1)) \<phi> j1} \<le> Sup {i. i\<le>j2 \<and> i=progress \<sigma> (P2(p \<mapsto> min (Suc i) j2)) \<phi> j2}"
