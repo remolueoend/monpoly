@@ -1590,7 +1590,7 @@ lemma sup_letprev_progress_le:
   apply(auto simp add: progress_fixpoint_ex progress_mono_gen progress_le_gen)
   done
 
-lemma safe_letprev_progress_p:
+(*lemma safe_letprev_progress_p:
 "safe_letprev p \<phi> \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
 progress \<sigma> (P(p\<mapsto>x)) \<phi> j = min (progress \<sigma> (P(p\<mapsto>j)) \<phi> j) x"
    apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
@@ -1716,6 +1716,7 @@ lemma test2: " pred_mapping (\<lambda> x. x\<le>j) P \<Longrightarrow> \<Squnion
   apply(rule cSup_eq_maximum)
    apply(auto simp add: progress_le_gen intro!: Min_le_iff)
   sorry
+*)
 
 lemma sup_letprev_progress_mono: 
   shows "pred_mapping (\<lambda>x. x \<le> j1) P1 \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j2) P2 \<Longrightarrow> j1\<le>j2 \<Longrightarrow> rel_mapping (\<le>) P1 P2 \<Longrightarrow>Sup {i. i\<le>j1 \<and> i=progress \<sigma> (P1(p \<mapsto> min (Suc i) j1)) \<phi> j1} \<le> Sup {i. i\<le>j2 \<and> i=progress \<sigma> (P2(p \<mapsto> min (Suc i) j2)) \<phi> j2}"
@@ -1783,6 +1784,7 @@ lemma min_letprev_progress_upd:
       done
     done
   subgoal for e p \<phi> \<psi> P x
+    apply (erule conjE)+
     apply (erule disjE_Not2)
     apply simp
     apply (erule conjE)+
@@ -1791,7 +1793,9 @@ lemma min_letprev_progress_upd:
     proof -
       define sup where "sup = (\<lambda>P. \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j})"
       have [simp]: "sup P \<le> j"
-        unfolding sup_def using prems(4,5) sup_letprev_progress_le by auto
+        unfolding sup_def using prems(5) sup_letprev_progress_le by auto
+      have [simp]: "sup (P(e \<mapsto> x)) \<le> j"
+        unfolding sup_def using prems(5,6) sup_letprev_progress_le by auto
       have sup_fp: "sup P = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (sup P)) j)) \<phi> j"
         if "pred_mapping (\<lambda>x. x \<le> j) P"for P
         using that
@@ -1799,75 +1803,38 @@ lemma min_letprev_progress_upd:
         using Max_in[where A="{i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}"]
         progress_fixpoint_ex[of j \<sigma> \<phi> P p]
         by (auto simp: progress_le_gen progress_mono_gen)
-
-      from prems(4-) obtain fp where "fp \<in> {min x (sup P)..j}" "fp = Monitor.progress \<sigma> (P(e \<mapsto> x, p \<mapsto> min (Suc fp) j)) \<phi> j"
+      from prems(5-) obtain fp where "fp \<in> {min x (sup P)..j}" "fp = Monitor.progress \<sigma> (P(e \<mapsto> x, p \<mapsto> min (Suc fp) j)) \<phi> j"
         apply atomize_elim
         apply (fold Bex_def)
         apply (rule bounded_fixpoint_ex_above)
           apply (auto simp: mono_def reflp_def progress_le_gen
             intro!: progress_mono_gen rel_mapping_map_upd rel_mapping_reflp)
-        subgoal for fp
-          apply (cases "sup P \<le> x")
-          apply simp_all
-          using prems(1)[of "P(p \<mapsto> min (Suc fp) j)" x]
-          apply (auto simp add: fun_upd_twist[of e p]) []
+        subgoal for k
+          apply (frule prems(2)[of "P(p \<mapsto> min (Suc k) j)" x])
+            apply (auto intro!: pred_mapping_map_upd)[2]
+          apply (simp add: fun_upd_twist[of p e])
+          apply (erule disjE)
+           apply auto[]
           apply (erule order_trans[rotated])
-          apply (unfold sup_def) []
-          apply (rule cSup_least)
-          apply (auto simp: mono_def reflp_def progress_le_gen
-            intro!: progress_mono_gen rel_mapping_map_upd rel_mapping_reflp bounded_fixpoint_ex) [2]
-           apply (rule ord_eq_le_trans)
-            apply assumption
-           apply (rule progress_mono_gen; simp?)
-           apply (rule rel_mapping_map_upd)
-          apply (rule min.mono[OF _ order_refl])
-            apply (auto simp: reflp_def intro!: rel_mapping_reflp) [2]
-           apply (erule order_trans[rotated])
-          apply (rule cSup_upper; auto)
-          using prems(1)[of "P(p \<mapsto> min (Suc fp) j)" x]
-          apply (auto simp add: fun_upd_twist[of e p]) []
-          apply (erule order_trans[rotated])
-          sorry
+          using prems(1)[of "P(p \<mapsto> min (Suc (sup P)) j)" "min (Suc k) j"] sup_fp by auto
         done
-      thm prems(1)
-      have "x \<le> sup (P(e \<mapsto> x)) \<or> sup P \<le> sup (P(e \<mapsto> x))"
-        using prems(1)[of "P(p \<mapsto> min (Suc (sup (P(e \<mapsto> x)))) j)" x] prems(4-)
-        apply auto
-         apply (subst sup_fp; (auto simp: fun_upd_twist[of e p])?)
-        defer
-         apply (erule notE) back
-        apply (subst (1 2) sup_fp; (auto simp: fun_upd_twist[of e p])?)
-        apply (erule order_trans[rotated])
-         apply (unfold sup_def) []
-        apply (rule sup_letprev_progress_mono; simp?)
-        thm cSup_upper2
-        sorry
-      with prems(2-) show ?thesis
+      then have "min x (sup P) \<le> sup (P(e \<mapsto> x))"
+        by (subst (2) sup_def) (auto intro!: cSup_upper2[of fp])
+      with prems(3-) show ?thesis
         apply -
-        apply (fold sup_def[THEN fun_cong])
-      apply auto
-      subgoal
-        apply (drule meta_spec2[of _ "P(p \<mapsto> Monitor.progress \<sigma> P \<phi> j)" "Monitor.progress \<sigma> (P(e \<mapsto> x)) \<phi> j"])
-        apply (auto simp: progress_le_gen)
+        apply (fold min_le_iff_disj sup_def[THEN fun_cong])
+        apply (rule order_trans[rotated])
+         apply (rule progress_mono_gen[where P="P(e \<mapsto> x, p \<mapsto> min x (sup P))", OF order_refl])
+           apply simp
+          apply simp
+         apply (auto simp: reflp_def elim!: rel_mapping_map_upd intro: rel_mapping_reflp)
         apply (simp add: fun_upd_twist[of e p])
-        apply (drule meta_spec2[of _ "P(p \<mapsto> Monitor.progress \<sigma> (P(e \<mapsto> x)) \<phi> j)" x])
-        apply (auto simp: progress_le_gen reflp_def
-        intro!: pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp) [2]
-        apply (simp add: fun_upd_twist[of e p])
-        apply (drule meta_spec2[of _ "P(p \<mapsto> Monitor.progress \<sigma> (P(e \<mapsto> x)) \<phi> j)" x])
-        apply (auto simp: progress_le_gen reflp_def
-        intro!: pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp)
-        done
-      subgoal
-        apply (simp add: fun_upd_twist[of e p])
-        apply (erule thin_rl)
-        apply (drule meta_spec2[of _ "P(p \<mapsto> Monitor.progress \<sigma> (P(e \<mapsto> x)) \<phi> j)" x])
-        apply (auto simp: progress_le_gen reflp_def
-        intro!: pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp)
-        apply (erule notE[where P = "_ \<le> _"])
+        apply rotate_tac
+        apply (drule meta_spec2[of _ "P(p \<mapsto> min x (sup P))" x])
+        apply auto
         apply (erule order_trans[rotated])
-         apply (rule progress_mono_gen; (auto simp: progress_le_gen reflp_def
-        intro!: pred_mapping_map_upd rel_mapping_map_upd rel_mapping_reflp)?)
+        apply (drule meta_spec2[of _ "P(p \<mapsto> sup P)" x])
+        apply simp
         done
     qed
     subgoal premises prems

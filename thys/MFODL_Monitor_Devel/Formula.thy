@@ -267,7 +267,7 @@ fun safe_letprev :: "name \<Rightarrow> formula \<Rightarrow> bool" where
 |  "safe_letprev p (LessEq t1 t2) = True"
 |  "safe_letprev p (Pred e ts) = True"
 |  "safe_letprev p (Let e \<phi> \<psi>) = (safe_letprev p \<phi> \<and> (\<not> contains_pred p \<phi> \<or> safe_letprev e \<psi>) \<and> (p = e \<or> safe_letprev p \<psi>))"
-|  "safe_letprev p (LetPrev e \<phi> \<psi>) = (p = e \<or> safe_letprev p \<phi> \<and> (\<not> contains_pred p \<phi> \<or> safe_letprev e \<psi>) \<and> safe_letprev p \<psi>)"
+|  "safe_letprev p (LetPrev e \<phi> \<psi>) = (safe_letprev e \<phi> \<and> (p = e \<or> safe_letprev p \<phi> \<and> (\<not> contains_pred p \<phi> \<or> safe_letprev e \<psi>) \<and> safe_letprev p \<psi>))"
 |  "safe_letprev p (Neg \<phi>) = safe_letprev p \<phi>"
 |  "safe_letprev p (Or \<phi> \<psi>) = (safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
 |  "safe_letprev p (And \<phi> \<psi>) = (safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
