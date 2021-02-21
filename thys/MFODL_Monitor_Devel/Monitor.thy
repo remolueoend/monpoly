@@ -1858,7 +1858,7 @@ lemma progress_fixpoint_ex2:
         rel_mapping_reflp pred_mapping_map_upd elim: pred_mapping_mono)
   done
 
-
+(*
 lemma pred_mapping_larger: 
   shows "j\<le>j' \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j') P"
   apply(auto simp add: pred_mapping_alt)
@@ -1958,13 +1958,28 @@ lemma min_letprev_progress_upd1:
 lemma min_letprev_progress_upd2:
   "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> p \<in> dom P \<Longrightarrow> Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j \<ge> Monitor.progress \<sigma> P \<phi> j"
   by (rule progress_mono_gen) (auto simp: rel_mapping_alt pred_mapping_alt)
+*)
 
 lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> p \<in> S \<Longrightarrow>
   (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j) \<Longrightarrow>
   (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
-  (*apply(auto simp add: min_letprev_progress_upd2 progress_fixpoint_ex progress_mono_gen progress_le_gen)*)
-  apply(auto intro!: min_letprev_progress_upd2 progress_sup_translate)
-  sorry (*TODO*)
+  apply (elim exE conjE)
+  apply (intro exI conjI)
+    apply assumption
+   apply assumption
+  subgoal for P j
+    apply (subgoal_tac "x \<le> j")
+     apply (drule (3) progress_fixpoint_ex2)
+     apply (elim bexE conjE)
+     apply (rule cSup_upper2)
+       apply (rule CollectI)
+       apply (erule conjI[rotated])
+       apply simp
+      apply simp
+     apply simp
+    apply (auto simp add: pred_mapping_alt)
+    done
+  done
 
 lemma pred_mapping_max_mapping:
   "pred_mapping (\<lambda>x. x\<le>j1) P1 \<Longrightarrow> pred_mapping (\<lambda>x. x\<le>j2) P2 \<Longrightarrow> pred_mapping (\<lambda>x. x\<le>(max j1 j2)) (max_mapping P1 P2)"
