@@ -1307,6 +1307,12 @@ lemmas progress_simps[simp] = progress.simps[folded progress_regex_def[THEN fun_
 
 end
 
+function pre_meval_wf_mformula where
+"pre_meval_wf_mformula (meval j m) j i ys (if first \<and> j > 0 then [{}] else buf) p ts db \<phi> = 
+    (list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
+      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf)" 
+  by auto
+
 definition "pred_mapping Q = pred_fun (\<lambda>_. True) (pred_option Q)"
 definition "rel_mapping Q = rel_fun (=) (rel_option Q)"
 
@@ -1590,7 +1596,7 @@ lemma sup_letprev_progress_le:
   apply(auto simp add: progress_fixpoint_ex progress_mono_gen progress_le_gen)
   done
 
-(*lemma safe_letprev_progress_p:
+lemma safe_letprev_progress_p:
 "safe_letprev p \<phi> \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
 progress \<sigma> (P(p\<mapsto>x)) \<phi> j = min (progress \<sigma> (P(p\<mapsto>j)) \<phi> j) x"
    apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
@@ -1608,6 +1614,23 @@ progress \<sigma> (P(p\<mapsto>x)) \<phi> j = min (progress \<sigma> (P(p\<mapst
     sorry
   apply(auto)
   sorry
+(*
+ have sup_fp: "sup P = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (sup P)) j)) \<phi> j"
+        if "pred_mapping (\<lambda>x. x \<le> j) P"for P
+        using that
+        unfolding sup_def Sup_nat_def
+        using Max_in[where A="{i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}"]
+        progress_fixpoint_ex[of j \<sigma> \<phi> P p]
+        by (auto simp: progress_le_gen progress_mono_gen)
+*)
+
+lemma sup_is_fixpoint:
+"pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j} =
+Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (\<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j})) j)) \<phi> j"
+  unfolding Sup_nat_def
+  using Max_in[where A="{i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}"]
+        progress_fixpoint_ex[of j \<sigma> \<phi> P p]
+  by (auto simp: progress_le_gen progress_mono_gen)
 
 lemma safe_letprev_min_sup:
 "safe_letprev p \<phi> \<and> safe_letprev p \<psi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P 
@@ -1617,7 +1640,6 @@ lemma safe_letprev_min_sup:
           min (\<Squnion> {i. i \<le> j \<and> i = (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j)}) 
               (\<Squnion> {i. i \<le> j \<and> i = (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<psi> j)})"
   apply(auto)
-  apply(rule cSup_eq_maximum)
 
   sorry
 
@@ -1628,6 +1650,16 @@ lemma safe_letprev_Min_sup:
   apply(rule cSup_eq_maximum)
    apply(auto)
 
+  sorry
+
+lemma min_eq_iff_disj:
+"(min a b) = c \<longrightarrow> a = c \<or> b = c"
+  by (simp add: min_def)
+
+lemma progress_sup_translate2:
+"safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda> x. x\<le>j) P \<Longrightarrow> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}) = (progress \<sigma> (P(p \<mapsto>j)) \<phi> j)"
+  apply(rule cSup_eq_maximum)
+  
   sorry
 
 lemma progress_sup_translate:
@@ -1658,7 +1690,7 @@ lemma progress_sup_translate:
         apply(auto simp add: progress_le_gen intro!: pred_mapping_map_upd)[1]
        defer
        apply(simp)
-      apply(auto intro!: progress_mono_gen)[]
+       apply(auto intro!: progress_mono_gen)[]
       sorry (*TODO*)
     subgoal
       sorry (*TODO*)
@@ -1673,7 +1705,6 @@ lemma progress_sup_translate:
        apply(simp)
        apply(auto simp add: sup_letprev_progress_le progress_le_gen intro!: pred_mapping_map_upd)[2]
     subgoal
-      apply(auto intro!: not_contains_pred_progress)
       sorry
     subgoal
       apply(rule cSup_eq_maximum)
@@ -1681,7 +1712,9 @@ lemma progress_sup_translate:
        apply(auto simp add: sup_letprev_progress_le progress_le_gen intro!: pred_mapping_map_upd)[2]
       sorry
     done
-  apply(simp add: safe_letprev_min_sup)
+  subgoal for p \<phi> \<psi> P
+            apply(simp add: safe_letprev_min_sup)
+    done
   apply(simp add: safe_letprev_min_sup)
   apply(simp add: safe_letprev_Min_sup)
   apply(auto)[]
@@ -1716,7 +1749,7 @@ lemma test2: " pred_mapping (\<lambda> x. x\<le>j) P \<Longrightarrow> \<Squnion
   apply(rule cSup_eq_maximum)
    apply(auto simp add: progress_le_gen intro!: Min_le_iff)
   sorry
-*)
+
 
 lemma sup_letprev_progress_mono: 
   shows "pred_mapping (\<lambda>x. x \<le> j1) P1 \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j2) P2 \<Longrightarrow> j1\<le>j2 \<Longrightarrow> rel_mapping (\<le>) P1 P2 \<Longrightarrow>Sup {i. i\<le>j1 \<and> i=progress \<sigma> (P1(p \<mapsto> min (Suc i) j1)) \<phi> j1} \<le> Sup {i. i\<le>j2 \<and> i=progress \<sigma> (P2(p \<mapsto> min (Suc i) j2)) \<phi> j2}"
@@ -1845,8 +1878,6 @@ lemma min_letprev_progress_upd:
     done
   done
 
-
-
 lemma progress_fixpoint_ex2:
   assumes "safe_letprev p \<phi>"
   shows "a\<le>j \<Longrightarrow> range_mapping a j P \<Longrightarrow> a\<le> Monitor.progress \<sigma> P \<phi> j \<Longrightarrow>
@@ -1858,103 +1889,6 @@ lemma progress_fixpoint_ex2:
         rel_mapping_reflp pred_mapping_map_upd elim: pred_mapping_mono)
   done
 
-
-lemma pred_mapping_larger: 
-  shows "j\<le>j' \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j') P"
-  apply(auto simp add: pred_mapping_alt)
-  sorry
-  
-
-lemma min_letprev_progress_upd1_let_intermediate:
-  assumes \<phi>_progress: "\<And>P. \<exists>j'\<ge>j.
-          A ={i. i \<le> j' \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j')) \<phi> j'} \<Longrightarrow>
-          pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
-          \<exists>x\<in>A. Monitor.progress \<sigma> P \<phi> j \<le> x" 
-  assumes \<psi>_progress: "\<And>P. \<exists>j'\<ge>j.
-          A = {i. i \<le> j' \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j')) \<psi> j'} \<Longrightarrow>
-          pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
-          \<exists>x\<in>A. Monitor.progress \<sigma> P \<psi> j \<le> x"
-  assumes P: "pred_mapping (\<lambda>x. x \<le> j) P"
-  shows "\<exists>j'\<ge>j. A = {i. i \<le> j' \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j', e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j'))  \<phi> j')) \<psi> j'}
-        \<Longrightarrow> \<exists>x\<in>A. Monitor.progress \<sigma> (P(e \<mapsto> Monitor.progress \<sigma> P \<phi> j)) \<psi> j \<le> x"
-  using assms proof -
-  from \<phi>_progress P obtain x1 j1 A1 where j1: "j1\<ge>j" and
-    A1: "A1 ={i. i \<le> j1 \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j1)) \<phi> j1}" and
-    x1: "x1\<le>j1" "x1=Monitor.progress \<sigma> (P(p \<mapsto> min (Suc x1) j1)) \<phi> j1" and
-    progress1: "Monitor.progress \<sigma> P \<phi> j \<le> x1"
-    apply(atomize_elim)
-    apply(auto simp del: fun_upd_apply)
-    sorry
-  from \<psi>_progress P obtain x2 j2 A2 where j2: "j2\<ge>j" and
-    A2: "A2 ={i. i \<le> j2 \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j2)) \<psi> j2}" and
-    x2: "x2\<le>j2" "x2=Monitor.progress \<sigma> (P(p \<mapsto> min (Suc x2) j2)) \<psi> j2" and
-    progress2: "Monitor.progress \<sigma> P \<psi> j \<le> x2"
-    apply(atomize_elim)
-    sorry
-  from x1 progress1 P have "Monitor.progress \<sigma> (P(e\<mapsto> Monitor.progress \<sigma> P \<phi> j)) \<psi> j \<le> Monitor.progress \<sigma> (P(e\<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> min (Suc x1) j1)) \<phi> j1)) \<psi> j"
-    apply(simp)
-    (*apply(auto simp add: pred_mapping_larger progress_le_gen intro!: pred_mapping_map_upd progress_mono_gen)*)
-    sorry
-  oops
-
-lemma min_letprev_progress_upd1:
-  "(safe_letprev p \<phi>) \<Longrightarrow> 
-  \<exists> j'\<ge>j. A = {i. i\<le>j' \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j')) \<phi> j'} 
-  \<Longrightarrow> A\<noteq>{} \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> \<exists> a \<in> A. a \<ge> Monitor.progress \<sigma> P \<phi> j"
-  apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
-  apply(simp_all add: min_le_iff_disj progress_regex_def Min_le_iff)
-  apply(auto) [3]
-  subgoal for p e P
-    apply(simp split: if_splits)
-    apply(auto simp: pred_mapping_alt dom_def split: option.splits)
-    subgoal for j' x2 x
-      apply(rule exI[where x="j'"])
-      apply(auto)
-      done
-    done
-  subgoal for p e \<phi> \<psi> P
-    apply(elim conjE disjE impCE)
-    apply(simp_all)
-    apply(auto)
-    (*subgoal for j'
-      apply(auto intro!: progress_mono_gen)
-      apply(auto simp: progress_le_gen)
-       apply(auto simp add: pred_mapping_larger progress_le_gen)
-      apply(auto simp add: pred_mapping_larger progress_le_gen progress_mono_gen rel_mapping_reflp reflp_def intro!: rel_mapping_map_upd)
-      done
-    subgoal for j' x
-      sorry
-    subgoal for j' x
-      sorry
-    subgoal for j' x
-      sorry*)
-    sorry
-  subgoal for p e \<phi> \<psi> P
-    (*apply(elim conjE disjE impCE)
-    apply(simp_all)*)
-    apply(auto)
-    sorry
-  subgoal for p \<phi> \<psi> P
-    sorry
-  subgoal for p \<phi> \<psi> P
-    sorry
-  subgoal for p l P
-    sorry
-  subgoal for p \<phi> P
-    sorry
-  subgoal for p \<phi> P
-    apply(simp add: Bex_def)
-    sorry
-  subgoal for p \<phi> \<psi> P
-    sorry
-  subgoal for p \<phi> I \<psi> P
-    sorry
-  subgoal for p r P
-    sorry
-  subgoal for p I r P
-    sorry
-  done
-
 lemma min_letprev_progress_upd2:
   "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> p \<in> dom P \<Longrightarrow> Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j \<ge> Monitor.progress \<sigma> P \<phi> j"
   by (rule progress_mono_gen) (auto simp: rel_mapping_alt pred_mapping_alt)
@@ -1963,7 +1897,9 @@ lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> p \<in> S \<
   (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j) \<Longrightarrow>
   (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
   (*apply(auto simp add: min_letprev_progress_upd2 progress_fixpoint_ex progress_mono_gen progress_le_gen)*)
-  apply(auto intro!: min_letprev_progress_upd2 progress_sup_translate)
+  (*apply(auto intro!: min_letprev_progress_upd2 progress_sup_translate)*)
+  (*apply(intro cSup_upper)
+  apply(rule progress_fixpoint_ex2 [where a="x"])*)
   sorry (*TODO*)
 
 lemma pred_mapping_max_mapping:
@@ -3044,7 +2980,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_mformula \<sigma> j P V n R (MLet p m \<phi> \<psi>) (Formula.Let p \<phi>' \<psi>')"
   | LetPrev: "wf_mformula \<sigma> j P V m UNIV \<phi> \<phi>' \<Longrightarrow> first \<longleftrightarrow> j = 0 \<Longrightarrow>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
-      [(i-1)..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf \<Longrightarrow>
+      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf \<Longrightarrow>
     wf_mformula \<sigma> j (P(p \<mapsto> (Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})))
       (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) n R \<psi> \<psi>' \<Longrightarrow> \<comment> \<open>safe\<close>
     {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
