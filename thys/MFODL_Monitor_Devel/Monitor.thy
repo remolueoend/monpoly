@@ -1570,11 +1570,6 @@ lemma letprev_progress_ge_gen:
     sorry
 *)
 
-lemma prog_p_mono: 
-  assumes "safe_letprev p \<phi>"
-  shows "Monitor.progress \<sigma> P \<phi> j \<le> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j"
-  oops
-
 lemma not_contains_pred_progress[simp]: "\<not> contains_pred p \<phi> \<Longrightarrow> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = Monitor.progress \<sigma> P \<phi> j"
   apply(induct p \<phi> arbitrary: P x rule: contains_pred.induct)
                    apply(simp_all add: progress_regex_def)
@@ -1596,7 +1591,7 @@ lemma sup_letprev_progress_le:
   apply(auto simp add: progress_fixpoint_ex progress_mono_gen progress_le_gen)
   done
 
-lemma safe_letprev_progress_p:
+(*lemma safe_letprev_progress_p:
 "safe_letprev p \<phi> \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
 progress \<sigma> (P(p\<mapsto>x)) \<phi> j = min (progress \<sigma> (P(p\<mapsto>j)) \<phi> j) x"
    apply(induct p \<phi> arbitrary: P rule: safe_letprev.induct)
@@ -1613,16 +1608,7 @@ progress \<sigma> (P(p\<mapsto>x)) \<phi> j = min (progress \<sigma> (P(p\<mapst
   subgoal for p \<phi> \<psi> P
     sorry
   apply(auto)
-  sorry
-(*
- have sup_fp: "sup P = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (sup P)) j)) \<phi> j"
-        if "pred_mapping (\<lambda>x. x \<le> j) P"for P
-        using that
-        unfolding sup_def Sup_nat_def
-        using Max_in[where A="{i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}"]
-        progress_fixpoint_ex[of j \<sigma> \<phi> P p]
-        by (auto simp: progress_le_gen progress_mono_gen)
-*)
+  sorry*)
 
 lemma sup_is_fixpoint:
 "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> \<Squnion> {i. i \<le> j \<and> i = Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j} =
@@ -1632,7 +1618,7 @@ Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (\<Squnion> {i. i \<le> j \<an
         progress_fixpoint_ex[of j \<sigma> \<phi> P p]
   by (auto simp: progress_le_gen progress_mono_gen)
 
-lemma safe_letprev_min_sup:
+(*lemma safe_letprev_min_sup:
 "safe_letprev p \<phi> \<and> safe_letprev p \<psi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P 
   \<Longrightarrow>  \<Squnion> {i. i \<le> j \<and> i =
            min (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j)
@@ -1748,7 +1734,7 @@ lemma test2: " pred_mapping (\<lambda> x. x\<le>j) P \<Longrightarrow> \<Squnion
        (MIN x\<in>regex.atms r. Monitor.progress \<sigma> P x j)"
   apply(rule cSup_eq_maximum)
    apply(auto simp add: progress_le_gen intro!: Min_le_iff)
-  sorry
+  sorry*)
 
 
 lemma sup_letprev_progress_mono: 
@@ -1889,18 +1875,26 @@ lemma progress_fixpoint_ex2:
         rel_mapping_reflp pred_mapping_map_upd elim: pred_mapping_mono)
   done
 
-lemma min_letprev_progress_upd2:
-  "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> p \<in> dom P \<Longrightarrow> Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j \<ge> Monitor.progress \<sigma> P \<phi> j"
-  by (rule progress_mono_gen) (auto simp: rel_mapping_alt pred_mapping_alt)
-
 lemma letprev_progress_ge: "safe_letprev p \<phi> \<Longrightarrow> p \<in> S \<Longrightarrow>
   (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le> progress \<sigma> P \<phi> j) \<Longrightarrow>
   (\<exists> P j. dom P = S \<and> range_mapping x j P \<and> x \<le>(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi> j}))"
-  (*apply(auto simp add: min_letprev_progress_upd2 progress_fixpoint_ex progress_mono_gen progress_le_gen)*)
-  (*apply(auto intro!: min_letprev_progress_upd2 progress_sup_translate)*)
-  (*apply(intro cSup_upper)
-  apply(rule progress_fixpoint_ex2 [where a="x"])*)
-  sorry (*TODO*)
+  apply (elim exE conjE)
+  apply (intro exI conjI)
+    apply assumption
+   apply assumption
+  subgoal for P j
+    apply (subgoal_tac "x \<le> j")
+     apply (drule (3) progress_fixpoint_ex2)
+     apply (elim bexE conjE)
+     apply (rule cSup_upper2)
+       apply (rule CollectI)
+       apply (erule conjI[rotated])
+       apply simp
+      apply simp
+     apply simp
+    apply (auto simp add: pred_mapping_alt)
+    done
+  done
 
 lemma pred_mapping_max_mapping:
   "pred_mapping (\<lambda>x. x\<le>j1) P1 \<Longrightarrow> pred_mapping (\<lambda>x. x\<le>j2) P2 \<Longrightarrow> pred_mapping (\<lambda>x. x\<le>(max j1 j2)) (max_mapping P1 P2)"
