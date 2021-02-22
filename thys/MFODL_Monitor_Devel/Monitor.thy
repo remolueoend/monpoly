@@ -2901,8 +2901,9 @@ proof -
   qed
 qed
 
-lemma mprev_next_NilE[elim!]: "mprev_next I xs ts = ([], [], []) \<Longrightarrow> (xs = [] \<Longrightarrow> ts = [] \<Longrightarrow> R) \<Longrightarrow> R"
-  by (induct I xs ts rule: mprev_next.induct) (auto split: prod.splits)
+lemma mprev_next_NilE[elim!]: "mprev_next I xs ts = (ys, [], []) \<Longrightarrow>
+  (xs = [] \<Longrightarrow> ts = [] \<Longrightarrow> ys = [] \<Longrightarrow> R) \<Longrightarrow> R"
+  by (induct I xs ts arbitrary: ys rule: mprev_next.induct) (auto split: prod.splits)
 
 lemma mprev: "mprev_next I xs ts = (ys, xs', ts') \<Longrightarrow>
   list_all2 P [i..<j'] xs \<Longrightarrow> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [i..<j] ts \<Longrightarrow> i \<le> j' \<Longrightarrow> i \<le> j \<Longrightarrow>
@@ -5150,9 +5151,9 @@ next
       apply (auto simp: hd_append hd_rev last_map wf_ts_def lookahead_ts_def)
       using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
       using list_all2_lastD  apply fastforce
-        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
+        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
       done
     define zs'' where "zs'' = fst (eval_until I nt auxlist')"
     define auxlist'' where "auxlist'' = snd (eval_until I nt auxlist')"
@@ -5382,9 +5383,9 @@ next
       apply (auto simp: hd_append hd_rev last_map wf_ts_regex_def lookahead_ts_def)
       using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
       using list_all2_lastD apply fastforce
-        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
-      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 nat_le_Suc_less)
+        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
       done
     have "i \<le> progress \<sigma> P' (Formula.MatchF I r) (j + \<delta>) \<Longrightarrow>
       wf_matchF_aux \<sigma> V n R I r aux' i 0 \<Longrightarrow>
