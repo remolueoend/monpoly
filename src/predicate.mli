@@ -81,11 +81,13 @@ val eval_eterm: ('a -> cst) -> 'a eterm -> cst
 val eval_term: (var * cst) list -> term -> cst
 val eval_gterm: term -> cst
 
-val avg: cst -> cst -> cst
 val plus: cst -> cst -> cst
 val minus: cst -> cst -> cst
+val average: cst -> cst -> cst
 
 val cst_eq: cst -> cst -> bool
+
+val float_of_cst: cst -> float
 
 (** A predicate consists of a name and a list of term arguments. It is
     thus an atomic formula. *)

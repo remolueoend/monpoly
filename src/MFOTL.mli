@@ -110,11 +110,13 @@ val ts_plus: tsdiff -> tsdiff -> tsdiff
 val ts_minus: timestamp -> timestamp -> tsdiff
 
 
-(** Checking interval memebrship of timestamp (differences): *)
+(** Checking interval membership of timestamp (differences): *)
 
 val in_left_ext: tsdiff -> interval -> bool
 val in_right_ext: tsdiff -> interval -> bool
 val in_interval: tsdiff -> interval -> bool
+
+val infinite_interval: interval -> bool
 val init_interval: interval -> interval
 
 

@@ -191,25 +191,28 @@ let eval_term assign =
 (* evaluate ground term *)
 let eval_gterm t = eval_term [] t
 
-
-let avg a b =
-  match a, b with
-  | Int x, Int y -> Float (((float_of_int x) +. (float_of_int y)) /. 2.)
-  | Float x, Float y -> Float ((x+.y)/.2.)
-  | _ -> failwith "[Predicate.fmed] type error"
-
 let plus a b =
   match a, b with
   | Int x, Int y -> Int (x+y)
   | Float x, Float y -> Float (x+.y)
-  | _ -> failwith "[Predicate.fmed] type error"
+  | _ -> failwith "[Predicate.plus] type error"
 
 let minus a b =
   match a, b with
   | Int x, Int y -> Int (x-y)
   | Float x, Float y -> Float (x-.y)
-  | _ -> failwith "[Predicate.fmed] type error"
+  | _ -> failwith "[Predicate.minus] type error"
 
+let average a b =
+  match a, b with
+  | Int x, Int y -> Float ((float_of_int x +. float_of_int y) /. 2.)
+  | Float x, Float y -> Float ((x+.y)/.2.)
+  | _ -> failwith "[Predicate.avg] type error"
+
+let float_of_cst = function
+  | Int x -> float_of_int x
+  | Float x -> x
+  | _ -> failwith "[Predicate.float_of_cst] type error"
 
 
 (* TODO: should we return a set instead? *)

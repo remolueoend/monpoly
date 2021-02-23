@@ -21,32 +21,32 @@
   @10. (time point 0): (0)
   @20. (time point 1): (2)
   @30. (time point 2): (0)
-  WARNING: AVG applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
-  WARNING: AVG applied on empty relation at time point 2, timestamp 30.! Resulting value is 0, by (our) convention.
+  WARNING: AVG applied on empty relation! Resulting value is 0, by (our) convention.
+  WARNING: AVG applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- MED y p(x,y)' > test_agg_empty_rel_5.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_5.mfotl -log test_agg_empty_rel.log -nonewlastts
   @10. (time point 0): (0)
   @20. (time point 1): (2)
   @30. (time point 2): (0)
-  WARNING: MED applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
-  WARNING: MED applied on empty relation at time point 2, timestamp 30.! Resulting value is 0, by (our) convention.
+  WARNING: MED applied on empty relation! Resulting value is 0, by (our) convention.
+  WARNING: MED applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- MIN y p(x,y)' > test_agg_empty_rel_6.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_6.mfotl -log test_agg_empty_rel.log -nonewlastts
   @10. (time point 0): (0)
   @20. (time point 1): (1)
   @30. (time point 2): (0)
-  WARNING: MIN applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
-  WARNING: MIN applied on empty relation at time point 2, timestamp 30.! Resulting value is 0, by (our) convention.
+  WARNING: MIN applied on empty relation! Resulting value is 0, by (our) convention.
+  WARNING: MIN applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- MAX y p(x,y)' > test_agg_empty_rel_7.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_7.mfotl -log test_agg_empty_rel.log -nonewlastts
   @10. (time point 0): (0)
   @20. (time point 1): (3)
   @30. (time point 2): (0)
-  WARNING: MAX applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
-  WARNING: MAX applied on empty relation at time point 2, timestamp 30.! Resulting value is 0, by (our) convention.
+  WARNING: MAX applied on empty relation! Resulting value is 0, by (our) convention.
+  WARNING: MAX applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- CNT y; x p(x,y)' > test_agg_empty_rel_8.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_8.mfotl -log test_agg_empty_rel.log -nonewlastts
@@ -89,28 +89,28 @@
   @10. (time point 0): (0)
   @20. (time point 1): (2)
   @30. (time point 2): (2)
-  WARNING: AVG applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
+  WARNING: AVG applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- MED y ONCE p(x,y)' > test_agg_empty_rel_17.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_17.mfotl -log test_agg_empty_rel.log -nonewlastts
   @10. (time point 0): (0)
   @20. (time point 1): (2)
   @30. (time point 2): (2)
-  WARNING: MED applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
+  WARNING: MED applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- MIN y ONCE p(x,y)' > test_agg_empty_rel_18.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_18.mfotl -log test_agg_empty_rel.log -nonewlastts
   @10. (time point 0): (0)
   @20. (time point 1): (1)
   @30. (time point 2): (1)
-  WARNING: MIN applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
+  WARNING: MIN applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- MAX y ONCE p(x,y)' > test_agg_empty_rel_19.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_19.mfotl -log test_agg_empty_rel.log -nonewlastts
   @10. (time point 0): (0)
   @20. (time point 1): (3)
   @30. (time point 2): (3)
-  WARNING: MAX applied on empty relation at time point 0, timestamp 10.! Resulting value is 0, by (our) convention.
+  WARNING: MAX applied on empty relation! Resulting value is 0, by (our) convention.
 
   $ echo 'v <- CNT y; x ONCE p(x,y)' > test_agg_empty_rel_20.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_20.mfotl -log test_agg_empty_rel.log -nonewlastts
