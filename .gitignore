@@ -1,6 +1,6 @@
 *.o
 _build
-/monpoly.install
+/monpoly*.install
 
 *~
 \#*\#
