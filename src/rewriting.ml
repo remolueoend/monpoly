@@ -669,7 +669,9 @@ let rec rewrite f =
 
   | And (f', Exists (v, f1)) ->
     if propagate_cond f' f1 then
-      And (f', Exists (v, rewrite (And (f', f1))))
+      let (v', m) = fresh_var_mapping (free_vars (And (f', f1))) v in
+      let m' = List.map (fun (v, n) -> (v, Var n)) m in
+      And (f', Exists (replace m v, rewrite (And (f', substitute_vars m' f1))))
     else
       let f' = rewrite f' in
       let f1 = rewrite f1 in
@@ -717,7 +719,7 @@ let rec rewrite f =
 
   | And (f', Since (intv, f1, f2)) when (snd intv <> Inf) ->
     if propagate_cond f' f1 then
-      let f1' = rewrite (And (Eventually (intv, f'), f1)) in
+      let f1' = rewrite (And (Eventually (init_interval intv, f'), f1)) in
       And (f', Since (intv, f1', f2))
     else if propagate_cond f' f2 then
       let f2' = rewrite (And (Eventually (intv, f'), f2)) in
@@ -730,7 +732,7 @@ let rec rewrite f =
 
   | And (f', Until (intv, f1, f2)) ->
     if propagate_cond f' f1 then
-      let f1' = rewrite (And (Once (intv, f'), f1)) in
+      let f1' = rewrite (And (Once (init_interval intv, f'), f1)) in
       And (f', Until (intv, f1', f2))
     else if propagate_cond f' f2 then
       let f2' = rewrite (And (Once (intv, f'), f2)) in
@@ -987,7 +989,9 @@ and check_re_let = function
   | Star r -> (check_re_let r)
 
 
-let expand_let f = 
+type expand_mode = ExpandAll | ExpandNonshared
+
+let expand_let mode f =
   let _ = check_let f in
   let rec expand_let_rec m = function
   | Equal _
@@ -1006,7 +1010,17 @@ let expand_let f =
       expand_let_rec (List.remove_assoc n m) (substitute_vars subm f)
     else Pred (p)
 
-  | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
+  | Let (p, f1, f2) ->
+    let name = get_name p in
+    (match mode with
+    | ExpandAll -> expand_let_rec ((name, (get_args p, f1)) :: m) f2
+    | ExpandNonshared ->
+      let f2' = expand_let_rec m f2 in
+      if count_pred_uses name f2' <= 1 then
+        expand_let_rec ((name, (get_args p, f1)) :: m) f2'
+      else
+        let f1' = expand_let_rec m f1 in
+        Let (p, f1', f2'))
 
   | Neg f -> Neg (expand_let_rec m f)
   | Exists (v, f) -> Exists (v,expand_let_rec m f)

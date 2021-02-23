@@ -282,7 +282,7 @@ let get_cell_at_index i l =
     raise Empty_dllist
 
 
-let rec iterrev_cond_delete iter_cond f del_cond l =
+let iterrev_cond_delete iter_cond f del_cond l =
   if l.length > 0 then
     let tail = l.tail in
     let head = tail.next in

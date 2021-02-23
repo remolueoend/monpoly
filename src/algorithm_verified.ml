@@ -6,7 +6,7 @@ open Misc
 
 let no_mw = ref false
 
-module IntMap = Map.Make(struct type t = int let compare = Pervasives.compare end)
+module IntMap = Map.Make(struct type t = int let compare = Stdlib.compare end)
 open IntMap
 
 let monitor dbschema logfile f =

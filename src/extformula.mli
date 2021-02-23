@@ -3,17 +3,13 @@ open Predicate
 open MFOTL
 open Tuple
 
-module NEval = Dllist
 module Sk = Dllist
 module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
-type linfo = {
-  mutable llast: (int * timestamp) NEval.cell;
-  mutable llastq: int
-}
+type linfo = {mutable llast: Neval.cell}
 type ainfo = {mutable arel: relation option}
-type pinfo = {mutable ptsq: timestamp}
+type pinfo = {mutable plast: Neval.cell}
 type ninfo = {mutable init: bool}
 type oainfo = {mutable ores: relation;
          oaauxrels: (timestamp * relation) Mqueue.t}
@@ -46,22 +42,22 @@ type sainfo = {mutable sres: relation;
                saauxrels: (timestamp * relation) Mqueue.t}
 type sinfo = {mutable srel2: relation option;
               sauxrels: (timestamp * relation) Mqueue.t}
-type ezinfo = {mutable ezlastev: (int * timestamp) NEval.cell;
+type ezinfo = {mutable ezlastev: Neval.cell;
                mutable eztree: (int, relation) Sliding.stree;
                mutable ezlast: (int * timestamp * relation) Dllist.cell;
                ezauxrels: (int * timestamp * relation) Dllist.dllist}
-type einfo = {mutable elastev: (int * timestamp) NEval.cell;
+type einfo = {mutable elastev: Neval.cell;
               mutable etree: (timestamp, relation) Sliding.stree;
               mutable elast: (timestamp * relation) Dllist.cell;
               eauxrels: (timestamp * relation) Dllist.dllist}
-type uinfo = {mutable ulast: (int * timestamp) NEval.cell;
+type uinfo = {mutable ulast: Neval.cell;
               mutable ufirst: bool;
               mutable ures: relation;
               mutable urel2: relation option;
               raux: (int * timestamp * (int * relation) Sk.dllist) Sj.dllist;
               mutable saux: (int * relation) Sk.dllist}
-type uninfo = {mutable last1: (int * timestamp) NEval.cell;
-               mutable last2: (int * timestamp) NEval.cell;
+type uninfo = {mutable last1: Neval.cell;
+               mutable last2: Neval.cell;
                mutable listrel1: (int * timestamp * relation) Dllist.dllist;
                mutable listrel2: (int * timestamp * relation) Dllist.dllist}
 
@@ -102,7 +98,6 @@ val contains_eventually: extformula -> bool
 val print_auxel:  int * Relation.relation -> unit
 val print_sauxel: MFOTL.timestamp * Relation.relation -> unit
 
-val print_neval: string -> (int * MFOTL.timestamp) Dllist.dllist -> unit
 val print_predinf: string -> info -> unit
 val print_uinf: string -> uinfo -> unit
 

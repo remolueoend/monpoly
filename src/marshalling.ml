@@ -15,70 +15,40 @@ open Helper
 open Extformula
 open Mformula
 
-type state = (int * timestamp * bool * mformula * (int * timestamp) array * int * int * bool)
-
 (*
   Converts the extformula to an mformula by recursing through the structure and reducing state information. The resulting
   formula thus has the same structure but minified state information.
   Main changes:
     - Once & Eventually have all pointers and trees removed
-    - Record fields containing cell are replaced with integers pointing at the cell index / encoding void.
 
   neval dllist is converted to an array representation.
  *)
-let ext_to_m ff neval =
-  let el2m linf =
-    let mlast = if linf.llast == NEval.void then -2
-      else if not (NEval.is_last neval linf.llast) && NEval.get_next neval linf.llast == NEval.get_first_cell neval then -1
-      else NEval.get_index linf.llast neval
-    in
-    (mlast, linf.llastq)
+let ext_to_m ff =
+  let el2m linf = linf.llast
   in
   let eze2m ezinf =
-      {mezauxrels = ezinf.ezauxrels}
+    {mezlastev = ezinf.ezlastev; mezauxrels = ezinf.ezauxrels}
   in
   let ee2m einf =
-      {meauxrels = einf.eauxrels}
+    {melastev = einf.elastev; meauxrels = einf.eauxrels}
   in
   let mue2m uinf =
-    let ilast =
-      if uinf.ulast == NEval.void then -2
-      else if not (NEval.is_last neval uinf.ulast) && NEval.get_next neval uinf.ulast == NEval.get_first_cell neval then -1
-      else NEval.get_index uinf.ulast neval
-    in
-    assert(ilast < NEval.length neval);
-        {mulast = ilast;
-         mufirst = uinf.ufirst;
-         mures = uinf.ures;
-         murel2 = uinf.urel2;
-         (* TODO: transform these too *)
-         mraux = uinf.raux;
-         msaux = uinf.saux;
-        }
+    {mulast = uinf.ulast;
+     mufirst = uinf.ufirst;
+     mures = uinf.ures;
+     murel2 = uinf.urel2;
+     (* TODO: transform these too *)
+     mraux = uinf.raux;
+     msaux = uinf.saux;
+    }
   in
   let mune2m uninf =
-    let ilast1 = if uninf.last1 == NEval.void then -2
-        else (* note that neval is not empty in this case *)
-        if not (NEval.is_last neval uninf.last1) && NEval.get_next neval uninf.last1 == NEval.get_first_cell neval then
-          (* in this case inf.last does not point to an element of
-             neval; however, it points to the first element of neval *)
-          -1
-        else NEval.get_index uninf.last1 neval
-    in
-    let ilast2 = if uninf.last2 == NEval.void then -2
-        else (* note that neval is not empty in this case *)
-        if not (NEval.is_last neval uninf.last2) && NEval.get_next neval uninf.last2 == NEval.get_first_cell neval then
-          (* in this case inf.last does not point to an element of
-             neval; however, it points to the first element of neval *)
-          -1
-        else NEval.get_index uninf.last2 neval
-    in
-        {
-          mlast1 = ilast1;
-          mlast2 = ilast2;
-          mlistrel1 = uninf.listrel1;
-          mlistrel2 = uninf.listrel2;
-        }
+    {
+      mlast1 = uninf.last1;
+      mlast2 = uninf.last2;
+      mlistrel1 = uninf.listrel1;
+      mlistrel2 = uninf.listrel2;
+    }
   in
   let o2m oinf =
     { moauxrels = oinf.oauxrels; }
@@ -86,7 +56,6 @@ let ext_to_m ff neval =
   let oz2m ozinf =
     { mozauxrels = ozinf.ozauxrels}
   in
-  let a = NEval.to_array neval in
   let rec e2m = function
     | ERel           (rel)                                                  -> MRel         (rel)
     | EPred          (pred, c1, inf)                                        -> MPred        (pred, c1, inf)
@@ -109,57 +78,31 @@ let ext_to_m ff neval =
     | EUntil         (c1, intv, ext1, ext2, uinf)                           -> MUntil       (c1, intv, (e2m ext1), (e2m ext2), (mue2m uinf))
     | EEventuallyZ   (intv, ext, ezinf)                                     -> MEventuallyZ (intv, (e2m ext), (eze2m ezinf))
     | EEventually    (intv, ext, einf)                                      -> MEventually  (intv, (e2m ext), (ee2m einf))
-  in a, e2m ff
+  in e2m ff
 
 (*
   Restores an mformula to its extformula representation by reconstructing the full state information,
   including optimization structures such as sliding trees.
 *)
-let m_to_ext mf neval = 
-  let rec get_lastev crt cond =
-    if not (NEval.is_last neval crt) then
-      let e = NEval.get_next neval crt in
-      if cond (NEval.get_data e) && not (NEval.is_last neval e) then
-        get_lastev e cond
-      else
-        e  
-    else crt   
-  in    
-
-  let ml2e (mlast, mlastq) =
-    let llast =
-      if      mlast = -2 then NEval.void
-      else if mlast = -2 then NEval.new_cell (-1,MFOTL.ts_invalid)  neval
-      else                    NEval.get_cell_at_index mlast neval
-    in
-    {llast = llast; llastq = mlastq}
+let m_to_ext mf =
+  let ml2e mlast = {llast = mlast}
   in
   let mez2e intv mezinf =
    (* contents of inf:
-       ezlastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
+       ezlastev: 'a Neval.cell  last cell of neval for which f2 is evaluated
        ezauxrels: info          the auxiliary relations (up to ezlastev)
     *)
-    (* Retrieves last evaluated cell by taking the subformula interval and retrieving the last element
-       of neval which lies within it.
-       Returns void if neval is empty. *)
-    let cell =
-      if NEval.is_empty neval then NEval.void
-      else begin 
-        let (_, tsq) = NEval.get_first neval in
-        get_lastev (NEval.get_first_cell neval) (fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv)
-    end
-    in
     (* if auxrels is empty or ezlastev is void return invalid tree, forcing reevaluation in the algorithm *)
     let return_empty =
       let eztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
       let ezlast = Dllist.void in
-      {ezlastev = cell; eztree = eztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+      {ezlastev = mezinf.mezlastev; eztree = eztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
     in
-    if not (Dllist.is_empty mezinf.mezauxrels) && not (cell = NEval.void) then
+    if not (Dllist.is_empty mezinf.mezauxrels) && Neval.is_valid mezinf.mezlastev then
       (* If auxrels contains elements, rebuild tree and restore ezlast by getting all elements of auxrels
          where the timepoint is smaller than that of ezlastev
          Note: We are presuming that all monpoly instances have synchronized timepoints. *)
-      let (tpq, tsq) = NEval.get_data cell in
+      let (tpq, tsq) = Neval.get_data mezinf.mezlastev in
       let (tpj, tsj, _) = Dllist.get_first mezinf.mezauxrels in
       (* Catch case where auxrels contains exactly one element with same tp as ezlast *)
       if ((tpj - tpq) < 0) then
@@ -169,7 +112,7 @@ let m_to_ext mf neval =
           Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
         in
         let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-        {ezlastev = cell; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+        {ezlastev = mezinf.mezlastev; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
       else return_empty
     else begin
       return_empty
@@ -177,30 +120,20 @@ let m_to_ext mf neval =
   in
   let me2e intv meinf =
     (* contents of inf:
-       elastev: 'a NEval.cell  last cell of neval for which f2 is evaluated
+       elastev: 'a Neval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info          the auxiliary relations (up to elastev)
     *)
     let meauxrels = meinf.meauxrels in
-    (* Retrieves last evaluated cell by taking the subformula interval and retrieving the last element
-      of neval which lies within it.
-      Returns void if neval is empty. *)
-    let cell =
-      if NEval.is_empty neval then NEval.void
-      else begin
-        let _, tsq = NEval.get_first neval in
-        get_lastev (NEval.get_first_cell neval) (fun (_, tsj) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv)
-    end
-    in
     (* if auxrels is empty or elastev is void return invalid tree, forcing reevaluation in the algorithm *)
     let return_empty =
       let metree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
       let elast = Dllist.void in
-      {elastev = cell; etree = metree; elast = elast;eauxrels = meinf.meauxrels}
+      {elastev = meinf.melastev; etree = metree; elast = elast;eauxrels = meinf.meauxrels}
     in
-    if not(Dllist.is_empty meauxrels) && cell != NEval.void then
+    if not(Dllist.is_empty meauxrels) && Neval.is_valid meinf.melastev then
      (* If auxrels contains elements, rebuild tree and restore elast by getting all elements of auxrels
          where the timestamp is smaller than that of elastev *)
-      let (_, tsq) = NEval.get_data cell in
+      let (_, tsq) = Neval.get_data meinf.melastev in
       let (tsj, _) = Dllist.get_first meauxrels in
       (* Catch case where auxrels contains exactly one element with same ts as elast *)
       if ((MFOTL.ts_minus tsj tsq) < 0.0) then
@@ -208,7 +141,7 @@ let m_to_ext mf neval =
           let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
           Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
         in
-        let einf = {elastev = cell; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
+        let einf = {elastev = meinf.melastev; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
         einf
       else return_empty
     else begin
@@ -216,12 +149,7 @@ let m_to_ext mf neval =
     end
   in
   let mu2e muinf =
-    let cell =
-      if      muinf.mulast = -2 then NEval.void
-      else if muinf.mulast = -2 then NEval.new_cell (-1,MFOTL.ts_invalid) neval
-      else                           NEval.get_cell_at_index muinf.mulast neval
-    in
-    {ulast  = cell;
+    {ulast  = muinf.mulast;
      ufirst = muinf.mufirst;
      ures   = muinf.mures;
      urel2  = muinf.murel2;
@@ -230,18 +158,8 @@ let m_to_ext mf neval =
     }
   in
   let mun2e muninf =
-     let cell1 =
-          if      muninf.mlast1 = -2 then NEval.void
-          else if muninf.mlast1 = -2 then NEval.new_cell (-1,MFOTL.ts_invalid)  neval
-          else                            NEval.get_cell_at_index muninf.mlast1 neval
-    in
-     let cell2 =
-          if      muninf.mlast2 = -2 then NEval.void
-          else if muninf.mlast2 = -2 then NEval.new_cell (-1,MFOTL.ts_invalid) neval
-          else                            NEval.get_cell_at_index muninf.mlast2 neval
-    in
-    {last1 = cell1;
-     last2 = cell2;
+    {last1 = muninf.mlast1;
+     last2 = muninf.mlast2;
      listrel1 = muninf.mlistrel1;
      listrel2 = muninf.mlistrel2;
     }

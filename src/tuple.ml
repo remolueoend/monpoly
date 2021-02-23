@@ -50,7 +50,7 @@ type tuple = cst list
 
 (* compare two tuples *)
 let compare t1 t2 = compare t1 t2
-  (* this is Pervasives.compare: [2]>[1;4] (as 2>1), [2]<[3;4] (as 2<3),
+  (* this is Stdlib.compare: [2]>[1;4] (as 2>1), [2]<[3;4] (as 2<3),
      and [2]<[2;4] (as []<l for any non-empty l) *)
 
 (*** operations on tuples ***)

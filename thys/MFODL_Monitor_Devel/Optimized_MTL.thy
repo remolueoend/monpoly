@@ -1439,9 +1439,9 @@ proof -
       using assms table_auxlist' sorted_append[of "map fst (linearize data_prev)"]
         False lookup_tuple_since' ts_tuple_rel_auxlist' table_in' table_since' wf_data_prev'
         valid_before
-      unfolding add_def auxlist'_def[symmetric] cur_nt I_def
-      by (auto simp only: valid_mmsaux.simps lin_data_prev' n_def R_def) fastforce+
-        (* takes long *)
+      unfolding add_def auxlist'_def[symmetric] cur_nt I_def n_def R_def
+        valid_mmsaux.simps
+      by (fastforce simp: lin_data_prev') (* SLOW *)
   qed
 qed
 

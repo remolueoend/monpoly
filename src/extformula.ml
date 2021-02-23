@@ -3,17 +3,15 @@ open Predicate
 open MFOTL
 open Tuple
 
-module NEval = Dllist
 module Sk = Dllist
 module Sj = Dllist
 
 type info  = (int * timestamp * relation) Queue.t
 type linfo = {
-  mutable llast: (int * timestamp) NEval.cell;
-  mutable llastq: int
+  mutable llast: Neval.cell;
 }
 type ainfo = {mutable arel: relation option}
-type pinfo = {mutable ptsq: timestamp}
+type pinfo = {mutable plast: Neval.cell}
 type ninfo = {mutable init: bool}
 type oainfo = {mutable ores: relation;
          oaauxrels: (timestamp * relation) Mqueue.t}
@@ -50,22 +48,22 @@ type sainfo = {mutable sres: relation;
                saauxrels: (timestamp * relation) Mqueue.t}
 type sinfo = {mutable srel2: relation option;
               sauxrels: (timestamp * relation) Mqueue.t}
-type ezinfo = {mutable ezlastev: (int * timestamp) NEval.cell;
+type ezinfo = {mutable ezlastev: Neval.cell;
                mutable eztree: (int, relation) Sliding.stree;
                mutable ezlast: (int * timestamp * relation) Dllist.cell;
                ezauxrels: (int * timestamp * relation) Dllist.dllist}
-type einfo = {mutable elastev: (int * timestamp) NEval.cell;
+type einfo = {mutable elastev: Neval.cell;
               mutable etree: (timestamp, relation) Sliding.stree;
               mutable elast: (timestamp * relation) Dllist.cell;
               eauxrels: (timestamp * relation) Dllist.dllist}
-type uinfo = {mutable ulast: (int * timestamp) NEval.cell;
+type uinfo = {mutable ulast: Neval.cell;
               mutable ufirst: bool;
               mutable ures: relation;
               mutable urel2: relation option;
               raux: (int * timestamp * (int * relation) Sk.dllist) Sj.dllist;
               mutable saux: (int * relation) Sk.dllist}
-type uninfo = {mutable last1: (int * timestamp) NEval.cell;
-               mutable last2: (int * timestamp) NEval.cell;
+type uninfo = {mutable last1: Neval.cell;
+               mutable last2: Neval.cell;
                mutable listrel1: (int * timestamp * relation) Dllist.dllist;
                mutable listrel2: (int * timestamp * relation) Dllist.dllist}
 
@@ -135,14 +133,6 @@ let print_bool b =
   else
     print_string "false"
 
-let print_neval str neval =
-  print_string str;
-  Misc.print_dllist
-    (fun (q,tsq) ->
-        Printf.printf "(%d,%s)" q (MFOTL.string_of_ts tsq)
-    ) neval;
-  print_newline()
-
 let print_ainf str ainf =
   print_string str;
   match ainf with
@@ -184,16 +174,7 @@ let print_predinf str inf =
   print_newline()
 
 let print_linf str inf =
-  Printf.printf "%s{" str;
-  if inf.llast == NEval.void then
-    print_string "last=None; "
-  else
-    begin
-      let (i,tsi) = NEval.get_data inf.llast in
-      Printf.printf "last=(%d,%s); " i (MFOTL.string_of_ts tsi)
-    end;
-  Printf.printf "lastq=%d" inf.llastq;
-  print_endline "}"
+  Printf.printf "%s{llast=%s}\n" str (Neval.string_of_cell inf.llast)
 
 let print_ozinf str inf =
   print_string str;
@@ -243,14 +224,8 @@ let print_sinf str inf =
 
 
 let print_uinf str inf =
-  Printf.printf "%s{first=%b; " str inf.ufirst;
-  if inf.ulast == NEval.void then
-    print_string "last=None; "
-  else
-    begin
-      let (i,tsi) = NEval.get_data inf.ulast in
-      Printf.printf "last=(%d,%s); " i (MFOTL.string_of_ts tsi)
-    end;
+  Printf.printf "%s{first=%b; last=%s; " str inf.ufirst
+    (Neval.string_of_cell inf.ulast);
   Relation.print_rel "res=" inf.ures;
   print_string "; raux=";
   Misc.print_dllist print_rauxel inf.raux;
@@ -259,16 +234,8 @@ let print_uinf str inf =
   print_endline "}"
 
 let print_uninf str uninf =
-  let get_last last =
-    if last == NEval.void then "None"
-    else
-      begin
-        let i,tsi = NEval.get_data last in
-        Printf.sprintf "(%d,%s)" i (MFOTL.string_of_ts tsi)
-      end
-  in
   Printf.printf "%s{last1=%s; last2=%s; " str
-    (get_last uninf.last1) (get_last uninf.last2);
+    (Neval.string_of_cell uninf.last1) (Neval.string_of_cell uninf.last2);
   print_string "listrel1=";
   Misc.print_dllist print_aauxel uninf.listrel1;
   print_string "; listrel2=";
@@ -276,14 +243,7 @@ let print_uninf str uninf =
   print_string "}\n"
 
 let print_ezinf str inf =
-  Printf.printf "%s{" str;
-  if inf.ezlastev == NEval.void then
-    print_string "ezlastev = None; "
-  else
-    begin
-      let (i,tsi) = NEval.get_data inf.ezlastev in
-      Printf.printf "ezlastev = (%d,%s); " i (MFOTL.string_of_ts tsi)
-    end;
+  Printf.printf "%s{ezlastev=%s; " str (Neval.string_of_cell inf.ezlastev);
   if inf.ezlast == Dllist.void then
     print_string "ezlast = None; "
   else
@@ -298,14 +258,7 @@ let print_ezinf str inf =
 
 
 let print_einf str inf =
-  Printf.printf "%s{" str;
-  if inf.elastev == NEval.void then
-    print_string "elastev = None; "
-  else
-    begin
-      let (i,tsi) = NEval.get_data inf.elastev in
-      Printf.printf "elastev = (%d,%s); " i (MFOTL.string_of_ts tsi)
-    end;
+  Printf.printf "%s{elastev=%s; " str (Neval.string_of_cell inf.elastev);
   if inf.elast == Dllist.void then
     print_string "elast = None; "
   else
@@ -352,8 +305,8 @@ let print_extf str ff =
         | EPrev (intv,f,pinf) ->
           print_string "PREVIOUS";
           MFOTL.print_interval intv;
-          print_string ": ptsq=";
-          MFOTL.print_ts pinf.ptsq;
+          print_string ": plast=";
+          print_string (Neval.string_of_cell pinf.plast);
           print_string "\n";
           print_f_rec (d+1) f
 

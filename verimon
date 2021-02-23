@@ -1,1 +1,7 @@
-monpoly -verified "$@"
+#!/bin/bash
+SELF=${BASH_SOURCE[0]}
+while [[ -L $SELF ]]; do
+    SELF=$(readlink -- "$SELF")
+done
+BASE_DIR=$(cd -P -- "$(dirname -- "$SELF")" && pwd -P)
+exec "$BASE_DIR/_build/default/src/main.exe" -verified "$@"

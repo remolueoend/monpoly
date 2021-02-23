@@ -1,4 +1,4 @@
-open Pervasives
+open Stdlib
 exception Error of string
 
 (* Helper implementations for Int32 *)
@@ -25,9 +25,6 @@ let logand l r =
 
 let logor l r =
   Int32.to_int (Int32.logor (Int32.of_int l) (Int32.of_int r))
-
-let logor_32 l r =
-  Int32.logor l r
 
 let logxor l r = 
   Int32.to_int (Int32.logxor (Int32.of_int l) (Int32.of_int r))

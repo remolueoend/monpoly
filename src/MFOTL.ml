@@ -158,6 +158,7 @@ let in_left_ext v intv =
 let in_interval v intv =
   in_right_ext v intv && in_left_ext v intv
 
+let init_interval (_, b) = (CBnd 0., b)
 
 let aggreg_default_value op t = match op, t with
   | Min, TFloat -> Float infinity
@@ -380,7 +381,7 @@ and free_re_vars = function
 
 let fresh_var fv =
   let rec fresh_var_rec v = 
-    let var = "__f" ^ (string_of_int v) in
+    let var = "_x" ^ (string_of_int v) in
     if List.exists (fun x -> x=var) fv
     then
       fresh_var_rec (v+1)
@@ -418,7 +419,7 @@ let rec substitute_vars m =
       let fv = free_vars f in
       let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
       let bv_rename = List.filter (fun x -> List.mem x tvars) v in
-      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let (_,fresh_var_map) = fresh_var_mapping (Misc.union fv tvars) bv_rename in
       Exists (
         Misc.replace fresh_var_map v,
         let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
@@ -428,7 +429,7 @@ let rec substitute_vars m =
       let fv = free_vars f in
       let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
       let bv_rename = List.filter (fun x -> List.mem x tvars) v in
-      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let (_,fresh_var_map) = fresh_var_mapping (Misc.union fv tvars) bv_rename in
       ForAll (
         Misc.replace fresh_var_map v,
         let no_bv =  (List.filter (fun (x,_) -> not (List.mem x v)) m) in
@@ -439,7 +440,7 @@ let rec substitute_vars m =
       let bvars = Misc.diff fv g in
       let tvars = List.flatten (List.map (fun (_,t) -> Predicate.tvars t) m) in
       let bv_rename = Misc.inter tvars bvars in
-      let (_,fresh_var_map) = fresh_var_mapping fv bv_rename in
+      let (_,fresh_var_map) = fresh_var_mapping (Misc.union fv tvars) bv_rename in
       let no_bv = (List.filter (fun (x,_) -> not (List.mem x bvars)) m) in
       let m' = no_bv @ List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
 
@@ -474,6 +475,49 @@ and substitute_re_vars m = function
   | Concat (r1,r2) -> Concat ((substitute_re_vars m r1), (substitute_re_vars m r2))
   | Plus (r1,r2) -> Plus (substitute_re_vars m r1, (substitute_re_vars m r2))
   | Star r -> Star (substitute_re_vars m r) 
+
+let count_pred_uses pred f =
+  let rec go = function
+    | Equal _
+    | Less _
+    | LessEq _ -> 0
+
+    | Pred p -> if Predicate.get_name p = pred then 1 else 0
+
+    | Let (p, f1, f2) ->
+        let c1 = go f1 in
+        let c2 = if Predicate.get_name p = pred then 0 else go f2 in
+        c1 + c2
+
+    | Neg f
+    | Exists (_, f)
+    | ForAll (_, f)
+    | Aggreg (_, _, _, _, _, f)
+    | Prev (_, f)
+    | Next (_, f)
+    | Once (_, f)
+    | PastAlways (_, f)
+    | Eventually (_, f)
+    | Always (_, f) -> go f
+
+    | Prex (_, r)
+    | Frex (_, r) -> go_re r
+
+    | And (f1, f2)
+    | Or (f1, f2)
+    | Implies (f1, f2)
+    | Equiv (f1, f2)
+    | Since (_, f1, f2)
+    | Until (_, f1, f2) -> go f1 + go f2
+  and go_re = function
+    | Wild -> 0
+    | Test f -> go f
+    | Concat (r1, r2)
+    | Plus (r1, r2) -> go_re r1 + go_re r2
+    | Star r -> go_re r
+  in
+  go f
+
 
 
 let string_of_ts ts =

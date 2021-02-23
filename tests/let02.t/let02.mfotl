@@ -1,0 +1,4 @@
+LET P(y,x,z) = (ONCE A(x,z)) AND NEXT B(z,y) IN
+LET Q(y,x,z) = P(y,x,z) OR P(z,x,y) IN
+LET R(x) = EVENTUALLY[1,2] C(x) IN
+Q(u,"foo",v) AND R(u)

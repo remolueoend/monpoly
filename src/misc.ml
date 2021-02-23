@@ -74,9 +74,6 @@ let nsplit str sep =
 (* End Theft *)
 
 
-open Dllist
-
-
 let usr2 = ref false
 let alrm = ref false
 
@@ -162,7 +159,7 @@ let rec elim_elem x = function
 let rec add_in_sorted x = function
   | [] -> [x]
   | h :: t ->
-    if Pervasives.compare x h < 0
+    if Stdlib.compare x h < 0
     then x :: h :: t
     else h :: (add_in_sorted x t)
 
@@ -312,7 +309,7 @@ let conjunction l = List.fold_left (&&) true l
 
 (* split a list in two at certain position *)
 (* split_at_n 1 [a;b;c] = [a],[b;c] *)
-let rec split_at_n n l =
+let split_at_n n l =
   let rec split first n = function
     | [] ->
       if n=0 then
@@ -419,7 +416,7 @@ let replace m =
 
 
 
-
+(*
 let remove_at_pos pos l =
   let rec remove_pos' i first = function
     | h::t ->
@@ -483,6 +480,7 @@ let partition_map p f l =
         l1, h::l2
   in
   part [] l
+*)
 
 
 (* return current memory usage *)
@@ -508,7 +506,7 @@ let mem_usage mem_str =
   in find_mem ic
 
 let mem_current () = mem_usage "VmSize"
-let mem_max () = mem_usage "VmPeak"
+(* let mem_max () = mem_usage "VmPeak" *)
 
 (* return maximum memory usage *)
 let mem_max () =

@@ -50,7 +50,7 @@ let logfile = ref ""
 
 
 let test lexbuf =
-  let len = String.length lexbuf.lex_buffer in
+  let len = Bytes.length lexbuf.lex_buffer in
   Printf.printf "len=%d buffer_len=%d\n" len  lexbuf.lex_buffer_len;
   Printf.printf "lex_abs_pos = %d\n\
                  lex_start_pos = %d\n\
@@ -97,14 +97,14 @@ let show_error lexbuf =
   let snum = start.pos_cnum - start.pos_bol in
   let cnum = curr.pos_cnum - curr.pos_bol in
   let token = Lexing.lexeme lexbuf in
-  let rest = String.sub lexbuf.lex_buffer lexbuf.lex_start_pos lexbuf.lex_buffer_len in
+  let rest = Bytes.sub lexbuf.lex_buffer lexbuf.lex_start_pos lexbuf.lex_buffer_len in
   let line_end_pos =
     try
-      String.index_from rest 0 '\n'
+      Bytes.index_from rest 0 '\n'
     with
-    | Not_found -> (String.length rest) - 1
+    | Not_found -> (Bytes.length rest) - 1
   in
-  let line = String.sub rest 0 line_end_pos in
+  let line = Bytes.sub rest 0 line_end_pos in
   (* Note: [line] is only a suffix (startintg at index [snum]) of the
      line number [lnum] *)
   lnum, snum, cnum, token, line
@@ -128,7 +128,7 @@ let get_signature_lexbuf lexbuf =
     Printf.eprintf
       "[Log.get_sign_from_file] Failed to parse signature file. Error at line %d:\n%s\n"
       lexbuf.lex_start_p.pos_lnum
-      lexbuf.lex_buffer;
+      (Bytes.to_string lexbuf.lex_buffer);
     raise e
 
 let get_signature_string s =
@@ -174,7 +174,7 @@ let get_next_entry lexbuf =
           "[Log.get_next_entry] Failed to parse log file. \
            Error at line %d, character %d. Current token is: %s. \
            Suffix of line %d starting from index %d is: %s.\n%!"
-          lnum cnum token lnum snum line;
+          lnum cnum token lnum snum (Bytes.to_string line);
         raise e
     in
     match log_entry with
@@ -184,7 +184,7 @@ let get_next_entry lexbuf =
         "[Log.get_next_entry] Ignoring the current time point due to parse error. \
          Error at line %d, character %d. Current token is: %s. \
          Suffix of line %d starting from index %d is: %s.\n%!"
-        lnum cnum token lnum snum line;
+        lnum cnum token lnum snum (Bytes.to_string line);
       if not complete then update lexbuf;
       get_next lexbuf
 
