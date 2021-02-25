@@ -602,7 +602,7 @@ next
   qed
 next
   case (LetPrev p \<phi> \<psi>)
-  let ?V = "\<lambda>V \<sigma>. V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>))"
+  let ?V = "\<lambda>V \<sigma>. V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) o Suc)"
   show ?case unfolding sat.simps proof (rule LetPrev.IH(2))
     show "i < plen \<pi>" by fact
     from LetPrev.prems show "past_only \<psi>" by simp
@@ -614,8 +614,8 @@ next
     show "the (?V V \<sigma> p') k = the (?V V' \<sigma>' p') k" proof (cases "p' = p")
       case True
       with LetPrev \<open>i < plen \<pi>\<close> *
-      have "letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) k = 
-            letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma>' (V'(p \<mapsto> \<lambda>_. X)) v i \<phi>) k"
+      have "letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) (Suc k) = 
+            letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma>' (V'(p \<mapsto> \<lambda>_. X)) v i \<phi>) (Suc k)"
         apply (induct k arbitrary: V V')
          apply simp
          apply (rule Collect_cong)
