@@ -307,7 +307,8 @@ subsubsection \<open>Semantics\<close>
 definition "ecard A = (if finite A then card A else \<infinity>)"
 
 fun letprev_sat where
-  "letprev_sat n sat i = {v. length v = n \<and> sat (case i of 0 \<Rightarrow> {} | Suc j \<Rightarrow> letprev_sat n sat j) v i}"
+  "letprev_sat n sat 0 = {}" |
+  "letprev_sat n sat (Suc i) = {v. length v = n \<and> sat (letprev_sat n sat i) v i}"
 
 qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
   "sat \<sigma> V v i (Pred r ts) = (case V r of
@@ -316,7 +317,7 @@ qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarr
 | "sat \<sigma> V v i (Let p \<phi> \<psi>) =
     sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = nfv \<phi> \<and> sat \<sigma> V v i \<phi>})) v i \<psi>"
 | "sat \<sigma> V v i (LetPrev p \<phi> \<psi>) =
-    sat \<sigma> (V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>))) v i \<psi>"
+    sat \<sigma> (V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) o Suc)) v i \<psi>"
 | "sat \<sigma> V v i (Eq t1 t2) = (eval_trm v t1 = eval_trm v t2)"
 | "sat \<sigma> V v i (Less t1 t2) = (eval_trm v t1 < eval_trm v t2)"
 | "sat \<sigma> V v i (LessEq t1 t2) = (eval_trm v t1 \<le> eval_trm v t2)"
