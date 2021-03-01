@@ -3001,10 +3001,9 @@ definition (in maux) letprev_meval_invar where
 "letprev_meval_invar n R V \<sigma> P \<phi>' m j' i ys buf p ts db \<phi> =
 (let j = j' - length ts in
 wf_mformula \<sigma> j (P(p\<mapsto>i)) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) m UNIV \<phi> \<phi>' \<and>
-i \<le> min (Suc (letprev_progress \<sigma> P p \<phi>' j')) j' \<and> \<comment> \<open>needs thought\<close>
 list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
       [i..<Suc (letprev_progress \<sigma> P p \<phi>' j)] buf)"
-
+(*i \<le> min (Suc (letprev_progress \<sigma> P p \<phi>' j')) j' \<and>*) \<comment> \<open>needs thought\<close>
 definition (in maux) letprev_meval_post where
 "letprev_meval_post n R V \<sigma> P \<phi>' m j p i' xs buf' \<phi>f =
 (wf_mformula \<sigma> j (P(p\<mapsto>i')) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) m UNIV \<phi>f \<phi>' \<and>
@@ -3015,11 +3014,6 @@ list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. 
     (list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
       [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf)" 
   by auto*)
-
-lemma (in maux) letprev_meval_invar_post "letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi>0 \<Longrightarrow>
-  (i', xs, buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi> \<Longrightarrow>
-  letprev_meval_post n R V \<sigma> P \<phi>' m j p i' xs buf' \<phi>f"
-  oops
 
 (*function letprev_meval0 where
   "letprev_meval0 eval j i ys buf p ts db \<phi> =
@@ -3042,20 +3036,38 @@ termination
          Regex.match (Formula.sat \<sigma> V (map the v)) (from_mregex ms \<phi>s) i (i + length aux - 1)) (lookup Y ms)))"*)
 
 lemma (in maux) letprev_meval_invar_init: 
-  assumes "wf_mformula \<sigma> (j-length ts) P V n R (MLetPrev p m \<phi>0 \<psi> i buf) (Formula.LetPrev p \<phi>' \<psi>')"
-  shows "letprev_meval_invar n R V \<sigma> P \<phi>' m j i [] (if i = 0 \<and> j > 0 then [{}] else buf) p ts db \<phi>0"
+  assumes "wf_mformula \<sigma> (j-length ts) P V n R (MLetPrev p m \<phi> \<psi> i buf) (Formula.LetPrev p \<phi>' \<psi>')"
+  shows "letprev_meval_invar n R V \<sigma> P \<phi>' m j i [] buf p ts db \<phi>"
     using assms proof -
-    from assms wf_mformula.LetPrev have 1: "wf_mformula \<sigma> (j - length ts) (P(p\<mapsto>i)) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) m UNIV \<phi>0 \<phi>'"
+    from assms have 1: "wf_mformula \<sigma> (j - length ts) (P(p\<mapsto>i)) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) m UNIV \<phi> \<phi>'"
+      by (auto elim: wf_mformula.cases)
+    moreover from assms have i: "i = min (Suc (letprev_progress \<sigma> P p \<phi>' (j - length ts))) (j - length ts)"
       by (auto elim: wf_mformula.cases)
     (*fv: "m = Formula.nfv \<phi>'" "{0..<m} \<subseteq> fv \<phi>'" and
     2:  "wf_mformula \<sigma> j (P(p \<mapsto> (Sup {i. i\<le>(j-length ts) \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) (j-length ts))) \<phi>' (j-length ts)})))
       (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) n R \<psi> \<psi>'" and*)
-    moreover have list: "list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
-      [(i-1)..<(letprev_progress \<sigma> P p \<phi>' (j-length ts))] buf" sorry
-    ultimately show ?thesis apply (auto)
-      oops
+    moreover from assms i have list: "list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
+      [i..<Suc (letprev_progress \<sigma> P p \<phi>' (j-length ts))] buf" 
+      by (auto elim: wf_mformula.cases simp add: min_def split: if_splits)
+    ultimately show ?thesis unfolding letprev_meval_invar_def 
+      by(simp add: Let_def)
+  qed
+(* "wf_mformula \<sigma> j (P(p\<mapsto>i)) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) m UNIV \<phi> \<phi>' \<Longrightarrow>
+    i = min (Suc (letprev_progress \<sigma> P p \<phi>' j)) j \<Longrightarrow>
+    list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
+      [i..<Suc (letprev_progress \<sigma> P p \<phi>' j)] buf \<Longrightarrow>
+    wf_mformula \<sigma> j (P(p \<mapsto> (letprev_progress \<sigma> P p \<phi>' j)))
+      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') o Suc)) n R \<psi> \<psi>' \<Longrightarrow> \<comment> \<open>safe\<close>
+    {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>'*)
 
 lemma invar_recursion_invar: "letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi>s \<Longrightarrow> False"
+  oops
+
+lemma (in maux) letprev_meval_invar_post: "letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> \<Longrightarrow>
+  (i', xs, buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi> \<Longrightarrow>
+  letprev_meval_post n R V \<sigma> P \<phi>' m j p i' xs buf' \<phi>f"
+  apply (induction taking: m j rule: letprev_meval_induct)
+  apply(simp add: Let_def letprev_meval0.simps split: if_splits)
   oops
 
 subsubsection \<open>Initialisation\<close>
