@@ -4424,11 +4424,12 @@ let rec less_eq_enat q x1 = match q, x1 with Infinity_enat, Enat n -> false
                        | Enat m, Enat n -> less_eq_nat m n;;
 
 let rec interval
-  l r = Abs_I (if less_eq_enat (Enat l) r
-                then (less_eq_nat l,
-                       ((fun i -> less_eq_enat (Enat i) r),
-                         not (equal_enat r Infinity_enat)))
-                else rep_I (failwith "undefined"));;
+  xb xc =
+    Abs_I (if less_eq_enat (Enat xb) xc
+            then (less_eq_nat xb,
+                   ((fun i -> less_eq_enat (Enat i) xc),
+                     not (equal_enat xc Infinity_enat)))
+            else ((fun _ -> true), ((fun _ -> true), false)));;
 
 let rec init_args i n l r pos = Args_ext (i, n, l, r, pos, ());;
 
