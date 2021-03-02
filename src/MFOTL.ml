@@ -481,7 +481,9 @@ let count_pred_uses pred f =
   let rec go = function
     | Equal _
     | Less _
-    | LessEq _ -> 0
+    | LessEq _
+    | Matches _
+    | Substring _ -> 0
 
     | Pred p -> if Predicate.get_name p = pred then 1 else 0
 
