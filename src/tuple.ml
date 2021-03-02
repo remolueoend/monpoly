@@ -100,6 +100,13 @@ let get_at_pos = List.nth
 let add_first tuple v = v :: tuple
 let add_last tuple v = tuple @ [v]
 
+let rec insert pos t v =
+  if pos <= 0 then v :: t
+  else
+    match t with
+    | [] -> raise Not_found
+    | x :: t' -> x :: insert (pos-1) t' v
+
 let duplicate_pos pos tuple =
   let v = get_at_pos tuple pos in
   add_last tuple v

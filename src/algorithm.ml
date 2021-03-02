@@ -483,94 +483,19 @@ let elim_old_eventually q tsq intv inf =
   elim_old_eauxrels ()
 
 
-
-(* Instead of a single Dllist and a pointer, which says where in this
-   list end the current time window, we use two queues. One queue
-   stores the time window, the other ones stores the relations not
-   yet in the time window *)
-let comp_agg_once tsq intv state update_state_old update_state_new get_result rel discard =
-  let rec elim_old_from_timewindow () =
-    (* remove old elements that fell out of the interval *)
-    if not (Queue.is_empty state.tw_rels) then
-      let (tsj, arel) = Queue.top state.tw_rels in
-      if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-        begin
-          ignore(Queue.pop state.tw_rels);
-          update_state_old state arel;
-          elim_old_from_timewindow ()
-        end
-  in
-
-  let rec consider_other_rels () =
-    if not (Queue.is_empty state.other_rels) then
-      begin
-        let (tsj, arel) = Queue.top state.other_rels in
-        let diff = MFOTL.ts_minus tsq tsj in
-        if not (MFOTL.in_left_ext diff intv) then
-          begin
-            (* current relation already too old for the new time window *)
-            ignore (Queue.pop state.other_rels);
-            consider_other_rels ()
-          end
-        else if MFOTL.in_interval diff intv then
-          (* current relation in the interval, so we process it *)
-          begin
-            ignore (Queue.pop state.other_rels);
-            let arel' = update_state_new state arel in
-            (* keep old tuples around if and only if the interval is bounded *)
-            if snd intv <> Inf then
-              Queue.push (tsj, arel') state.tw_rels;
-            consider_other_rels ()
-          end
-          (* else, that is, not (MFOTL.in_right_ext diff intv) *)
-          (* current relation too new, so we stop and consider it next time *)
-      end
-  in
-
-  elim_old_from_timewindow ();
-  if not (Relation.is_empty rel) then
-    Queue.push (tsq, rel) state.other_rels;
-  consider_other_rels ();
-  if not discard then
-    get_result state
-  else
-    Relation.empty
-
-
-
-let comp_aggMM_once tsq intv state update_state_old update_state_new get_result rel discard =
-  let rec consider_other_rels () =
-    if not (Queue.is_empty state.non_tw_rels) then
-      begin
-        let (tsj, arel) = Queue.top state.non_tw_rels in
-        let diff = MFOTL.ts_minus tsq tsj in
-        if not (MFOTL.in_left_ext diff intv) then
-          begin
-            (* current relation already too old for the new time window *)
-            ignore (Queue.pop state.non_tw_rels);
-            consider_other_rels ()
-          end
-        else if MFOTL.in_interval diff intv then
-          (* current relation in the interval, so we process it *)
-          begin
-            ignore (Queue.pop state.non_tw_rels);
-            update_state_new state tsj arel;
-            consider_other_rels ()
-          end
-          (* else, that is, not (MFOTL.in_right_ext diff intv) *)
-          (* current relation too new, so we stop and consider it next time *)
-      end
-  in
-
-  update_state_old state tsq;
-  if not (Relation.is_empty rel) then
-    Queue.push (tsq, rel) state.non_tw_rels;
-  consider_other_rels ();
-  if not discard then
-    get_result state
-  else
-    Relation.empty
-
+let warn_if_empty_aggreg {op; default} {Aggreg.empty_rel; Aggreg.rel} =
+  if empty_rel then
+    (match op with
+    | Avg | Med | Min | Max ->
+      let op_str = MFOTL.string_of_agg_op op in
+      let default_str = string_of_cst true default in
+      let msg = Printf.sprintf "WARNING: %s applied on empty relation! \
+                                Resulting value is %s, by (our) convention.\n"
+        op_str default_str
+      in
+      prerr_string msg
+    | Cnt | Sum -> ());
+  rel
 
 
 let add_let_index f n rels =
@@ -588,9 +513,8 @@ let add_let_index f n rels =
 
     | ENeg f1
     | EExists (_,f1)
-    | EAggOnce (f1,_,_,_,_,_)
-    | EAggMMOnce (f1,_,_,_,_,_)
-    | EAggreg (_,f1)
+    | EAggOnce (_,_,f1)
+    | EAggreg (_,_,f1)
     | ENext (_,f1,_)
     | EPrev (_,f1,_)
     | EOnceA (_,f1,_)
@@ -716,9 +640,11 @@ let rec eval f crt discard =
        )
     )
 
-  | EAggreg (comp, f) ->
+  | EAggreg (inf, comp, f) ->
     (match eval f crt discard with
-     | Some rel -> Some (comp rel)
+     | Some rel ->
+       Some (if discard then Relation.empty
+         else warn_if_empty_aggreg inf (comp rel))
      | None -> None
     )
 
@@ -868,31 +794,14 @@ let rec eval f crt discard =
          end
     )
 
-  | EAggOnce (f, intv, state, update_old, update_new, get_result) ->
+  | EAggOnce (inf, state, f) ->
     (match eval f crt false with
-     | Some rel -> Some (comp_agg_once
-                           tsq intv state
-                           update_old
-                           update_new
-                           get_result
-                           rel discard)
+     | Some rel ->
+       state#update tsq rel;
+       Some (if discard then Relation.empty
+         else warn_if_empty_aggreg inf state#get_result)
      | None -> None
     )
-
-  | EAggMMOnce (f, intv, state, update_old, update_new, get_result) ->
-    (match eval f crt false with
-     | Some rel -> Some (comp_aggMM_once
-                           tsq intv state
-                           update_old
-                           update_new
-                           get_result
-                           rel discard)
-     | None -> None
-    )
-
-
-
-
 
   (* We distinguish between whether the left margin of [intv] is
      zero or not, as we need to have two different ways of
@@ -1322,9 +1231,8 @@ let add_index f i tsi db =
 
     | ENeg f1
     | EExists (_,f1)
-    | EAggOnce (f1,_,_,_,_,_)
-    | EAggMMOnce (f1,_,_,_,_,_)
-    | EAggreg (_,f1)
+    | EAggOnce (_,_,f1)
+    | EAggreg (_,_,f1)
     | ENext (_,f1,_)
     | EPrev (_,f1,_)
     | EOnceA (_,f1,_)
@@ -1364,121 +1272,6 @@ let process_index ff closed last i =
     else false
   in
   eval_loop ()
-
-module Tuple_map = Map.Make (
-  struct type t = tuple
-    let compare = Tuple.compare
-  end)
-
-
-let comp_aggreg init_value update posx posG rel =
-  let map = ref Tuple_map.empty in
-  Relation.iter
-    (fun tuple ->
-       let gtuple = Tuple.projections posG tuple in
-       let crt_value = Tuple.get_at_pos tuple posx in
-       (*   match Tuple.get_at_pos tuple posx with *)
-       (*     | Int v -> v *)
-       (*     | _ -> failwith "[comp_aggreg] internal error" *)
-       (* in *)
-       try
-         let old_agg_value = Tuple_map.find gtuple !map in
-         let new_agg_value = update old_agg_value crt_value in
-         map := Tuple_map.add gtuple new_agg_value !map
-       with
-       | Not_found ->
-         map := Tuple_map.add gtuple (init_value crt_value) !map;
-    )
-    rel;
-  !map
-
-let comp_aggreg init_value update posx posG rel =
-  let map = Hashtbl.create 1000 in
-  Relation.iter
-    (fun tuple ->
-       let gtuple = Tuple.projections posG tuple in
-       let crt_value = Tuple.get_at_pos tuple posx in
-       (*   match Tuple.get_at_pos tuple posx with *)
-       (*     | Int v -> v *)
-       (*     | _ -> failwith "[comp_aggreg] internal error" *)
-       (* in *)
-       try
-         let old_agg_value = Hashtbl.find map gtuple in
-         let new_agg_value = update old_agg_value crt_value in
-         Hashtbl.replace map gtuple new_agg_value;
-       with
-       | Not_found ->
-         Hashtbl.add map gtuple (init_value crt_value);
-    )
-    rel;
-  map
-
-exception Break
-
-
-let size xlist =
-  let s = ref 0 in
-  Intmap.iter (fun _ m ->
-      assert(m > 0);
-      s := !s + m;
-    ) xlist;
-  !s
-
-
-(* The following assumptionn should hold: [len] is the sum of all
-   bindings [m] in [xlist] *)
-let median xlist len fmed =
-  assert (len <> 0);
-  assert (len = size xlist);
-  let mid = if len mod 2 = 0 then (len / 2) - 1 else len / 2 in
-  let flag = ref false in
-  let crt = ref 0 in
-  let med = ref (fst (Intmap.choose xlist)) in
-  let prev = ref !med in
-  try
-    Intmap.iter (fun c m ->
-        if !flag then
-          begin med := fmed !prev c; raise Break end
-        else
-        if mid < !crt + m then (* c is the (left) median *)
-          if len mod 2 = 0 then
-            if mid = !crt + m - 1 then
-              begin flag := true;  prev := c end
-            else
-              begin med := fmed c c; raise Break end
-          else begin med := fmed c c; raise Break end
-        else
-          crt := !crt + m
-      ) xlist;
-    failwith "[median] internal error"
-  with Break -> !med
-
-
-
-
-let aggreg_empty_rel op glist t =
-  let op_str = MFOTL.string_of_agg_op op in
-  let default_value = MFOTL.aggreg_default_value op t in
-  if glist = [] then
-    begin
-      (match op with
-       | Avg | Med | Min | Max ->
-         let err_msg = Printf.sprintf "WARNING: %s applied on empty relation \
-                                       at time point %d, timestamp %s! \
-                                       Resulting value is %s, by (our) convention.\n"
-             op_str !crt_tp (MFOTL.string_of_ts !crt_ts) (string_of_cst true default_value)
-         in
-         prerr_string err_msg
-
-       | Cnt | Sum -> ()
-      );
-
-      Relation.singleton (Tuple.make_tuple [default_value])
-    end
-  else
-    Relation.empty
-
-
 
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
@@ -1578,376 +1371,39 @@ let add_ext neval f =
     in
     EAnd (comp, ff1, ff2, {arel = None})
 
-  | Aggreg (t_y, y, (Avg as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Sum as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Cnt as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Med as op), x, glist, Once (intv, f)) ->
-
+  | Aggreg (t_y, y, op, x, glist, Once (intv, f)) ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
+    let default = MFOTL.aggreg_default_value op t_y in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-
-    let init_agg_val op cst =
+    let state =
       match op with
-      | Med -> Med_aux (1, Intmap.singleton cst 1)
-      | Cnt -> C_aux (1)
-      | _ -> SA_aux (1, cst)
+      | Cnt -> Aggreg.cnt_once default intv 0 posG
+      | Min -> Aggreg.min_once default intv 0 posx posG
+      | Max -> Aggreg.max_once default intv 0 posx posG
+      | Sum -> Aggreg.sum_once default intv 0 posx posG
+      | Avg -> Aggreg.avg_once default intv 0 posx posG
+      | Med -> Aggreg.med_once default intv 0 posx posG
     in
-
-    let init_agg_values = init_agg_val op in
-
-    let add c xlist =
-      try
-        let m = Intmap.find c xlist in
-        Intmap.add c (m+1) (Intmap.remove c xlist)
-      with Not_found -> Intmap.add c 1 xlist
-    in
-
-    let remove c xlist =
-      let m = Intmap.find c xlist in
-      if m = 1 then
-        Intmap.remove c xlist
-      else
-        Intmap.add c (m-1) (Intmap.remove c xlist)
-    in
-
-    let update_agg_values add_flag prev_values cst =
-      match prev_values with
-      | C_aux (c) -> 
-        if add_flag
-        then true, C_aux (c+1)
-        else c = 1, C_aux (c-1)
-      | SA_aux (c, s) ->
-        if add_flag
-        then true, SA_aux (c + 1, Predicate.plus s cst)
-        else c = 1, SA_aux (c - 1, Predicate.minus s cst)
-      | Med_aux (len, xlist) ->
-        if add_flag
-        then true, Med_aux (len + 1, add cst xlist)
-        else len = 1, Med_aux (len - 1, remove cst xlist)
-    in
-
-    let update_state_new_mset state rel =
-      let new_rel = ref [] in
-      Relation.iter
-        (fun tuple ->
-           let gtuple = Tuple.projections posG tuple in
-           let cst = Tuple.get_at_pos tuple posx in
-           new_rel := (tuple, gtuple, cst) :: !new_rel;
-           try
-             let m = Hashtbl.find state.mset tuple in
-             Hashtbl.replace state.mset tuple (m+1);
-             assert (m > 0);
-             assert (Hashtbl.mem state.hres gtuple)
-           with Not_found ->
-             Hashtbl.add state.mset tuple 1;
-             try
-               let agg_values = Hashtbl.find state.hres gtuple in
-               let _, new_values = update_agg_values true agg_values cst in
-               Hashtbl.replace state.hres gtuple new_values
-             with Not_found ->
-               Hashtbl.add state.hres gtuple (init_agg_values cst)
-        ) rel;
-      !new_rel
-    in
-
-    (* optimized implementation for unbounded intervals *)
-    let update_state_new_all state rel =
-      Relation.iter
-        (fun tuple ->
-           let gtuple = Tuple.projections posG tuple in
-           let cst = Tuple.get_at_pos tuple posx in
-           try
-             let agg_values = Hashtbl.find state.hres gtuple in
-             let _, new_values = update_agg_values true agg_values cst in
-             Hashtbl.replace state.hres gtuple new_values
-           with Not_found ->
-             Hashtbl.add state.hres gtuple (init_agg_values cst)
-        ) rel;
-      []
-    in
-
-    let update_state_new =
-      if snd intv = Inf
-      then update_state_new_all
-      else update_state_new_mset
-    in
-
-    let update_state_old state rel =
-      List.iter (fun (tuple, gtuple, cst) ->
-          let m = Hashtbl.find state.mset tuple in
-          assert (m > 0);
-          if m = 1 then
-            begin
-              Hashtbl.remove state.mset tuple;
-              let agg_values = Hashtbl.find state.hres gtuple in
-              let remove, new_values = update_agg_values false agg_values cst in
-              if remove then
-                Hashtbl.remove state.hres gtuple
-              else
-                Hashtbl.replace state.hres gtuple new_values
-            end
-          else
-            Hashtbl.replace state.mset tuple (m-1)
-        ) rel
-    in
-
-    let get_val_func = function
-      | Cnt ->
-        (fun x -> match x with
-           | C_aux c -> Int c
-           | _ -> failwith "internal error"
-        )
-      | Sum ->
-        (fun x -> match x with
-           | SA_aux (_, s) -> s
-           | _ -> failwith "internal error"
-        )
-      | Avg ->
-        (fun x -> match x with
-           | SA_aux (c,s) -> (match s with
-               | Int s -> Float ((float_of_int s) /. (float_of_int c))
-               | Float s -> Float (s /. (float_of_int c))
-               | _ -> failwith "internal error")
-           | _ -> failwith "internal error"
-        )
-      | Med ->
-        (fun x -> match x with
-           | Med_aux (len, xlist) -> median xlist len Predicate.avg
-           | _ -> failwith "internal error"
-        )
-
-      | _ -> failwith "[add_ext, AggOnce] internal error"
-    in
-
-    let get_val = get_val_func op in
-
-    let get_result state =
-      if Hashtbl.length state.hres = 0 then
-        aggreg_empty_rel op glist t_y
-      else
-        let res = ref Relation.empty in
-        Hashtbl.iter
-          (fun gtuple agg_values ->
-             res := Relation.add (Tuple.add_first gtuple (get_val agg_values)) !res
-          )
-          state.hres;
-        !res
-    in
-
-    let init_state = {
-      tw_rels = Queue.create ();
-      other_rels = Queue.create ();
-      mset = Hashtbl.create 1000;
-      hres = Hashtbl.create 100;
-    }
-    in
-
-    EAggOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
-
-
-  | Aggreg (t_y, y, (Min as op), x, glist, Once (intv, f))
-  | Aggreg (t_y, y, (Max as op), x, glist, Once (intv, f)) ->
-
-    let get_comp_func = function
-      | Min -> (fun x y -> - (Stdlib.compare x y))
-      | Max -> (fun x y -> Stdlib.compare x y)
-      | _ -> failwith "[add_ext, AggMMOnce] internal error"
-    in
-
-    (* returns 1 if x better than y, 0 if they are equal, and -1 otherwise *)
-    (* for Min: x is better than y iff x < y *)
-    (* for Max: x is better than y iff x > y *)
-    let is_better = get_comp_func op in
-
-    let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
-    let attr = MFOTL.free_vars f in
-    let posx = Misc.get_pos x attr in
-    let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-
-    (* The invariant is:
-       if (tsq,v) is before (tsq',v')
-       then tsq >= tsq', v' is better or equal than v, and
-       we don't have equality in both cases;
-
-       The first condition is ensured by default, as timestamps are
-       non-decreasing. We have to enforce the second and third
-       consitions. *)
-    let rec update_list_new tsq cst dllist =
-      if not (Dllist.is_empty dllist) then
-        begin
-          let (tsq',m) = Dllist.get_first dllist in
-          let comp = is_better cst m in
-          if comp > 0 then
-            begin
-              ignore(Dllist.pop_first dllist);
-              update_list_new tsq cst dllist
-            end
-          else if comp = 0 then
-            begin
-              if tsq <> tsq' then
-                begin
-                  ignore(Dllist.pop_first dllist);
-                  Dllist.add_first (tsq, cst) dllist
-                end
-                (* else: same element appears previously, no need to
-                   update *)
-            end
-          else
-            Dllist.add_first (tsq, cst) dllist
-        end
-      else
-        Dllist.add_first (tsq, cst) dllist
-    in
-
-    let update_state_new state tsq rel =
-      Relation.iter
-        (fun tuple ->
-           let gtuple = Tuple.projections posG tuple in
-           let cst = Tuple.get_at_pos tuple posx in
-           try
-             let dllist = Hashtbl.find state.tbl gtuple in
-             update_list_new tsq cst dllist
-           with Not_found ->
-             let dllist = Dllist.singleton (tsq, cst) in
-             Hashtbl.add state.tbl gtuple dllist;
-        ) rel
-    in
-
-    let rec update_list_old tsq dllist =
-      if not (Dllist.is_empty dllist) then
-        let tsj,_ = Dllist.get_last dllist in
-        if not (MFOTL.in_left_ext (MFOTL.ts_minus tsq tsj) intv) then
-          begin
-            ignore(Dllist.pop_last dllist);
-            update_list_old tsq dllist
-          end
-    in
-
-    let update_state_old state tsq =
-      Hashtbl.filter_map_inplace (fun _ dllist ->
-          update_list_old tsq dllist;
-          if Dllist.is_empty dllist then None else Some dllist
-        ) state.tbl
-    in
-
-    let get_result state =
-      if Hashtbl.length state.tbl = 0 then
-        aggreg_empty_rel op glist t_y
-      else
-        let res = ref Relation.empty in
-        Hashtbl.iter
-          (fun gtuple dllist ->
-             let _, agg_val = Dllist.get_last dllist in
-             res := Relation.add (Tuple.add_first gtuple agg_val) !res
-          )
-          state.tbl;
-        !res
-    in
-
-    let init_state = {
-      non_tw_rels = Queue.create ();
-      tbl = Hashtbl.create 100;
-    }
-    in
-
-    EAggMMOnce ((add_ext f), intv, init_state, update_state_old, update_state_new, get_result)
-
-
-
-  | Aggreg (t_y, y, Avg, x, glist, f) ->
-    let attr = MFOTL.free_vars f in
-    let posx = Misc.get_pos x attr in
-    let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let init_value = fun v -> (v,1) in
-    let update =
-      fun (os,oc) nv ->
-        match os, nv with
-        | Int s, Int v -> (Int (s + v), oc + 1)
-        | Float s, Float v -> (Float (s +. v), oc + 1)
-        | _ -> failwith "[Aggreg.Avg, update] internal error"
-    in
-    let comp_map = comp_aggreg init_value update posx posG in
-    let comp rel =
-      if Relation.is_empty rel then
-        aggreg_empty_rel Avg glist TFloat 
-      else
-        let map = comp_map rel in
-        let new_rel = ref Relation.empty in
-        Hashtbl.iter (fun tuple (s,c) ->
-            let s' = match s with
-              | Float x -> x
-              | Int x -> float_of_int x
-              | _ -> failwith "[Aggreg.Avg, comp] internal error"
-            in
-            new_rel := Relation.add
-                (Tuple.add_first tuple (Float (s' /. (float_of_int c)))) !new_rel;
-          ) map;
-        !new_rel
-    in
-    EAggreg (comp, add_ext f)
-
-  | Aggreg (t_y, y, Med, x, glist, f) ->
-    let attr = MFOTL.free_vars f in
-    let posx = Misc.get_pos x attr in
-    let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let init_value = fun v -> (1, [v]) in
-    let update = fun (len, old_list) nv -> (len+1, nv::old_list) in
-    let comp_map = comp_aggreg init_value update posx posG in
-    let fmed a b =
-      match a, b with
-      | Int x, Int y -> Float (((float_of_int x) +. (float_of_int y)) /. 2.)
-      | Float x, Float y -> Float ((x+.y)/.2.)
-      | _ -> failwith "[add_ext] type error"
-    in
-    let comp rel =
-      if Relation.is_empty rel then
-        aggreg_empty_rel Med glist TFloat
-      else
-        let map = comp_map rel in
-        let new_rel = ref Relation.empty in
-        Hashtbl.iter (fun tuple (len, vlist) ->
-            let vlist = List.sort Stdlib.compare vlist in
-            let med = Misc.median vlist len fmed in
-            new_rel := Relation.add (Tuple.add_first tuple med) !new_rel;
-          ) map;
-        !new_rel
-    in
-    EAggreg (comp, add_ext f)
+    EAggOnce ({op; default}, state, add_ext f)
 
   | Aggreg (t_y, y, op, x, glist, f)  ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
+    let default = MFOTL.aggreg_default_value op t_y in
     let attr = MFOTL.free_vars f in
     let posx = Misc.get_pos x attr in
     let posG = List.map (fun z -> Misc.get_pos z attr) glist in
-    let init_value, update =
+    let comp =
       match op with
-      | Cnt -> (fun v -> Int 1),
-               (fun ov _ -> match ov with
-                  | Int ov -> Int (ov + 1)
-                  | _ -> failwith "[add_ext, Aggreg] internal error")
-      | Min -> (fun v -> v), (fun ov nv -> min ov nv)
-      | Max -> (fun v -> v), (fun ov nv -> max ov nv)
-      | Sum -> (fun v -> v), (fun ov nv -> match ov, nv with
-          | (Int ov), (Int nv) -> Int (ov + nv)
-          | (Float ov), (Float nv) -> Float (ov +. nv)
-          | _ -> failwith "[add_ext, Aggreg] internal error")
-      | Avg | Med -> failwith "[add_ext, Aggreg] internal error"
+      | Cnt -> Aggreg.cnt default 0 posG
+      | Sum -> Aggreg.sum default 0 posx posG
+      | Min -> Aggreg.min default 0 posx posG
+      | Max -> Aggreg.max default 0 posx posG
+      | Avg -> Aggreg.avg default 0 posx posG
+      | Med -> Aggreg.med default 0 posx posG
     in
-    let comp_map = comp_aggreg init_value update posx posG in
-    let comp rel =
-      if Relation.is_empty rel then
-        aggreg_empty_rel op glist t_y
-      else
-        let map = comp_map rel in
-        let new_rel = ref Relation.empty in
-        Hashtbl.iter (fun tuple v ->
-            new_rel := Relation.add (Tuple.add_first tuple v) !new_rel;
-          ) map;
-        !new_rel
-    in
-    EAggreg (comp, add_ext f)
+    EAggreg ({op; default}, comp, add_ext f)
 
   | Prev (intv, f) ->
     let ff = add_ext f in

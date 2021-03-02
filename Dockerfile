@@ -2,35 +2,33 @@ FROM ocaml/opam2:ubuntu-18.04
 
 RUN sudo apt-get update \
     && sudo apt-get install -y \
-    subversion \
     m4 \
     libgmp-dev \
     && sudo rm -rf /var/lib/apt/lists/* 
 
-# RUN opam init -y \
-RUN opam update \
-    && opam switch create 4.06.1 \
-    && opam install \
-       ocamlfind \
-       qcheck \
-       zarith \
-       num
+RUN rm -rf /home/opam/.opam \
+    && opam init -y \
+    && opam update \
+    && opam switch create 4.11.1 
 
-# RUN useradd -ms /bin/bash monply
+RUN eval $(opam env) 
+
 USER opam
-ENV WDIR /home/opam/monpoly
-RUN mkdir -p ${WDIR}
-WORKDIR ${WDIR}
+ENV MDIR /monpoly
+ENV WDIR /work
+RUN sudo mkdir -p ${WDIR} \
+    && sudo mkdir -p ${MDIR}
+WORKDIR ${MDIR}
 
-ADD . ${WDIR}
+ADD . ${MDIR}
 RUN sudo chown -R opam:opam . \
-    && eval `opam config env` \
-    && make \
-    && make log_generator \
-    && make fma_generator \
-    && sudo cp ./monpoly /usr/local/bin/monpoly \
-    && sudo cp ./verimon /usr/local/bin/verimon \
-    && sudo cp ./tools/gen_log /usr/local/bin/gen_log \
-    && sudo cp ./tools/gen_fma /usr/local/bin/gen_fma \
-    && make clean 
-
+    && opam install --deps-only . 
+RUN eval $(opam env) \
+    && dune build --release \
+    && dune test \
+    && dune install
+    # TODO add log_generator fma_generator and verimon 
+RUN chmod +x ${MDIR}/run.sh \
+    && sudo mv ${MDIR}/run.sh /run.sh
+WORKDIR ${WDIR}
+ENTRYPOINT ["/run.sh"]

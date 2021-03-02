@@ -58,17 +58,10 @@ lemma subtract_simps[simp]:
   "bounded (subtract x I) = bounded I"
   by (transfer; auto simp: downclosed_def)+
 
-definition interval :: "nat \<Rightarrow> enat \<Rightarrow> \<I>" where
-  "interval l r = (if l \<le> r then Abs_\<I> (\<lambda>i. l \<le> i, \<lambda>i. enat i \<le> r, r \<noteq> \<infinity>) else undefined)"
-
-lemma [code abstract]: "Rep_\<I> (interval l r) = (if l \<le> r then (\<lambda>i. l \<le> i, \<lambda>i. enat i \<le> r, r \<noteq> \<infinity>) else Rep_\<I> undefined)"
-  unfolding interval_def
-  apply (cases "enat l \<le> r")
-  apply (simp_all only: if_True if_False)
-  apply (subst Abs_\<I>_inverse[of "(\<lambda>i. l \<le> i, \<lambda>i. enat i \<le> r, r \<noteq> \<infinity>)"])
-  apply (cases r)
-    apply (auto simp: upclosed_def downclosed_def not_le)
-  done
+lift_definition interval :: "nat \<Rightarrow> enat \<Rightarrow> \<I>" is
+  "\<lambda>l. \<lambda>r. (if enat l \<le> r then (\<lambda>i. l \<le> i, \<lambda>i. enat i \<le> r, r \<noteq> \<infinity>) else (\<lambda>_. True, \<lambda>_. True, False))"
+  using enat_iless
+  by (auto simp: upclosed_def downclosed_def not_le order_subst2)
 
 (*<*)
 end

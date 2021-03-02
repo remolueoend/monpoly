@@ -49,15 +49,8 @@ type mformula =
   | MAnd of comp_two * mformula * mformula * ainfo
   | MOr of comp_two * mformula * mformula * ainfo
   | MExists of comp_one * mformula
-  | MAggreg of comp_one * mformula
-  | MAggOnce of mformula * interval * agg_once_state *
-                (agg_once_state -> (tuple * tuple * cst) list -> unit) *
-                (agg_once_state -> relation -> (tuple * tuple * cst) list) *
-                (agg_once_state -> relation)
-  | MAggMMOnce of mformula * interval * aggMM_once_state *
-                  (aggMM_once_state -> timestamp -> unit) *
-                  (aggMM_once_state -> timestamp -> relation -> unit) *
-                  (aggMM_once_state -> relation)
+  | MAggreg of agg_info * Aggreg.aggregator * mformula
+  | MAggOnce of agg_info * Aggreg.once_aggregator * mformula
   | MPrev of interval * mformula * pinfo
   | MNext of interval * mformula * ninfo
   | MSinceA of comp_two * interval * mformula * mformula * sainfo
@@ -84,9 +77,8 @@ let free_vars f =
   | MOr            (c, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
   (* Utilize comp to map away unwanted elements of pvars *)
   | MExists        (c, f1)                -> Helper.rel_to_pvars (c (Helper.pvars_to_rel (get_pred f1)))
-  | MAggreg        (c, f1)                -> get_pred f1
-  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1
-  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1
+  | MAggreg        (_inf, _comp, f1)      -> get_pred f1
+  | MAggOnce       (_inf, _state, f1)     -> get_pred f1
   | MPrev          (_, f1, _)             -> get_pred f1
   | MNext          (_, f1, _)             -> get_pred f1
   | MSinceA        (c, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)
@@ -113,9 +105,8 @@ let predicates f =
   | MOr            (_, f1, f2, _)         -> Misc.union (get_pred f1) (get_pred f2)
   (* Utilize comp to map away unwanted elements of pvars *)
   | MExists        (comp, f1)             -> get_pred f1
-  | MAggreg        (_, f1)                -> get_pred f1
-  | MAggOnce       (f1, _, _, _, _, _)    -> get_pred f1
-  | MAggMMOnce     (f1, _, _, _, _, _)    -> get_pred f1
+  | MAggreg        (_inf, _comp, f1)      -> get_pred f1
+  | MAggOnce       (_inf, _state, f1)     -> get_pred f1
   | MPrev          (_, f1, _)             -> get_pred f1
   | MNext          (_, f1, _)             -> get_pred f1
   | MSinceA        (_, _, f1, f2, _)      -> Misc.union (get_pred f1) (get_pred f2)

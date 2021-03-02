@@ -14,22 +14,7 @@ type ninfo = {mutable init: bool}
 type oainfo = {mutable ores: relation;
          oaauxrels: (timestamp * relation) Mqueue.t}
 
-type t_agg =
-  | C_aux of int 
-  | SA_aux of int * cst
-  | Med_aux of (int * Intmap.int_map)
-
-type agg_once_state = {
-  tw_rels: (timestamp * (tuple * tuple * cst) list) Queue.t;
-  other_rels: (timestamp * relation) Queue.t;
-  mutable mset: (tuple, int) Hashtbl.t;
-  mutable hres: (tuple, t_agg) Hashtbl.t;
-}
-
-type aggMM_once_state = {
-  non_tw_rels: (timestamp * relation) Queue.t;
-  mutable tbl: (tuple, (timestamp * cst) Dllist.dllist) Hashtbl.t;
-}
+type agg_info = {op: agg_op; default: cst}
 
 type ozinfo = {mutable oztree: (int, relation) Sliding.stree;
                mutable ozlast: (int * timestamp * relation) Dllist.cell;
@@ -72,15 +57,8 @@ type extformula =
   | EAnd of comp_two * extformula * extformula * ainfo
   | EOr of comp_two * extformula * extformula * ainfo
   | EExists of comp_one * extformula
-  | EAggreg of comp_one * extformula
-  | EAggOnce of extformula * interval * agg_once_state *
-                (agg_once_state -> (tuple * tuple * cst) list -> unit) *
-                (agg_once_state -> relation -> (tuple * tuple * cst) list) *
-                (agg_once_state -> relation)
-  | EAggMMOnce of extformula * interval * aggMM_once_state *
-                  (aggMM_once_state -> timestamp -> unit) *
-                  (aggMM_once_state -> timestamp -> relation -> unit) *
-                  (aggMM_once_state -> relation)
+  | EAggreg of agg_info * Aggreg.aggregator * extformula
+  | EAggOnce of agg_info * Aggreg.once_aggregator * extformula
   | EPrev of interval * extformula * pinfo
   | ENext of interval * extformula * ninfo
   | ESinceA of comp_two * interval * extformula * extformula * sainfo

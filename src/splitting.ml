@@ -219,9 +219,8 @@ let earliest_cell lastev mf =
 
     | MNeg f1
     | MExists (_, f1)
-    | MAggreg (_, f1)
-    | MAggOnce (f1, _, _, _, _, _)
-    | MAggMMOnce (f1, _, _, _, _, _)
+    | MAggreg (_, _, f1)
+    | MAggOnce (_, _, f1)
     | MPrev (_, f1, _)
     | MNext (_, f1, _)
     | MOnceA (_, f1, _)
@@ -284,13 +283,8 @@ let combine_ainfo ainf1 ainf2 =
   in
   { arel = urel; }
 
-let combine_agg  agg1 agg2 =
-  let other_rels = combine_queues2 agg1.other_rels agg2.other_rels in
-  {tw_rels = agg1.tw_rels; other_rels = other_rels; mset = agg1.mset; hres = agg1.hres }
-
-let combine_aggMM agg1 agg2 =
-  let non_tw_rels = combine_queues2 agg1.non_tw_rels agg2.non_tw_rels in
-  {non_tw_rels = non_tw_rels; tbl = agg1.tbl }
+let combine_agg_once _state1 _state2 =
+  failwith "State merging for aggregations has not been implemented."
 
 let combine_sainfo sainf1 sainf2 =
   let sarel2 = match (sainf1.sarel2, sainf2.sarel2) with
@@ -379,12 +373,10 @@ let comb_m lastev f1 f2 =
       -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
     | (MExists (c, f11), MExists(_,f21))
       -> MExists        (c, comb_m f11 f21)
-    | (MAggreg (c, f11), MAggreg(_,f21))
-      -> MAggreg        (c, comb_m f11 f21)
-    | (MAggOnce (f11, dt, agg1, update_old, update_new, get_result), MAggOnce (f21, _, agg2, _, _, _))
-      -> MAggOnce  (comb_m f11 f21, dt, combine_agg agg1 agg2, update_old, update_new, get_result)
-    | (MAggMMOnce (f11, dt, aggMM1, update_old, update_new, get_result), MAggMMOnce (f21, _, aggMM2, _, _, _))
-      -> MAggMMOnce (comb_m f11 f21, dt, combine_aggMM aggMM1 aggMM2, update_old, update_new, get_result)
+    | (MAggreg (inf, c, f11), MAggreg(_,_,f21))
+      -> MAggreg        (inf, c, comb_m f11 f21)
+    | (MAggOnce (inf, state1, f11), MAggOnce (_, state2, f21))
+      -> MAggOnce  (inf, combine_agg_once state1 state2, comb_m f11 f21)
     | (MPrev (dt, f11, pinf1), MPrev ( _, f21, pinf2))
       -> MPrev          (dt, comb_m f11 f21, pinf1)
     | (MNext (dt, f11, ninf1), MNext ( _, f21, ninf2))
@@ -554,13 +546,8 @@ let split_state mapping mf size =
     in
     res
   in
-  let split_agg  agg p =
-    let res = split_queue2 agg.other_rels p in
-    Array.map (fun e ->   {tw_rels = agg.tw_rels; other_rels = e; mset = agg.mset; hres = agg.hres }) res   
-  in
-  let split_aggMM agg p =
-    let res = split_queue2 agg.non_tw_rels p in      
-    Array.map (fun e -> {non_tw_rels = e; tbl = agg.tbl }) res
+  let split_agg_once _state _p =
+    failwith "State splitting for aggregations has not been implemented."
   in
   let split_sainfo sainf p1 p2 =
     let arr = Array.init size (fun i -> None) in 
@@ -665,16 +652,13 @@ let split_state mapping mf size =
       let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p1 f1))
     | MExists        (c, f1)                                    ->
       (*print_endline "exists";*)
-      Array.map (fun e -> MExists(c, e)) (split_f f1)                                                                    
-    | MAggreg        (c, f1)                                    ->
+      Array.map (fun e -> MExists(c, e)) (split_f f1)
+    | MAggreg        (inf, comp, f1)                            ->
       (*print_endline "aggreg";*)
-      Array.map (fun e -> MAggreg(c, e)) (split_f f1)  
-    | MAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   ->
+      Array.map (fun e -> MAggreg(inf, comp, e)) (split_f f1)
+    | MAggOnce       (inf, state, f1)                           ->
       (*print_endline "aggonce";*)
-      let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_agg agg (p1 f1))   
-    | MAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) ->
-      (*print_endline "aggmmonce";*)
-      let a1 = (split_f f1) in  Array.mapi (fun i e -> MAggMMOnce(a1.(i), dt, e, upd_old, upd_new, get_res)) (split_aggMM aggMM (p1 f1))
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MAggOnce(inf, e, a1.(i))) (split_agg_once state (p1 f1))
     | MPrev          (dt, f1, pinf)                             ->
       (*print_endline "mprev";*)
       Array.map (fun e -> MPrev(dt, e, pinf)) (split_f f1)
@@ -776,9 +760,8 @@ let rec print_ef = function
   | EAnd           (c, f1, f2, ainf)                          -> print_endline "And";print_ef f1; print_ef f2
   | EOr            (c, f1, f2, ainf)                          -> print_endline "Or";print_ef f1; print_ef f2
   | EExists        (c, f1)                                    -> print_endline "Exists";print_ef f1
-  | EAggreg        (c, f1)                                    -> print_endline "Aggreg";print_ef f1
-  | EAggOnce       (f1, dt, agg, upd_old, upd_new, get_res)   -> print_endline "AggOnce";print_ef f1
-  | EAggMMOnce     (f1, dt, aggMM, upd_old, upd_new, get_res) -> print_endline "AggMMOnce";print_ef f1
+  | EAggreg        (_inf, _comp, f1)                          -> print_endline "Aggreg";print_ef f1
+  | EAggOnce       (_inf, _state, f1)                         -> print_endline "AggOnce";print_ef f1
   | EPrev          (dt, f1, pinf)                             -> print_endline "Prev";print_ef f1
   | ENext          (dt, f1, ninf)                             -> print_endline "Next";print_ef f1
   | ESinceA        (c2, dt, f1, f2, sainf)                    -> print_endline "SinceA";print_ef f1;print_ef f2

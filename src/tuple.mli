@@ -80,6 +80,10 @@ val add_first: tuple -> cst -> tuple
   (** [add_first t v] builds a new tuple by adding the value [v] at the
       beginning of [t] *)
 
+val insert: int -> tuple -> cst -> tuple
+(** [insert pos t v] builds a new tuple by inserting the value [v] at position
+    [pos] in [t] *)
+
 (* val duplicate_pos: int -> tuple -> tuple *)
 (*   (\** [duplicate_pos pos t] builds a new tuple by adding the value at *)
 (*       position [pos] in [t] to the end of [t]. *\) *)

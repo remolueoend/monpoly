@@ -20,4 +20,5 @@ Temporal Logic (MFOTL) with aggregations.")
   (depends
     (ocaml (>= 4.11))
     (dune (>= 2.8))
-    dune-build-info))
+    dune-build-info
+    (zarith (>= 1.11))))

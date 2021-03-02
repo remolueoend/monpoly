@@ -133,7 +133,6 @@ let ts_of_string2 err_place str =
       failwith msg
 
 
-
 (* TODO: these function names are not intuitive, because one usually
    does not think in terms of the interval I labelling a temporal
    operator, but instead, in terms of the time window that it defines.
@@ -157,6 +156,8 @@ let in_left_ext v intv =
 
 let in_interval v intv =
   in_right_ext v intv && in_left_ext v intv
+
+let infinite_interval (_, b) = (b = Inf)
 
 let init_interval (_, b) = (CBnd 0., b)
 
