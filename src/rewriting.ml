@@ -37,14 +37,16 @@
  * covered by the GNU Lesser General Public License.
  *)
 
-
-
 open Misc
 open Predicate
 open MFOTL
 open Db
 open Verified
 
+type expand_mode = ExpandAll | ExpandNonshared
+
+let no_rw = ref false
+let unfold_let = ref None
 
 let elim_double_negation f =
   let rec elim = function
@@ -970,10 +972,7 @@ and check_re_let = function
   | Star r -> (check_re_let r)
 
 
-type expand_mode = ExpandAll | ExpandNonshared
-
 let expand_let mode f =
-  let _ = check_let f in
   let rec expand_let_rec m = function
   | Equal _
   | Less _
@@ -1387,7 +1386,7 @@ and type_check_re_formula (sch, vars) = function
  type_check_formula (sch, vars)
 
 
-
+(* TODO: rename this function, as it checks and infers types *)
 let rec check_syntax db_schema f =
   let lift_type t = TCst t in
   let sch = List.map (fun (t, l) -> (t, List.map (fun (_,t) -> lift_type t) l)) db_schema in 
@@ -1415,9 +1414,18 @@ let print_reason str reason =
     print_endline msg
   | None -> failwith "[Rewriting.print_reason] internal error"
 
-let check_formula check_mon s f =
-  (* we first the formula's syntax *)
-  let (fv,f) = check_syntax s f in
+(* TODO: rename; this functions checks and rewrites *)
+let check_formula s f =
+  (* Remember the order of variables in the input formula. This order is used
+     for output, regardless of any transformations that follow. *)
+  let orig_fv = MFOTL.free_vars f in
+
+  (* we first infer and check types *)
+  let (fvtypes,f) = check_syntax s f in
+  let fvtypes = List.map (fun v -> v, List.assoc v fvtypes) orig_fv in
+
+  (* we then check all LET bindings *)
+  ignore (check_let f);
 
   (* we then check that it contains wf intervals *)
   if not (check_intervals f) then
@@ -1434,20 +1442,29 @@ let check_formula check_mon s f =
       exit 1;
     end;
 
-  if !Misc.no_rw then
+  (* Unfold LETs now if requested. Note that this is independent of -no_rw. *)
+  let f = match !unfold_let with
+    | None -> f
+    | Some mode -> expand_let mode f
+  in
+
+  let check_mon = if !Misc.verified then Verified_adapter.is_monitorable s
+    else is_monitorable
+  in
+  if !no_rw then
     let is_mon, reason = check_mon f in
     if !Misc.verbose || !Misc.checkf then
       begin
         MFOTL.printnl_formula "The input formula is:\n  " f;
         print_string "The sequence of free variables is: ";
-        Misc.print_list print_string (MFOTL.free_vars f);
+        Misc.print_list print_string orig_fv;
         print_newline();
         if is_mon then print_endline "The formula is monitorable."
         else print_reason "The formula is NOT monitorable" reason
       end
     else if not is_mon then
       print_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
-    (is_mon, f, fv)
+    (is_mon, f, fvtypes)
   else
     let nf = normalize f in
     if (Misc.debugging Dbg_monitorable) && nf <> f then
@@ -1472,7 +1489,7 @@ let check_formula check_mon s f =
 
         MFOTL.printnl_formula "The analyzed formula is:\n  " rf;
         print_string "The sequence of free variables is: ";
-        Misc.print_list print_string (MFOTL.free_vars f);
+        Misc.print_list print_string orig_fv;
         print_newline()
       end;
 
@@ -1501,5 +1518,5 @@ let check_formula check_mon s f =
     else if !Misc.checkf then
       print_string "The analyzed formula is monitorable.\n";
 
-    let (fv,rf) = check_syntax s rf in
-    (fst is_mon, rf, fv)
+    let (_,rf) = check_syntax s rf in
+    (fst is_mon, rf, fvtypes)

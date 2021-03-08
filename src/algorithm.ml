@@ -1253,7 +1253,7 @@ let add_index f i tsi db =
   in
   update [] f
 
-let process_index ff closed last i =
+let process_index ff posl last i =
   if !Misc.verbose then
     Printf.printf "At time point %d:\n%!" i;
 
@@ -1263,7 +1263,7 @@ let process_index ff closed last i =
     if tsq < MFOTL.ts_max then
       match eval ff crt false with
       | Some rel ->
-        show_results closed i q tsq rel;
+        show_results posl i q tsq rel;
         last := crt;
         if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
         else if Neval.is_last crt then true
@@ -1553,9 +1553,9 @@ let read_m_from_file file =
 
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
-let marshal dumpfile ff closed neval lastev =
+let marshal dumpfile ff posl neval lastev =
   let mf = Marshalling.ext_to_m ff in
-  let value : state = (!Log.last_ts,closed,mf,neval,!lastev,!Log.tp,!Log.last) in
+  let value : state = (!Log.last_ts,posl,mf,neval,!lastev,!Log.tp,!Log.last) in
   (*Printf.printf "Log TP to restore: %d \n" !Log.tp;*)
   dump_to_file dumpfile value
 
@@ -1564,9 +1564,9 @@ let marshal dumpfile ff closed neval lastev =
   information using m_to_ext function.
 *)
 let unmarshal resumefile =
-  let (last_ts,closed,mf,neval,lastev,tp,last) = read_m_from_file resumefile in
+  let (last_ts,posl,mf,neval,lastev,tp,last) = read_m_from_file resumefile in
   let ff = Marshalling.m_to_ext mf in
-  (last_ts,closed,ff,neval,ref lastev,tp,last)
+  (last_ts,posl,ff,neval,ref lastev,tp,last)
 
 
 let create_empty_db =
@@ -1578,13 +1578,13 @@ let add_empty_db ff neval =
   ignore (Neval.append (!crt_tp, !lastts) neval);
   add_index ff !crt_tp !lastts create_empty_db
 
-let catch_up_on_filtered_tp closed i ff neval last =
+let catch_up_on_filtered_tp posl i ff neval last =
   let rec eval_loop () =
     let crt = Neval.get_next !last in
     match eval ff crt false with
     | Some rel ->
       let (q, tsq) = Neval.get_data crt in
-      show_results closed i q tsq rel;
+      show_results posl i q tsq rel;
       last := crt;
       if Neval.is_last crt then () else eval_loop ()
     | None -> ()
@@ -1596,12 +1596,12 @@ let catch_up_on_filtered_tp closed i ff neval last =
   end
   (*print_extf "After catching up \n" ff*)
 
-let split_save filename ff closed i neval last =
+let split_save filename ff posl i neval last =
   let heavy_unproc = !slicer_heavy_unproc in
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  catch_up_on_filtered_tp closed i ff neval last;
+  catch_up_on_filtered_tp posl i ff neval last;
 
   let mf = Marshalling.ext_to_m ff in
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
@@ -1613,7 +1613,7 @@ let split_save filename ff closed i neval last =
   in
 
   Array.iteri (fun index mf ->
-    let value : state = (!Log.last_ts,closed,mf,neval,!last,!Log.tp,!Log.last) in
+    let value : state = (!Log.last_ts,posl,mf,neval,!last,!Log.tp,!Log.last) in
     dump_to_file (format_filename index) value
   ) result;
   Printf.printf "%s\n%!" saved_state_msg
@@ -1623,13 +1623,13 @@ let split_save filename ff closed i neval last =
    Split formula according to split constraints (sconsts). Resulting splits will be stored to files
    with names of index prepended with dumpfile variable.
 *)
-let split_and_save  sconsts dumpfile closed i ff neval last =
-  catch_up_on_filtered_tp closed i ff neval last;
+let split_and_save  sconsts dumpfile posl i ff neval last =
+  catch_up_on_filtered_tp posl i ff neval last;
   let mf = Marshalling.ext_to_m ff in
   let result = Splitting.split_formula sconsts mf in
 
   Array.iteri (fun index mf ->
-  let value : state = (!Log.last_ts,closed,mf,neval,!last,!Log.tp,!Log.last) in
+  let value : state = (!Log.last_ts,posl,mf,neval,!last,!Log.tp,!Log.last) in
   dump_to_file (dumpfile ^ (string_of_int index)) value) result;
   Printf.printf "%s\n%!" saved_state_msg
 
@@ -1647,19 +1647,19 @@ let files_to_list f =
 let merge_formulas files =
   if List.length files == 1 then unmarshal (List.hd files)
   else
-    let (last_ts, closed, mf, neval, lastev, tp, last) =
-      List.fold_right (fun s (last_ts1,closed,mf1,neval,lastev,tp1,last) ->
+    let (last_ts, posl, mf, neval, lastev, tp, last) =
+      List.fold_right (fun s (last_ts1,posl,mf1,neval,lastev,tp1,last) ->
         let (last_ts,_,mf2,_,_,tp,_) = read_m_from_file s in
 
         if (MFOTL.ts_minus last_ts1 last_ts) = 0. then failwith "[merge_formulas] last_ts mismatch";
         if tp1 <> tp then failwith "[merge_formulas] tp mismatch";
 
         let comb_mf = Splitting.comb_m lastev mf1 mf2 in
-        (last_ts,closed, comb_mf, neval, lastev, tp,last)
+        (last_ts,posl, comb_mf, neval, lastev, tp,last)
       ) (List.tl files) (read_m_from_file (List.hd files))
     in
     let ff = Marshalling.m_to_ext mf in
-    (last_ts, closed, ff, neval, ref lastev, tp, last)
+    (last_ts, posl, ff, neval, ref lastev, tp, last)
 
 (* MONITORING FUNCTION *)
 
@@ -1680,7 +1680,7 @@ let checkSplitParam p = match p with
 (* The arguments are:
    lexbuf - the lexer buffer (holds current state of the scanner)
    ff - the extended MFOTL formula
-   closed - true iff [ff] is a ground formula
+   posl - permutation of free variable positions, for output
    neval - the queue of no-yet evaluted indexes/entries
    i - the index of current entry in the log file
    ([i] may be different from the current time point when
@@ -1697,7 +1697,7 @@ let set_slicer_parameters c p =
     Printf.printf "%s\n%!" slicing_parameters_updated_msg
   | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
 
-let rec check_log lexbuf ff closed neval i last =
+let rec check_log lexbuf ff posl neval i last =
   let finish () =
     if Misc.debugging Dbg_perf then
       Perf.check_log_end i !lastts
@@ -1730,8 +1730,8 @@ let rec check_log lexbuf ff closed neval i last =
             | "save_state" ->
               (match parameters with
               | Some (Argument filename) ->
-                catch_up_on_filtered_tp closed !crt_tp ff neval last;
-                marshal filename ff closed neval last;
+                catch_up_on_filtered_tp posl !crt_tp ff neval last;
+                marshal filename ff posl neval last;
                 Printf.printf "%s\n%!" saved_state_msg;
                 loop ffl i
               | None ->
@@ -1751,7 +1751,7 @@ let rec check_log lexbuf ff closed neval i last =
               (match parameters with
               | Some p ->
                 if checkExitParam p then begin
-                  split_save !dumpfile ff closed !crt_tp neval last;
+                  split_save !dumpfile ff posl !crt_tp neval last;
                   loop ffl i
                 end else begin
                   Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
@@ -1765,8 +1765,8 @@ let rec check_log lexbuf ff closed neval i last =
               (match parameters with
               | Some p ->
                 if checkExitParam p then begin
-                  catch_up_on_filtered_tp closed !crt_tp ff neval last;
-                  marshal !dumpfile ff closed neval last;
+                  catch_up_on_filtered_tp posl !crt_tp ff neval last;
+                  marshal !dumpfile ff posl neval last;
                   Printf.printf "%s\n%!" saved_state_msg
                 end
                 else Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
@@ -1777,7 +1777,7 @@ let rec check_log lexbuf ff closed neval i last =
               | Some p ->
                 if checkSplitParam p then
                   split_and_save (get_constraints_split_state p)
-                    !dumpfile closed !crt_tp ff neval last
+                    !dumpfile posl !crt_tp ff neval last
                 else
                   Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
               | None -> Printf.printf "%s: No parameters specified at timepoint %d\n%!" c !tp
@@ -1794,7 +1794,7 @@ let rec check_log lexbuf ff closed neval i last =
           crt_ts := ts;
           add_index ff tp ts db;
           ignore (Neval.append (tp, ts) neval);
-          let cont = process_index ff closed last tp in
+          let cont = process_index ff posl last tp in
           lastts := ts;
           if cont then
             loop ffl (i + 1)
@@ -1819,12 +1819,15 @@ let rec check_log lexbuf ff closed neval i last =
   loop ff i
 
 
-let monitor_lexbuf lexbuf f =
+let monitor_lexbuf lexbuf fv f =
+  (* compute permutation for output tuples *)
+  let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
+  assert (List.length fv_pos = List.length fv);
   let neval = Neval.create () in
   let extf, last = add_ext neval f in
-  check_log lexbuf extf (MFOTL.free_vars f = []) neval 0 last
+  check_log lexbuf extf fv_pos neval 0 last
 
-let monitor_string log f =
+let monitor_string log fv f =
   (let lexbuf = Lexing.from_string log in
    lastts := MFOTL.ts_invalid;
    crt_tp := -1;
@@ -1832,7 +1835,7 @@ let monitor_string log f =
    Log.tp := 0;
    Log.skipped_tps := 0;
    Log.last := false;
-   monitor_lexbuf lexbuf f;
+   monitor_lexbuf lexbuf fv f;
    Lexing.flush_input lexbuf;)
 
 let monitor logfile =
@@ -1868,7 +1871,7 @@ let test_filter logfile f =
 (* Unmarshals formula & state from resume file and then starts processing logfile.
    Note: The whole logfile is read from the start, with old timestamps being skipped  *)
 let resume logfile =
-  let (last_ts,closed,ff,neval,lastev,tp,last) = unmarshal !resumefile in
+  let (last_ts,posl,ff,neval,lastev,tp,last) = unmarshal !resumefile in
 
   (*print_neval "Neval \n" neval;
   print_extf "State \n" ff;*)
@@ -1878,13 +1881,13 @@ let resume logfile =
   Log.last := last;
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" restored_state_msg;
-  check_log lexbuf ff closed neval 0 lastev
+  check_log lexbuf ff posl neval 0 lastev
 
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
 let combine logfile =
   let files = files_to_list !combine_files in
-  let (last_ts,closed,ff,neval,lastev,tp,last) = merge_formulas files in
+  let (last_ts,posl,ff,neval,lastev,tp,last) = merge_formulas files in
 
   (*print_neval "Combined neval \n" neval;
   print_extf "Combined formula \n" ff;*)
@@ -1896,7 +1899,7 @@ let combine logfile =
 
   let lexbuf = Log.log_open logfile in
   Printf.printf "%s\n%!" combined_state_msg;
-  check_log lexbuf ff closed neval 0 lastev
+  check_log lexbuf ff posl neval 0 lastev
 
 
 (* Testing slicer *)
