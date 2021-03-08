@@ -3092,6 +3092,12 @@ lemma j_fixpoint:
    apply force
   by blast
 
+lemma sup_alt:
+  (*assumes "safe_letprev p \<phi>"
+  assumes "pred_mapping (\<lambda> x. x\<le>j) P"*)
+  shows "letprev_progress \<sigma> P p \<phi> j = progress \<sigma> (P(p \<mapsto>j)) \<phi> j"
+  sorry
+
 lemma (in maux) invar_recursion_post: 
   assumes "pred_mapping (\<lambda> x. x\<le>(j-length ts)) P"
   assumes meval: "case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> 
@@ -3122,13 +3128,15 @@ lemma (in maux) invar_recursion_post:
      apply(simp_all del:upt_Suc)
      apply(intro conjI)
        apply force
-subgoal
-      apply(subst sup_is_fixpoint)
-       apply(erule pred_mapping_mono)
-      apply force
+  subgoal
+    apply(subgoal_tac "j \<ge> (Suc (letprev_progress \<sigma> P p \<phi>' j))")
+     apply(simp_all del:upt_Suc)
+     apply(auto simp del:upt_Suc)
+    apply(simp add:letprev_progress_def del:upt_Suc)
   
   sorry
-subgoal
+  subgoal
+    apply(auto simp del:upt_Suc)
       apply(subst sup_is_fixpoint)
        apply(erule pred_mapping_mono)
        apply force
@@ -3167,8 +3175,20 @@ subgoal
   subgoal
        apply(subgoal_tac "j\<le>(Suc (letprev_progress \<sigma> P p \<phi>' j))")
   apply (metis Nat.le_imp_diff_is_add diff_diff_cancel diff_is_0_eq' diff_le_self le_trans plus_nat.add_0 rev_min_pm1)
-
+    apply(subgoal_tac "j<Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
+     apply(cases " ys' = []")
+      apply(auto simp del:upt_Suc)[]
+      apply(subgoal_tac "Suc (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j)=Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
+       apply (metis diff_diff_left diff_is_0_eq nat_le_linear sup_alt)
+      apply(auto simp del:upt_Suc)[]
+    subgoal
+      (*apply(auto intro!: progress_mono_gen simp del:upt_Suc)[]*)
+      sorry
+      apply(auto simp del:upt_Suc)[]
+  subgoal
+(*Need rule that list_all2 _ [a..<b] cs \<Longrightarrow> cs \<noteq> [] \<Longrightarrow> a<b*)
     sorry
+  by linarith
   subgoal
     apply(auto simp del:upt_Suc)
     sorry
