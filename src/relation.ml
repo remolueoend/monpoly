@@ -42,7 +42,6 @@
 open Misc
 open Tuple
 open Predicate
-open MFOTL
 
 
 module Tuple_set = Set.Make (
@@ -63,15 +62,27 @@ let print_rel str rel =
   let rel' = Tuple_set.elements rel in
   Misc.print_list Tuple.print_tuple rel'
 
+let print_rel_perm str posl rel =
+  print_string str;
+  let rel' = Tuple_set.elements rel in
+  Misc.print_list (Tuple.print_tuple_perm posl) rel'
 
 let print_rel4 str rel =
   print_string str;
   let rel' = Tuple_set.elements rel in
   Misc.print_list4 Tuple.print_tuple rel'
 
+let print_rel4_perm str posl rel =
+  print_string str;
+  let rel' = Tuple_set.elements rel in
+  Misc.print_list4 (Tuple.print_tuple_perm posl) rel'
 
 let print_reln str rel =
   print_rel str rel;
+  print_newline()
+
+let print_reln_perm str posl rel =
+  print_rel_perm str posl rel;
   print_newline()
 
 

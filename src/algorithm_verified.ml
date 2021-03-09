@@ -9,8 +9,11 @@ let no_mw = ref false
 module IntMap = Map.Make(struct type t = int let compare = Stdlib.compare end)
 open IntMap
 
-let monitor dbschema logfile f =
-  let closed = (free_vars f = []) in
+let monitor dbschema logfile fv f =
+  (* compute permutation for output tuples *)
+  let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
+  assert (List.length fv_pos = List.length fv);
+
   let cf = convert_formula dbschema f in
   let cf = if !no_mw then cf else Monitor.convert_multiway cf in
   let init_state = Monitor.minit_safe cf in
@@ -40,7 +43,7 @@ let monitor dbschema logfile f =
         List.iter (fun (qtp, rel) ->
             let qts = find qtp tpts in
             if qts < MFOTL.ts_max then
-              show_results closed d.tp qtp qts rel
+              show_results fv_pos d.tp qtp qts rel
           ) vs;
         let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
         loop new_state tpts d.tp d.ts

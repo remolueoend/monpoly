@@ -92,8 +92,6 @@ let statsarg = ref false
 let testfilteropt = ref false
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
-let verified = ref false
-let unfold_let: Rewriting.expand_mode option ref = ref None
 
 (* Printexc.record_backtrace true;; *)
 
@@ -145,23 +143,18 @@ let main () =
     else
       begin
         (* read signature file *)
-        let _ = if is_mfodl f then verified := true else () in
         let sign = Log.get_signature !sigfile in
+        let _ = if is_mfodl f then Misc.verified := true else () in
 
-        let f = match !unfold_let with
-          | Some mode -> expand_let mode f
-          | None -> ignore(check_let f); f
-        in
-        let check_mon = if !verified then Verified_adapter.is_monitorable sign
-                        else is_monitorable in
-        let is_mon, pf, vartypes = check_formula check_mon sign f in
+        let is_mon, pf, vartypes = check_formula sign f in
+        let fv = List.map fst vartypes in
         if !sigout then
           Predicate.print_vartypes_list vartypes
         else if is_mon && not !Misc.checkf then
           begin
             if not !nofilterrelopt then
               Filter_rel.enable pf;
-            if not !nofilteremptytpopt && not !verified then
+            if not !nofilteremptytpopt && not !Misc.verified then
               Filter_empty_tp.enable pf;
             if !testfilteropt then
               Algorithm.test_filter !logfile pf
@@ -175,17 +168,17 @@ let main () =
                 Algorithm.resume !logfile
               else if !Algorithm.combine_files <> "" then
                 Algorithm.combine !logfile
-              else if !verified then
-                Algorithm_verified.monitor sign !logfile pf
+              else if !Misc.verified then
+                Algorithm_verified.monitor sign !logfile fv pf
               else
-                Algorithm.monitor !logfile pf
+                Algorithm.monitor !logfile fv pf
           end
       end
 
 let set_unfold_let = function
-  | "no" -> unfold_let := None
-  | "full" -> unfold_let := Some (Rewriting.ExpandAll)
-  | "smart" -> unfold_let := Some (Rewriting.ExpandNonshared)
+  | "no" -> Rewriting.unfold_let := None
+  | "full" -> Rewriting.unfold_let := Some (Rewriting.ExpandAll)
+  | "smart" -> Rewriting.unfold_let := Some (Rewriting.ExpandNonshared)
   | _ -> ()  (* impossible *)
 
 let _ =
@@ -198,7 +191,7 @@ let _ =
     "-debug", Arg.Set_string debug, "\tChoose unit to debug, among 'eval', 'perf', 'log', 'formula', 'monitorable', 'filter'";
     "-verbose", Arg.Set Misc.verbose, "\tTurn on verbose mode";
     "-check", Arg.Set Misc.checkf, "\tCheck if formula is monitorable (and exit)";
-    "-no_rw", Arg.Set Misc.no_rw, "\tNo formula rewrite";
+    "-no_rw", Arg.Set Rewriting.no_rw, "\tNo formula rewrite";
     "-sigout", Arg.Set sigout, "\tShow the output signature (and exit)";
     "-unix", Arg.Set MFOTL.unixts, "\tTimestamps represent Unix time";
     "-mem", Arg.Set memarg, "\t\tShow maximum memory usage on stderr";
@@ -213,7 +206,7 @@ let _ =
     "-load", Arg.Set_string Algorithm.resumefile, "\tLoad monitor state from file";
     "-combine", Arg.Set_string Algorithm.combine_files, "\tComma separated partition files to combine";
     "-slicer", Arg.Set_string slicer_file, "\tFile used to test slicer";
-    "-verified", Arg.Set verified, "\tRun the Monpoly's verified kernel";
+    "-verified", Arg.Set Misc.verified, "\tRun the Monpoly's verified kernel";
     "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
     "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
       "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";

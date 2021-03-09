@@ -62,16 +62,14 @@ val alrm: bool ref
 
 val verbose: bool ref
 val checkf: bool ref
+val verified: bool ref
 val new_last_ts: bool ref
 val ignore_parse_errors: bool ref
 val stop_at_out_of_order_ts: bool ref
-  (** Flags corresponding to the command-line options: -verbose, -check, -no_new_last_ts, -ignore_errors, -stop_at_out_of_order_ts. *)
-
-val no_rw: bool ref
 val stop_at_first_viol: bool ref
-(** Flags corresponding to the command-line options -verbose,
-    -check, -no_new_last_ts, -no_rw, and -stop_at_last_viol. *)
-
+  (** Flags corresponding to the command-line options: -verbose, -check,
+      -verified, -no_new_last_ts, -ignore_errors, -stop_at_out_of_order_ts,
+      -stop_at_last_viol. *)
 
 val split_debug: string -> unit
 (** [split_debug str] parses the string [str] into a list of debugging

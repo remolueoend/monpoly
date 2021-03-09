@@ -80,13 +80,12 @@ let alrm = ref false
 let verbose = ref false
 let checkf = ref false
 
+let verified = ref false
+
 let new_last_ts = ref true
 
 let ignore_parse_errors = ref false
 let stop_at_out_of_order_ts = ref false
-
-let no_rw = ref false
-
 let stop_at_first_viol = ref false
 
 
