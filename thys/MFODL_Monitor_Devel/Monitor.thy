@@ -3205,10 +3205,10 @@ lemma (in maux) letprev_meval_invar_post:
   letprev_meval_post n R V \<sigma> P \<phi>' m j i' ys' buf' p \<phi>f"
   using assms proof (induction i ys buf p ts db \<phi> arbitrary: i' ys' buf' \<phi>f taking: m j rule: letprev_meval_induct) 
     case (step i ys buf p ts db \<phi>)
-    define xs where "xs = take (j-i) buf"
-    define ysp where "ysp = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>"
-    define buf'' where "buf'' = drop (j - i) buf @ (fst ysp)"
-    then show ?case proof (cases "buf''=[]\<or>i+length xs\<ge> j")
+    moreover define xs where "xs = take (j-i) buf"
+    moreover define ysp where "ysp = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>"
+    moreover define buf'' where "buf'' = drop (j - i) buf @ (fst ysp)"
+    ultimately show ?case proof (cases "buf''=[]\<or>i+length xs\<ge> j")
     case True 
     then show ?thesis
     apply(auto intro!: invar_recursion_post)
