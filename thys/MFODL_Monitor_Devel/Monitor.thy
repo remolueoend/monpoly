@@ -3093,10 +3093,28 @@ lemma j_fixpoint:
   by blast
 
 lemma sup_alt:
-  (*assumes "safe_letprev p \<phi>"
-  assumes "pred_mapping (\<lambda> x. x\<le>j) P"*)
+  assumes "safe_letprev p \<phi>"
+  assumes "pred_mapping (\<lambda> x. x\<le>j) P"
   shows "letprev_progress \<sigma> P p \<phi> j = progress \<sigma> (P(p \<mapsto>j)) \<phi> j"
-  sorry
+  unfolding letprev_progress_def
+  apply (rule antisym)
+   apply (rule cSup_least)
+    apply clarsimp
+    apply (rule progress_fixpoint_ex)
+      apply (auto intro!: progress_le_gen progress_mono_gen)[2]
+    apply fact
+   apply clarsimp
+   apply (erule ord_eq_le_trans)
+  using assms(2) apply (auto simp: reflp_def intro!: progress_mono_gen rel_mapping_map_upd
+      rel_mapping_reflp)[]
+  apply (rule cSup_upper)
+  using assms(2) apply (auto intro!: progress_le_gen)
+  apply (rule antisym)
+   apply (rule order_trans[rotated])
+    apply (rule min_letprev_progress_upd[OF assms(1), where P="P(p \<mapsto> j)", simplified])
+   apply (auto simp: reflp_def intro!: progress_le_gen progress_mono_gen rel_mapping_map_upd
+      rel_mapping_reflp)
+  done
 
 lemma (in maux) invar_recursion_post: 
   assumes "pred_mapping (\<lambda> x. x\<le>(j-length ts)) P"
