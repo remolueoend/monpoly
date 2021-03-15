@@ -37,15 +37,30 @@
  * covered by the GNU Lesser General Public License.
  *)
 
-
-
 open Misc
 open Predicate
 open MFOTL
 
-
 type tuple = cst list
 
+
+(* String interning *)
+
+module StringHash: (Hashtbl.HashedType with type t = string) = struct
+  type t = string
+  let equal = (=)
+  let hash = Hashtbl.hash
+end
+
+module StringCache = Weak.Make(StringHash)
+
+let string_cache = StringCache.create 256
+
+let cached x =
+  if !Misc.str_cache then
+    try StringCache.find string_cache x
+    with Not_found -> (StringCache.add string_cache x; x)
+  else x
 
 
 (* compare two tuples *)
@@ -70,7 +85,7 @@ let make_tuple2 sl tl =
           with Failure _ ->
             raise (Type_error ("Expected type int for field number "
                                ^ (string_of_int !pos))))
-       | TStr -> Str s
+       | TStr -> Str (cached s)
        | TFloat ->
          (try Float (float_of_string s)
           with Failure _ ->

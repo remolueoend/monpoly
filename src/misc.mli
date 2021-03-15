@@ -71,6 +71,9 @@ val stop_at_first_viol: bool ref
       -verified, -no_new_last_ts, -ignore_errors, -stop_at_out_of_order_ts,
       -stop_at_last_viol. *)
 
+val str_cache: bool ref
+  (** Flag corresponding to the -strcache option. *)
+
 val split_debug: string -> unit
 (** [split_debug str] parses the string [str] into a list of debugging
     units used when calling {!debugging}. *)
