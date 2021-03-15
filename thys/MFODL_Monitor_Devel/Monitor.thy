@@ -1676,6 +1676,7 @@ lemma min_letprev_progress_upd:
     done
   done
 
+(*TODO*)
 lemma min_letprev_progress_upd2:
   "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow>
   Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min x (Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j)" 
@@ -3078,40 +3079,15 @@ definition (in maux) letprev_meval_invar where
 "letprev_meval_invar n R V \<sigma> P \<phi>' m j' i ys buf p ts db \<phi> =
 (let j = j' - length ts in
 wf_mformula \<sigma> j (P(p\<mapsto>i)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) m UNIV \<phi> \<phi>' \<and>
-i \<le> min (Suc (progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)) j \<and> \<comment> \<open>needs thought\<close>
+i \<le> min (Suc (progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)) j \<and> 
 list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
       [i..<Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)] buf)"
-(*i \<le> min (Suc (letprev_progress \<sigma> P p \<phi>' j')) j' \<and>*) \<comment> \<open>needs thought\<close>
 definition (in maux) letprev_meval_post where
 "letprev_meval_post n R V \<sigma> P \<phi>' m j i' xs buf' p \<phi>f =
 (wf_mformula \<sigma> j (P(p\<mapsto>i')) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i')) m UNIV \<phi>f \<phi>' \<and>
 i' = min (Suc (letprev_progress \<sigma> P p \<phi>' j)) j \<and>
 list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
       [i'..<Suc (letprev_progress \<sigma> P p \<phi>' j)] buf')" 
-(*"pre_meval_wf_mformula (meval j m) j i ys (if first \<and> j > 0 then [{}] else buf) p ts db \<phi> = 
-    (list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) (map the v) i \<phi>'))
-      [i..<(Sup {i. i\<le>j \<and> i=progress \<sigma> (P(p \<mapsto> min (Suc i) j)) \<phi>' j})] buf)" 
-  by auto*)
-
-(*function letprev_meval0 where
-  "letprev_meval0 eval j i ys buf p ts db \<phi> =
-     (let xs = take (j - i) buf;
-          (ys', \<phi>') = eval ts (Mapping.update p (map (image (map the)) xs) db) \<phi>;
-          buf' = drop (j - i) buf @ ys'
-     in if size \<phi>' \<noteq> size \<phi> then undefined
-     else if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', buf', \<phi>')
-     else letprev_meval0 eval j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>')"
-  by auto
-termination
-  by (relation "measure (\<lambda>(_, j, i, _, buf, _). j - (i + length buf))")
-    (auto simp: not_le min_def diff_less_mono2)*)
-
-(*definition wf_matchF_invar where
-  "wf_matchF_invar \<sigma> V n R I r st i =
-     (case st of (aux, Y) \<Rightarrow> aux \<noteq> [] \<and> wf_matchF_aux \<sigma> V n R I r aux i 0 \<and>
-     (case to_mregex r of (mr, \<phi>s) \<Rightarrow> \<forall>ms \<in> LPDs mr.
-       qtable n (Formula.fv_regex r) (mem_restr R) (\<lambda>v.
-         Regex.match (Formula.sat \<sigma> V (map the v)) (from_mregex ms \<phi>s) i (i + length aux - 1)) (lookup Y ms)))"*)
 
 lemma (in maux) letprev_meval_invar_init: 
   assumes "pred_mapping (\<lambda> x. x\<le>(j-length ts)) P"
@@ -3190,11 +3166,6 @@ lemma (in maux) invar_recursion_invar:
   apply(simp del: upt_Suc)
   done
 
-(*  assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' V db"
-  shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
-    list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'))
-    [progress \<sigma> P \<phi>' j..<progress \<sigma> P' \<phi>' (j + \<delta>)] xs"*)
-
 lemma j_fixpoint: 
   assumes "pred_mapping (\<lambda> x. x\<le>j) P"
   shows "j=Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j \<Longrightarrow> letprev_progress \<sigma> P p \<phi> j = j"
@@ -3238,6 +3209,37 @@ lemma fixpoint_unique:
    apply(simp)
   sorry
 
+
+
+lemma fixpoint_sup:
+  assumes "safe_letprev p \<phi>"
+  assumes "pred_mapping (\<lambda> x. x\<le>j) P"
+  shows "i\<le>j \<Longrightarrow> i= progress \<sigma> (P(p \<mapsto>min (Suc i) j)) \<phi> j \<Longrightarrow> i = letprev_progress \<sigma> P p \<phi> j"
+  using assms
+  apply(subgoal_tac "letprev_progress \<sigma> P p \<phi> j = progress \<sigma> (P(p \<mapsto>min (Suc (letprev_progress \<sigma> P p \<phi> j)) j)) \<phi> j")
+   apply(cases "letprev_progress \<sigma> P p \<phi> j\<le> i")
+    apply(subgoal_tac "letprev_progress \<sigma> P p \<phi> j \<ge> i")
+  apply(simp)
+    apply(intro fixpoint_unique[where i="i" and  i' ="letprev_progress \<sigma> P p \<phi> j" and  p = "p" and \<phi> = "\<phi>" and j = "j" and P = "P" and \<sigma>="\<sigma>"] )
+         apply(assumption)
+         apply(assumption)
+         apply(assumption)
+      apply(simp)
+     apply(assumption)
+    apply(assumption)
+   apply(subgoal_tac "letprev_progress \<sigma> P p \<phi> j \<le> i")
+ apply(simp)
+    apply(intro fixpoint_unique[where i="letprev_progress \<sigma> P p \<phi> j" and  i' ="i" and  p = "p" and \<phi> = "\<phi>" and j = "j" and P = "P" and \<sigma>="\<sigma>"] )
+         apply(assumption)
+       apply(assumption)
+  using sup_letprev_progress_le apply blast
+  using nat_le_linear apply blast
+    apply(assumption)
+   apply(assumption)
+  apply(intro sup_is_fixpoint)
+  apply(assumption)
+  done
+
 lemma (in maux) invar_recursion_post: 
   assumes "safe_letprev p \<phi>'"
   assumes "pred_mapping (\<lambda> x. x\<le>(j-length ts)) P"
@@ -3274,33 +3276,59 @@ lemma (in maux) invar_recursion_post:
     apply(subgoal_tac "j \<ge> (Suc (letprev_progress \<sigma> P p \<phi>' j))")
      apply(simp_all del:upt_Suc)
      apply(auto simp del:upt_Suc)
-     apply(rule antisym)
-     apply(subst sup_alt)
+     apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)\<le>Monitor.progress \<sigma> (P(p \<mapsto> Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)))) \<phi>' j")
+         apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)=Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))) j)) \<phi>' j")
+       apply(rule fixpoint_sup[where i="Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)"])
+          apply(assumption)
+         apply(assumption)
+        apply (metis (no_types) le_add2 pred_mapping_map_upd progress_le_gen rev_min_pm1)
        apply(assumption)
+      apply simp
+     apply(intro progress_mono_gen)
+        apply simp
+       apply (meson pred_mapping_map_upd)
+      apply simp
+     apply(intro rel_mapping_map_upd)
+      apply linarith
+     apply(simp add: rel_mapping_reflp reflp_def)
+apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)\<le>Monitor.progress \<sigma> (P(p \<mapsto> Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)))) \<phi>' j")
+         apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)=Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))) j)) \<phi>' j")
+         apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)=letprev_progress \<sigma> P p \<phi>' j")
+       apply (metis diff_add_inverse diff_add_inverse2 diff_le_self le_diff_iff le_trans)
+       apply(rule fixpoint_sup[where i="Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)"])
+apply(assumption)
+         apply(assumption)
+        apply (metis (no_types) le_add2 pred_mapping_map_upd progress_le_gen rev_min_pm1)
       apply(assumption)
-
-      apply(rule progress_mono_gen)
-         apply(simp)
-        apply (meson pred_mapping_map_upd)
-        apply (meson pred_mapping_map_upd order_refl)
-          apply(rule rel_mapping_map_upd)
-       apply (meson diff_le_self le_trans)
-      apply(simp add: rel_mapping_reflp reflp_def) 
-     apply(subst letprev_progress_def)
-     apply(rule cSup_least)
-      apply clarsimp
-    apply (rule progress_fixpoint_ex)
-      apply (auto intro!: progress_le_gen progress_mono_gen)[3]
-    apply(simp del: upt_Suc)
-  
-  sorry
+     apply simp
+ apply(intro progress_mono_gen)
+        apply simp
+       apply (meson pred_mapping_map_upd)
+      apply simp
+     apply(intro rel_mapping_map_upd)
+      apply linarith
+     apply(simp add: rel_mapping_reflp reflp_def)
+  done
   subgoal
     apply(auto simp del:upt_Suc)
-      apply(subst sup_is_fixpoint)
-       apply(erule pred_mapping_mono)
-       apply force
-  
-    sorry
+   apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)\<le>Monitor.progress \<sigma> (P(p \<mapsto> Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)))) \<phi>' j")
+         apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)=Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))) j)) \<phi>' j")
+             apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)=letprev_progress \<sigma> P p \<phi>' j")
+       apply(simp)
+apply(rule fixpoint_sup[where i="Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)"])
+apply(assumption)
+         apply(assumption)
+        apply (metis (no_types) le_add2 pred_mapping_map_upd progress_le_gen rev_min_pm1)
+      apply(assumption)
+     apply simp
+ apply(intro progress_mono_gen)
+        apply simp
+       apply (meson pred_mapping_map_upd)
+      apply simp
+     apply(intro rel_mapping_map_upd)
+      apply linarith
+     apply(simp add: rel_mapping_reflp reflp_def)
+    done
      apply(intro conjI)
         apply force
   apply(subgoal_tac "j = Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
@@ -3314,8 +3342,12 @@ lemma (in maux) invar_recursion_post:
           apply(simp)
          apply(simp)
   subgoal
-(*Need rule that list_all2 _ [a..<b] cs \<Longrightarrow> cs \<noteq> [] \<Longrightarrow> a<b*)
-    sorry
+    apply(subgoal_tac "j<Suc (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j)")
+     apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j\<le>j")
+      apply (meson le_less_Suc_eq)
+    using progress_le_gen apply fastforce
+        using list_all2_lengthD apply force
+        done
        apply linarith
  apply(subgoal_tac "j = Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
    apply(simp del:upt_Suc)
@@ -3326,8 +3358,13 @@ lemma (in maux) invar_recursion_post:
          apply(simp)
         apply force
   subgoal
-(*Need rule that list_all2 _ [a..<b] cs \<Longrightarrow> cs \<noteq> [] \<Longrightarrow> a<b*)
-    sorry
+    apply(subgoal_tac "j<Suc (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j)")
+     apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j\<le>j")
+      apply (meson le_less_Suc_eq)
+    using progress_le_gen apply fastforce
+     apply(auto simp del:upt_Suc)
+    using list_all2_lengthD apply force
+    done
     apply linarith
      apply(intro conjI)
      apply force
@@ -3341,12 +3378,23 @@ lemma (in maux) invar_recursion_post:
         apply (metis assms(1) diff_diff_left diff_is_0_eq nat_le_linear sup_alt)
        apply(auto simp del:upt_Suc)[]
     subgoal
-      (*apply(auto intro!: progress_mono_gen simp del:upt_Suc)[]*)
-      sorry
+      apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j \<ge> Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)")
+       apply(simp)
+      apply(intro progress_mono_gen)
+         apply(simp)
+        apply (meson pred_mapping_map_upd)
+       apply (meson le_refl pred_mapping_map_upd)
+      apply(intro rel_mapping_map_upd)
+       apply (meson diff_le_self le_trans)
+      apply(simp add: rel_mapping_reflp reflp_def)
+      done
       apply(auto simp del:upt_Suc)[]
-  subgoal
-(*Need rule that list_all2 _ [a..<b] cs \<Longrightarrow> cs \<noteq> [] \<Longrightarrow> a<b*)
-    sorry
+    subgoal
+      apply(subgoal_tac "Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))<Suc (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j)")
+      apply(subgoal_tac "j<Suc (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j)")
+      using less_or_eq_imp_le sup_alt apply presburger
+       apply linarith
+      by (metis length_greater_0_conv length_upt list_all2_lengthD zero_less_diff)
   by linarith
   subgoal
     apply(auto simp del:upt_Suc)
@@ -3382,25 +3430,32 @@ lemma (in maux) invar_recursion_post:
   apply force
   done
 
-find_theorems "upt _ _ @ upt _ _"
 (*  Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j \<ge> min x (Monitor.progress \<sigma> P \<phi> j)" *)
 (*TODO*)
 lemma (in maux) letprev_meval_invar_post: 
-  assumes meval: "case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs)) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>'))) m UNIV \<phi>\<^sub>n \<phi>' \<and>
-    list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'))
+  assumes safe: "safe_letprev p \<phi>'" 
+  assumes "pred_mapping (\<lambda> x. x\<le>(j-length ts)) P"
+  assumes meval: "case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> 
+    wf_mformula \<sigma> j (P(p \<mapsto> i + length xs)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs))) m UNIV \<phi>\<^sub>n \<phi>' \<and>
+    list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>'))
     [progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j-length ts)..<progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' j] xs'"
   shows "letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> \<Longrightarrow>
   (i', ys', buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi> \<Longrightarrow>
   letprev_meval_post n R V \<sigma> P \<phi>' m j i' ys' buf' p \<phi>f"
   using assms proof (induction i ys buf p ts db \<phi> arbitrary: i' ys' buf' \<phi>f taking: m j rule: letprev_meval_induct) 
-    case (step i ys buf p ts db \<phi>)
-    moreover define xs where "xs = take (j-i) buf"
-    moreover define ysp where "ysp = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>"
+  case (step i ys buf p ts db \<phi>)
+    moreover define xsa where "xsa = take (j-i) buf"
+    moreover define ysp where "ysp = meval j m ts (Mapping.update p (map ((`) (map the)) xsa) db) \<phi>"
     moreover define buf'' where "buf'' = drop (j - i) buf @ (fst ysp)"
     ultimately show ?case proof (cases "buf''=[]\<or>i+length xs\<ge> j")
     case True 
-    then show ?thesis
-    apply(auto intro!: invar_recursion_post)
+    then show ?thesis using step 
+      apply(intro invar_recursion_post[where ts="ts" and i="i" and xs = "xs" and db="db" and \<phi> = "\<phi>" and ys="ys" and buf="buf"])
+              apply(assumption)
+                   apply(assumption)
+                   apply(assumption)
+                   apply(assumption)
+    (*apply(auto intro!: invar_recursion_post simp del:upt_Suc fun_upd_apply)*)
     sorry
   next
     case False
