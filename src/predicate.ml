@@ -300,11 +300,11 @@ let string_of_var var =
 let rec string_of_cst qm c =
   let format_string s =
     if s = "" then "\"\""
-      else if qm then
+      else (* if qm then*)
         if (s.[0] = '\"' && s.[(String.length s)-1] = '\"') then
           s
         else "\"" ^ s ^ "\""
-      else s
+      (*      else s*)
   in match c with
   | Int i -> string_of_int i
   | Float f -> Printf.sprintf "%g" f
