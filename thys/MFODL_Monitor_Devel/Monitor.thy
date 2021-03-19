@@ -664,61 +664,107 @@ type_synonym 'a ml\<delta>aux = "(ts \<times> 'a table list \<times> 'a table) l
 
 datatype mconstraint = MEq | MLess | MLessEq
 
+record aggargs =
+  aggargs_cols :: "nat set"
+  aggargs_n :: nat
+  aggargs_g0 :: bool
+  aggargs_y :: nat
+  aggargs_\<omega> :: "Formula.agg_op"
+  aggargs_b :: nat
+  aggargs_f :: "Formula.trm"
+
 record args =
   args_ivl :: \<I>
   args_n :: nat
   args_L :: "nat set"
   args_R :: "nat set"
   args_pos :: bool
+  args_agg :: "aggargs option"
 
-datatype (dead 'msaux, dead 'muaux) mformula =
-  MRel "event_data table"
-  | MPred Formula.name "Formula.trm list"
-  | MLet Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula"
-  | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
-  | MAndAssign "('msaux, 'muaux) mformula" "nat \<times> Formula.trm"
-  | MAndRel "('msaux, 'muaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
-  | MAnds "nat set list" "nat set list" "('msaux, 'muaux) mformula list" "event_data mbufn"
-  | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2"
-  | MNeg "('msaux, 'muaux) mformula"
-  | MExists "('msaux, 'muaux) mformula"
-  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux) mformula"
-  | MPrev \<I> "('msaux, 'muaux) mformula" bool "event_data table list" "ts list"
-  | MNext \<I> "('msaux, 'muaux) mformula" bool "ts list"
-  | MSince args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" "'msaux"
-  | MUntil args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" ts "'muaux"
-  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
-  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" ts "event_data ml\<delta>aux"
+definition init_args :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> bool \<Rightarrow> aggargs option \<Rightarrow> args" where
+  "init_args I n L R pos agg = \<lparr>args_ivl = I, args_n = n, args_L = L, args_R = R,
+    args_pos = pos, args_agg = agg\<rparr>"
 
-record ('msaux, 'muaux) mstate =
-  mstate_i :: nat
-  mstate_m :: "('msaux, 'muaux) mformula"
-  mstate_n :: nat
+definition init_aggargs :: "nat set \<Rightarrow> nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.agg_op \<Rightarrow> nat \<Rightarrow>
+  Formula.trm \<Rightarrow> aggargs" where
+  "init_aggargs cols n g0 y \<omega> b f = \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0,
+    aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
 
-fun eq_rel :: "nat \<Rightarrow> Formula.trm \<Rightarrow> Formula.trm \<Rightarrow> event_data table" where
-  "eq_rel n (Formula.Const x) (Formula.Const y) = (if x = y then unit_table n else empty_table)"
-| "eq_rel n (Formula.Var x) (Formula.Const y) = singleton_table n x y"
-| "eq_rel n (Formula.Const x) (Formula.Var y) = singleton_table n y x"
-| "eq_rel n _ _ = undefined"
+fun meval_trm :: "Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> event_data" where
+  "meval_trm (Formula.Var x) v = the (v ! x)"
+| "meval_trm (Formula.Const x) v = x"
+| "meval_trm (Formula.Plus x y) v = meval_trm x v + meval_trm y v"
+| "meval_trm (Formula.Minus x y) v = meval_trm x v - meval_trm y v"
+| "meval_trm (Formula.UMinus x) v = - meval_trm x v"
+| "meval_trm (Formula.Mult x y) v = meval_trm x v * meval_trm y v"
+| "meval_trm (Formula.Div x y) v = meval_trm x v div meval_trm y v"
+| "meval_trm (Formula.Mod x y) v = meval_trm x v mod meval_trm y v"
+| "meval_trm (Formula.F2i x) v = EInt (integer_of_event_data (meval_trm x v))"
+| "meval_trm (Formula.I2f x) v = EFloat (double_of_event_data (meval_trm x v))"
 
-lemma regex_atms_size: "x \<in> regex.atms r \<Longrightarrow> size x < regex.size_regex size r"
-  by (induct r) auto
+definition packagg :: "args \<Rightarrow> Formula.formula \<Rightarrow> Formula.formula" where
+  "packagg args f = (case args_agg args of None \<Rightarrow> f
+    | Some aggargs \<Rightarrow> Formula.Agg (aggargs_y aggargs)
+      (aggargs_\<omega> aggargs) (aggargs_b aggargs) (aggargs_f aggargs) f)"
 
-lemma atms_size:
-  assumes "x \<in> atms r"
-  shows "size x < Regex.size_regex size r"
-proof -
-  { fix y assume "y \<in> regex.atms r" "case y of formula.Neg z \<Rightarrow> x = z | _ \<Rightarrow> False"
-    then have "size x < Regex.size_regex size r"
-      by (cases y rule: formula.exhaust) (auto dest: regex_atms_size)
-  }
-  with assms show ?thesis
-    unfolding atms_def
-    by (auto split: formula.splits dest: regex_atms_size)
-qed
+definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.agg_op \<Rightarrow> nat \<Rightarrow> Formula.trm \<Rightarrow>
+  event_data table \<Rightarrow> event_data table" where
+  "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = empty_table
+    then singleton_table n y (eval_agg_op \<omega> {})
+    else (\<lambda>k.
+      let group = Set.filter (\<lambda>x. drop b x = k) rel;
+        M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+      in k[y:=Some (eval_agg_op \<omega> M)]) ` (drop b) ` rel)"
 
-definition init_args :: "\<I> \<Rightarrow> nat \<Rightarrow> nat set \<Rightarrow> nat set \<Rightarrow> bool \<Rightarrow> args" where
-  "init_args I n L R pos = \<lparr>args_ivl = I, args_n = n, args_L = L, args_R = R, args_pos = pos\<rparr>"
+definition eval_aggargs :: "aggargs \<Rightarrow> event_data table \<Rightarrow> event_data table" where
+  "eval_aggargs args = eval_agg (aggargs_n args) (aggargs_g0 args)
+    (aggargs_y args) (aggargs_\<omega> args) (aggargs_b args) (aggargs_f args)"
+
+definition eval_args_agg :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table" where
+  "eval_args_agg args X = (case args_agg args of None \<Rightarrow> X | Some aggargs \<Rightarrow> eval_aggargs aggargs X)"
+
+definition type_restr :: "aggargs \<Rightarrow> event_data table \<Rightarrow> bool" where
+  "type_restr args X = (let \<beta> =
+    \<Union>(set ` (restrict (Formula.fv_trm (aggargs_f args)) ` X)) \<subseteq> {None} \<union> Some ` (range EInt) in
+    case aggargs_\<omega> args of (Formula.Agg_Cnt, _) \<Rightarrow> True
+    | _ \<Rightarrow> \<beta>)"
+
+lemma meval_trm_cong: "(\<And>i. i \<in> Formula.fv_trm f \<Longrightarrow> ts ! i = ts' ! i) \<Longrightarrow>
+  meval_trm f ts = meval_trm f ts'"
+  by (induction f ts rule: meval_trm.induct) auto
+
+definition safe_aggargs :: "aggargs \<Rightarrow> bool" where
+  "safe_aggargs args = (aggargs_y args < aggargs_n args \<and>
+    (\<forall>i \<in> aggargs_cols args. i < aggargs_b args + aggargs_n args) \<and>
+    aggargs_y args + aggargs_b args \<notin> aggargs_cols args \<and>
+    {0..<aggargs_b args} \<subseteq> aggargs_cols args \<and>
+    Formula.fv_trm (aggargs_f args) \<subseteq> aggargs_cols args \<and>
+    aggargs_g0 args = (aggargs_cols args \<subseteq> {0..<aggargs_b args}))"
+
+locale maggaux =
+  fixes valid_maggaux :: "aggargs \<Rightarrow> 'maggaux \<Rightarrow> event_data table \<Rightarrow> bool"
+    and init_maggaux :: "aggargs \<Rightarrow> 'maggaux"
+    and insert_maggaux :: "aggargs \<Rightarrow> event_data table \<Rightarrow> 'maggaux \<Rightarrow> 'maggaux"
+    and delete_maggaux :: "aggargs \<Rightarrow> event_data table \<Rightarrow> 'maggaux \<Rightarrow> 'maggaux"
+    and result_maggaux :: "aggargs \<Rightarrow> 'maggaux \<Rightarrow> event_data table"
+  assumes valid_init_maggaux: "safe_aggargs args \<Longrightarrow>
+    valid_maggaux args (init_maggaux args) {}"
+  assumes valid_insert_maggaux: "valid_maggaux args aux X \<Longrightarrow>
+    table (aggargs_b args + aggargs_n args) (aggargs_cols args) Y \<Longrightarrow>
+    type_restr args Y \<Longrightarrow> X \<inter> Y = {} \<Longrightarrow>
+    valid_maggaux args (insert_maggaux args Y aux) (X \<union> Y)"
+  assumes valid_delete_maggaux: "valid_maggaux args aux X \<Longrightarrow>
+    table (aggargs_b args + aggargs_n args) (aggargs_cols args) Y \<Longrightarrow> Y \<subseteq> X \<Longrightarrow>
+    valid_maggaux args (delete_maggaux args Y aux) (X - Y)"
+  assumes valid_result_maggaux: "valid_maggaux args aux X \<Longrightarrow>
+    result_maggaux args aux = eval_aggargs args X"
+
+interpretation maggaux_trivial: maggaux "\<lambda>_ X Y. X = Y" "\<lambda>_. {}" "\<lambda>_ Y X. X \<union> Y" "\<lambda>_ Y X. X - Y"
+  "\<lambda>args X. eval_aggargs args X"
+  by unfold_locales auto
+
+definition "valid_aggargs n R args = (case args of None \<Rightarrow> True | Some aggargs \<Rightarrow>
+  n = aggargs_b aggargs + aggargs_n aggargs \<and> R = aggargs_cols aggargs \<and> safe_aggargs aggargs)"
 
 locale msaux =
   fixes valid_msaux :: "args \<Rightarrow> ts \<Rightarrow> 'msaux \<Rightarrow> event_data msaux \<Rightarrow> bool"
@@ -727,23 +773,25 @@ locale msaux =
     and join_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
     and add_new_table_msaux :: "args \<Rightarrow> event_data table \<Rightarrow> 'msaux \<Rightarrow> 'msaux"
     and result_msaux :: "args \<Rightarrow> 'msaux \<Rightarrow> event_data table"
-  assumes valid_init_msaux: "L \<subseteq> R \<Longrightarrow>
-    valid_msaux (init_args I n L R pos) 0 (init_msaux (init_args I n L R pos)) []"
+  assumes valid_init_msaux: "L \<subseteq> R \<Longrightarrow> valid_aggargs n R agg \<Longrightarrow>
+    valid_msaux (init_args I n L R pos agg) 0 (init_msaux (init_args I n L R pos agg)) []"
   assumes valid_add_new_ts_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> nt \<ge> cur \<Longrightarrow>
     valid_msaux args nt (add_new_ts_msaux args nt aux)
     (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
   assumes valid_join_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow>
     table (args_n args) (args_L args) rel1 \<Longrightarrow>
+    (case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel1) \<Longrightarrow>
     valid_msaux args cur (join_msaux args rel1 aux)
     (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)"
   assumes valid_add_new_table_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow>
     table (args_n args) (args_R args) rel2 \<Longrightarrow>
+    (case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel2) \<Longrightarrow>
     valid_msaux args cur (add_new_table_msaux args rel2 aux)
     (case auxlist of
       [] => [(cur, rel2)]
     | ((t, y) # ts) \<Rightarrow> if t = cur then (t, y \<union> rel2) # ts else (cur, rel2) # auxlist)"
-    and valid_result_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> result_msaux args aux =
-    foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {}"
+  assumes valid_result_msaux: "valid_msaux args cur aux auxlist \<Longrightarrow> result_msaux args aux =
+    eval_args_agg args (foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {})"
 
 fun check_before :: "\<I> \<Rightarrow> ts \<Rightarrow> (ts \<times> 'a \<times> 'b) \<Rightarrow> bool" where
   "check_before I dt (t, a, b) \<longleftrightarrow> \<not> memR I (dt - t)"
@@ -794,18 +842,21 @@ locale muaux =
     and add_new_muaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
     and length_muaux :: "args \<Rightarrow> 'muaux \<Rightarrow> nat"
     and eval_muaux :: "args \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> event_data table list \<times> 'muaux"
-  assumes valid_init_muaux: "L \<subseteq> R \<Longrightarrow>
-    valid_muaux (init_args I n L R pos) 0 (init_muaux (init_args I n L R pos)) []"
+  assumes valid_init_muaux: "L \<subseteq> R \<Longrightarrow> valid_aggargs n R agg \<Longrightarrow>
+    valid_muaux (init_args I n L R pos aggargs) 0 (init_muaux (init_args I n L R pos aggargs)) []"
   assumes valid_add_new_muaux: "valid_muaux args cur aux auxlist \<Longrightarrow>
     table (args_n args) (args_L args) rel1 \<Longrightarrow>
     table (args_n args) (args_R args) rel2 \<Longrightarrow>
+    (case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel1) \<Longrightarrow>
+    (case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel2) \<Longrightarrow>
     nt \<ge> cur \<Longrightarrow>
     valid_muaux args nt (add_new_muaux args rel1 rel2 nt aux)
     (update_until args rel1 rel2 nt auxlist)"
   assumes valid_length_muaux: "valid_muaux args cur aux auxlist \<Longrightarrow> length_muaux args aux = length auxlist"
   assumes valid_eval_muaux: "valid_muaux args cur aux auxlist \<Longrightarrow> nt \<ge> cur \<Longrightarrow>
     eval_muaux args nt aux = (res, aux') \<Longrightarrow> eval_until (args_ivl args) nt auxlist = (res', auxlist') \<Longrightarrow>
-    res = res' \<and> valid_muaux args cur aux' auxlist'"
+    valid_muaux args cur aux' auxlist' \<and> (case args_agg args of None \<Rightarrow> res = res'
+    | Some aggargs \<Rightarrow> res = map (eval_aggargs aggargs) res')"
 
 locale maux = msaux valid_msaux init_msaux add_new_ts_msaux join_msaux add_new_table_msaux result_msaux +
   muaux valid_muaux init_muaux add_new_muaux length_muaux eval_muaux
@@ -820,6 +871,52 @@ locale maux = msaux valid_msaux init_msaux add_new_ts_msaux join_msaux add_new_t
     and add_new_muaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'muaux \<Rightarrow> 'muaux"
     and length_muaux :: "args \<Rightarrow> 'muaux \<Rightarrow> nat"
     and eval_muaux :: "args \<Rightarrow> nat \<Rightarrow> 'muaux \<Rightarrow> event_data table list \<times> 'muaux"
+
+datatype (dead 'msaux, dead 'muaux) mformula =
+  MRel "event_data table"
+  | MPred Formula.name "Formula.trm list"
+  | MLet Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula"
+  | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
+  | MAndAssign "('msaux, 'muaux) mformula" "nat \<times> Formula.trm"
+  | MAndRel "('msaux, 'muaux) mformula" "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm"
+  | MAnds "nat set list" "nat set list" "('msaux, 'muaux) mformula list" "event_data mbufn"
+  | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2"
+  | MNeg "('msaux, 'muaux) mformula"
+  | MExists "('msaux, 'muaux) mformula"
+  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux) mformula"
+  | MPrev \<I> "('msaux, 'muaux) mformula" bool "event_data table list" "ts list"
+  | MNext \<I> "('msaux, 'muaux) mformula" bool "ts list"
+  | MSince args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" "'msaux"
+  | MUntil args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" ts "'muaux"
+  | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
+  | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" ts "event_data ml\<delta>aux"
+
+record ('msaux, 'muaux) mstate =
+  mstate_i :: nat
+  mstate_m :: "('msaux, 'muaux) mformula"
+  mstate_n :: nat
+
+fun eq_rel :: "nat \<Rightarrow> Formula.trm \<Rightarrow> Formula.trm \<Rightarrow> event_data table" where
+  "eq_rel n (Formula.Const x) (Formula.Const y) = (if x = y then unit_table n else empty_table)"
+| "eq_rel n (Formula.Var x) (Formula.Const y) = singleton_table n x y"
+| "eq_rel n (Formula.Const x) (Formula.Var y) = singleton_table n y x"
+| "eq_rel n _ _ = undefined"
+
+lemma regex_atms_size: "x \<in> regex.atms r \<Longrightarrow> size x < regex.size_regex size r"
+  by (induct r) auto
+
+lemma atms_size:
+  assumes "x \<in> atms r"
+  shows "size x < Regex.size_regex size r"
+proof -
+  { fix y assume "y \<in> regex.atms r" "case y of formula.Neg z \<Rightarrow> x = z | _ \<Rightarrow> False"
+    then have "size x < Regex.size_regex size r"
+      by (cases y rule: formula.exhaust) (auto dest: regex_atms_size)
+  }
+  with assms show ?thesis
+    unfolding atms_def
+    by (auto split: formula.splits dest: regex_atms_size)
+qed
 
 fun split_assignment :: "nat set \<Rightarrow> Formula.formula \<Rightarrow> nat \<times> Formula.trm" where
   "split_assignment X (Formula.Eq t1 t2) = (case (t1, t2) of
@@ -862,14 +959,14 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.Prev I \<phi>) = MPrev I (minit0 n \<phi>) True [] []"
 | "minit0 n (Formula.Next I \<phi>) = MNext I (minit0 n \<phi>) True []"
 | "minit0 n (Formula.Since \<phi> I \<psi>) = (if safe_formula \<phi>
-    then MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+    then MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None))
     else (case \<phi> of
-      Formula.Neg \<phi> \<Rightarrow> MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
+      Formula.Neg \<phi> \<Rightarrow> MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None))
     | _ \<Rightarrow> undefined))"
 | "minit0 n (Formula.Until \<phi> I \<psi>) = (if safe_formula \<phi>
-    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True None))
     else (case \<phi> of
-      Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
+      Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False None))
     | _ \<Rightarrow> undefined))"
 | "minit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
@@ -942,27 +1039,6 @@ fun match :: "Formula.trm list \<Rightarrow> event_data list \<Rightarrow> (nat 
         None \<Rightarrow> Some (f(x \<mapsto> y))
       | Some z \<Rightarrow> if y = z then Some f else None))"
 | "match _ _ = None"
-
-fun meval_trm :: "Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> event_data" where
-  "meval_trm (Formula.Var x) v = the (v ! x)"
-| "meval_trm (Formula.Const x) v = x"
-| "meval_trm (Formula.Plus x y) v = meval_trm x v + meval_trm y v"
-| "meval_trm (Formula.Minus x y) v = meval_trm x v - meval_trm y v"
-| "meval_trm (Formula.UMinus x) v = - meval_trm x v"
-| "meval_trm (Formula.Mult x y) v = meval_trm x v * meval_trm y v"
-| "meval_trm (Formula.Div x y) v = meval_trm x v div meval_trm y v"
-| "meval_trm (Formula.Mod x y) v = meval_trm x v mod meval_trm y v"
-| "meval_trm (Formula.F2i x) v = EInt (integer_of_event_data (meval_trm x v))"
-| "meval_trm (Formula.I2f x) v = EFloat (double_of_event_data (meval_trm x v))"
-
-definition eval_agg :: "nat \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> Formula.agg_op \<Rightarrow> nat \<Rightarrow> Formula.trm \<Rightarrow>
-  event_data table \<Rightarrow> event_data table" where
-  "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = empty_table
-    then singleton_table n y (eval_agg_op \<omega> {})
-    else (\<lambda>k.
-      let group = Set.filter (\<lambda>x. drop b x = k) rel;
-        M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-      in k[y:=Some (eval_agg_op \<omega> M)]) ` (drop b) ` rel)"
 
 definition (in maux) update_since :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow>
   'msaux \<Rightarrow> event_data table \<times> 'msaux" where
@@ -2056,11 +2132,15 @@ definition wf_ts :: "Formula.trace \<Rightarrow> _ \<Rightarrow> nat \<Rightarro
 definition wf_ts_regex :: "Formula.trace \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> Formula.formula Regex.regex \<Rightarrow> ts list \<Rightarrow> bool" where
   "wf_ts_regex \<sigma> P j r ts \<longleftrightarrow> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [progress_regex \<sigma> P r j..<j] ts"
 
-abbreviation "Sincep pos \<phi> I \<psi> \<equiv> Formula.Since (if pos then \<phi> else Formula.Neg \<phi>) I \<psi>"
+definition "Sincep pos \<phi> I \<psi> \<equiv> Formula.Since (if pos then \<phi> else Formula.Neg \<phi>) I \<psi>"
+
+definition "agg_b args = (case args_agg args of None \<Rightarrow> 0           | Some aggargs \<Rightarrow> aggargs_b aggargs)"
+definition "agg_n args = (case args_agg args of None \<Rightarrow> args_n args | Some aggargs \<Rightarrow> aggargs_n aggargs)"
 
 definition (in msaux) wf_since_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> event_data list set \<Rightarrow> args \<Rightarrow>
   Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> 'msaux \<Rightarrow> nat \<Rightarrow> bool" where
-  "wf_since_aux \<sigma> V R args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> (\<exists>cur auxlist. valid_msaux args cur aux auxlist \<and>
+  "wf_since_aux \<sigma> V R args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
+    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and> (\<exists>cur auxlist. valid_msaux args cur aux auxlist \<and>
     cur = (if ne = 0 then 0 else \<tau> \<sigma> (ne - 1)) \<and>
     sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
     (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne - 1) \<and> memR (args_ivl args) (\<tau> \<sigma> (ne - 1) - t) \<and> (\<exists>i. \<tau> \<sigma> i = t) \<and>
@@ -2083,7 +2163,8 @@ lemma qtable_mem_restr_UNIV: "qtable n A(mem_restr UNIV) Q X = wf_table n A Q X"
   unfolding qtable_def by auto
 
 lemma (in msaux) wf_since_aux_UNIV_alt:
-  "wf_since_aux \<sigma> V UNIV args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and> (\<exists>cur auxlist. valid_msaux args cur aux auxlist \<and>
+  "wf_since_aux \<sigma> V UNIV args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
+    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and> (\<exists>cur auxlist. valid_msaux args cur aux auxlist \<and>
     cur = (if ne = 0 then 0 else \<tau> \<sigma> (ne - 1)) \<and>
     sorted_wrt (\<lambda>x y. fst x > fst y) auxlist \<and>
     (\<forall>t X. (t, X) \<in> set auxlist \<longrightarrow> ne \<noteq> 0 \<and> t \<le> \<tau> \<sigma> (ne - 1) \<and> memR (args_ivl args) (\<tau> \<sigma> (ne - 1) - t) \<and> (\<exists>i. \<tau> \<sigma> i = t) \<and>
@@ -2107,12 +2188,14 @@ definition wf_until_auxlist :: "Formula.trace \<Rightarrow> _ \<Rightarrow> nat 
 definition (in muaux) wf_until_aux :: "Formula.trace \<Rightarrow> _ \<Rightarrow> event_data list set \<Rightarrow> args \<Rightarrow>
   Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> 'muaux \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_until_aux \<sigma> V R args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
+    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and>
     (\<exists>cur auxlist. valid_muaux args cur aux auxlist \<and>
       cur = (if ne + length auxlist = 0 then 0 else \<tau> \<sigma> (ne + length auxlist - 1)) \<and>
       wf_until_auxlist \<sigma> V (args_n args) R (args_pos args) \<phi> (args_ivl args) \<psi> auxlist ne)"
 
 lemma (in muaux) wf_until_aux_UNIV_alt:
   "wf_until_aux \<sigma> V UNIV args \<phi> \<psi> aux ne \<longleftrightarrow> Formula.fv \<phi> \<subseteq> Formula.fv \<psi> \<and>
+    valid_aggargs (args_n args) (Formula.fv \<psi>) (args_agg args) \<and>
     (\<exists>cur auxlist. valid_muaux args cur aux auxlist \<and>
       cur = (if ne + length auxlist = 0 then 0 else \<tau> \<sigma> (ne + length auxlist - 1)) \<and>
       list_all2 (\<lambda>x i. case x of (t, r1, r2) \<Rightarrow> t = \<tau> \<sigma> i \<and>
@@ -2224,6 +2307,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     args_n args = n \<Longrightarrow>
     args_L args = Formula.fv \<phi>' \<Longrightarrow>
     args_R args = Formula.fv \<psi>' \<Longrightarrow>
+    args_agg args = None \<Longrightarrow>
     Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' \<Longrightarrow>
     wf_mbuf2' \<sigma> P V j n R \<phi>' \<psi>' buf \<Longrightarrow>
     wf_ts \<sigma> P j \<phi>' \<psi>' nts \<Longrightarrow>
@@ -2236,6 +2320,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     args_n args = n \<Longrightarrow>
     args_L args = Formula.fv \<phi>' \<Longrightarrow>
     args_R args = Formula.fv \<psi>' \<Longrightarrow>
+    args_agg args = None \<Longrightarrow>
     Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' \<Longrightarrow>
     wf_mbuf2' \<sigma> P V j n R \<phi>' \<psi>' buf \<Longrightarrow>
     wf_ts \<sigma> P j \<phi>' \<psi>' nts \<Longrightarrow>
@@ -2285,12 +2370,16 @@ lemma wf_ts_regex_0: "wf_ts_regex \<sigma> P 0 r []"
   unfolding wf_ts_regex_def by simp
 
 lemma (in msaux) wf_since_aux_Nil: "Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' \<Longrightarrow>
-  wf_since_aux \<sigma> V R (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b) \<phi>' \<psi>' (init_msaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b)) 0"
-  unfolding wf_since_aux_def by (auto intro!: valid_init_msaux)
+  valid_aggargs n (Formula.fv \<psi>') agg \<Longrightarrow>
+  wf_since_aux \<sigma> V R (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg) \<phi>' \<psi>' (init_msaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg)) 0"
+  unfolding wf_since_aux_def
+  by (auto intro!: valid_init_msaux) (simp add: init_args_def)
 
 lemma (in muaux) wf_until_aux_Nil: "Formula.fv \<phi>' \<subseteq> Formula.fv \<psi>' \<Longrightarrow>
-  wf_until_aux \<sigma> V R (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b) \<phi>' \<psi>' (init_muaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b)) 0"
-  unfolding wf_until_aux_def wf_until_auxlist_def by (auto intro: valid_init_muaux)
+  valid_aggargs n (Formula.fv \<psi>') agg \<Longrightarrow>
+  wf_until_aux \<sigma> V R (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg) \<phi>' \<psi>' (init_muaux (init_args I n (Formula.fv \<phi>') (Formula.fv \<psi>') b agg)) 0"
+  unfolding wf_until_aux_def wf_until_auxlist_def
+  by (auto intro!: valid_init_muaux) (simp add: init_args_def)
 
 lemma wf_matchP_aux_Nil: "wf_matchP_aux \<sigma> V n R I r [] 0"
   unfolding wf_matchP_aux_def by simp
@@ -2397,22 +2486,22 @@ next
   case (Since \<phi> I \<psi>)
   then show ?case
     using wf_since_aux_Nil
-    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+    by (auto simp add: init_args_def valid_aggargs_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
 next
   case (Not_Since \<phi> I \<psi>)
   then show ?case
     using wf_since_aux_Nil
-    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+    by (auto simp add: init_args_def valid_aggargs_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
 next
   case (Until \<phi> I \<psi>)
   then show ?case
-    using valid_length_muaux[OF valid_init_muaux[OF Until(1)]] wf_until_aux_Nil
-    by (auto simp add: init_args_def simp del: progress_simps intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0)
+    using valid_length_muaux[OF valid_init_muaux[OF Until(1), of _ None]] wf_until_aux_Nil
+    by (auto simp add: init_args_def valid_aggargs_def simp del: progress_simps intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0)
 next
   case (Not_Until \<phi> I \<psi>)
   then show ?case
-    using valid_length_muaux[OF valid_init_muaux[OF Not_Until(1)]] wf_until_aux_Nil
-    by (auto simp add: init_args_def simp del: progress_simps intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0)
+    using valid_length_muaux[OF valid_init_muaux[OF Not_Until(1), of _ None]] wf_until_aux_Nil
+    by (auto simp add: init_args_def valid_aggargs_def simp del: progress_simps intro!: wf_mformula.Until wf_mbuf2'_0 wf_ts_0)
 next
   case (MatchP I r)
   then show ?case
@@ -2970,6 +3059,40 @@ lemma map_filter_alt:
   "map f (filter P xs) = concat (map (\<lambda>x. if P x then [f x] else []) xs)"
   by (induct xs) auto
 
+lemma qtable_eval_args_agg:
+  "qtable (agg_n args) (fv (packagg args \<psi>)) (mem_restr R') (\<lambda>v. Formula.sat \<sigma> V (map the v) ne (packagg args \<psi>)) (eval_args_agg args rel)"
+  if q: "qtable (args_n args) (fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) ne \<psi>) rel"
+    and mr: "mem_restr R = mem_restr (lift_envs' (agg_b args) R')"
+    and valid_aggargs: "valid_aggargs (args_n args) (fv \<psi>) (args_agg args)"
+proof (cases "args_agg args")
+  case None
+  have pack: "packagg args \<psi> = \<psi>"
+    by (auto simp add: packagg_def None)
+  have "mem_restr R' = mem_restr R"
+    using mr mem_restr_lift_envs'_append[of "[]" 0]
+    by (auto simp: agg_b_def None)
+  then show ?thesis
+    using q
+    unfolding pack
+    by (auto simp: eval_args_agg_def agg_n_def None)
+next
+  case (Some aggargs)
+  have n_def: "agg_n args = aggargs_n aggargs" "args_n args = aggargs_b aggargs + aggargs_n aggargs"
+    using valid_aggargs
+    by (auto simp: agg_n_def Some valid_aggargs_def)
+  have x_in_colsD: "x + aggargs_b aggargs \<in> aggargs_cols aggargs \<Longrightarrow> x < aggargs_n aggargs" for x
+    using valid_aggargs
+    by (auto simp: valid_aggargs_def Some safe_aggargs_def)
+  show ?thesis
+    unfolding packagg_def Some eval_args_agg_def
+    apply (auto simp del: sat.simps fvi.simps simp: eval_aggargs_def n_def)
+    apply (rule qtable_eval_agg)
+    using q valid_aggargs mr
+    by (auto simp: n_def agg_b_def Some valid_aggargs_def safe_aggargs_def
+        fvi_iff_fv[where ?b="aggargs_b aggargs"] fvi_trm_iff_fv_trm[where ?b="aggargs_b aggargs"]
+        dest!: x_in_colsD)
+qed
+
 lemma (in maux) update_since:
   assumes pre: "wf_since_aux \<sigma> V R args \<phi> \<psi> aux ne"
     and qtable1: "qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) ne \<phi>) rel1"
@@ -2981,8 +3104,11 @@ lemma (in maux) update_since:
     and args_L: "args_L args = Formula.fv \<phi>"
     and args_R: "args_R args = Formula.fv \<psi>"
     and args_pos: "args_pos args = pos"
+    and args_aggargs: "case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel1"
+      "case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel2"
+    and mr: "mem_restr R = mem_restr (lift_envs' (agg_b args) R')"
   shows "wf_since_aux \<sigma> V R args \<phi> \<psi> aux' (Suc ne)"
-    and "qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) ne (Sincep pos \<phi> I \<psi>)) rel"
+    and "qtable (agg_n args) (Formula.fv (packagg args (Sincep pos \<phi> I \<psi>))) (mem_restr R') (\<lambda>v. Formula.sat \<sigma> V (map the v) ne (packagg args (Sincep pos \<phi> I \<psi>))) rel"
 proof -
   let ?wf_tuple = "\<lambda>v. wf_tuple n (Formula.fv \<psi>) v"
   note sat.simps[simp del]
@@ -3006,7 +3132,7 @@ proof -
   have cur_le: "cur \<le> \<tau> \<sigma> ne"
     unfolding cur_def by auto
   have valid0: "valid_msaux args (\<tau> \<sigma> ne) aux0 auxlist0" unfolding aux0_def auxlist0_def
-    using valid_join_msaux[OF valid_add_new_ts_msaux[OF aux(1)], OF cur_le tabL]
+    using valid_join_msaux[OF valid_add_new_ts_msaux[OF aux(1)], OF cur_le tabL args_aggargs(1)]
     by (auto simp: args_ivl args_pos cur_def map_filter_alt split_beta cong: map_cong)
   from aux(2) have sorted_auxlist0: "sorted_wrt (\<lambda>x y. fst x > fst y) auxlist0"
     unfolding auxlist0_def
@@ -3016,7 +3142,7 @@ proof -
       qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. (Formula.sat \<sigma> V (map the v) (ne-1) (Sincep pos \<phi> (point (\<tau> \<sigma> (ne-1) - t)) \<psi>) \<and>
         (if pos then Formula.sat \<sigma> V (map the v) ne \<phi> else \<not> Formula.sat \<sigma> V (map the v) ne \<phi>))) X" for t X
     unfolding auxlist0_def using fvi_subset
-    by (auto 0 1 elim!: qtable_join[OF _ qtable1] simp: sat_the_restrict dest!: aux(3))
+    by (auto 0 1 elim!: qtable_join[OF _ qtable1] simp: sat_the_restrict Sincep_def dest!: aux(3))
   then have in_auxlist0_le_\<tau>: "(t, X) \<in> set auxlist0 \<Longrightarrow> t \<le> \<tau> \<sigma> ne" for t X
     by (meson \<tau>_mono diff_le_self le_trans)
   have in_auxlist0_2: "ne \<noteq> 0 \<Longrightarrow> t \<le> \<tau> \<sigma> (ne-1) \<Longrightarrow> memR I (\<tau> \<sigma> ne - t) \<Longrightarrow> \<exists>i. \<tau> \<sigma> i = t \<Longrightarrow>
@@ -3045,7 +3171,7 @@ proof -
   have tabR: "table (args_n args) (args_R args) rel2"
     using qtable2[unfolded qtable_def] unfolding args_n[symmetric] args_R[symmetric] by simp
   have valid': "valid_msaux args (\<tau> \<sigma> ne) aux' auxlist'"
-    unfolding aux'_eq auxlist'_eq using valid_add_new_table_msaux[OF valid0 tabR]
+    unfolding aux'_eq auxlist'_eq using valid_add_new_table_msaux[OF valid0 tabR args_aggargs(2)]
     by (auto simp: not_le split: list.splits option.splits if_splits)
   have sorted_auxlist': "sorted_wrt (\<lambda>x y. fst x > fst y) auxlist'"
     unfolding auxlist'_eq
@@ -3056,7 +3182,7 @@ proof -
   proof (cases auxlist0)
     case Nil
     with auxlist' show ?thesis
-      unfolding auxlist'_eq using qtable2 auxlist0_Nil
+      unfolding auxlist'_eq Sincep_def using qtable2 auxlist0_Nil
       by (auto simp: zero_enat_def[symmetric] sat_Since_rec[where i=ne]
           dest: spec[of _ "\<tau> \<sigma> (ne-1)"] elim!: qtable_cong[OF _ refl])
   next
@@ -3075,14 +3201,14 @@ proof -
             (Sincep pos \<phi> (point (\<tau> \<sigma> (ne - 1) - fst a)) \<psi>) \<and> (if pos then Formula.sat \<sigma> V (map the v) ne \<phi>
               else \<not> Formula.sat \<sigma> V (map the v) ne \<phi>)) (snd a)"
           by (auto simp: True[symmetric] zero_enat_def[symmetric])
-        ultimately show ?thesis using qtable2 t True
+        ultimately show ?thesis unfolding Sincep_def using qtable2 t True
           by (auto simp: sat_Since_rec[where i=ne] sat.simps(6) elim!: qtable_union)
       next
         case False
         with auxlist' Cons t have "X = rel2"
           unfolding auxlist'_eq using sorted_auxlist0 in_auxlist0_le_\<tau>[of "fst a" "snd a"] by (auto split: if_splits)
         with auxlist' Cons t False show ?thesis
-          unfolding auxlist'_eq using qtable2 in_auxlist0_2[of "\<tau> \<sigma> (ne-1)"] in_auxlist0_le_\<tau>[of "fst a" "snd a"] sorted_auxlist0
+          unfolding auxlist'_eq Sincep_def using qtable2 in_auxlist0_2[of "\<tau> \<sigma> (ne-1)"] in_auxlist0_le_\<tau>[of "fst a" "snd a"] sorted_auxlist0
           by (auto simp: sat_Since_rec[where i=ne] sat.simps(3) zero_enat_def[symmetric] enat_0_iff not_le
               elim!: qtable_cong[OF _ refl] dest!: le_\<tau>_less meta_mp)
       qed
@@ -3095,7 +3221,7 @@ proof -
            (if pos then Formula.sat \<sigma> V (map the v) ne \<phi> else \<not> Formula.sat \<sigma> V (map the v) ne \<phi>)) X"
         using in_auxlist0_1 by blast+
       with False auxlist' Cons show ?thesis
-        unfolding auxlist'_eq using qtable2
+        unfolding auxlist'_eq Sincep_def
         by (fastforce simp: sat_Since_rec[where i=ne] sat.simps(6)
             diff_diff_right[where i="\<tau> \<sigma> ne" and j="\<tau> \<sigma> _ + \<tau> \<sigma> ne" and k="\<tau> \<sigma> (ne - 1)",
               OF trans_le_add2, simplified] elim!: qtable_cong[OF _ refl] order_trans dest: le_\<tau>_less)
@@ -3127,25 +3253,26 @@ proof -
   qed
 
   show "wf_since_aux \<sigma> V R args \<phi> \<psi> aux' (Suc ne)"
+    using pre
     unfolding wf_since_aux_def args_ivl args_n args_pos
     by (auto simp add: fv_sub dest: in_auxlist'_1 intro: sorted_auxlist' in_auxlist'_2
         intro!: exI[of _ auxlist'] valid')
 
-  have "rel = result_msaux args aux'"
+  have rel_msaux: "rel = result_msaux args aux'"
     using result_eq by (auto simp add: update_since_def Let_def)
-  with valid' have rel_eq: "rel = foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist', memL I (\<tau> \<sigma> ne - t)] {}"
-    by (auto simp add: args_ivl valid_result_msaux
-        intro!: arg_cong[where f = "\<lambda>x. foldr (\<union>) (concat x) {}"] split: option.splits)
-  have rel_alt: "rel = (\<Union>(t, rel) \<in> set auxlist'. if memL I (\<tau> \<sigma> ne - t) then rel else empty_table)"
+  have rel_eq: "rel = eval_args_agg args (foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist', memL I (\<tau> \<sigma> ne - t)] {})"
+    by (auto simp: args_ivl rel_msaux valid_result_msaux[OF valid'])
+  have rel_alt: "rel = eval_args_agg args (\<Union>(t, rel) \<in> set auxlist'. if memL I (\<tau> \<sigma> ne - t) then rel else empty_table)"
     unfolding rel_eq
-    by (auto elim!: in_foldr_UnE bexI[rotated] intro!: in_foldr_UnI)
-  show "qtable n (fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) ne (Sincep pos \<phi> I \<psi>)) rel"
-    unfolding rel_alt
+    by (auto elim!: in_foldr_UnE bexI[rotated] intro!: in_foldr_UnI arg_cong[where ?f="\<lambda>x. eval_args_agg args x"])
+  have qtable_since: "qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) ne (Sincep pos \<phi> I \<psi>))
+    (\<Union>(t, rel) \<in> set auxlist'. if memL I (\<tau> \<sigma> ne - t) then rel else empty_table)"
   proof (rule qtable_Union[where Qi="\<lambda>(t, X) v.
     memL I (\<tau> \<sigma> ne - t) \<and> Formula.sat \<sigma> V (map the v) ne (Sincep pos \<phi> (point (\<tau> \<sigma> ne - t)) \<psi>)"],
         goal_cases finite qtable equiv)
     case (equiv v)
     show ?case
+      unfolding Sincep_def
     proof (rule iffI, erule sat_Since_point, goal_cases left right)
       case (left j)
       then show ?case using in_auxlist'_2[of "\<tau> \<sigma> j", OF _ _ exI, OF _ _ refl] by auto
@@ -3154,6 +3281,14 @@ proof -
       then show ?case by (auto elim!: sat_Since_pointD dest: in_auxlist'_1)
     qed
   qed (auto dest!: in_auxlist'_1 intro!: qtable_empty)
+  have fv: "fv (Sincep pos \<phi> I \<psi>) = fv \<psi>"
+    using fvi_subset
+    by (auto simp: Sincep_def)
+  show "qtable (agg_n args) (fv (packagg args (Sincep pos \<phi> I \<psi>))) (mem_restr R') (\<lambda>v. Formula.sat \<sigma> V (map the v) ne (packagg args (Sincep pos \<phi> I \<psi>))) rel"
+    unfolding rel_alt
+    apply (rule qtable_eval_args_agg[OF _ mr])
+    using qtable_since pre
+    by (auto simp: args_n fv wf_since_aux_def)
 qed
 
 lemma fv_regex_from_mregex:
@@ -3773,6 +3908,8 @@ lemma (in muaux) wf_update_until:
     and args_n: "args_n args = n"
     and args_L: "args_L args = Formula.fv \<phi>"
     and args_R: "args_R args = Formula.fv \<psi>"
+    and args_aggargs: "case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel1"
+      "case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs rel2"
     and args_pos: "args_pos args = pos"
   shows "wf_until_aux \<sigma> V R args \<phi> \<psi> (add_new_muaux args rel1 rel2 (\<tau> \<sigma> (ne + length_muaux args aux)) aux) ne \<and>
       length_muaux args (add_new_muaux args rel1 rel2 (\<tau> \<sigma> (ne + length_muaux args aux)) aux) = Suc (length_muaux args aux)"
@@ -3796,7 +3933,7 @@ proof -
   have fv_sub: "fv \<phi> \<subseteq> fv \<psi>"
     using pre unfolding wf_until_aux_def by auto
   moreover have valid_add_new_auxlist: "valid_muaux args nt (add_new_muaux args rel1 rel2 nt aux) auxlist'"
-    using valid_add_new_muaux[OF valid_aux tab1 tab2 nt_mono]
+    using valid_add_new_muaux[OF valid_aux tab1 tab2 args_aggargs nt_mono]
     unfolding auxlist'_def nt_def length_aux .
   moreover have "length_muaux args (add_new_muaux args rel1 rel2 nt aux) = Suc (length_muaux args aux)"
     using valid_length_muaux[OF valid_add_new_auxlist] unfolding length_auxlist' length_aux[symmetric] .
@@ -3806,7 +3943,9 @@ proof -
   moreover have "\<tau> \<sigma> (ne + length auxlist) = (if ne + length auxlist' = 0 then 0 else \<tau> \<sigma> (ne + length auxlist' - 1))"
     unfolding cur length_auxlist' by auto
   ultimately show ?thesis
-    unfolding wf_until_aux_def nt_def length_aux args_ivl args_n args_pos by fast
+    using pre
+    unfolding wf_until_aux_def nt_def length_aux args_ivl args_n args_pos
+    by fast
 qed
 
 lemma length_update_matchF_base:
@@ -4678,6 +4817,220 @@ lemma list_all2_replicate[simp]: "list_all2 R (replicate m x) xs \<longleftright
 lemma list_all2_replicate2[simp]: "list_all2 R xs (replicate m x) \<longleftrightarrow> length xs = m \<and> (\<forall>i < m. R (xs ! i) x)"
   by (auto simp: list_all2_conv_all_nth)
 
+definition "Untilp pos \<phi> I \<psi> \<equiv> Formula.Until (if pos then \<phi> else Formula.Neg \<phi>) I \<psi>"
+
+lemma (in maux) update_until':
+  "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux'' (Monitor.progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
+  Monitor.progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs =
+  Monitor.progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<and>
+  Monitor.progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs + length_muaux args aux'' =
+  min (Monitor.progress \<sigma> P' \<phi>''' (j + \<delta>)) (Monitor.progress \<sigma> P' \<psi>'' (j + \<delta>)) \<and>
+  list_all2 (\<lambda>i. qtable (agg_n args) (fv (packagg args (Untilp pos \<phi>'' I \<psi>''))) (mem_restr R')
+    (\<lambda>v. Formula.sat \<sigma> V (map the v) i (packagg args (Untilp pos \<phi>'' I \<psi>''))))
+    [Monitor.progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j..<
+     Monitor.progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs] zs \<and>
+  nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (min (Monitor.progress \<sigma> P' \<phi>'' (j + \<delta>)) (Monitor.progress \<sigma> P' \<psi>'' (j + \<delta>)))))"
+  if q1: "list_all2 (\<lambda>i. qtable n (fv \<phi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>''))
+    [Monitor.progress \<sigma> P \<phi>'' j..<Monitor.progress \<sigma> P' \<phi>'' (j + \<delta>)] xs"
+  and q2: "list_all2 (\<lambda>i. qtable n (fv \<psi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>''))
+    [Monitor.progress \<sigma> P \<psi>'' j..<Monitor.progress \<sigma> P' \<psi>'' (j + \<delta>)] ys"
+  and eq1: "mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) = (aux', buf', nts')"
+  and eq2: "eval_muaux args nt aux' = (zs, aux'')"
+  and pos: "if args_pos args then \<phi>''' = \<phi>'' else \<phi>''' = Formula.Neg \<phi>''"
+  and wf_envs: "wf_envs \<sigma> j \<delta> P P' V db"
+  and fvi_sub: "Formula.fv \<phi>'' \<subseteq> Formula.fv \<psi>''"
+  and buf: "wf_mbuf2' \<sigma> P V j n R \<phi>'' \<psi>'' buf"
+  and nts: "wf_ts \<sigma> P j \<phi>'' \<psi>'' nts"
+  and aux: "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux (progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j)"
+  and args_ivl: "args_ivl args = I"
+  and args_n: "args_n args = n"
+  and args_L: "args_L args = Formula.fv \<phi>''"
+  and args_R: "args_R args = Formula.fv \<psi>''"
+  and args_pos: "pos = args_pos args"
+  and args_aggargs: "\<And>i X. qtable n (fv \<phi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'') X \<Longrightarrow>
+    case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs X"
+  "\<And>i Y. qtable n (fv \<psi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>'') Y \<Longrightarrow>
+    case args_agg args of None \<Rightarrow> True | Some aggargs \<Rightarrow> type_restr aggargs Y"
+  and t: "t = (if j = 0 then 0 else \<tau> \<sigma> (min (j - 1) (min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j))))"
+  and nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
+  and length_aux: "progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j + length_muaux args aux = min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j)"
+  and nts_snoc: "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j)..< j + \<delta>] (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])"
+  and mr: "mem_restr R = mem_restr (lift_envs' (agg_b args) R')"
+  and valid_aggargs: "valid_aggargs n (fv \<psi>'') (args_agg args)"
+proof -
+  note sat.simps[simp del] progress_simps[simp del]
+  define ne where "ne \<equiv> progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j"
+  have \<phi>''': "progress \<sigma> P \<phi>''' j = progress \<sigma> P \<phi>'' j"  "progress \<sigma> P' \<phi>''' j = progress \<sigma> P' \<phi>'' j" for j
+    using pos by (simp_all add: progress.simps split: if_splits)
+  have update1: "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux' (progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j) \<and>
+      ne + length_muaux args aux' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>))"
+    using q1 q2 nts_snoc length_aux aux fvi_sub args_aggargs
+    unfolding \<phi>'''
+    by (elim mbuf2t_take_add_induct'[where j'="j + \<delta>", OF eq1 wf_envs_P_simps[OF wf_envs] buf])
+      (auto simp: args_n args_L args_R ne_def wf_update_until)
+  then obtain cur auxlist' where valid_aux': "valid_muaux args cur aux' auxlist'" and
+    cur: "cur = (if ne + length auxlist' = 0 then 0 else \<tau> \<sigma> (ne + length auxlist' - 1))" and
+    wf_auxlist': "wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' auxlist' (progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j)"
+    unfolding wf_until_aux_def ne_def args_ivl args_n args_pos by auto
+  have length_aux': "length_muaux args aux' = length auxlist'"
+    using valid_length_muaux[OF valid_aux'] .
+  have nts': "wf_ts \<sigma> P' (j + \<delta>) \<phi>'' \<psi>'' nts'"
+    using q1 q2 wf_envs nts_snoc
+    unfolding wf_ts_def
+    by (intro mbuf2t_take_eqD(2)[OF eq1]) (auto intro: wf_mbuf2_add buf[unfolded wf_mbuf2'_def])
+  have nt: "nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))))"
+    using nts nts' unfolding nt0 t
+    apply (auto simp: hd_append hd_rev last_map wf_ts_def lookahead_ts_def)
+    using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
+    using list_all2_lastD  apply fastforce
+      apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+     apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+    apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
+    done
+  define zs'' where "zs'' = fst (eval_until I nt auxlist')"
+  define auxlist'' where "auxlist'' = snd (eval_until I nt auxlist')"
+  have current_w_le: "cur \<le> nt"
+  proof (cases nts')
+    case Nil
+    have p_le: "min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<le> j + \<delta>"
+      using wf_envs_progress_le[OF wf_envs]
+      by (auto simp: min_def le_diff_conv)
+    then show ?thesis
+      unfolding cur conjunct2[OF update1, unfolded length_aux'] nt
+      using Nil by (auto simp: \<phi>''' intro!: \<tau>_mono)
+  next
+    case (Cons nt x)
+    have progress_\<phi>''': "progress \<sigma> P' \<phi>'' (j + \<delta>) = progress \<sigma> P' \<phi>''' (j + \<delta>)"
+      using pos by (auto simp add: progress.simps split: if_splits)
+    have p_le: "min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<le> j + \<delta>"
+      using wf_envs_progress_le[OF wf_envs]
+      by (auto simp: min_def le_diff_conv)
+    then show ?thesis
+      unfolding cur conjunct2[OF update1, unfolded length_aux'] Cons progress_\<phi>''' nt
+      by (auto split: if_splits list.splits intro!: \<tau>_mono)
+  qed
+  have valid_aux'': "valid_muaux args cur aux'' auxlist''"
+    using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
+    by (auto simp add: args_ivl zs''_def auxlist''_def)
+  have length_aux'': "length_muaux args aux'' = length auxlist''"
+    using valid_length_muaux[OF valid_aux''] .
+  have eq2': "eval_until I nt auxlist' = (zs'', auxlist'')"
+    by (auto simp: zs''_def auxlist''_def)
+  have length_aux'_aux'': "length_muaux args aux' = length zs'' + length_muaux args aux''"
+    using eval_until_length[OF eq2'] unfolding length_aux' length_aux'' .
+  have "i \<le> progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<Longrightarrow>
+      wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' auxlist' i \<Longrightarrow>
+      i + length auxlist' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<Longrightarrow>
+      wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' auxlist'' (progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
+        i + length zs'' = progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<and>
+        i + length zs'' + length auxlist'' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<and>
+        list_all2 (\<lambda>i. qtable n (Formula.fv \<psi>'') (mem_restr R)
+          (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Untilp pos \<phi>'' I \<psi>'')))
+          [i..<i + length zs''] zs''" for i
+    using eq2'
+  proof (induction auxlist' arbitrary: zs'' auxlist'' i)
+    case Nil
+    then show ?case
+      by (auto dest!: antisym[OF progress_Until_le])
+  next
+    case (Cons a aux')
+    obtain t a1 a2 where "a = (t, a1, a2)" by (cases a)
+    from Cons.prems(2) have aux': "wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' aux' (Suc i)"
+      by (rule wf_until_aux_Cons)
+    from Cons.prems(2) have 1: "t = \<tau> \<sigma> i"
+      unfolding \<open>a = (t, a1, a2)\<close> by (rule wf_until_aux_Cons1)
+    from Cons.prems(2) have 3: "qtable n (Formula.fv \<psi>'') (mem_restr R) (\<lambda>v.
+        (\<exists>j\<ge>i. j < Suc (i + length aux') \<and> mem I ((\<tau> \<sigma> j - \<tau> \<sigma> i)) \<and> Formula.sat \<sigma> V (map the v) j \<psi>'' \<and>
+        (\<forall>k\<in>{i..<j}. if pos then Formula.sat \<sigma> V (map the v) k \<phi>'' else \<not> Formula.sat \<sigma> V (map the v) k \<phi>''))) a2"
+      unfolding \<open>a = (t, a1, a2)\<close> by (rule wf_until_aux_Cons3)
+    from Cons.prems(3) have Suc_i_aux': "Suc i + length aux' =
+          min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>))"
+      by simp
+    have "i \<ge> progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>)"
+      if "memR I (nt - t)"
+      using that nts' unfolding wf_ts_def progress.simps nt
+      by (auto simp add: 1 list_all2_Cons2 upt_eq_Cons_conv \<phi>'''
+          intro!: cInf_lower \<tau>_mono diff_le_mono simp del: upt_Suc split: if_splits list.splits)
+    moreover
+    have "Suc i \<le> progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>)"
+      if "\<not> memR I (nt - t)"
+    proof -
+      have \<tau>_min:  "\<tau> \<sigma> (min (j + \<delta> - 1) k) = min (\<tau> \<sigma> (j + \<delta> - 1)) (\<tau> \<sigma> k)" for k
+        by (simp add: min_of_mono monoI)
+      have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi>
+        using wf_envs_progress_le[OF wf_envs, of \<phi>] by auto
+      let ?X = "{i. \<forall>k. k < j + \<delta> \<and> k \<le> min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+      let ?min = "min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))"
+      have "\<tau> \<sigma> ?min \<le> \<tau> \<sigma> (j + \<delta>)"
+        by (rule \<tau>_mono) auto
+      from that have "?X \<noteq> {}"
+        by (auto simp: \<phi>''' intro!: exI[of _ "progress \<sigma> P' \<phi>'' (j + \<delta>)"])
+      show ?thesis
+        using that nts' Suc_i_aux' unfolding wf_ts_def progress.simps nt
+        by (intro cInf_greatest[OF \<open>?X \<noteq> {}\<close>])
+          (auto 0 3 simp: 1 \<phi>''' list_all2_Cons2 upt_eq_Cons_conv
+            simp del: upt_Suc split: list.splits if_splits
+            dest!: spec[of _ "?min"]
+            intro: diff_le_mono diff_le_mono2 order_trans[OF diff_le_mono diff_le_mono2] \<tau>_mono
+            elim!: contrapos_np[of _ "Suc i \<le> _"])
+    qed
+    moreover have *: "k < progress \<sigma> P' \<psi> (j + \<delta>)" if
+      "\<not> memR I (nt - \<tau> \<sigma> i)"
+      "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" "\<psi> = \<psi>'' \<or> \<psi> = \<phi>''" for k \<psi>
+      using that nts' unfolding wf_ts_def nt
+      by (auto simp: list_all2_Cons2 upt_eq_Cons_conv
+          simp del: upt_Suc split: list.splits if_splits
+          elim!: contrapos_np[of _ "k < _"] intro!: diff_le_mono diff_le_mono2)
+    ultimately show ?case using Cons.prems Suc_i_aux'[simplified]
+      unfolding \<open>a = (t, a1, a2)\<close>
+      by (auto simp: \<phi>''' 1 sat.simps upt_conv_Cons Untilp_def dest!: Cons.IH[OF _ aux' Suc_i_aux']
+          simp del: upt_Suc split: if_splits prod.splits intro!: iff_exI qtable_cong[OF 3 refl])
+  qed
+  note wf_aux'' = this[OF wf_envs_progress_mono[OF wf_envs le_add1]
+      wf_auxlist' conjunct2[OF update1, unfolded ne_def length_aux']]
+  have zs_def: "zs = map (eval_args_agg args) zs''"
+    using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
+    unfolding eval_args_agg_def
+    by (auto simp add: args_ivl zs''_def auxlist''_def split: option.splits)
+  have len_zs'': "length zs'' = length zs"
+    by (auto simp: zs_def)
+  have fv: "fv (Untilp pos \<phi>'' I \<psi>'') = fv \<psi>''"
+    using fvi_sub
+    by (auto simp: Untilp_def)
+  have "list_all2 (\<lambda>i. qtable n (fv \<psi>'') (mem_restr R)
+      (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Untilp pos \<phi>'' I \<psi>'')))
+      [Monitor.progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j..<
+       Monitor.progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>)] zs''"
+    using wf_aux''
+    by auto
+  then have list_all2_zs: "list_all2 (\<lambda>i. qtable (agg_n args) (fv (packagg args (Untilp pos \<phi>'' I \<psi>''))) (mem_restr R')
+      (\<lambda>v. Formula.sat \<sigma> V (map the v) i (packagg args (Untilp pos \<phi>'' I \<psi>''))))
+      [Monitor.progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j..<
+       Monitor.progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>)] zs"
+    unfolding zs_def list_all2_map2
+    apply (rule list_all2_mono)
+    apply (rule qtable_eval_args_agg[of _ _ R])
+    apply (auto simp: mr args_n fv valid_aggargs)
+    done
+  have "progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length auxlist' =
+      progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) + length auxlist''"
+    using wf_aux'' valid_aux'' length_aux'_aux''
+    by (auto simp add: ne_def length_aux' length_aux'')
+  then have "cur =
+      (if progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) + length auxlist'' = 0 then 0
+      else \<tau> \<sigma> (progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) + length auxlist'' - 1))"
+    unfolding cur ne_def by auto
+  then show "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux'' (progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
+      progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs = progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<and>
+      progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs + length_muaux args aux'' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<and>
+      list_all2 (\<lambda>i. qtable (agg_n args) (fv (packagg args (Untilp pos \<phi>'' I \<psi>''))) (mem_restr R') (\<lambda>v. Formula.sat \<sigma> V (map the v) i (packagg args (Untilp pos \<phi>'' I \<psi>''))))
+      [progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j..<progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs] zs \<and>
+      nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))))"
+    using aux wf_aux'' valid_aux'' fvi_sub list_all2_zs
+    unfolding wf_until_aux_def length_aux'' args_ivl args_n args_pos nt len_zs''
+    by (auto simp only: length_aux'')
+qed
+
 lemma (in maux) meval:
   assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' V db"
   shows "case meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
@@ -5044,6 +5397,7 @@ next
     and args_n: "args_n args = n"
     and args_L: "args_L args = Formula.fv \<phi>''"
     and args_R: "args_R args = Formula.fv \<psi>''"
+    and args_agg: "args_agg args = None"
     by (cases rule: wf_mformula.cases) (auto)
   have \<phi>''': "Formula.fv \<phi>''' = Formula.fv \<phi>''" "progress \<sigma> P \<phi>''' j = progress \<sigma> P \<phi>'' j"
     "progress \<sigma> P' \<phi>''' j = progress \<sigma> P' \<phi>'' j" for j
@@ -5053,6 +5407,17 @@ next
     using nts unfolding wf_ts_def
     by (subst upt_add_eq_append) (auto simp add: wf_envs_progress_le[THEN min.coboundedI1] list.rel_map
       intro!: list_all2_appendI list.rel_refl)
+  have mr: "mem_restr R = mem_restr (lift_envs' (agg_b args) R)"
+    using mem_restr_lift_envs'_append[of "[]" 0] args_agg
+    by (auto simp: agg_b_def split: option.splits)
+  have agg_n: "agg_n args = n"
+    by (auto simp: agg_n_def args_agg args_n)
+  have Sincep: "packagg args (Sincep (args_pos args) \<phi>'' I \<psi>'') = Formula.Since \<phi>''' I \<psi>''"
+    using pos
+    by (auto simp: packagg_def args_agg Sincep_def)
+  note upd_since = update_since[OF _ _ _ _ _ args_ivl args_n args_L args_R _ _ _ mr,
+      where ?pos="args_pos args",
+      unfolded args_agg agg_n Sincep, simplified]
   have update: "wf_since_aux \<sigma> V R args \<phi>'' \<psi>'' (snd (zs, aux')) (progress \<sigma> P' (Formula.Since \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>''' \<union> Formula.fv \<psi>'') (mem_restr R)
       (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Since \<phi>''' I \<psi>'')))
@@ -5083,12 +5448,12 @@ next
     then show ?case
       using fvi_subset pos
       by (auto 0 3 simp: args_ivl args_n args_L args_R Un_absorb1
-          elim!: update_since(1) list_all2_appendI dest!: update_since(2)
+          elim!: upd_since(1) list_all2_appendI dest!: upd_since(2)
           split: prod.split if_splits)
   qed simp
   with MSince.IH(1)[OF \<phi> MSince.prems(2)] MSince.IH(2)[OF \<psi> MSince.prems(2)] show ?case
     by (auto 0 3 simp: Since_eq split: prod.split
-        intro: wf_mformula.Since[OF _ _ pos pos_eq args_ivl args_n args_L args_R fvi_subset]
+        intro: wf_mformula.Since[OF _ _ pos pos_eq args_ivl args_n args_L args_R args_agg fvi_subset]
         elim: mbuf2t_take_add'(1)[OF _ wf_envs_P_simps[OF MSince.prems(2)] buf nts_snoc]
               mbuf2t_take_add'(2)[OF _ wf_envs_P_simps[OF MSince.prems(2)] buf nts_snoc])
 next
@@ -5107,6 +5472,7 @@ next
     and args_n: "args_n args = n"
     and args_L: "args_L args = Formula.fv \<phi>''"
     and args_R: "args_R args = Formula.fv \<psi>''"
+    and args_agg: "args_agg args = None"
     and t: "t = (if j = 0 then 0 else \<tau> \<sigma> (min (j - 1) (min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j))))"
     and length_aux: "progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j + length_muaux args aux =
       min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j)"
@@ -5118,168 +5484,46 @@ next
     [min (progress \<sigma> P \<phi>'' j) (progress \<sigma> P \<psi>'' j)..< j + \<delta>] (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>])"
     using nts unfolding wf_ts_def
     by (subst upt_add_eq_append) (auto simp add: wf_envs_progress_le[THEN min.coboundedI1] list.rel_map
-      intro!: list_all2_appendI list.rel_refl)
-  {
-    fix xs ys zs aux' aux'' buf' nts' nt
-    assume eval_\<phi>: "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>) = xs"
-      and eval_\<psi>: "fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>) = ys"
-      and nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
-      and eq1: "mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
-        (aux', buf', nts')"
-      and eq2: "eval_muaux args nt aux' = (zs, aux'')"
-    define ne where "ne \<equiv> progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j"
-    have update1: "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux' (progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j) \<and>
-      ne + length_muaux args aux' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>))"
-      using MUntil.IH(1)[OF \<phi> MUntil.prems(2)] eval_\<phi> MUntil.IH(2)[OF \<psi> MUntil.prems(2)]
-        eval_\<psi> nts_snoc nts_snoc length_aux aux fvi_subset
-      unfolding \<phi>'''
-      by (elim mbuf2t_take_add_induct'[where j'="j + \<delta>", OF eq1 wf_envs_P_simps[OF MUntil.prems(2)] buf])
-        (auto simp: args_n args_L args_R ne_def wf_update_until)
-    then obtain cur auxlist' where valid_aux': "valid_muaux args cur aux' auxlist'" and
-      cur: "cur = (if ne + length auxlist' = 0 then 0 else \<tau> \<sigma> (ne + length auxlist' - 1))" and
-      wf_auxlist': "wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' auxlist' (progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j)"
-      unfolding wf_until_aux_def ne_def args_ivl args_n args_pos by auto
-    have length_aux': "length_muaux args aux' = length auxlist'"
-      using valid_length_muaux[OF valid_aux'] .
-    have nts': "wf_ts \<sigma> P' (j + \<delta>) \<phi>'' \<psi>'' nts'"
-      using MUntil.IH(1)[OF \<phi> MUntil.prems(2)] eval_\<phi> MUntil.IH(2)[OF \<psi> MUntil.prems(2)]
-        MUntil.prems(2) eval_\<psi> nts_snoc
-      unfolding wf_ts_def
-      by (intro mbuf2t_take_eqD(2)[OF eq1]) (auto intro: wf_mbuf2_add buf[unfolded wf_mbuf2'_def])
-    have nt: "nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))))"
-      using nts nts' unfolding nt0 t
-      apply (auto simp: hd_append hd_rev last_map wf_ts_def lookahead_ts_def)
-      using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
-      using list_all2_lastD  apply fastforce
-        apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
-       apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
-      apply (metis (mono_tags, lifting) add_gr_0 list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
-      done
-    define zs'' where "zs'' = fst (eval_until I nt auxlist')"
-    define auxlist'' where "auxlist'' = snd (eval_until I nt auxlist')"
-    have current_w_le: "cur \<le> nt"
-    proof (cases nts')
-      case Nil
-      have p_le: "min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<le> j + \<delta>"
-        using wf_envs_progress_le[OF MUntil.prems(2)]
-        by (auto simp: min_def le_diff_conv)
-      then show ?thesis
-        unfolding cur conjunct2[OF update1, unfolded length_aux'] nt
-        using Nil by (auto simp: \<phi>''' intro!: \<tau>_mono)
-    next
-      case (Cons nt x)
-      have progress_\<phi>''': "progress \<sigma> P' \<phi>'' (j + \<delta>) = progress \<sigma> P' \<phi>''' (j + \<delta>)"
-        using pos by (auto simp add: progress.simps split: if_splits)
-      have p_le: "min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<le> j + \<delta>"
-        using wf_envs_progress_le[OF MUntil.prems(2)]
-        by (auto simp: min_def le_diff_conv)
-      then show ?thesis
-        unfolding cur conjunct2[OF update1, unfolded length_aux'] Cons progress_\<phi>''' nt
-        by (auto split: if_splits list.splits intro!: \<tau>_mono)
-    qed
-    have valid_aux'': "valid_muaux args cur aux'' auxlist''"
-      using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
-      by (auto simp add: args_ivl zs''_def auxlist''_def)
-    have length_aux'': "length_muaux args aux'' = length auxlist''"
-      using valid_length_muaux[OF valid_aux''] .
-    have eq2': "eval_until I nt auxlist' = (zs, auxlist'')"
-      using valid_eval_muaux[OF valid_aux' current_w_le eq2, of zs'' auxlist'']
-      by (auto simp add: args_ivl zs''_def auxlist''_def)
-    have length_aux'_aux'': "length_muaux args aux' = length zs + length_muaux args aux''"
-      using eval_until_length[OF eq2'] unfolding length_aux' length_aux'' .
-    have "i \<le> progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<Longrightarrow>
-      wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' auxlist' i \<Longrightarrow>
-      i + length auxlist' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<Longrightarrow>
-      wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' auxlist'' (progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
-        i + length zs = progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<and>
-        i + length zs + length auxlist'' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<and>
-        list_all2 (\<lambda>i. qtable n (Formula.fv \<psi>'') (mem_restr R)
-          (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Formula.Until (if pos then \<phi>'' else Formula.Neg \<phi>'') I \<psi>'')))
-          [i..<i + length zs] zs" for i
-      using eq2'
-    proof (induction auxlist' arbitrary: zs auxlist'' i)
-      case Nil
-      then show ?case
-        by (auto dest!: antisym[OF progress_Until_le])
-    next
-      case (Cons a aux')
-      obtain t a1 a2 where "a = (t, a1, a2)" by (cases a)
-      from Cons.prems(2) have aux': "wf_until_auxlist \<sigma> V n R pos \<phi>'' I \<psi>'' aux' (Suc i)"
-        by (rule wf_until_aux_Cons)
-      from Cons.prems(2) have 1: "t = \<tau> \<sigma> i"
-        unfolding \<open>a = (t, a1, a2)\<close> by (rule wf_until_aux_Cons1)
-      from Cons.prems(2) have 3: "qtable n (Formula.fv \<psi>'') (mem_restr R) (\<lambda>v.
-        (\<exists>j\<ge>i. j < Suc (i + length aux') \<and> mem I ((\<tau> \<sigma> j - \<tau> \<sigma> i)) \<and> Formula.sat \<sigma> V (map the v) j \<psi>'' \<and>
-        (\<forall>k\<in>{i..<j}. if pos then Formula.sat \<sigma> V (map the v) k \<phi>'' else \<not> Formula.sat \<sigma> V (map the v) k \<phi>''))) a2"
-        unfolding \<open>a = (t, a1, a2)\<close> by (rule wf_until_aux_Cons3)
-      from Cons.prems(3) have Suc_i_aux': "Suc i + length aux' =
-          min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>))"
-        by simp
-      have "i \<ge> progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>)"
-        if "memR I (nt - t)"
-        using that nts' unfolding wf_ts_def progress.simps nt
-        by (auto simp add: 1 list_all2_Cons2 upt_eq_Cons_conv \<phi>'''
-          intro!: cInf_lower \<tau>_mono diff_le_mono simp del: upt_Suc split: if_splits list.splits)
-      moreover
-      have "Suc i \<le> progress \<sigma> P' (Formula.Until \<phi>''' I \<psi>'') (j + \<delta>)"
-        if "\<not> memR I (nt - t)"
-      proof -
-        have \<tau>_min:  "\<tau> \<sigma> (min (j + \<delta> - 1) k) = min (\<tau> \<sigma> (j + \<delta> - 1)) (\<tau> \<sigma> k)" for k
-          by (simp add: min_of_mono monoI)
-        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi>
-          using wf_envs_progress_le[OF MUntil.prems(2), of \<phi>] by auto
-        let ?X = "{i. \<forall>k. k < j + \<delta> \<and> k \<le> min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
-        let ?min = "min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))"
-        have "\<tau> \<sigma> ?min \<le> \<tau> \<sigma> (j + \<delta>)"
-          by (rule \<tau>_mono) auto
-        from that have "?X \<noteq> {}"
-          by (auto simp: \<phi>''' intro!: exI[of _ "progress \<sigma> P' \<phi>'' (j + \<delta>)"])
-        show ?thesis
-          using that nts' Suc_i_aux' unfolding wf_ts_def progress.simps nt
-          by (intro cInf_greatest[OF \<open>?X \<noteq> {}\<close>])
-            (auto 0 3 simp: 1 \<phi>''' list_all2_Cons2 upt_eq_Cons_conv
-              simp del: upt_Suc split: list.splits if_splits
-              dest!: spec[of _ "?min"]
-              intro: diff_le_mono diff_le_mono2 order_trans[OF diff_le_mono diff_le_mono2] \<tau>_mono
-              elim!: contrapos_np[of _ "Suc i \<le> _"])
-      qed
-      moreover have *: "k < progress \<sigma> P' \<psi> (j + \<delta>)" if
-        "\<not> memR I (nt - \<tau> \<sigma> i)"
-        "memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)" "\<psi> = \<psi>'' \<or> \<psi> = \<phi>''" for k \<psi>
-        using that nts' unfolding wf_ts_def nt
-        by (auto simp: list_all2_Cons2 upt_eq_Cons_conv
-          simp del: upt_Suc split: list.splits if_splits
-          elim!: contrapos_np[of _ "k < _"] intro!: diff_le_mono diff_le_mono2)
-      ultimately show ?case using Cons.prems Suc_i_aux'[simplified]
-        unfolding \<open>a = (t, a1, a2)\<close>
-        by (auto simp: \<phi>''' 1 sat.simps upt_conv_Cons dest!: Cons.IH[OF _ aux' Suc_i_aux']
-            simp del: upt_Suc split: if_splits prod.splits intro!: iff_exI qtable_cong[OF 3 refl])
-    qed
-    note wf_aux'' = this[OF wf_envs_progress_mono[OF MUntil.prems(2) le_add1]
-      wf_auxlist' conjunct2[OF update1, unfolded ne_def length_aux']]
-    have "progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length auxlist' =
-      progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) + length auxlist''"
-      using wf_aux'' valid_aux'' length_aux'_aux''
-      by (auto simp add: ne_def length_aux' length_aux'')
-    then have "cur =
-      (if progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) + length auxlist'' = 0 then 0
-      else \<tau> \<sigma> (progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) + length auxlist'' - 1))"
-      unfolding cur ne_def by auto
-    then have "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux'' (progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
+        intro!: list_all2_appendI list.rel_refl)
+  have mr: "mem_restr R = mem_restr (lift_envs' (agg_b args) R)"
+    using mem_restr_lift_envs'_append[of "[]" 0]
+    by (auto simp: agg_b_def args_agg)
+  have valid: "valid_aggargs n (fv \<psi>'') (args_agg args)"
+    using aux
+    by (auto simp: wf_until_aux_def args_n)
+  define xs where "xs = fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>)"
+  define ys where "ys = fst (meval n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>)"
+  have list_all2_xs: "list_all2 (\<lambda>i. qtable n (fv \<phi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>''))
+    [Monitor.progress \<sigma> P \<phi>'' j..<Monitor.progress \<sigma> P' \<phi>'' (j + \<delta>)] xs"
+    using MUntil(1)[OF \<phi> MUntil(4)]
+    by (auto simp: xs_def split: prod.splits)
+  have list_all2_ys: "list_all2 (\<lambda>i. qtable n (fv \<psi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>''))
+    [Monitor.progress \<sigma> P \<psi>'' j..<Monitor.progress \<sigma> P' \<psi>'' (j + \<delta>)] ys"
+    using MUntil(2)[OF \<psi> MUntil(4)]
+    by (auto simp: ys_def split: prod.splits)
+  have pack: "packagg args (Untilp pos \<phi>'' I \<psi>'') = Formula.Until (if pos then \<phi>'' else Formula.Neg \<phi>'') I \<psi>''"
+    by (auto simp: packagg_def args_agg Untilp_def)
+  have fvi_subsume: "fv \<phi>'' \<union> fv \<psi>'' = fv \<psi>''"
+    using fvi_subset
+    by auto
+  have update:
+    "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux'' (progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>)) \<and>
       progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs = progress \<sigma> P' (formula.Until \<phi>''' I \<psi>'') (j + \<delta>) \<and>
       progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs + length_muaux args aux'' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<and>
       list_all2 (\<lambda>i. qtable n (fv \<psi>'') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (formula.Until (if pos then \<phi>'' else formula.Neg \<phi>'') I \<psi>'')))
       [progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j..<progress \<sigma> P (formula.Until \<phi>''' I \<psi>'') j + length zs] zs \<and>
       nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))))"
-      using wf_aux'' valid_aux'' fvi_subset
-      unfolding wf_until_aux_def length_aux'' args_ivl args_n args_pos nt by (auto simp only: length_aux'')
-  }
-  note update = this[OF refl refl refl, rotated]
+    if nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
+      and eq1: "mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) = (aux', buf', nts')"
+      and eq2: "eval_muaux args nt aux' = (zs, aux'')"
+    for aux' aux'' zs nt nts' buf'
+    using update_until'[OF list_all2_xs list_all2_ys eq1 eq2 pos MUntil(4) fvi_subset buf nts aux args_ivl args_n args_L args_R args_pos _ _ t nt0 length_aux nts_snoc mr valid, unfolded args_agg, simplified]
+    by (auto simp: args_n agg_n_def args_agg pack fvi_subsume)
   from MUntil.IH(1)[OF \<phi> MUntil.prems(2)] MUntil.IH(2)[OF \<psi> MUntil.prems(2)] pos pos_eq fvi_subset show ?case
     unfolding meval.simps Let_def
-    by (auto simp: args_ivl args_n args_pos Until_eq \<phi>''' progress.simps(6) Let_def
-        split: prod.split if_splits dest!: update
-        intro!: wf_mformula.Until[OF _ _ _ _ args_ivl args_n args_L args_R fvi_subset]
+    by (auto simp: args_ivl args_n args_pos Until_eq \<phi>''' progress.simps(6) Let_def xs_def ys_def
+        split: prod.split if_splits dest!: update[OF refl, rotated]
+        intro!: wf_mformula.Until[OF _ _ _ _ args_ivl args_n args_L args_R args_agg fvi_subset]
         elim!: list.rel_mono_strong qtable_cong
         elim: mbuf2t_take_add'(1)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc]
         mbuf2t_take_add'(2)[OF _ wf_envs_P_simps[OF MUntil.prems(2)] buf nts_snoc])
