@@ -162,6 +162,3 @@ val print_rel4: string -> relation -> unit
 val print_reln: string -> relation -> unit
 val print_bigrel: relation -> unit
 val print_orel: relation option -> unit
-
-val print_rel4_perm: string -> int list -> relation -> unit
-val print_reln_perm: string -> int list -> relation -> unit

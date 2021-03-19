@@ -88,6 +88,8 @@ let ignore_parse_errors = ref false
 let stop_at_out_of_order_ts = ref false
 let stop_at_first_viol = ref false
 
+let str_cache = ref false
+
 
 type dbg =
   | Dbg_all (* this is enabled when at least one of the below is enabled *)

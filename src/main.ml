@@ -210,6 +210,7 @@ let _ =
     "-no_mw", Arg.Set Algorithm_verified.no_mw, "\tNo multi-way join (only with the verified kernel)";
     "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
       "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
+    "-strcache", Arg.Set Misc.str_cache, "\tUse string cache to reduce memory usage";
   ]
     (fun _ -> ())
     usage_string;
