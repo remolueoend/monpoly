@@ -1420,12 +1420,12 @@ let check_formula s f =
      for output, regardless of any transformations that follow. *)
   let orig_fv = MFOTL.free_vars f in
 
+  (* we then check all LET bindings *)
+  ignore (check_let f);
+
   (* we first infer and check types *)
   let (fvtypes,f) = check_syntax s f in
   let fvtypes = List.map (fun v -> v, List.assoc v fvtypes) orig_fv in
-
-  (* we then check all LET bindings *)
-  ignore (check_let f);
 
   (* we then check that it contains wf intervals *)
   if not (check_intervals f) then
