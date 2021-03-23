@@ -3408,30 +3408,21 @@ apply(assumption)
      apply(subgoal_tac "j=Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
       apply metis
      apply (metis (no_types, lifting) add_leE diff_add_inverse diff_le_mono diff_le_self le_add_diff_inverse le_antisym)
-    apply(auto simp del: upt_Suc)
-    apply(subgoal_tac "(Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)) = (Monitor.progress \<sigma> (P(p \<mapsto> Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)))) \<phi>' j)")
-        apply(subgoal_tac "(Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)) = (Monitor.progress \<sigma> (P(p \<mapsto> min (Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))) j)) \<phi>' j)")
-      apply (simp add: sup_alt)
-     apply linarith
-    apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)\<le>Monitor.progress \<sigma> (P(p \<mapsto> Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)))) \<phi>' j")
-     (*apply(erule case_prodE)
-    apply(simp del: upt_Suc)
-  apply (elim conjE)
-   apply(erule order_trans)
-    apply(simp del: upt_Suc)
-    apply(rule progress_mono_gen)
-       apply(simp)
-       apply(rule pred_mapping_map_upd)
-        apply(simp)
-       apply(simp)
-      apply(rule pred_mapping_map_upd)
-       apply(simp)
-      apply(erule pred_mapping_mono)
-      apply force
-     apply(intro rel_mapping_map_upd)
-      apply(simp)
-       apply(simp add: rel_mapping_reflp reflp_def)*)
-    sorry
+         apply(subgoal_tac "j=Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
+         apply(subgoal_tac "j=Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j")
+      apply(subgoal_tac "j= letprev_progress \<sigma> P p \<phi>' j")
+       apply fastforce
+    using j_fixpoint apply presburger
+     apply(subgoal_tac "j\<le>Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j")
+         apply(subgoal_tac "j\<ge>Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j")
+    using le_antisym apply presburger
+      apply(intro progress_le_gen)
+      apply (metis pred_mapping_map_upd)
+     apply(subgoal_tac "Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))< Suc (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi>' j)")
+      apply (metis less_Suc_eq_le)
+     apply(auto simp del:upt_Suc)
+    using list_all2_lengthD apply force
+    done
      apply(intro conjI)
      apply force
   subgoal
