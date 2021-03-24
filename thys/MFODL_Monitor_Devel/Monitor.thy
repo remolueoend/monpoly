@@ -2932,7 +2932,8 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
       [i..<Suc (letprev_progress \<sigma> P p \<phi>' j)] buf \<Longrightarrow>
     wf_mformula \<sigma> j (P(p \<mapsto> (letprev_progress \<sigma> P p \<phi>' j)))
-      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') o Suc)) n R \<psi> \<psi>' \<Longrightarrow> \<comment> \<open>safe\<close>
+      (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') o Suc)) n R \<psi> \<psi>' \<Longrightarrow> 
+    safe_letprev p \<phi>' \<Longrightarrow>\<comment> \<open>safe\<close>
     {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MLetPrev p m \<phi> \<psi> i buf) (Formula.LetPrev p \<phi>' \<psi>')"
   | And: "wf_mformula \<sigma> j P V n R \<phi> \<phi>' \<Longrightarrow> wf_mformula \<sigma> j P V n R \<psi> \<psi>' \<Longrightarrow>
@@ -3523,9 +3524,9 @@ lemma (in maux) letprev_meval_invar_post:
     wf_mformula \<sigma> j (P(p \<mapsto> i + length xs)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs))) m UNIV \<phi>\<^sub>n \<phi>' \<and>
     list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>'))
     [progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j-length ts)..<progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' j] xs'"
-  shows "letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> \<Longrightarrow>
+  shows "letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> k\<Longrightarrow>
   (i', ys', buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi> \<Longrightarrow>
-  letprev_meval_post n R V \<sigma> P \<phi>' m j i' ys' buf' p \<phi>f"
+  letprev_meval_post n R V \<sigma> P \<phi>' m j i' (ys@ys') buf' p \<phi>f k"
   using assms proof (induction i ys buf p ts db \<phi> arbitrary: i' ys' buf' \<phi>f taking: m j rule: letprev_meval_induct) 
   case (step i ys buf p ts db \<phi>)
     moreover define xs where "xs = take (j-i) buf"
@@ -3536,16 +3537,49 @@ lemma (in maux) letprev_meval_invar_post:
     case True 
     then show ?thesis using step
       apply(intro invar_recursion_post[where ts="ts" and i="i" and xs = "xs" and db="db" and \<phi> = "\<phi>" and ys="ys" and buf="buf"])
-             apply(assumption)
+      apply(assumption)
              apply(assumption)
                    apply(assumption)
            apply(assumption)
           apply(rule xs_def)
+      subgoal
          apply(subst(asm)(2) letprev_meval_code)
          apply(simp del: fun_upd_apply add: Let_def buf''_def i''_def ysp_def split:prod.splits if_splits)
-      sledgehammer
-    (*apply(auto intro!: invar_recursion_post simp del:upt_Suc fun_upd_apply)*)
-    sorry
+         apply(auto simp del: fun_upd_apply)[]
+          
+(*apply(elim disjE)
+      apply(simp add: letprev_meval_invar_def del:upt_Suc fun_upd_apply)
+          apply(auto intro!: invar_recursion_post simp del:upt_Suc fun_upd_apply)[]*)
+         (*apply(subst letprev_meval_code)*)
+        sorry
+      subgoal
+        apply(subst(asm)(2) letprev_meval_code)
+        apply(simp del: fun_upd_apply add: Let_def split:prod.splits if_splits option.splits)
+         apply(simp del: fun_upd_apply add: buf''_def i''_def ysp_def)
+         apply(auto simp del: fun_upd_apply)[]
+        using \<open>\<lbrakk>buf'' = [] \<or> j \<le> i''; \<And>xs ys' \<phi>''' buf' i' ys'a buf'a \<phi>f. \<lbrakk>xs = take (j - i) buf; (ys', \<phi>''') = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>; buf' = drop (j - i) buf @ ys'; size \<phi>''' = size \<phi>; buf' \<noteq> []; i + length xs < j; letprev_meval_invar n R V \<sigma> P \<phi>' m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>''' k; (i', ys'a, buf'a, \<phi>f) = letprev_meval m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>'''; safe_letprev p \<phi>'; pred_mapping (\<lambda>x. x \<le> j - length []) P; \<And>xsa ts db \<phi>. case meval j m ts (Mapping.update p (map ((`) (map the)) xsa) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs + length xsa)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs + length xsa))) m UNIV \<phi>\<^sub>n \<phi>' \<and> list_all2 (\<lambda>i. qtable m (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>')) [Monitor.progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' (j - length ts)..< Monitor.progress \<sigma> (P(p \<mapsto> i + length xs + length xsa)) \<phi>' j] xs'\<rbrakk> \<Longrightarrow> letprev_meval_post n R V \<sigma> P \<phi>' m j i' ((ys @ ys') @ ys'a) buf'a p \<phi>f k; letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> k; (i', ys', buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi>; safe_letprev p \<phi>'; pred_mapping (\<lambda>x. x \<le> j - length ts) P; \<And>xs ts db \<phi>. case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs))) m UNIV \<phi>\<^sub>n \<phi>' \<and> list_all2 (\<lambda>i. qtable m (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>')) [Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..< Monitor.progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' j] xs'\<rbrakk> \<Longrightarrow> (ys', \<phi>f) = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>\<close> buf''_def step.prems(2) xs_def ysp_def apply auto[1]
+        apply (smt (z3) \<open>\<lbrakk>buf'' = [] \<or> j \<le> i''; \<And>xs ys' \<phi>''' buf' i' ys'a buf'a \<phi>f. \<lbrakk>xs = take (j - i) buf; (ys', \<phi>''') = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>; buf' = drop (j - i) buf @ ys'; size \<phi>''' = size \<phi>; buf' \<noteq> []; i + length xs < j; letprev_meval_invar n R V \<sigma> P \<phi>' m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>''' k; (i', ys'a, buf'a, \<phi>f) = letprev_meval m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>'''; safe_letprev p \<phi>'; pred_mapping (\<lambda>x. x \<le> j - length []) P; \<And>xsa ts db \<phi>. case meval j m ts (Mapping.update p (map ((`) (map the)) xsa) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs + length xsa)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs + length xsa))) m UNIV \<phi>\<^sub>n \<phi>' \<and> list_all2 (\<lambda>i. qtable m (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>')) [Monitor.progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' (j - length ts)..< Monitor.progress \<sigma> (P(p \<mapsto> i + length xs + length xsa)) \<phi>' j] xs'\<rbrakk> \<Longrightarrow> letprev_meval_post n R V \<sigma> P \<phi>' m j i' ((ys @ ys') @ ys'a) buf'a p \<phi>f k; letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> k; (i', ys', buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi>; safe_letprev p \<phi>'; pred_mapping (\<lambda>x. x \<le> j - length ts) P; \<And>xs ts db \<phi>. case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs))) m UNIV \<phi>\<^sub>n \<phi>' \<and> list_all2 (\<lambda>i. qtable m (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>')) [Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..< Monitor.progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' j] xs'\<rbrakk> \<Longrightarrow> (ys', \<phi>f) = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>\<close> i''_def le_antisym less_irrefl_nat less_or_eq_imp_le old.prod.inject self_append_conv2 step.prems(2) take_all xs_def)
+                using \<open>\<lbrakk>buf'' = [] \<or> j \<le> i''; \<And>xs ys' \<phi>''' buf' i' ys'a buf'a \<phi>f. \<lbrakk>xs = take (j - i) buf; (ys', \<phi>''') = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>; buf' = drop (j - i) buf @ ys'; size \<phi>''' = size \<phi>; buf' \<noteq> []; i + length xs < j; letprev_meval_invar n R V \<sigma> P \<phi>' m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>''' k; (i', ys'a, buf'a, \<phi>f) = letprev_meval m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>'''; safe_letprev p \<phi>'; pred_mapping (\<lambda>x. x \<le> j - length []) P; \<And>xsa ts db \<phi>. case meval j m ts (Mapping.update p (map ((`) (map the)) xsa) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs + length xsa)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs + length xsa))) m UNIV \<phi>\<^sub>n \<phi>' \<and> list_all2 (\<lambda>i. qtable m (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>')) [Monitor.progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' (j - length ts)..< Monitor.progress \<sigma> (P(p \<mapsto> i + length xs + length xsa)) \<phi>' j] xs'\<rbrakk> \<Longrightarrow> letprev_meval_post n R V \<sigma> P \<phi>' m j i' ((ys @ ys') @ ys'a) buf'a p \<phi>f k; letprev_meval_invar n R V \<sigma> P \<phi>' m j i ys buf p ts db \<phi> k; (i', ys', buf', \<phi>f) = letprev_meval m j i ys buf p ts db \<phi>; safe_letprev p \<phi>'; pred_mapping (\<lambda>x. x \<le> j - length ts) P; \<And>xs ts db \<phi>. case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j (P(p \<mapsto> i + length xs)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') (i + length xs))) m UNIV \<phi>\<^sub>n \<phi>' \<and> list_all2 (\<lambda>i. qtable m (fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) (map the v) i \<phi>')) [Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..< Monitor.progress \<sigma> (P(p \<mapsto> i + length xs)) \<phi>' j] xs'\<rbrakk> \<Longrightarrow> (ys', \<phi>f) = meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi>\<close> i''_def step.prems(2) xs_def apply auto[1]
+
+        sorry
+      subgoal
+        apply(subst(asm)(2) letprev_meval_code)
+        apply(simp del: fun_upd_apply add: Let_def split:prod.splits if_splits option.splits)
+         apply(simp del: fun_upd_apply add: buf''_def i''_def ysp_def)
+        apply(auto simp del: fun_upd_apply)[]
+            apply (metis take_all xs_def)
+           apply (metis take_all xs_def)
+          apply (metis take_all xs_def)
+         apply (simp add: xs_def)
+        sorry
+      subgoal
+        apply(subst(asm)(2) letprev_meval_code)
+        apply(simp del: fun_upd_apply add: Let_def split:prod.splits if_splits option.splits)
+        apply(simp del: fun_upd_apply add: buf''_def i''_def ysp_def)
+        apply(auto simp del: fun_upd_apply)[]
+         apply (metis old.prod.inject prod.collapse take_all xs_def)
+        by (metis length_take xs_def)
+      done
   next
     case False
     then show ?thesis using step 
@@ -3553,6 +3587,28 @@ lemma (in maux) letprev_meval_invar_post:
     sorry
   qed
 qed
+
+(*
+definition (in maux) letprev_meval_invar where
+"letprev_meval_invar n R V \<sigma> P \<phi>' m j' i ys buf p ts db \<phi> k=
+(let j = j' - length ts in
+wf_mformula \<sigma> j (P(p\<mapsto>i)) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i)) m UNIV \<phi> \<phi>' \<and>
+i \<le> min (Suc (progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)) j \<and> 
+list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
+      [i..<Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)] buf\<and>
+list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
+      [k..<Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)] ys \<and>
+k\<le>Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j))"
+
+definition (in maux) letprev_meval_post where
+"letprev_meval_post n R V \<sigma> P \<phi>' m j i' xs buf' p \<phi>f k=
+(wf_mformula \<sigma> j (P(p\<mapsto>i')) (V(p \<mapsto> \<lambda>_. letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i')) m UNIV \<phi>f \<phi>' \<and>
+i' = min (Suc (letprev_progress \<sigma> P p \<phi>' j)) j \<and>
+list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
+      [i'..<Suc (letprev_progress \<sigma> P p \<phi>' j)] buf'\<and>
+list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>') i))
+      [k..<Suc (letprev_progress \<sigma> P p \<phi>' j)] xs)" 
+*)
   (*apply (cases "i+length (take (j-i) buf) < j")
   apply (induction i ys buf p ts db \<phi> arbitrary: i' ys' buf' \<phi>f taking: m j rule: letprev_meval_induct)
   apply (auto)
