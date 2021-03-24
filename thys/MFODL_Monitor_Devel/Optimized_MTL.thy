@@ -358,8 +358,8 @@ fun init_mmsaux :: "args \<Rightarrow> 'a mmsaux" where
   "init_mmsaux args = (0, 0, join_mask (args_n args) (args_L args),
   join_mask (args_n args) (args_R args), empty_queue, empty_queue, Mapping.empty, Mapping.empty)"
 
-lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_args I n L R b) 0
-  (init_mmsaux (init_args I n L R b)) []"
+lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_args I n L R b agg) 0
+  (init_mmsaux (init_args I n L R b agg)) []"
   by (auto simp add: init_args_def empty_queue_rep ts_tuple_rel_def join_mask_def
       Mapping.lookup_empty safe_max_def table_def)
 
@@ -1492,10 +1492,17 @@ lemma valid_result_mmsaux: "valid_mmsaux args cur aux auxlist \<Longrightarrow>
   result_mmsaux args aux = foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {}"
   using valid_result_mmsaux_unfolded by (cases aux) fast
 
+definition "result_mmsaux' args aux = eval_args_agg args (result_mmsaux args aux)"
+
+lemma valid_result_mmsaux': "valid_mmsaux args cur aux auxlist \<Longrightarrow>
+  result_mmsaux' args aux =
+  eval_args_agg args (foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {})"
+  by (simp add: result_mmsaux'_def valid_result_mmsaux)
+
 interpretation default_msaux: msaux valid_mmsaux init_mmsaux add_new_ts_mmsaux gc_join_mmsaux
-  add_new_table_mmsaux result_mmsaux
+  add_new_table_mmsaux result_mmsaux'
   using valid_init_mmsaux valid_add_new_ts_mmsaux valid_gc_join_mmsaux valid_add_new_table_mmsaux
-    valid_result_mmsaux
+    valid_result_mmsaux'
   by unfold_locales assumption+
 
 subsection \<open>Optimized data structure for Until\<close>
@@ -3005,8 +3012,8 @@ definition init_mmuaux :: "args \<Rightarrow> 'a mmuaux" where
   join_mask (args_n args) (args_L args), join_mask (args_n args) (args_R args),
   Mapping.empty, Mapping.update 0 Mapping.empty Mapping.empty, [], 0)"
 
-lemma valid_init_mmuaux: "L \<subseteq> R \<Longrightarrow> valid_mmuaux (init_args I n L R b) 0
-  (init_mmuaux (init_args I n L R b)) []"
+lemma valid_init_mmuaux: "L \<subseteq> R \<Longrightarrow> valid_mmuaux (init_args I n L R b agg) 0
+  (init_mmuaux (init_args I n L R b agg)) []"
   unfolding init_mmuaux_def valid_mmuaux_def
   by (auto simp add: init_args_def empty_queue_rep table_def Mapping.lookup_update)
 
@@ -3018,6 +3025,20 @@ lemma valid_length_mmuaux:
   assumes "valid_mmuaux args cur aux auxlist"
   shows "length_mmuaux args aux = length auxlist"
   using assms by (cases aux) (auto simp add: valid_mmuaux_def dest: list_all2_lengthD)
+
+definition "eval_mmuaux' args nt aux = (case eval_mmuaux args nt aux of (res, aux') \<Rightarrow>
+    (map (eval_args_agg args) res, aux'))"
+
+lemma valid_eval_mmuaux':
+  assumes "valid_mmuaux args cur aux auxlist" "nt \<ge> cur"
+    "eval_mmuaux' args nt aux = (res, aux')" "eval_until (args_ivl args) nt auxlist = (res', auxlist')"
+  shows "valid_mmuaux args cur aux' auxlist' \<and> res = map (eval_args_agg args) res'"
+  using assms(3) valid_eval_mmuaux[OF assms(1,2) _ assms(4)]
+  by (auto simp: eval_mmuaux'_def split: prod.splits option.splits)
+
+interpretation default_muaux: muaux valid_mmuaux init_mmuaux add_new_mmuaux length_mmuaux eval_mmuaux'
+  using valid_init_mmuaux valid_add_new_mmuaux valid_length_mmuaux valid_eval_mmuaux'
+  by unfold_locales assumption+
 
 (*<*)
 end
