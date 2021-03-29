@@ -308,7 +308,7 @@ definition "ecard A = (if finite A then card A else \<infinity>)"
 
 fun letprev_sat where
   "letprev_sat n sat 0 = {}" |
-  "letprev_sat n sat (Suc i) = {v. length v = n \<and> sat (letprev_sat n sat i) v i}"
+  "letprev_sat n sat (Suc i) = {v. length v = n \<and> sat (\<lambda> j. (if j\<le>i then letprev_sat n sat j else {})) v i}"
 
 qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
   "sat \<sigma> V v i (Pred r ts) = (case V r of
@@ -317,7 +317,7 @@ qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarr
 | "sat \<sigma> V v i (Let p \<phi> \<psi>) =
     sat \<sigma> (V(p \<mapsto> \<lambda>i. {v. length v = nfv \<phi> \<and> sat \<sigma> V v i \<phi>})) v i \<psi>"
 | "sat \<sigma> V v i (LetPrev p \<phi> \<psi>) =
-    sat \<sigma> (V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) o Suc)) v i \<psi>"
+    sat \<sigma> (V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) o Suc)) v i \<psi>"
 | "sat \<sigma> V v i (Eq t1 t2) = (eval_trm v t1 = eval_trm v t2)"
 | "sat \<sigma> V v i (Less t1 t2) = (eval_trm v t1 < eval_trm v t2)"
 | "sat \<sigma> V v i (LessEq t1 t2) = (eval_trm v t1 \<le> eval_trm v t2)"
@@ -563,7 +563,7 @@ fun past_only :: "formula \<Rightarrow> bool" where
 | "past_only (MatchP _ r) = Regex.pred_regex past_only r"
 | "past_only (MatchF _ _) = False"
 
-lemma past_only_sat:
+(*lemma past_only_sat:
   assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
   shows "i < plen \<pi> \<Longrightarrow> dom V = dom V' \<Longrightarrow>
      (\<And>p i. p \<in> dom V \<Longrightarrow> i < plen \<pi> \<Longrightarrow> the (V p) i = the (V' p) i) \<Longrightarrow>
@@ -602,7 +602,7 @@ next
   qed
 next
   case (LetPrev p \<phi> \<psi>)
-  let ?V = "\<lambda>V \<sigma>. V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) o Suc)"
+  let ?V = "\<lambda>V \<sigma>. V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) o Suc)"
   show ?case unfolding sat.simps proof (rule LetPrev.IH(2))
     show "i < plen \<pi>" by fact
     from LetPrev.prems show "past_only \<psi>" by simp
@@ -614,8 +614,8 @@ next
     show "the (?V V \<sigma> p') k = the (?V V' \<sigma>' p') k" proof (cases "p' = p")
       case True
       with LetPrev \<open>i < plen \<pi>\<close> *
-      have "letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> \<lambda>_. X)) v i \<phi>) (Suc k) = 
-            letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma>' (V'(p \<mapsto> \<lambda>_. X)) v i \<phi>) (Suc k)"
+      have "letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) (Suc k) = 
+            letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma>' (V'(p \<mapsto> X)) v i \<phi>) (Suc k)"
         apply (induct k arbitrary: V V')
          apply simp
          apply (rule Collect_cong)
@@ -624,8 +624,11 @@ next
          apply (rule LetPrev(1))
             apply simp
            apply (simp only: dom_fun_upd)
-          apply auto []
+           apply (auto split: if_splits) []
+           apply (auto split: if_splits) []
            apply fastforce
+            apply fastforce
+          apply fastforce
           apply fastforce
          apply simp
         apply simp
@@ -635,6 +638,7 @@ next
         apply (rule LetPrev(1))
            apply simp
           apply (simp only: dom_fun_upd)
+          apply auto []
          apply auto []
           apply fastforce
          apply fastforce
@@ -661,7 +665,7 @@ next
   then have "Regex.match (sat \<sigma> V v) r a b = Regex.match (sat \<sigma>' V' v) r a b" if "b < plen \<pi>" for a b
     using that by (intro Regex.match_cong_strong) (auto simp: regex.pred_set)
   with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
-qed auto
+qed auto*)
 
 
 subsection \<open>Safe formulas\<close>
@@ -951,7 +955,7 @@ qed (auto 9 0 simp add: nth_Cons' fv_regex_alt)
 
 abbreviation relevant_events where "relevant_events \<phi> S \<equiv> {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}"
 
-lemma sat_slice_strong:
+(*lemma sat_slice_strong:
   assumes "v \<in> S" "dom V = dom V'"
     "\<And>p v i. p \<in> dom V \<Longrightarrow> (p, v) \<in> relevant_events \<phi> S \<Longrightarrow> v \<in> the (V p) i \<longleftrightarrow> v \<in> the (V' p) i"
   shows "relevant_events \<phi> S - {e. fst e \<in> dom V} \<subseteq> E \<Longrightarrow>
@@ -1118,7 +1122,7 @@ next
   then show ?case
     by auto
 qed simp_all
-
+*)
 
 subsection \<open>Translation to n-ary conjunction\<close>
 
@@ -1530,10 +1534,11 @@ end (*context*)
 
 interpretation Formula_slicer: abstract_slicer "relevant_events \<phi>" for \<phi> .
 
-lemma sat_slice_iff:
+(*lemma sat_slice_iff:
   assumes "v \<in> S"
   shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat (Formula_slicer.slice \<phi> S \<sigma>) V v i \<phi>"
   by (rule sat_slice_strong[OF assms]) auto
+*)
 
 lemma Neg_splits:
   "P (case \<phi> of formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =
