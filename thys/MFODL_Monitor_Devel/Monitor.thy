@@ -6149,8 +6149,10 @@ next
   case (7 p')
   from xs in_fv have "list_all2 (\<lambda>x y. map the ` y = {v. length v = m \<and> Formula.sat \<sigma> V v x \<phi>})
       [progress \<sigma> P \<phi> j..<progress \<sigma> P' \<phi> (j + \<delta>)] xs"
-    by (elim list.rel_mono_strong) (auto 0 3 simp: wf_tuple_def nth_append
+    apply (elim list.rel_mono_strong) 
+    apply(auto 0 3 simp: wf_tuple_def nth_append
       elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"])
+    sorry
   moreover have "list_all2 (\<lambda>i X. X = the (V p') i) [the (P p')..<the (P' p')] (the (Mapping.lookup db p'))"
     if "p \<noteq> p'"
   proof -
@@ -6195,8 +6197,8 @@ next
   with assms show ?case by (cases "p' \<in> dom P") (auto simp: wf_envs_def lookup_update')
 next
   case (7 p')
-  from xs' in_fv have "list_all2 ((\<lambda>x y. map the ` y = 
-      {v. length v = m \<and> Formula.sat \<sigma> (V(p' \<mapsto> \<lambda>j. if j \<le> x then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> X)) v i \<phi>) j else {})) v x \<phi>}))
+  from xs' in_fv have "list_all2 (\<lambda>x y. map the ` y = 
+      {v. length v = m \<and> Formula.sat \<sigma> (V(p \<mapsto> \<lambda>j. if j \<le> x then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j else {})) v x \<phi>})
       [(letprev_progress \<sigma> P p \<phi> j)..<(letprev_progress \<sigma> P' p \<phi> (j+\<delta>))] xs'"
     apply(subgoal_tac "list_all2
      (\<lambda>i. qtable m (fv \<phi>) (mem_restr R)
@@ -6212,6 +6214,22 @@ next
      [(letprev_progress \<sigma> P p \<phi> j)..<
       (letprev_progress \<sigma> P p \<phi> (j + \<delta>))] xs'")
     subgoal
+
+
+      apply(auto 0 3 simp del:upt_Suc)
+      thm "list.rel_mono_strong"
+    apply (intro list.rel_mono_strong[where x="[letprev_progress \<sigma> P p \<phi> j..<letprev_progress \<sigma> P' p \<phi> (j + \<delta>)]" and y="xs'" and R="\<lambda> i. qtable m (fv \<phi>) (mem_restr R)
+           (\<lambda>v. length v = m \<and>
+                Formula.sat \<sigma>
+                 (V(p \<mapsto>
+                  \<lambda>j. if j \<le> i then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j else {}))
+                 (map the v) i \<phi>)" and Ra = "\<lambda>x y. map the ` y = 
+      {v. length v = m \<and> Formula.sat \<sigma> (V(p \<mapsto> \<lambda>j. if j \<le> x then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j else {})) v x \<phi>}"]) 
+        defer
+    apply(auto 0 3 simp: wf_tuple_def nth_append
+      elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"] simp del:upt_Suc)[]
+
+      (*apply( intro image_eqI[where x="map Some _"])*)
       sorry
     (*apply (elim list.rel_mono_strong)
     apply(auto 0 3 simp: wf_tuple_def nth_append
@@ -6236,15 +6254,6 @@ next
     apply (simp add: list.rel_map image_iff lookup_update' del: fun_upd_apply)
     apply (auto simp add: progress_le progress_mono_gen progress_fixpoint_ex_above sup_letprev_progress_mono cSup_mono)
     done
-(*have "list_all2 (\<lambda>i X. X = the (V p') i) [the (P p')..<the (P' p')] (the (Mapping.lookup db p'))"
-    if "p \<noteq> p'"
-  proof -
-    from that 7 have "p' \<in> dom P" by simp
-    with wf_envs show ?thesis by (simp add: wf_envs_def)
-  qed
-  with assms show ?case
-    apply (simp add: list.rel_map image_iff lookup_update' del:upt_Suc)
-  sorry*)
 qed (use assms in \<open>auto simp: wf_envs_def\<close>) (*TODO*)
 
 lemma wf_envs_P_simps[simp]:
