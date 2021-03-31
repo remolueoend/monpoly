@@ -3631,7 +3631,6 @@ apply(simp)
      apply assumption
     apply assumption
     done
-  sledgehammer
   apply (metis (no_types, lifting) diff_add_inverse le_Suc_ex length_upt list_all2_lengthD)
            apply(erule pred_mapping_mono)
   apply force
@@ -3666,16 +3665,15 @@ lemma (in maux) letprev_meval_invar_post:
     ultimately show ?case proof (cases "buf''=[]\<or>i''\<ge> j")
       case True 
       from True show ?thesis using step unfolding zs
-        oops
-(*
-      apply(intro invar_recursion_post[where ts="ts" and i="i" and xs = "xs" and db="db" and \<phi> = "\<phi>" and ys="ys" and buf="buf"])
+      apply(intro invar_recursion_post[where ts="ts" and i="i" and xs = "xs" and db="db" and \<phi> = "\<phi>" and ys="ys" and buf="buf" and P'="P'" and P = "P"])
       apply(assumption)
              apply(assumption)
                    apply(assumption)
-             apply(assumption)
+               apply(assumption)
+        subgoal
+          sorry(*TODO*)
             apply(assumption)
-      apply(assumption)
-          apply(rule xs_def)
+            apply(rule xs_def)
       subgoal
          apply(subst(asm)(2) letprev_meval_code)
          apply(simp del: fun_upd_apply add: Let_def buf''_def i''_def ysp_def split:prod.splits if_splits)
@@ -3707,7 +3705,7 @@ lemma (in maux) letprev_meval_invar_post:
          apply (metis old.prod.inject prod.collapse take_all xs_def)
         by (metis length_take xs_def)
       done
-  next
+        next
     case False
     then show ?thesis using step(2-) unfolding zs
       apply(subgoal_tac "letprev_meval_invar n R V \<sigma> P' \<phi>' m j (i + length xs) (ys @ (fst ysp)) buf'' p [] Mapping.empty (snd ysp) k")
@@ -3733,8 +3731,10 @@ lemma (in maux) letprev_meval_invar_post:
       apply(assumption)
                    apply(assumption)
                    apply(assumption)
-                   apply(assumption)
-                   apply(assumption)
+      subgoal
+
+        sorry
+      apply(assumption)
           apply(simp add: xs_def)
       apply(simp add: ysp_def)
         apply(simp add: buf''_def)
@@ -3743,40 +3743,6 @@ lemma (in maux) letprev_meval_invar_post:
       done
   qed
 qed
-*)
-
-(*
-definition (in maux) letprev_meval_invar where
-"letprev_meval_invar n R V \<sigma> P \<phi>' m j' i ys buf p ts db \<phi> k=
-(let j = j' - length ts in
-wf_mformula \<sigma> j (P(p\<mapsto>i)) (V(p \<mapsto>  letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>') i)) m UNIV \<phi> \<phi>' \<and>
-i \<le> min (Suc (progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)) j \<and> 
-list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>') i))
-      [i..<Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)] buf\<and>
-list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>') i))
-      [k..<Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j)] ys \<and>
-k\<le>Suc(progress \<sigma> (P(p\<mapsto>i)) \<phi>' j))"
-
-definition (in maux) letprev_meval_post where
-"letprev_meval_post n R V \<sigma> P \<phi>' m j i' xs buf' p \<phi>f k=
-(wf_mformula \<sigma> j (P(p\<mapsto>i')) (V(p \<mapsto>  letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>') i')) m UNIV \<phi>f \<phi>' \<and>
-i' = min (Suc (letprev_progress \<sigma> P p \<phi>' j)) j \<and>
-list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>') i))
-      [i'..<Suc (letprev_progress \<sigma> P p \<phi>' j)] buf'\<and>
-list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. map the v \<in> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>') i))
-      [k..<Suc (letprev_progress \<sigma> P p \<phi>' j)] xs)" 
-*)
-  (*apply (cases "i+length (take (j-i) buf) < j")
-  apply (induction i ys buf p ts db \<phi> arbitrary: i' ys' buf' \<phi>f taking: m j rule: letprev_meval_induct)
-  apply (auto)
-  oops*)
-
-(*          xs = take (j - i) buf \<Longrightarrow>
-          (ys', \<phi>') = meval m j ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> \<Longrightarrow>
-          buf' = drop (j - i) buf @ ys' \<Longrightarrow>
-          size \<phi>' = size \<phi> \<Longrightarrow>
-          buf' \<noteq> [] \<Longrightarrow>
-          i + length xs < j \<Longrightarrow>*)
 
 subsubsection \<open>Initialisation\<close>
 
@@ -6395,6 +6361,7 @@ obtain i' ys' buf' \<phi>f \<phi>f1 \<phi>f2 xs' where
     e2: "meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) (Mapping.update p (map ((`) (map the)) ys') db) \<phi>2 = (xs', \<phi>f2)" and
     \<phi>f: "\<phi>f = MLetPrev p m \<phi>f1 \<phi>f2 i' buf'"
   apply(simp del:upt_Suc)
+  apply(simp add: letprev_meval_invar_post letprev_meval_invar_init del:upt_Suc)
     sorry (*TODO*)
 
 (*
