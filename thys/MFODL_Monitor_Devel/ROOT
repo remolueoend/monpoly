@@ -10,6 +10,7 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Event_Data
     Regex
     Formula
+    Typing
     Optimized_Join
     Monitor
     Optimized_MTL
