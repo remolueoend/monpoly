@@ -563,7 +563,7 @@ fun past_only :: "formula \<Rightarrow> bool" where
 | "past_only (MatchP _ r) = Regex.pred_regex past_only r"
 | "past_only (MatchF _ _) = False"
 
-(*lemma past_only_sat:
+lemma past_only_sat:
   assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
   shows "i < plen \<pi> \<Longrightarrow> dom V = dom V' \<Longrightarrow>
      (\<And>p i. p \<in> dom V \<Longrightarrow> i < plen \<pi> \<Longrightarrow> the (V p) i = the (V' p) i) \<Longrightarrow>
@@ -616,33 +616,49 @@ next
       with LetPrev \<open>i < plen \<pi>\<close> *
       have "letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) (Suc k) = 
             letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma>' (V'(p \<mapsto> X)) v i \<phi>) (Suc k)"
-        apply (induct k arbitrary: V V')
-         apply simp
-         apply (rule Collect_cong)
-         apply (rule conj_cong)
-          apply (rule refl)
-         apply (rule LetPrev(1))
-            apply simp
-           apply (simp only: dom_fun_upd)
-           apply (auto split: if_splits) []
-           apply (auto split: if_splits) []
-           apply fastforce
-            apply fastforce
-          apply fastforce
-          apply fastforce
-         apply simp
-        apply simp
-        apply (rule Collect_cong)
-        apply (rule conj_cong)
-         apply (rule refl)
-        apply (rule LetPrev(1))
+        apply (induct "nfv \<phi>" "\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>" "Suc k" arbitrary: k V V' rule: letprev_sat.induct)
+        subgoal for k V V'
+          apply (cases k)
            apply simp
-          apply (simp only: dom_fun_upd)
-          apply auto []
-         apply auto []
-          apply fastforce
-         apply fastforce
-        apply simp
+           apply (rule Collect_cong)
+           apply (rule conj_cong)
+            apply (rule refl)
+           apply (rule LetPrev(1))
+              apply simp
+             apply (simp only: dom_fun_upd)
+             apply (auto split: if_splits) []
+            apply (auto split: if_splits) []
+               apply fastforce
+              apply fastforce
+             apply fastforce
+            apply fastforce
+           apply simp
+          apply (simp (no_asm_simp))
+          apply (rule Collect_cong)
+          apply (rule conj_cong)
+           apply (rule refl)
+          apply (rule LetPrev(1))
+             apply simp
+            apply (simp (no_asm_simp) only: dom_fun_upd)
+            apply auto []
+          subgoal for l v q j
+            apply (cases "q = p")
+            subgoal premises prems
+              apply (simp add: prems(16))
+              apply (rule impI)
+              apply (cases j)
+               apply simp
+              subgoal for m
+                apply (hypsubst)
+                using prems(2-)
+                apply (intro prems(1))
+                           apply auto
+                done
+              done
+            apply (metis (no_types, lifting) dom_fun_upd fun_upd_apply insertE option.simps(3))
+            done
+          apply simp
+          done
         done
       with True LetPrev(4,6) *(2) show ?thesis
         by simp
@@ -665,7 +681,7 @@ next
   then have "Regex.match (sat \<sigma> V v) r a b = Regex.match (sat \<sigma>' V' v) r a b" if "b < plen \<pi>" for a b
     using that by (intro Regex.match_cong_strong) (auto simp: regex.pred_set)
   with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
-qed auto*)
+qed auto
 
 
 subsection \<open>Safe formulas\<close>
@@ -901,7 +917,7 @@ qualified fun matches ::
     ((\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or>
     fst e \<noteq> p \<and> matches v \<psi> e)"
 | "matches v (LetPrev p \<phi> \<psi>) e =
-    (fst e \<noteq> p \<and> (\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or> matches v \<psi> e)"
+    (fst e \<noteq> p \<and> ((\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or> matches v \<psi> e))"
 | "matches v (Eq _ _) e = False"
 | "matches v (Less _ _) e = False"
 | "matches v (LessEq _ _) e = False"
@@ -955,7 +971,7 @@ qed (auto 9 0 simp add: nth_Cons' fv_regex_alt)
 
 abbreviation relevant_events where "relevant_events \<phi> S \<equiv> {e. S \<inter> {v. matches v \<phi> e} \<noteq> {}}"
 
-(*lemma sat_slice_strong:
+lemma sat_slice_strong:
   assumes "v \<in> S" "dom V = dom V'"
     "\<And>p v i. p \<in> dom V \<Longrightarrow> (p, v) \<in> relevant_events \<phi> S \<Longrightarrow> v \<in> the (V p) i \<longleftrightarrow> v \<in> the (V' p) i"
   shows "relevant_events \<phi> S - {e. fst e \<in> dom V} \<subseteq> E \<Longrightarrow>
@@ -985,7 +1001,7 @@ next
       with V show ?thesis
         unfolding fun_upd_apply eqTrueI[OF True] if_True option.sel mem_Collect_eq
       proof (intro conj_cong refl Let(1)[where
-        S="{v'. (\<exists>v \<in> S. matches v \<psi> (p, v'))}" and V=V],
+        S="{v'. (p, v') \<in> relevant_events \<psi> S}" and V=V],
         goal_cases relevant' v' dom' V')
         case relevant'
         then show ?case
@@ -1005,26 +1021,39 @@ next
 next
   case (LetPrev p \<phi> \<psi>)
   from LetPrev.prems show ?case unfolding sat.simps
-  proof (intro LetPrev(2)[of S], goal_cases relevant v dom V)
+    thm LetPrev(2)
+  proof (intro LetPrev(2)[of "S"], goal_cases relevant v dom V)
     case (V p' v' k)
     then show ?case
     proof (cases "p' = p")
       case [simp]: True
       with V show ?thesis
         apply (simp only: dom_fun_upd option.distinct if_False if_True fun_upd_apply[of _ _ _ p] refl
-            option.sel mem_Collect_eq)
-        thm LetPrev(1)
-        apply (induct k arbitrary: V V' v')
-         apply simp
+            option.sel o_apply)
+        apply (rotate_tac 1)
+        apply (erule thin_rl)
+        apply (rotate_tac - 2)
+        apply (erule thin_rl)
+        apply (rotate_tac - 2)
+        apply (erule thin_rl)
+        apply (induct "nfv \<phi>" "\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>" "Suc k" arbitrary: k V V' v' rule: letprev_sat.induct)
+        subgoal for k V V' v
+         apply (simp (no_asm_simp))
          apply (rule conj_cong[OF refl])
           apply (rule LetPrev(1)[where
-                S="{v'. (\<exists>v \<in> S. matches v \<psi> (p, v'))}"])
-             apply (elim subset_trans[rotated]) apply (auto simp: set_eq_iff split: if_splits) []
-            apply blast
+                S="{v'. (p, v') \<in> relevant_events \<psi> S}"])
+           apply (elim subset_trans[rotated]) apply (auto simp: set_eq_iff split: if_splits) []
+           apply blast
            apply blast
           apply (simp only: dom_fun_upd)
          apply force
-         apply simp
+(*
+         apply auto []
+        apply force
+        apply force
+        apply force
+         apply force
+         apply (simp (no_asm_simp))
         apply (rule conj_cong[OF refl])
         apply (rule LetPrev(1)[where
               S="{v'. (\<exists>v \<in> S. matches v \<psi> (p, v'))}"])
@@ -1033,18 +1062,30 @@ next
           apply blast
          apply (simp only: dom_fun_upd)
          apply simp
-        subgoal premises prems for k V V' v pp v' i
+*)
+        subgoal premises prems for pp v' i
           apply (cases "pp = p")
            apply simp
-          using prems(2-)
-           apply (intro prems(1); auto)
-          subgoal for x vv xx
-            sorry
+           apply (rule impI)
+          subgoal
+            apply (cases i)
+             apply simp
+            subgoal for j
+              apply (simp only:)
+              using prems(2-)
+              apply (intro prems(1))
+                   apply auto [2]
+                 apply (simp only:)
+              subgoal sorry
+                apply auto [3]
+              done
+            done
           apply simp_all
           using prems(2-)
           apply (intro prems(5); auto)
           done
         done
+      done
     next
       case False
       with V(2,3,5,6) show ?thesis
@@ -1122,7 +1163,6 @@ next
   then show ?case
     by auto
 qed simp_all
-*)
 
 subsection \<open>Translation to n-ary conjunction\<close>
 
