@@ -644,6 +644,7 @@ next
           subgoal for l v q j
             apply (cases "q = p")
             subgoal premises prems
+              thm prems
               apply (simp add: prems(16))
               apply (rule impI)
               apply (cases j)
@@ -1578,7 +1579,6 @@ lemma sat_slice_iff:
   assumes "v \<in> S"
   shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat (Formula_slicer.slice \<phi> S \<sigma>) V v i \<phi>"
   by (rule sat_slice_strong[OF assms]) auto
-
 
 lemma Neg_splits:
   "P (case \<phi> of formula.Neg \<psi> \<Rightarrow> f \<psi> | \<phi> \<Rightarrow> g \<phi>) =

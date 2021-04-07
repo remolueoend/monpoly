@@ -2390,20 +2390,20 @@ next
       with LetPrev 2
       have "letprev_sat (Formula.nfv \<phi>) (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>) (Suc i) = 
             letprev_sat (Formula.nfv \<phi>) (\<lambda>X v i. Formula.sat \<sigma>' (V'(p \<mapsto>  X)) v i \<phi>) (Suc i)"
-        apply (induct i arbitrary: V V')
-         apply simp
-         apply (rule Collect_cong)
-         apply (rule conj_cong)
-          apply (rule refl)
-        subgoal for V V' v
-          apply(rule LetPrev(1)[where P=
+        apply (induct "Formula.nfv \<phi>" "\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>" "Suc i" arbitrary: i V V' rule: letprev_sat.induct)
+        subgoal for i V V'
+          apply (cases i)
+           apply simp
+           apply (rule Collect_cong)
+           apply (rule conj_cong)
+            apply (rule refl)
+          thm LetPrev
+           apply (rule LetPrev(1)[where P=
             "P(p \<mapsto> min (Suc (letprev_progress \<sigma> P p \<phi> (plen \<pi>))) (plen \<pi>))"])
               apply (erule order.strict_trans2)
-              apply (rule cSup_least)
-          subgoal
-            apply(auto simp: progress_fixpoint_ex progress_mono_gen progress_le_gen)
-            done
-          subgoal for x
+               apply (rule cSup_least) 
+            apply(auto simp: progress_fixpoint_ex progress_mono_gen progress_le_gen)[]
+          subgoal for v x
             apply safe
             apply (rule ord_eq_le_trans)
              apply assumption
@@ -2416,8 +2416,8 @@ next
              apply (simp add: letprev_progress_def)
              apply (rule cSup_upper)
               apply (auto simp: reflp_def)
-            done
-          apply (simp only: dom_fun_upd)
+            done            
+              apply (simp only: dom_fun_upd)
            apply (simp del: fun_upd_apply)
           apply (simp del: fun_upd_apply)
            apply (auto simp del: fun_upd_apply) [2]
@@ -2425,8 +2425,8 @@ next
           apply(simp split: if_splits)
             apply (metis domI option.sel)
           apply(simp split: if_splits)
-          apply(simp split: if_splits)
-          by (metis domI option.sel)
+           apply(simp split: if_splits)
+           apply fastforce
           apply simp
           apply (rule Collect_cong)
           apply (rule conj_cong)
@@ -2435,10 +2435,8 @@ next
             "P(p \<mapsto> min (Suc (letprev_progress \<sigma> P p \<phi> (plen \<pi>))) (plen \<pi>))"])
               apply (erule order.strict_trans2)
               apply (rule cSup_least)
-          subgoal
-            apply(auto simp: progress_fixpoint_ex progress_mono_gen progress_le_gen)
-            done
-          subgoal for x
+            apply(auto simp: progress_fixpoint_ex progress_mono_gen progress_le_gen)[]
+          subgoal for nat v x
             apply safe
             apply (rule ord_eq_le_trans)
              apply assumption
@@ -2452,26 +2450,31 @@ next
              apply (rule cSup_upper)
               apply (auto simp: reflp_def)
             done
-          apply (simp only: dom_fun_upd)
+             apply (simp only: dom_fun_upd)
            apply (simp del: fun_upd_apply)
-          apply (simp del: fun_upd_apply)
-
-           apply (auto simp del: fun_upd_apply) [2]
-     (*apply (metis (mono_tags, hide_lams) domI option.sel)
-          apply (metis (mono_tags, hide_lams) domI option.sel)*)
-             apply (auto split: if_splits) []
-             defer
-             apply (auto split: if_splits) []
-              defer
-              apply (simp add: domI)
-             apply (auto split: if_splits) []
-          defer
-             apply (auto split: if_splits) []
-              defer
-              apply (simp add: domI)
-
-
-          sorry (*TODO*)
+            apply (simp del: fun_upd_apply)
+           apply (auto simp del: fun_upd_apply) []
+          subgoal for nat v q j \<phi>'
+            apply (cases "q = p")
+            thm LetPrev.IH
+            subgoal premises prems
+              thm prems
+              apply (simp add: prems(15))
+              apply (rule impI)
+              apply (cases j)
+               apply simp
+              subgoal for m
+                apply (hypsubst)
+                apply(simp)
+                using prems(2-)
+                apply (intro prems(1))
+                 apply auto
+                done
+              done
+              apply (metis (no_types, lifting) dom_fun_upd fun_upd_apply insertE option.simps(3))
+            done
+          done
+      done
       with True LetPrev show ?thesis
         by simp
     next
@@ -2721,8 +2724,7 @@ next
 next
   case (3 v S \<sigma> i)
   then show ?case
-    sorry (*FIX*)
-    (*using sat_slice_iff[symmetric] by simp*) 
+    using sat_slice_iff[symmetric] by simp
 next
   case (4 \<pi> \<pi>')
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
@@ -3123,6 +3125,71 @@ lemma V_subst_letprev: "safe_letprev p \<phi> \<Longrightarrow> Formula.sat \<si
        Formula.sat \<sigma> (V(p \<mapsto>\<lambda>_.  f i)) v i \<phi>"
 *)
 
+lemma V_subst_letprev_sat:
+  "safe_letprev p \<phi> \<Longrightarrow> (\<And>j. j \<le> i \<Longrightarrow> f j = g j) \<Longrightarrow>
+  Formula.letprev_sat n (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> f)) v i \<phi>) i = Formula.letprev_sat n (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> g)) v i \<phi>) i"
+  proof (induction p \<phi> arbitrary: V i f g rule: safe_letprev.induct)
+case (1 p t1 t2)
+  then show ?case
+    by simp
+next
+case (2 p t1 t2)
+  then show ?case 
+    by simp
+next
+  case (3 p t1 t2)
+  then show ?case
+    by simp
+next
+  case (4 p e ts)
+  then show ?case
+    apply(simp)
+sorry
+next
+  case (5 p e \<phi> \<psi>)
+  then show ?case sorry
+next
+  case (6 p e \<phi> \<psi>)
+  then show ?case sorry
+next
+  case (7 p \<phi>)
+  then show ?case sorry
+next
+  case (8 p \<phi> \<psi>)
+  then show ?case sorry
+next
+  case (9 p \<phi> \<psi>)
+  then show ?case sorry
+next
+  case (10 p l)
+  then show ?case sorry
+next
+  case (11 p \<phi>)
+  then show ?case sorry
+next
+  case (12 p y \<omega> b' f \<phi>)
+  then show ?case sorry
+next
+  case (13 p I \<phi>)
+  then show ?case sorry
+next
+  case (14 p I \<phi>)
+  then show ?case sorry
+next
+  case (15 p \<phi> I \<psi>)
+  then show ?case sorry
+next
+  case (16 p \<phi> I \<psi>)
+  then show ?case sorry
+next
+  case (17 p I r)
+  then show ?case sorry
+next
+  case (18 p I r)
+  then show ?case sorry
+qed
+
+
 lemma V_subst_letprev:
   "safe_letprev p \<phi> \<Longrightarrow> (\<And>j. j \<le> i \<Longrightarrow> f j = g j) \<Longrightarrow>
   Formula.sat \<sigma> (V(p \<mapsto> f)) v i \<phi> = Formula.sat \<sigma> (V(p \<mapsto> g)) v i \<phi>"
@@ -3225,7 +3292,7 @@ apply(subst (1 2)"6.IH"(3))
   subgoal
     apply (rule trans)
      apply (rule "6.IH"(3))
-    apply assumption
+      apply assumption
      apply(rule arg_cong[where f= "\<lambda> V. (letprev_sat (Formula.nfv \<phi>)
            (V) \<circ>
           Suc)
@@ -3315,92 +3382,10 @@ next
   from "12.IH"[of i f g V] "12.prems" show ?case by simp
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
-(*lemma V_subst_letprev: "safe_letprev p \<phi> \<Longrightarrow> j\<ge>i \<Longrightarrow> Formula.sat \<sigma> (V(p \<mapsto> f)) v i \<phi> =
-       Formula.sat \<sigma> (V(p \<mapsto>\<lambda>_.  f j)) v i \<phi>"
-  apply(induction p \<phi> arbitrary: V v i f j rule: safe_letprev.induct)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-               defer
-                defer
-  oops
-  apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-           apply(simp only: sat.simps safe_letprev.simps)
-            apply(rule ball_cong)
-             apply(simp)
-            apply blast
-           apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-      apply(simp split: nat.splits cong: match_cong)
-                   apply(simp split: nat.splits cong: match_cong)
-     apply(elim conjE impCE disjE_Not2)
-      apply(simp(no_asm_simp))
-      apply(rule arg_cong[where f= "\<lambda> V. Formula.sat \<sigma> V _ _ _"])
-      apply(rule arg_cong[where f= "\<lambda> f. _(_ \<mapsto> f)"])
-      apply(rule ext)
-  apply (meson not_contains_pred_sat)
-  subgoal premises prems for p e \<phi> \<psi> V v i f using prems(4-)
-    apply(simp add: fun_upd_twist[of p e])
-    apply(erule prems)
-    done
-  subgoal premises prems for p e \<phi> \<psi> V v i f using prems(4-)
-    apply(simp)
-    apply(subst (1 2) prems(2))
-     apply assumption
-      apply(rule arg_cong[where f= "\<lambda> V. Formula.sat \<sigma> V _ _ _"])
-      apply(rule arg_cong[where f= "\<lambda> f. _(_ \<mapsto> f)"])
-    apply(rule ext)
-    using prems(1)[of V f] apply simp
-    done
-  subgoal premises prems for p e \<phi> \<psi> V v i f using prems(4-)
-    apply(subst (1 2) prems(2))
-     apply assumption
-    apply(simp add: fun_upd_twist[of p e])
-    apply(erule trans[OF prems(3)])
-      apply(rule arg_cong[where f= "\<lambda> V. Formula.sat \<sigma> V _ _ _"])
-    apply(rule ext)
-    using prems(1)[of V f] apply simp
-    done
-  apply(simp split: nat.splits cong: match_cong)
-  apply(elim conjE impCE disjE_Not2)
-  subgoal premises prems for p e \<phi> \<psi> V v i f using prems(4-)
-    apply(simp add: fun_upd_twist[of p e])
-    done
-  subgoal premises prems for p e \<phi> \<psi> V v i f using prems(5-)
-    apply(simp add: fun_upd_twist[of p e])
-    apply(erule prems(4))
-    done
-  subgoal premises prems for p e \<phi> \<psi> V v i f using prems(5-)
-    
-    apply(subst (1 2) prems(3))
-     apply assumption
-    apply(simp add: fun_upd_twist[of p e] del: letprev_sat.simps)
-    thm prems(4)
-    apply(erule trans[OF prems(4)])
-      apply(rule arg_cong[where f= "\<lambda> V. Formula.sat \<sigma> V _ _ _"])
-    apply(rule ext)
-    using prems(2)[of "(V(e \<mapsto> _))" f _  i] apply (simp del: letprev_sat.simps)
-    sorry
-  done*)
-
-
-
 lemma (in maux) invar_recursion_invar:
   assumes "pred_mapping (\<lambda> x. x\<le>(j-length ts)) P"
   assumes "pred_mapping (\<lambda> x. x\<le>j) P'"
   assumes "rel_mapping (\<le>) P P'"
-  (*assumes meval: "case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> 
-    wf_mformula \<sigma> j (P'(p \<mapsto> i + length xs)) (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>'))) m UNIV \<phi>\<^sub>n \<phi>' \<and>
-    list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto>  X)) v i \<phi>'))) (map the v) i \<phi>'))
-    [progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j-length ts)..<progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j] xs'"*)
   assumes meval: "case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of (xs', \<phi>\<^sub>n) \<Rightarrow> 
     wf_mformula \<sigma> j (P'(p \<mapsto> i + length xs)) (V(p \<mapsto> \<lambda>j. if j \<le> (i + length xs) then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
           else {})) m UNIV \<phi>\<^sub>n \<phi>' \<and>
@@ -3831,57 +3816,6 @@ lemma (in maux) letprev_meval_invar_post:
     moreover define buf'' where "buf'' = drop (j - i) buf @ (fst ysp)"
     moreover  obtain zs where zs: "ys'= ys@zs" using step(3)
       by (meson letprev_meval_ys)
-
- (*from step.prems(7)[of "(P'(p \<mapsto> i + length xs))" "(V(p \<mapsto>
-                    \<lambda>j. if j \<le> (i + length xs) then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
-                        else {}))" "(P(p \<mapsto> i))" ts xs db \<phi>] 
-      have meval_instance: " case meval j m ts (Mapping.update p (map ((`) (map the)) xs) db) \<phi> of
-    (xs', \<phi>\<^sub>n) \<Rightarrow>
-      wf_mformula \<sigma> j (P'(p \<mapsto> i + length xs))
-       (V(p \<mapsto>
-        \<lambda>j. if j \<le> i + length xs then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
-            else {}))
-       m UNIV \<phi>\<^sub>n \<phi>' \<and>
-      list_all2
-       (\<lambda>i. qtable m (fv \<phi>') (mem_restr R)
-             (\<lambda>v. Formula.sat \<sigma>
-                   (V(p \<mapsto>
-                    \<lambda>j. if j \<le> i then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
-                        else {}))
-                   (map the v) i \<phi>'))
-       [Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..<
-        Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j]
-       xs'" 
-        (*if "i+length xs\<le>j"*)
-        (*using [[unify_trace_failure]]
-        apply(rule meval)*)
-        apply(cases "contains_pred p \<phi>'")
-         defer
-         apply(auto simp del:fun_upd_apply)
-        apply(subst(2) V_subst_letprev[OF step.prems(3), of _ _ " \<lambda>j. if j \<le> i + length xs
-                   then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j else {}"])
-        apply(subst(asm)(3) V_subst_letprev[OF step.prems(3)])
-          apply(simp)
-        subgoal for xs' \<phi>\<^sub>n v ib ja 
-          apply(rule arg_cong[where x="If _ _ _"])
-           apply(simp del:fun_upd_apply)
-          apply(clarsimp simp flip: less_Suc_eq_le simp del:fun_upd_apply)
-          thm step.prems(3)
-          thm V_subst_letprev[OF step.prems(3), of "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j" _ " \<lambda>j. if j \<le> i + length xs
-                   then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j else {}"]
-          apply(auto)
-          (*apply(erule order.strict_trans2)
-          apply(subst min_letprev_progress_upd2)
-              apply(rule step.prems(3))
-             apply(rule step.prems(5))
-          apply (simp_all add: that)*)
-
-          sorry
-        apply (erule arg_cong[where x="list_all2 _ _" and y= " list_all2 _ _ ", THEN iffD1, rotated])
-        apply(rule ext)
-        apply(rule list.rel_cong)
-          apply(rule refl)+
-        done*)
       ultimately show ?case proof (cases "buf''=[]\<or>i''\<ge> j")
       case True      
       from True show ?thesis using step unfolding zs
@@ -3904,14 +3838,48 @@ lemma (in maux) letprev_meval_invar_post:
           apply(cases "contains_pred p \<phi>'")
           apply(subgoal_tac "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j \<le> i+ length xs")
           subgoal
-            thm V_subst_letprev[OF step.prems(3), of _ 
-                  _ 
+
+            thm list.rel_cong[of "[Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..<
+        Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j]" "[Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..<
+        Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j]" "xs'" "xs'" "\<lambda> z. qtable m (fv \<phi>') (mem_restr R)
+        (\<lambda>v. Formula.sat \<sigma>
+              (V(p \<mapsto>
+               \<lambda>j. if j \<le> z then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
+                   else {}))
+              (map the v) z \<phi>')" "\<lambda> z. qtable m (fv \<phi>') (mem_restr R)
+        (\<lambda>v. Formula.sat \<sigma>
+              (V(p \<mapsto>
+               \<lambda>j. if j \<le> (i+length xs) then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
+                   else {}))
+              (map the v) z \<phi>')"]
+            apply(subst list.rel_cong[of "[Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..<
+        Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j]" "[Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts)..<
+        Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j]" _ _ "\<lambda> z. qtable m (fv \<phi>') (mem_restr R)
+        (\<lambda>v. Formula.sat \<sigma>
+              (V(p \<mapsto>
+               \<lambda>j. if j \<le> z then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
+                   else {}))
+              (map the v) z \<phi>')" "\<lambda> z. qtable m (fv \<phi>') (mem_restr R)
+        (\<lambda>v. Formula.sat \<sigma>
+              (V(p \<mapsto>
+               \<lambda>j. if j \<le> (i+length xs) then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
+                   else {}))
+              (map the v) z \<phi>')"])
+               apply(simp)
+              defer
+            subgoal for \<phi>\<^sub>n xs' z yb
+            thm V_subst_letprev[OF step.prems(3), of z 
+                  "\<lambda>j. if j \<le> z then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j else {}"
                   "\<lambda>j. if j \<le> i + length xs then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j else {}"]
-            apply(subst(3) V_subst_letprev[OF step.prems(3), of _ 
-                  _ 
+            apply(subst V_subst_letprev[OF step.prems(3), of z 
+                  "\<lambda>j. if j \<le> z then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j else {}"
                   "\<lambda>j. if j \<le> i + length xs then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j else {}"])
-             defer
-            apply fastforce
+                         apply(auto)
+            done
+           using step.prems(7)[of "(P'(p \<mapsto> i + length xs))" "(V(p \<mapsto>
+                    \<lambda>j. if j \<le> (i + length xs) then letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>') j
+                        else {}))" "(P(p \<mapsto> i))" ts xs db \<phi>] apply simp
+
             sorry
            apply(subgoal_tac "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j = min (i + length xs) (Monitor.progress \<sigma> (P'(p \<mapsto> j)) \<phi>' j)")
           apply linarith
