@@ -917,7 +917,7 @@ qualified fun matches ::
     ((\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or>
     fst e \<noteq> p \<and> matches v \<psi> e)"
 | "matches v (LetPrev p \<phi> \<psi>) e =
-    (fst e \<noteq> p \<and> ((\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or> matches v \<psi> e))"
+    (fst e \<noteq> p \<and> (\<exists>e'. rtranclp (\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p) e' e \<and> matches v \<psi> e'))"
 | "matches v (Eq _ _) e = False"
 | "matches v (Less _ _) e = False"
 | "matches v (LessEq _ _) e = False"
@@ -1036,33 +1036,29 @@ next
         apply (erule thin_rl)
         apply (rotate_tac - 2)
         apply (erule thin_rl)
+        apply (subgoal_tac "(p, v') \<in> {e. (\<exists>e'. rtranclp (\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p) e' e \<and> e' \<in> relevant_events \<psi> S)}")
+         defer
+         apply (rule CollectI)
+         apply (rule exI)
+         apply (rule conjI[rotated], assumption)
+        apply simp
+        apply (erule thin_rl)
         apply (induct "nfv \<phi>" "\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>" "Suc k" arbitrary: k V V' v' rule: letprev_sat.induct)
         subgoal for k V V' v
          apply (simp (no_asm_simp))
          apply (rule conj_cong[OF refl])
           apply (rule LetPrev(1)[where
-                S="{v'. (p, v') \<in> relevant_events \<psi> S}"])
-           apply (elim subset_trans[rotated]) apply (auto simp: set_eq_iff split: if_splits) []
-           apply blast
-           apply blast
-          apply (simp only: dom_fun_upd)
-         apply force
-(*
-         apply auto []
-        apply force
-        apply force
-        apply force
-         apply force
-         apply (simp (no_asm_simp))
-        apply (rule conj_cong[OF refl])
-        apply (rule LetPrev(1)[where
-              S="{v'. (\<exists>v \<in> S. matches v \<psi> (p, v'))}"])
-           apply (elim subset_trans[rotated]) apply (auto simp: set_eq_iff split: if_splits) []
-           apply blast
-          apply blast
-         apply (simp only: dom_fun_upd)
-         apply simp
-*)
+                S="{v'. rtranclp (\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p) (p, v) (p, v')}"])
+             apply (elim subset_trans[rotated])
+             apply (auto simp: set_eq_iff split: if_splits) []
+              apply (rule exI, erule conjI, rule exI, rule exI, erule conjI[rotated])
+              apply (erule rtranclp_trans)
+              apply (erule rtranclp.rtrancl_into_rtrancl)
+              apply simp
+             apply blast
+            apply blast
+           apply (simp only: dom_fun_upd)
+           apply force
         subgoal premises prems for pp v' i
           apply (cases "pp = p")
            apply simp
@@ -1074,23 +1070,23 @@ next
               apply (simp only:)
               using prems(2-)
               apply (intro prems(1))
-                   apply auto [2]
-                 apply (simp only:)
-              subgoal sorry
-                apply auto [3]
+                   apply auto [5]
+              apply (simp only:)
+              apply (smt (z3) disjoint_iff_not_equal mem_Collect_eq rtranclp.rtrancl_into_rtrancl rtranclp_trans snd_conv fst_conv)
               done
             done
           apply simp_all
-          using prems(2-)
-          apply (intro prems(5); auto)
+          using prems(2-3,5-)
+          apply (intro prems(4); auto)
+          apply (smt (z3) disjoint_iff_not_equal mem_Collect_eq rtranclp.rtrancl_into_rtrancl rtranclp_trans snd_conv fst_conv)
           done
         done
       done
     next
-      case False
+      case False thm V
       with V(2,3,5,6) show ?thesis
         unfolding fun_upd_apply eq_False[THEN iffD2, OF False] if_False
-        by (intro V(4)) (auto simp: False)
+        by (intro V(4)) (auto simp: False set_eq_iff)
     qed
   qed (auto simp: dom_def)
 next
