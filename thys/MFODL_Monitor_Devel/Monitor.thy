@@ -1223,6 +1223,32 @@ termination meval
 
 end
 
+lemma mformula_induct[case_names MRel MPred MLet MLetPrev MAnd MAndAssign MAndRel MAnds MOr MNeg
+   MExists MAgg MPrev MNext MSince MUntil MMatchP MMatchF]:
+  "(\<And>rel. P (MRel rel)) \<Longrightarrow>
+   (\<And>e ts. P (MPred e ts)) \<Longrightarrow>
+   (\<And>p m \<phi> \<psi>. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MLet p m \<phi> \<psi>)) \<Longrightarrow>
+   (\<And>p m \<phi> \<psi> i buf. (\<And>\<phi>'. size \<phi>' = size \<phi> \<Longrightarrow> P \<phi>') \<Longrightarrow> P \<psi> \<Longrightarrow> P (MLetPrev p m \<phi> \<psi> i buf)) \<Longrightarrow>
+   (\<And>A_\<phi> \<phi> pos A_\<psi> \<psi> buf. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)) \<Longrightarrow>
+   (\<And>\<phi> conf. P \<phi> \<Longrightarrow> P (MAndAssign \<phi> conf)) \<Longrightarrow>
+   (\<And>\<phi> conf. P \<phi> \<Longrightarrow> P (MAndRel \<phi> conf)) \<Longrightarrow>
+   (\<And>A_pos A_neg L buf. (\<And>\<phi>. \<phi> \<in> set L \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MAnds A_pos A_neg L buf)) \<Longrightarrow>
+   (\<And> \<phi> \<psi> buf. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MOr \<phi> \<psi> buf)) \<Longrightarrow>
+   (\<And>\<phi>. P \<phi> \<Longrightarrow> P (MNeg \<phi>)) \<Longrightarrow>
+   (\<And>\<phi>. P \<phi> \<Longrightarrow> P (MExists \<phi>)) \<Longrightarrow>
+   (\<And>g0 y \<omega> b f \<phi>. P \<phi> \<Longrightarrow> P (MAgg g0 y \<omega> b f \<phi>)) \<Longrightarrow>
+   (\<And>I \<phi> first buf nts. P \<phi> \<Longrightarrow> P (MPrev I \<phi> first buf nts)) \<Longrightarrow>
+   (\<And>I \<phi> first nts. P \<phi> \<Longrightarrow> P (MNext I \<phi> first nts)) \<Longrightarrow>
+   (\<And>args \<phi> \<psi> buf nts aux. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MSince args \<phi> \<psi> buf nts aux)) \<Longrightarrow>
+   (\<And>args \<phi> \<psi> buf nts t aux. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MUntil args \<phi> \<psi> buf nts t aux)) \<Longrightarrow>
+   (\<And>I mr mrs \<phi>s buf nts aux. (\<And>\<phi>. \<phi> \<in> set \<phi>s \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MMatchP I mr mrs \<phi>s buf nts aux)) \<Longrightarrow>
+   (\<And>I mr mrs \<phi>s buf nts t aux. (\<And>\<phi>. \<phi> \<in> set \<phi>s \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MMatchF I mr mrs \<phi>s buf nts t aux)) \<Longrightarrow>
+   P mf"
+  apply (induct "size mf" arbitrary: mf rule: less_induct)
+  subgoal for mf
+    by (cases mf) (auto simp: termination_simp)
+  done
+
 definition "letprev_meval m j = letprev_meval0 (meval j m) j"
 
 lemma letprev_meval_code[code]: 
