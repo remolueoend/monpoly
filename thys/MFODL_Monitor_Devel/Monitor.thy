@@ -755,7 +755,7 @@ locale maggaux =
     and result_maggaux :: "aggargs \<Rightarrow> 'maggaux \<Rightarrow> event_data table"
   assumes valid_init_maggaux: "safe_aggargs args \<Longrightarrow>
     valid_maggaux args (init_maggaux args) {}"
-  assumes valid_insert_maggaux: "valid_maggaux args aux X \<Longrightarrow>
+  assumes valid_insert_maggaux: "valid_maggaux args aux X \<Longrightarrow> finite Y \<Longrightarrow>
     table (aggargs_b args + aggargs_n args) (aggargs_cols args) Y \<Longrightarrow>
     type_restr args Y \<Longrightarrow> X \<inter> Y = {} \<Longrightarrow>
     valid_maggaux args (insert_maggaux args Y aux) (X \<union> Y)"
