@@ -6214,7 +6214,7 @@ next
     apply (elim list.rel_mono_strong) 
     apply(auto 0 3 simp: wf_tuple_def nth_append
       elim!: in_qtableE in_qtableI intro!: image_eqI[where x="map Some _"])
-    sorry
+    done
   moreover have "list_all2 (\<lambda>i X. X = the (V p') i) [the (P p')..<the (P' p')] (the (Mapping.lookup db p'))"
     if "p \<noteq> p'"
   proof -
