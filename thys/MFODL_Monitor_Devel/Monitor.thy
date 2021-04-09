@@ -391,7 +391,7 @@ qed (auto split: prod.splits simp: cases_Neg_iff)
 
 derive linorder mregex
 
-subsubsection \<open>LPD\<close>
+subsubsection \<open>Left Partial Derivative (LPD)\<close>
 
 definition saturate where
   "saturate f = while (\<lambda>S. f S \<noteq> S) f"
@@ -524,7 +524,7 @@ lemma LPDs_code[code]:
 
 end
 
-subsubsection \<open>RPD\<close>
+subsubsection \<open>Right Partial Derivative (RPD)\<close>
 
 primrec RPD where
   "RPD (MSkip n) = (case n of 0 \<Rightarrow> {} | Suc m \<Rightarrow> {MSkip m})"
@@ -655,11 +655,11 @@ subsection \<open>The executable monitor\<close>
 
 type_synonym ts = nat
 
-type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
+type_synonym 'a mbuf2 = "'a table list \<times> 'a table list" \<comment> \<open> buffers \<close>
 type_synonym 'a mbufn = "'a table list list"
-type_synonym 'a msaux = "(ts \<times> 'a table) list"
+type_synonym 'a msaux = "(ts \<times> 'a table) list" \<comment> \<open> since and until auxiliaries \<close>
 type_synonym 'a muaux = "(ts \<times> 'a table \<times> 'a table) list"
-type_synonym 'a mr\<delta>aux = "(ts \<times> (mregex, 'a table) mapping) list"
+type_synonym 'a mr\<delta>aux = "(ts \<times> (mregex, 'a table) mapping) list" \<comment> \<open> right and left derivs. aux \<close>
 type_synonym 'a ml\<delta>aux = "(ts \<times> 'a table list \<times> 'a table) list"
 
 datatype mconstraint = MEq | MLess | MLessEq
