@@ -274,7 +274,7 @@ fun safe_letprev :: "name \<Rightarrow> formula \<Rightarrow> bool" where
 |  "safe_letprev p (Ands l) = (\<forall>\<phi>\<in>set l. safe_letprev p \<phi>)"
 |  "safe_letprev p (Exists \<phi>) = safe_letprev p \<phi>"
 |  "safe_letprev p (Agg y \<omega> b' f \<phi>) = safe_letprev p \<phi>"
-|  "safe_letprev p (Prev I \<phi>) = (\<not> contains_pred p \<phi> \<and> safe_letprev p \<phi>)"
+|  "safe_letprev p (Prev I \<phi>) = safe_letprev p \<phi>"
 |  "safe_letprev p (Next I \<phi>) = (\<not> contains_pred p \<phi> \<and> safe_letprev p \<phi>)"
 |  "safe_letprev p (Since \<phi> I \<psi>) = (\<not> contains_pred p \<phi> \<and> \<not> contains_pred p \<psi> \<and> safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"
 |  "safe_letprev p (Until \<phi> I \<psi>) = (\<not> contains_pred p \<phi> \<and> \<not> contains_pred p \<psi> \<and> safe_letprev p \<phi> \<and> safe_letprev p \<psi>)"

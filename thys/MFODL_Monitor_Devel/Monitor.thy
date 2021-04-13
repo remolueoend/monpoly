@@ -1620,7 +1620,8 @@ lemma min_letprev_progress_upd:
       defer
       apply auto [2]
     apply auto []
-    apply (meson linear order_trans)
+     apply (meson linear order_trans)
+  apply (meson le_SucI)
    apply (erule conjE)+
    apply (erule disjE_Not2)
     apply auto []
@@ -1886,7 +1887,20 @@ next
 next
   case (13 p I \<phi>)
   then show ?case 
-    by (meson contains_pred.simps(13) safe_letprev.simps(13))
+    apply(cases "j=0")
+     apply simp
+    sorry (*TODO*) (*No longer True*)
+
+(*"progress P (Formula.Prev I \<phi>) j = (if j = 0 then 0 else min (Suc (progress P \<phi> j)) j)"
+*)
+    (*apply(cases "contains_pred p \<phi>")
+     defer
+    using contains_pred.simps(13) apply blast
+
+using contains_pred.simps(13) safe_letprev.simps(13) by blast
+    thm  safe_letprev.simps(13) contains_pred.simps(13)
+    apply(meson contains_pred.simps(13) safe_letprev.simps(13))
+    by (meson contains_pred.simps(13) safe_letprev.simps(13))*)
 next
   case (14 p I \<phi>)
   then show ?case 
@@ -1908,6 +1922,11 @@ next
   then show ?case
     by(simp del: fun_upd_apply)
 qed
+
+lemma min_letprev_progress_upd_new:
+  "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow>
+  \<exists> y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j)"
+  sorry (*TODO*)
 
 lemma progress_fixpoint_ex2:
   assumes "safe_letprev p \<phi>"
@@ -3256,6 +3275,14 @@ next
 next
   case (12 p y \<omega> b' f \<phi>)
   from "12.IH"[of i f g V] "12.prems" show ?case by simp
+next
+  case (13 p I \<phi>)
+  then show ?case
+    apply (simp del: fun_upd_apply)
+    apply (cases "i=0")
+     apply(simp_all)
+    using "13.IH"[of i f g V] "13.prems" 
+    sorry (*TODO*)
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
 lemma (in maux) invar_recursion_invar:
@@ -6394,8 +6421,6 @@ lemma (in maux) letprev_meval_invar_post:
         done
          apply (smt (z3) size_snd_meval step.prems(10) ysp_def)
         apply simp
-        (*using size_snd_meval ysp_def apply presburger*)
-        (*apply (metis diff_diff_cancel diff_is_0_eq diff_self_eq_0 length_0_conv)*)
        apply(intro invar_recursion_invar[where ts="ts" and P = "P" and buf = "buf" and db="db" and \<phi> = "\<phi>"])
                 apply(assumption)
                apply(assumption)
