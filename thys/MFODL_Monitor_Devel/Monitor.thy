@@ -6006,7 +6006,7 @@ declare progress_le_gen[simp]
 
 definition "wf_envs \<sigma> j \<delta> P P' V db =
   (dom V = dom P \<and>
-   Mapping.keys db = dom P \<union> (\<Union>k \<in> {j ..< j + \<delta>}. {p. p \<in> fst ` \<Gamma> \<sigma> k}) \<and>
+   Mapping.keys db \<supseteq> dom P \<union> (\<Union>k \<in> {j ..< j + \<delta>}. {p. p \<in> fst ` \<Gamma> \<sigma> k}) \<and>
    rel_mapping (\<le>) P P' \<and>
    pred_mapping (\<lambda>i. i \<le> j) P \<and>
    pred_mapping (\<lambda>i. i \<le> j + \<delta>) P' \<and>
@@ -6023,14 +6023,8 @@ lemma wf_envs_mk_db: "wf_envs \<sigma> j 1 Map.empty Map.empty Map.empty (mk_db 
 
 lemma wf_envs_empty: "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> 
   wf_envs \<sigma> (j + \<delta>) 0 P' P' V (Mapping.map_values (\<lambda>_ _. []) db)"
-  apply (auto simp: wf_envs_def rel_mapping_alt lookup_map_values map_option_case
-    keys_dom_lookup set_eq_iff domIff image_iff split: option.splits)
-    apply (metis not_Some_eq)
-   defer
-  apply (metis not_Some_eq)
-
-  find_theorems Mapping.keys Mapping.lookup
-  sorry
+  by (auto 0 3 simp: wf_envs_def rel_mapping_alt set_eq_iff domIff lookup_map_values
+      map_option_case keys_dom_lookup subset_iff split: option.splits)
 
 lemma wf_envs_update:
   assumes wf_envs: "wf_envs \<sigma> j \<delta> P P' V db"
@@ -6066,7 +6060,7 @@ next
   qed
   ultimately show ?case
     by (simp add: list.rel_map image_iff lookup_update')
-qed (use assms in \<open>auto simp: wf_envs_def\<close>)
+qed (use assms in \<open>auto 0 3 simp: wf_envs_def\<close>)
 
 lemma wf_envs_update_sup:
   assumes wf_envs: "wf_envs \<sigma> j \<delta> P P' V db"
@@ -6142,7 +6136,7 @@ next
     apply (simp add: list.rel_map image_iff lookup_update' del: fun_upd_apply)
     apply (auto simp add: progress_le progress_mono_gen progress_fixpoint_ex_above sup_letprev_progress_mono cSup_mono)
     done
-qed (use assms in \<open>auto simp: wf_envs_def\<close>)
+qed (use assms in \<open>auto 0 3 simp: wf_envs_def\<close>)
 
 lemma wf_envs_update2:
   assumes wf_envs: "wf_envs \<sigma> j \<delta> P P' V db"
@@ -6182,7 +6176,7 @@ next
   show ?case
     sorry
     (*by (simp add: list.rel_map image_iff lookup_update')*)
-qed (use assms in \<open>auto simp: wf_envs_def\<close>)
+qed (use assms in \<open>auto 0 3 simp: wf_envs_def\<close>)
 
 lemma(in maux) not_contains_V_wf_mformula: "\<not> contains_pred p \<phi>' \<Longrightarrow> wf_mformula \<sigma> j P (V(p\<mapsto>x)) n R \<phi> \<phi>' = wf_mformula \<sigma> j P V n R \<phi> \<phi>'"
   apply(induct p \<phi>' arbitrary: P V x rule: contains_pred.induct)
@@ -6547,16 +6541,16 @@ next
     from False MPred(2) have "e \<notin> dom P'" "e \<notin> dom V"
       unfolding wf_envs_def rel_mapping_alt by auto
     moreover
-    from False MPred(2) have *: "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k) \<longleftrightarrow> e \<in> Mapping.keys db"
-      unfolding wf_envs_def by auto
+    from False MPred(2) have *: "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k) \<longrightarrow> e \<in> Mapping.keys db"
+      unfolding wf_envs_def by (auto simp: subset_iff)
     from False MPred(2) have
       "e \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db e = Some (map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j ..< j + \<delta>])"
       unfolding wf_envs_def keys_dom_lookup by (metis Diff_iff domD option.sel)
     with * have "(case Mapping.lookup db e of None \<Rightarrow> replicate \<delta> {} | Some xs \<Rightarrow> xs) =
       map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j ..< j + \<delta>]"
       by (cases "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k)")
-        (auto 0 3 simp: image_iff keys_dom_lookup list.rel_eq[symmetric] list.rel_map
-         intro: list.rel_refl split: option.splits)
+        (auto 0 4 simp: image_iff keys_dom_lookup list.rel_map domIff
+         intro: list.rel_refl intro!: list_all2_eq[THEN iffD2] split: option.splits)
     ultimately show ?thesis
       by (cases rule: wf_mformula.cases)
         (fastforce intro!: wf_mformula.Pred qtableI list.rel_refl dest: ex_match cong: option.case
