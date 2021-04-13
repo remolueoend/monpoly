@@ -4599,7 +4599,7 @@ declare progress_le_gen[simp]
 
 definition "wf_envs \<sigma> j \<delta> P P' V db =
   (dom V = dom P \<and>
-   Mapping.keys db = dom P \<union> (\<Union>k \<in> {j ..< j + \<delta>}. {p. p \<in> fst ` \<Gamma> \<sigma> k}) \<and>
+   Mapping.keys db \<supseteq> dom P \<union> (\<Union>k \<in> {j ..< j + \<delta>}. {p. p \<in> fst ` \<Gamma> \<sigma> k}) \<and>
    rel_mapping (\<le>) P P' \<and>
    pred_mapping (\<lambda>i. i \<le> j) P \<and>
    pred_mapping (\<lambda>i. i \<le> j + \<delta>) P' \<and>
@@ -4646,7 +4646,7 @@ next
   qed
   ultimately show ?case
     by (simp add: list.rel_map image_iff lookup_update')
-qed (use assms in \<open>auto simp: wf_envs_def\<close>)
+qed (use assms in \<open>auto simp: wf_envs_def subset_iff\<close>)
 
 lemma wf_envs_P_simps[simp]:
    "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> pred_mapping (\<lambda>i. i \<le> j) P"
@@ -4712,16 +4712,17 @@ next
     from False MPred(2) have "e \<notin> dom P'" "e \<notin> dom V"
       unfolding wf_envs_def rel_mapping_alt by auto
     moreover
-    from False MPred(2) have *: "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k) \<longleftrightarrow> e \<in> Mapping.keys db"
-      unfolding wf_envs_def by auto
+    from False MPred(2) have *: "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k) \<Longrightarrow> e \<in> Mapping.keys db"
+      unfolding wf_envs_def subset_iff by auto
     from False MPred(2) have
       "e \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db e = Some (map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j ..< j + \<delta>])"
       unfolding wf_envs_def keys_dom_lookup by (metis Diff_iff domD option.sel)
     with * have "(case Mapping.lookup db e of None \<Rightarrow> replicate \<delta> {} | Some xs \<Rightarrow> xs) =
       map (\<lambda>k. {ts. (e, ts) \<in> \<Gamma> \<sigma> k}) [j ..< j + \<delta>]"
       by (cases "e \<in> (\<Union>k \<in> {j ..< j + \<delta>}. fst ` \<Gamma> \<sigma> k)")
-        (auto 0 3 simp: image_iff keys_dom_lookup list.rel_eq[symmetric] list.rel_map
-         intro: list.rel_refl split: option.splits)
+        (auto 0 3 simp: image_iff domIff keys_dom_lookup list.rel_eq[symmetric] list.rel_map
+         exI[where P="\<lambda>ys. list_all2 (=) _ ys", OF list.rel_refl[OF refl]] intro: list.rel_refl split: option.splits)
+    find_theorems Mapping.keys
     ultimately show ?thesis
       by (cases rule: wf_mformula.cases)
         (fastforce intro!: wf_mformula.Pred qtableI list.rel_refl dest: ex_match cong: option.case
