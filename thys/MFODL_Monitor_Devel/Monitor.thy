@@ -1089,7 +1089,7 @@ function letprev_meval0 where
           buf' = drop (j - i) buf @ ys'
      in if size \<phi>' \<noteq> size \<phi> then undefined
      else if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', buf', \<phi>')
-     else letprev_meval0 eval j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>')"
+     else letprev_meval0 eval j (i + length xs) (ys @ ys') buf' p [] (Mapping.map_values (\<lambda>_ _. []) db) \<phi>')"
   by auto
 termination
   by (relation "measure (\<lambda>(_, j, i, _, buf, _). j - (i + length buf))")
@@ -1257,7 +1257,7 @@ lemma letprev_meval_code[code]:
           (ys', \<phi>') = meval j m ts (Mapping.update p (map (image (map the)) xs) db) \<phi>;
           buf' = drop (j - i) buf @ ys' in
      if buf' = [] \<or> i + length xs \<ge> j then (i + length xs, ys @ ys', buf', \<phi>')
-     else letprev_meval m j (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>')"
+     else letprev_meval m j (i + length xs) (ys @ ys') buf' p [] (Mapping.map_values (\<lambda>_ _. []) db) \<phi>')"
   apply (subst letprev_meval0.simps[where eval="meval j m" and j=j for j m t, folded letprev_meval_def])
   apply (auto split: prod.splits simp: Let_def)
   apply (metis size_snd_meval snd_conv)+
@@ -1276,7 +1276,7 @@ lemma letprev_meval_induct[case_names step]:
           size \<phi>' = size \<phi> \<Longrightarrow>
           buf' \<noteq> [] \<Longrightarrow>
           i + length xs < j \<Longrightarrow>
-          P (i + length xs) (ys @ ys') buf' p [] Mapping.empty \<phi>') \<Longrightarrow>
+          P (i + length xs) (ys @ ys') buf' p [] (Mapping.map_values (\<lambda>_ _. []) db) \<phi>') \<Longrightarrow>
       P i ys buf p ts db \<phi>"
   shows "P i ys buf p ts db \<phi>"
   by (induction eval\<equiv>"meval j m" j\<equiv>j i ys buf p ts db \<phi> rule: letprev_meval0.induct)
@@ -3274,7 +3274,7 @@ lemma (in maux) invar_recursion_invar:
   buf' = drop (j - i) buf @ ys' \<Longrightarrow>
   buf' \<noteq> [] \<Longrightarrow>
   i + length xs < j \<Longrightarrow>
-  letprev_meval_invar n R V \<sigma> P' \<phi>' m j (i + length xs) (ys@ys') buf' p [] Mapping.empty \<phi>f k"
+  letprev_meval_invar n R V \<sigma> P' \<phi>' m j (i + length xs) (ys@ys') buf' p [] (Mapping.map_values (\<lambda>_ _. []) db) \<phi>f k"
   unfolding letprev_meval_invar_def Let_def using assms
   apply(simp_all del:upt_Suc split: prod.splits)
   apply clarify
@@ -6021,7 +6021,15 @@ lemma wf_envs_mk_db: "wf_envs \<sigma> j 1 Map.empty Map.empty Map.empty (mk_db 
   unfolding wf_envs_def mk_db_def
   by transfer (force split: if_splits simp: image_iff rel_mapping_alt)
 
-lemma wf_envs_empty: "wf_envs \<sigma> j 0 P P' V Mapping.empty"
+lemma wf_envs_empty: "wf_envs \<sigma> j \<delta> P P' V db \<Longrightarrow> 
+  wf_envs \<sigma> (j + \<delta>) 0 P' P' V (Mapping.map_values (\<lambda>_ _. []) db)"
+  apply (auto simp: wf_envs_def rel_mapping_alt lookup_map_values map_option_case
+    keys_dom_lookup set_eq_iff domIff image_iff split: option.splits)
+    apply (metis not_Some_eq)
+   defer
+  apply (metis not_Some_eq)
+
+  find_theorems Mapping.keys Mapping.lookup
   sorry
 
 lemma wf_envs_update:
