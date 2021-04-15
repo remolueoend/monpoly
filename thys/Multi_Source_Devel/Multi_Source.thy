@@ -490,9 +490,9 @@ lemma (in fo_spec) adequate_verdicts_collapse: "adequate \<sigma> \<Longrightarr
   verdicts (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` verdicts (forget_idx \<sigma>)"
   unfolding adequate_def verdicts_def by (auto intro: rev_image_eqI)
 
-lemma (in cosafety_monitor) adequate_verdicts_collapse_M: "adequate \<sigma> \<Longrightarrow>
+lemma (in cosafety_monitor) adequate_verdicts_collapse_M: "traces = UNIV \<Longrightarrow> adequate \<sigma> \<Longrightarrow>
   M_limit (collapse \<sigma>) = apfst (collapse_map \<sigma>) ` M_limit (forget_idx \<sigma>)"
-  unfolding M_limit_eq using adequate_verdicts_collapse .
+  using adequate_verdicts_collapse by (simp add: M_limit_eq)
 
 subsubsection \<open>Adding indexes\<close>
 
@@ -2479,7 +2479,7 @@ definition multi_source_monitor :: "'b list set list \<Rightarrow> 'a wtrace lis
     determ (map2 (\<lambda>X. verdicts \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
 theorem multi_source_monitor_eq:
-  assumes "\<Union>(set Xs) = UNIV" and "wpartitionp \<sigma> n ps"
+  assumes "\<Union>(set Xs) = UNIV" and "wpartitionp \<sigma> n ps" and [simp]: "traces = UNIV"
   shows "multi_source_monitor Xs ps = {verdicts (collapse \<sigma>)}"
 proof -
   let ?Xs' = "map relevant_events Xs"
@@ -2497,14 +2497,15 @@ end
 locale multi_source = sliceable_fo_spec + cosafety_monitor
 begin
 
-definition multi_source_monitor_M :: "'a list set list \<Rightarrow> 'b wtrace list \<Rightarrow> (nat \<times> 'a tuple) set set" where
+definition multi_source_monitor_M :: "'b list set list \<Rightarrow> 'a wtrace list \<Rightarrow> (nat \<times> 'b tuple) set set" where
   "multi_source_monitor_M Xs = multi_source_slicer (map relevant_events Xs) \<circ>\<then>
     determ (map2 (\<lambda>X. M_limit \<circ>> verdict_filter X) Xs \<circ>> (Union \<circ> set))"
 
-corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow>
+corollary multi_source_monitor_eq_alt: "\<Union>(set Xs) = UNIV \<Longrightarrow> wpartitionp_alt \<sigma> n ps \<Longrightarrow> traces = UNIV \<Longrightarrow>
   multi_source_monitor_M Xs (wpartitionp_alt.ps' ps) = {M_limit (collapse \<sigma>)}"
-  unfolding M_limit_eq multi_source_monitor_M_def
-  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps', unfolded multi_source_monitor_def] .
+  unfolding multi_source_monitor_M_def
+  using multi_source_monitor_eq[OF _ wpartitionp_alt.wpartitionp_ps', unfolded multi_source_monitor_def]
+  by (simp add: M_limit_eq)
 
 end
 

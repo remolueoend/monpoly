@@ -464,19 +464,22 @@ locale future_bounded_mfotl =
   fixes \<phi> :: "'a MFOTL.formula"
   assumes future_bounded: "MFOTL.future_bounded \<phi>"
 
-sublocale future_bounded_mfotl \<subseteq> sliceable_timed_progress "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" "relevant_events \<phi>"
+sublocale future_bounded_mfotl \<subseteq> sliceable_timed_progress "MFOTL.nfv \<phi>" "MFOTL.fv \<phi>" UNIV "relevant_events \<phi>"
   "\<lambda>\<sigma> v i. MFOTL.sat \<sigma> v i \<phi>" "pprogress \<phi>"
 proof (unfold_locales, goal_cases)
   case (1 x)
   then show ?case by (simp add: fvi_less_nfv)
 next
-  case (2 v v' \<sigma> i)
+  case (2 \<sigma> v v' i)
   then show ?case by (simp cong: sat_fvi_cong[rule_format])
 next
-  case (3 v S \<sigma> i)
+  case (3 \<sigma> S)
+  show ?case by simp
+next
+  case (4 \<sigma> v S i)
   then show ?case using sat_slice_iff[of v, symmetric] by simp
 next
-  case (4 \<pi> \<pi>')
+  case (5 \<pi>' \<pi>)
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
     using ex_prefix_of ..
   moreover have "prefix_of \<pi> \<sigma>"
@@ -484,30 +487,33 @@ next
   ultimately show ?case
     by (simp add: pprogress_eq plen_mono progress_mono)
 next
-  case (5 \<sigma> x)
+  case (6 \<sigma> x)
   obtain j where "x \<le> progress \<sigma> \<phi> j"
     using future_bounded progress_ge by blast
   then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
 next
-  case (6 \<pi> \<sigma> \<sigma>' i v)
+  case (7 \<sigma> \<pi> \<sigma>' i v)
   then have "i < progress \<sigma> \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
-  with 6 show ?case
+  with 7 show ?case
     using sat_prefix_conv by blast
 next
-  case (7 \<pi> \<pi>')
-  then have "plen \<pi> = plen \<pi>'"
-    by transfer (simp add: list_eq_iff_nth_eq)
+  case (8 \<pi> \<pi>')
+  have "plen \<pi> = plen \<pi>'"
+    using 8(3) by transfer (simp add: list_eq_iff_nth_eq)
   moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
     using ex_prefix_of by blast+
   moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-    using 7 calculation
+    using 8(3-) calculation
     by transfer (simp add: list_eq_iff_nth_eq)
   ultimately show ?case
     by (simp add: pprogress_eq progress_time_conv)
 qed
+
+lemma (in future_bounded_mfotl) prefixesI[simp, intro]: "\<pi> \<in> prefixes"
+  by (simp add: prefixes_def ex_prefix_of)
 
 locale monitorable_mfotl =
   fixes \<phi> :: "'a MFOTL.formula"
@@ -1464,7 +1470,7 @@ proof -
     by (auto 0 3 simp: p2 progress_prefix_conv[OF _ p1] sat_prefix_conv[OF _ p1] not_less
         pprogress_eq[OF p1] pprogress_eq[OF p2]
       dest:  mstep_output_iff[OF wf le p2 restrict, THEN iffD1] spec[of _ \<sigma>]
-             mstep_output_iff[OF wf le _ restrict, THEN iffD1] progress_sat_cong[OF p1]
+             mstep_output_iff[OF wf le _ restrict, THEN iffD1] progress_sat_cong[OF UNIV_I p1]
       intro: mstep_output_iff[OF wf le p2 restrict, THEN iffD2] p1)
 qed
 

@@ -2024,11 +2024,22 @@ lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi>
   unfolding pprogress_def using progress_prefix_conv
   by blast
 
-locale future_bounded_mfodl =
-  fixes \<phi> :: Formula.formula
+locale wty_mfodl =
+  fixes \<phi> :: Formula.formula and SIG :: sig and ENV :: tyenv
+  assumes well_typed: "SIG, ENV \<turnstile> \<phi>"
+begin
+
+definition "traces = {\<sigma>. wty_trace SIG \<sigma>}"
+
+lemma map_\<Gamma>_subset_traces: "\<sigma> \<in> traces \<Longrightarrow> (\<And>D. f D \<subseteq> D) \<Longrightarrow> map_\<Gamma> f \<sigma> \<in> traces"
+  by (auto simp: traces_def wty_envs_def)
+
+end
+
+locale future_bounded_mfodl = wty_mfodl +
   assumes future_bounded: "Formula.future_bounded \<phi>"
 
-sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" "relevant_events \<phi>"
+sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" traces "relevant_events \<phi>"
   "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"
 proof (unfold_locales, goal_cases)
   case (1 x)
@@ -2037,11 +2048,14 @@ next
   case (2 v v' \<sigma> i)
   then show ?case by (simp cong: sat_fv_cong[rule_format])
 next
-  case (3 v S \<sigma> i)
+  case (3 \<sigma> S)
+  then show ?case by (auto intro: map_\<Gamma>_subset_traces)
+next
+  case (4 \<sigma> v S i)
   then show ?case
     using sat_slice_iff[symmetric] by simp
 next
-  case (4 \<pi> \<pi>')
+  case (5 \<pi>' \<pi>)
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
     using ex_prefix_of ..
   moreover have "prefix_of \<pi> \<sigma>"
@@ -2049,33 +2063,32 @@ next
   ultimately show ?case
     by (simp add: pprogress_eq plen_mono progress_mono)
 next
-  case (5 \<sigma> x)
+  case (6 \<sigma> x)
   obtain j where "x \<le> progress \<sigma> Map.empty \<phi> j"
     using future_bounded progress_ge by blast
   then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
 next
-  case (6 \<pi> \<sigma> \<sigma>' i v)
+  case (7 \<sigma> \<pi> \<sigma>' i v)
   then have "i < progress \<sigma> Map.empty \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
-  with 6 show ?case
+  with 7 show ?case
     using sat_prefix_conv by blast
 next
-  case (7 \<pi> \<pi>')
-  then have "plen \<pi> = plen \<pi>'"
+  case (8 \<pi> \<pi>')
+  from 8(3) have "plen \<pi> = plen \<pi>'"
     by transfer (simp add: list_eq_iff_nth_eq)
   moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
     using ex_prefix_of by blast+
   moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-    using 7 calculation
+    using 8(3) calculation
     by transfer (simp add: list_eq_iff_nth_eq)
   ultimately show ?case
     by (simp add: pprogress_eq progress_time_conv)
 qed
 
-locale verimon_spec =
-  fixes \<phi> :: Formula.formula
+locale verimon_spec = wty_mfodl +
   assumes monitorable: "mmonitorable \<phi>"
 
 sublocale verimon_spec \<subseteq> future_bounded_mfodl
@@ -6002,10 +6015,21 @@ locale verimon = verimon_spec + maux
 lemma wty_db_empty: "wty_db S {}"
   by (simp add: wty_db_def)
 
-lemma ex_prefix_of_wty: "wty_prefix S p \<Longrightarrow> \<exists>s. prefix_of p s \<and> wty_trace S s"
+lemma prefix_of_wty_trace:
+  assumes "wty_trace S \<sigma>" and "prefix_of \<pi> \<sigma>"
+  shows "wty_prefix S \<pi>"
 proof -
-  assume "wty_prefix S p"
-  then have "\<exists>s. prefix_of p s \<and> (\<forall>i. wty_db S (\<Gamma> s i))"
+  from assms(1) have "\<forall>i. wty_db S (\<Gamma> \<sigma> i)"
+    by (simp add: wty_envs_def wty_db_def)
+  with assms(2) show ?thesis
+    by (transfer fixing: S) (metis in_set_conv_nth stake_nth)
+qed
+
+lemma ex_prefix_of_wty:
+  assumes "wty_prefix S p"
+  shows "\<exists>s. prefix_of p s \<and> wty_trace S s"
+proof -
+  from assms have "\<exists>s. prefix_of p s \<and> (\<forall>i. wty_db S (\<Gamma> s i))"
     proof (transfer fixing: S, intro bexI CollectI conjI)
     fix p :: "((string8 \<times> event_data list) set \<times> nat) list"
     assume *: "sorted (map snd p)"
@@ -6030,28 +6054,31 @@ proof -
   then show ?thesis by (auto simp: wty_envs_def wty_db_def)
 qed
 
+lemma (in future_bounded_mfodl) prefixes_alt: "prefixes = {\<pi>. wty_prefix SIG \<pi>}"
+  unfolding prefixes_def
+  using ex_prefix_of_wty prefix_of_wty_trace
+  by (fastforce simp: traces_def)
+
 lemma (in verimon) mstep_mverdicts:
-  assumes wf: "wf_mstate S E \<phi> \<pi> R st"
-    and wty: "wty_db S (fst tdb)"
+  assumes wf: "wf_mstate SIG ENV \<phi> \<pi> R st"
+    and wty: "wty_db SIG (fst tdb)"
     and le[simp]: "last_ts \<pi> \<le> snd tdb"
     and restrict: "mem_restr R v"
   shows "(i, v) \<in> flatten_verdicts (fst (mstep (map_prod mk_db id tdb) st)) \<longleftrightarrow>
     (i, v) \<in> M (psnoc \<pi> tdb) - M \<pi>"
 proof -
-  have "wty_prefix S (psnoc \<pi> tdb)"
+  have "wty_prefix SIG (psnoc \<pi> tdb)"
     using wf wty by (auto simp: wf_mstate_def intro!: wty_psnoc)
-  then obtain \<sigma> where p2: "prefix_of (psnoc \<pi> tdb) \<sigma>" and wty_s: "wty_trace S \<sigma>"
+  then obtain \<sigma> where p2: "prefix_of (psnoc \<pi> tdb) \<sigma>" and wty_\<sigma>: "wty_trace SIG \<sigma>"
     using ex_prefix_of_wty by blast
   with le have p1: "prefix_of \<pi> \<sigma>" by (blast elim!: prefix_of_psnocE)
   show ?thesis
-    unfolding M_def
-    apply (auto 0 3 simp: p2 progress_prefix_conv[OF _ p1] sat_prefix_conv[OF _ p1] not_less
-        pprogress_eq[OF p1] pprogress_eq[OF p2]
-        dest: mstep_output_iff[OF wf le p2 wty_s restrict, THEN iffD1] spec[of _ \<sigma>]
-        mstep_output_iff[OF wf le _ _ restrict, THEN iffD1] progress_sat_cong[OF p1]
-        intro: mstep_output_iff[OF wf le p2 wty_s restrict, THEN iffD2] p1)
-    (* FIXME *)
-    oops(*
+    unfolding M_def using wty_\<sigma>
+    by (auto 0 4 simp: p2 progress_prefix_conv[OF _ p1] sat_prefix_conv[OF _ p1] not_less
+        pprogress_eq[OF p1] pprogress_eq[OF p2] traces_def
+        dest: mstep_output_iff[OF wf le p2 _ restrict, THEN iffD1] spec[of _ \<sigma>]
+        mstep_output_iff[OF wf le _ _ restrict, THEN iffD1] progress_sat_cong[OF _ p1]
+        intro: mstep_output_iff[OF wf le p2 _ restrict, THEN iffD2] p1)
 qed
 
 context maux
@@ -6094,17 +6121,19 @@ end
 lemma Suc_length_conv_snoc: "(Suc n = length xs) = (\<exists>y ys. xs = ys @ [y] \<and> length ys = n)"
   by (cases xs rule: rev_cases) auto
 
-lemma (in verimon) wf_mstate_msteps: "wf_mstate \<phi> \<pi> R st \<Longrightarrow> mem_restr R v \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
-  X = msteps (pdrop (plen \<pi>) \<pi>') st \<Longrightarrow> wf_mstate \<phi> \<pi>' R (snd X) \<and>
+lemma (in verimon) wf_mstate_msteps: "wf_mstate SIG ENV \<phi> \<pi> R st \<Longrightarrow> mem_restr R v \<Longrightarrow>
+  \<pi> \<le> \<pi>' \<Longrightarrow> wty_prefix SIG \<pi>' \<Longrightarrow>
+  X = msteps (pdrop (plen \<pi>) \<pi>') st \<Longrightarrow> wf_mstate SIG ENV \<phi> \<pi>' R (snd X) \<and>
   ((i, v) \<in> flatten_verdicts (fst X)) = ((i, v) \<in> M \<pi>' - M \<pi>)"
 proof (induct "plen \<pi>' - plen \<pi>" arbitrary: X st \<pi> \<pi>')
   case 0
-  from 0(1,4,5) have "\<pi> = \<pi>'"  "X = ([], st)"
+  from 0(1,4,5,6) have "\<pi> = \<pi>'"  "X = ([], st)"
     by (transfer; auto)+
   with 0(2) show ?case unfolding flatten_verdicts_def by simp
 next
   case (Suc x)
-  from Suc(2,5) obtain \<pi>'' tdb where "x = plen \<pi>'' - plen \<pi>"  "\<pi> \<le> \<pi>''"
+  from Suc(2,5,6) obtain \<pi>'' tdb where "x = plen \<pi>'' - plen \<pi>" "\<pi> \<le> \<pi>''"
+    "wty_prefix SIG \<pi>''" "wty_db SIG (fst tdb)"
     "\<pi>' = psnoc \<pi>'' tdb" "pdrop (plen \<pi>) (psnoc \<pi>'' tdb) = psnoc (pdrop (plen \<pi>) \<pi>'') tdb"
     "last_ts (pdrop (plen \<pi>) \<pi>'') \<le> snd tdb" "last_ts \<pi>'' \<le> snd tdb"
     "\<pi>'' \<le> psnoc \<pi>'' tdb"
@@ -6118,18 +6147,19 @@ next
           (force simp: sorted_append append_eq_Cons_conv split: list.splits if_splits)+
     qed simp
   qed
-  with Suc(1)[OF this(1) Suc.prems(1,2) this(2) refl] Suc.prems show ?case
-    unfolding msteps_msteps_stateless[symmetric]
+  with Suc(1)[OF this(1) Suc.prems(1,2) this(2,3) refl] Suc.prems show ?case
     by (auto simp: msteps_psnoc split_beta mstep_mverdicts
-        dest: mono_monitor[THEN set_mp, rotated] intro!: wf_mstate_mstep)
+        dest: mono_monitor[THEN set_mp, rotated, unfolded prefixes_alt]
+        intro!: wf_mstate_mstep)
 qed
 
 lemma (in verimon) wf_mstate_msteps_stateless:
-  assumes "wf_mstate \<phi> \<pi> R st" "mem_restr R v" "\<pi> \<le> \<pi>'"
+  assumes "wf_mstate SIG ENV \<phi> \<pi> R st" "mem_restr R v" "\<pi> \<le> \<pi>'" "wty_prefix SIG \<pi>'"
   shows "(i, v) \<in> flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) \<longleftrightarrow> (i, v) \<in> M \<pi>' - M \<pi>"
   using wf_mstate_msteps[OF assms refl] unfolding msteps_msteps_stateless by simp
 
-lemma (in verimon) wf_mstate_msteps_stateless_UNIV: "wf_mstate \<phi> \<pi> UNIV st \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
+lemma (in verimon) wf_mstate_msteps_stateless_UNIV: "wf_mstate SIG ENV \<phi> \<pi> UNIV st \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
+  wty_prefix SIG \<pi>' \<Longrightarrow>
   flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) = M \<pi>' - M \<pi>"
   by (auto dest: wf_mstate_msteps_stateless[OF _ mem_restr_UNIV])
 
@@ -6142,15 +6172,15 @@ begin
 lemma minit_safe_minit: "mmonitorable \<phi> \<Longrightarrow> minit_safe \<phi> = minit \<phi>"
   unfolding minit_safe_def monitorable_formula_code by simp
 
-lemma wf_mstate_minit_safe: "mmonitorable \<phi> \<Longrightarrow> wf_mstate \<phi> pnil R (minit_safe \<phi>)"
+lemma wf_mstate_minit_safe: "S, E \<turnstile> \<phi> \<Longrightarrow> mmonitorable \<phi> \<Longrightarrow> wf_mstate S E \<phi> pnil R (minit_safe \<phi>)"
   using wf_mstate_minit minit_safe_minit mmonitorable_def by metis
 
 end
 
-lemma (in verimon) monitor_mverdicts: "flatten_verdicts (monitor \<phi> \<pi>) = M \<pi>"
+lemma (in verimon) monitor_mverdicts: "wty_prefix SIG \<pi> \<Longrightarrow> flatten_verdicts (monitor \<phi> \<pi>) = M \<pi>"
   unfolding monitor_def using monitorable
   by (subst wf_mstate_msteps_stateless_UNIV[OF wf_mstate_minit_safe, simplified])
-    (auto simp: mmonitorable_def mverdicts_Nil)
+    (auto simp: mmonitorable_def mverdicts_Nil well_typed)
 
 subsection \<open>Collected correctness results\<close>
 

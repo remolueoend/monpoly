@@ -6,7 +6,7 @@ begin
 
 section \<open>Typing\<close>
 
-subsection \<open>Types and type classes\<close>
+subsection \<open>Types\<close>
 
 datatype ty = TInt | TFloat | TString
 
