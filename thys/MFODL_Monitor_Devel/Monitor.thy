@@ -1746,6 +1746,367 @@ lemma sup_alt:
       rel_mapping_reflp)
   done
 
+lemma min_letprev_progress_upd_new:
+  "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow>
+  \<exists> y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j)"
+proof (induct p \<phi> arbitrary: P x rule: safe_letprev.induct)
+case (1 p t1 t2)
+  then show ?case 
+    using contains_pred.simps(1) by blast
+next
+  case (2 p t1 t2)
+  then show ?case 
+    using contains_pred.simps(2) by blast
+next
+  case (3 p t1 t2)
+  then show ?case 
+    by auto
+next
+  case (4 p e ts)
+  then show ?case 
+    by(auto)
+next
+  case (5 p e \<phi> \<psi>)
+  then show ?case 
+apply(simp del: fun_upd_apply)
+    apply(elim conjE disjE impCE)
+    apply blast
+    subgoal
+      apply(auto simp del: fun_upd_apply)
+        apply (drule meta_spec2[of _ "P" "x"])
+      apply(auto)
+      subgoal for y1
+        apply(cases "(Monitor.progress \<sigma> (P(e \<mapsto> j)) \<phi> j) < y1")
+         apply (simp)
+         apply presburger
+        apply simp
+        apply (drule meta_spec2[of _ "P" "y1"])
+        apply(simp add: fun_upd_twist[of p e])
+        apply(rule "5.hyps"(2)[of "P(p\<mapsto>x)" " Monitor.progress \<sigma> (P(e \<mapsto> j)) \<phi> j", THEN exE])
+            apply(assumption)
+           apply (meson pred_mapping_map_upd)
+          apply(rule progress_le_gen)
+          apply simp
+         apply(assumption)
+        subgoal for x1
+        apply(simp del: fun_upd_apply)
+          apply(subgoal_tac "Monitor.progress \<sigma> (P(e \<mapsto> y1)) \<psi> j\<le>Monitor.progress \<sigma> (P(e \<mapsto> Monitor.progress \<sigma> (P(e \<mapsto> j)) \<phi> j)) \<psi> j")
+          apply(simp del: fun_upd_apply)
+           apply (metis dual_order.strict_trans2 less_Suc_eq_le min.absorb2 min.left_commute pred_mapping_map_upd progress_le_gen)
+          apply(intro progress_mono_gen)
+             apply(simp)
+            apply (metis pred_mapping_map_upd progress_le_gen)
+           apply (metis order_refl pred_mapping_map_upd progress_le_gen)
+          by (metis le_less not_le_imp_less rel_mapping_alt rel_mapping_map_upd)
+        done
+      done
+         apply blast
+    subgoal
+      apply (drule meta_spec2[of _ P x])
+      apply (erule thin_rl)
+        apply (drule meta_spec2[of _ "P(e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)" "x"])
+      apply (simp add: fun_upd_twist[of e p] del: fun_upd_apply)
+      apply(cases "x>(Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)")
+       apply(simp)
+      apply (smt (z3) "5.hyps"(2) fun_upd_twist fun_upd_upd less_le_not_le min.boundedE min_def not_contains_pred_progress)
+      apply(auto)
+      subgoal for y2
+      apply(cases "y2>(Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)")
+         apply(simp)
+        subgoal
+          apply (subgoal_tac "pred_mapping (\<lambda>x. x \<le> j) (P(e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j))")
+          apply (smt (z3) "5.hyps"(1) "5.hyps"(2) \<open>\<lbrakk>\<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j); \<And>P x. \<lbrakk>safe_letprev e \<psi>; pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(e \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<psi> j); \<And>P x. \<lbrakk>safe_letprev p \<psi>; pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<psi> j); pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; safe_letprev p \<phi>; contains_pred p \<phi>; contains_pred e \<psi>; p = e; safe_letprev e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)) \<psi> j)\<close> fun_upd_twist min_def_raw not_contains_pred_progress order_refl)
+          by (metis pred_mapping_map_upd sup_alt sup_letprev_progress_le)
+        apply(simp add: fun_upd_twist[of p e])
+  apply(rule  "5.hyps"(2)[of "P(p\<mapsto>x)" " Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j", THEN exE])
+    apply(assumption)
+   apply (meson pred_mapping_map_upd)
+  apply(rule progress_le_gen)
+   apply (meson pred_mapping_map_upd)
+    apply(assumption)
+apply (rule "5.hyps"(2)[of "P(p\<mapsto>j)" " Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j", THEN exE])
+    apply(assumption)
+   apply (meson order_refl pred_mapping_map_upd)
+  apply(rule progress_le_gen)
+   apply (meson order_refl pred_mapping_map_upd)
+  apply(assumption)
+  subgoal for x1 x2
+      apply (cases "p=e")
+    subgoal
+      apply(simp del: fun_upd_apply)
+      apply(subgoal_tac "Monitor.progress \<sigma> (P(e \<mapsto> y2)) \<psi> j\<le>Monitor.progress \<sigma> (P(e \<mapsto> Monitor.progress \<sigma> (P(e \<mapsto> j)) \<phi> j)) \<psi> j")
+       apply(subgoal_tac "min x1 (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<psi> j)\<le>min x2 (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<psi> j)")
+        apply (metis min.boundedE min.left_commute min_absorb2)
+       apply presburger
+                apply(intro progress_mono_gen)
+ apply(simp)
+            apply (metis pred_mapping_map_upd progress_le_gen)
+           apply (metis order_refl pred_mapping_map_upd progress_le_gen)
+          by (metis le_less not_le_imp_less rel_mapping_alt rel_mapping_map_upd)
+         apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j)) \<psi> j\<le>Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)) \<psi> j")
+     apply(cases "contains_pred p \<psi>")
+      apply(clarsimp simp del: fun_upd_apply)
+       apply(rule "5.hyps"(3)[of "P(e\<mapsto>j)" x, THEN exE])
+  apply(assumption)
+         apply (meson order_refl pred_mapping_map_upd)
+        apply(assumption)+
+    subgoal for x3
+      apply(simp only: fun_upd_twist[of e p])
+         apply(clarsimp simp del: fun_upd_apply)
+          apply(subgoal_tac "min x1 (min x3 (Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> j)) \<psi> j)) \<le> min x2 (Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> j)) \<psi> j)")
+           apply (smt (z3) dual_order.trans min_absorb2 min_def)    
+         apply (meson min.boundedI)
+      done
+      apply(simp add: fun_upd_twist[of p e] del: fun_upd_apply)
+    apply (smt (z3) min.absorb2 min_def_raw order.trans)
+         apply(rule progress_mono_gen)
+            apply(simp)
+           apply (intro pred_mapping_map_upd progress_le_gen order_refl)
+        apply(assumption)+
+           apply (intro pred_mapping_map_upd progress_le_gen order_refl)
+        apply(assumption)+
+                apply (intro rel_mapping_map_upd progress_le_gen order_refl)
+          apply(rule progress_mono_gen)
+        apply(simp)
+                apply (meson pred_mapping_map_upd  order_refl)
+                apply (meson pred_mapping_map_upd  order_refl)
+          apply (intro rel_mapping_map_upd  order_refl)
+        apply(assumption)+
+        apply(simp add: rel_mapping_reflp reflp_def)
+        apply(assumption)+
+     apply(simp add: rel_mapping_reflp reflp_def)
+    done
+  done
+      done
+    apply blast
+      apply blast
+    apply (smt (verit, del_insts) "5.prems"(2) "5.prems"(3) fun_upd_twist min.orderE not_contains_pred_progress pred_mapping_map_upd pred_mapping_mono predicate1I progress_le_gen)
+    subgoal
+      apply (drule meta_spec2[of _ P x])
+      apply (erule thin_rl)
+        apply (drule meta_spec2[of _ "P(e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)" "x"])
+            apply (simp add: fun_upd_twist[of e p] del: fun_upd_apply)
+      apply(cases "x>(Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)")
+       apply(simp)
+      apply (smt (z3) less_le_not_le min.boundedE min_def not_contains_pred_progress)
+      apply(cases "contains_pred p \<phi>")
+       apply(simp)
+      apply (smt (z3) "5.hyps"(1) "5.hyps"(2) "5.hyps"(3) \<open>\<lbrakk>\<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j); \<And>P x. \<lbrakk>safe_letprev e \<psi>; pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(e \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<psi> j); \<And>P x. \<lbrakk>safe_letprev p \<psi>; pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<psi> j); pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; safe_letprev p \<phi>; contains_pred p \<phi>; contains_pred e \<psi>; safe_letprev p \<psi>; safe_letprev e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j)) \<psi> j)\<close> not_contains_pred_progress)
+      apply(simp)
+      by (metis pred_mapping_map_upd progress_le_gen)
+    done
+next
+  case (6 p e \<phi> \<psi>)
+  then show ?case 
+    apply(simp del: fun_upd_apply)
+    apply(elim conjE disjE impCE)
+       apply blast
+    subgoal
+      apply(subst sup_alt)
+        apply(simp)
+       apply (meson pred_mapping_map_upd)
+      apply(subst sup_alt)
+        apply(simp)
+       apply (meson order_refl pred_mapping_map_upd)
+      apply (erule thin_rl)
+      apply (drule meta_spec2[of _ "P(e\<mapsto>j)" x])
+      apply (erule thin_rl)
+      apply (drule meta_spec2[of _ "P(e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j, e\<mapsto>j)) \<phi> j)" "x"])
+      apply(simp)
+      apply(auto)
+      subgoal for y
+        apply(cases "(Monitor.progress \<sigma> (P(e \<mapsto> j, p \<mapsto> j)) \<phi> j) < y")
+         apply(simp add: fun_upd_twist[of p e])
+        apply(subgoal_tac "pred_mapping (\<lambda>x. x \<le> j) (P(e \<mapsto> Monitor.progress \<sigma> (P(e \<mapsto> j, p \<mapsto> j)) \<phi> j))")
+          apply (metis min_def_raw not_contains_pred_progress order_refl)
+         apply (simp add: progress_le_gen)
+        apply(simp add: fun_upd_twist[of p e])
+      apply(rule "6.hyps"(3)[of "P(p\<mapsto>x)" "Monitor.progress \<sigma> (P(e \<mapsto> j, p \<mapsto> x)) \<phi> j", THEN exE] )
+          apply(assumption)+
+         apply (metis pred_mapping_map_upd)
+        apply(rule progress_le_gen)
+      apply (meson order_refl pred_mapping_map_upd)
+        apply(assumption)+
+      apply(rule "6.hyps"(3)[of "P(p\<mapsto>j)" " Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> j)) \<phi> j", THEN exE])
+          apply(assumption)+
+      apply (meson order_refl pred_mapping_map_upd)
+        apply(rule progress_le_gen)
+      apply (meson order_refl pred_mapping_map_upd)
+       apply(assumption)+
+      apply (clarsimp simp del: fun_upd_apply)
+      subgoal for x1 x2 
+       apply(subgoal_tac "Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> j)) \<phi> j)) \<psi> j\<ge>Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> j)) \<phi> j)) \<psi> j")
+      apply(cases "contains_pred p \<psi>")
+       apply(rule "6.hyps"(4)[of "P(e\<mapsto>j)" x, THEN exE])
+          apply(assumption)+
+      apply (meson order_refl pred_mapping_map_upd)
+         apply (assumption) +
+       apply(drule meta_mp)
+        apply (intro pred_mapping_map_upd progress_le_gen order_refl)
+         apply(assumption)+
+       apply(drule(1) meta_mp)
+       apply clarify
+       apply(simp only: fun_upd_twist[of e p])    
+          apply (smt (z3) dual_order.trans min_absorb2 min_def)
+                apply(simp add: fun_upd_twist[of p e] del: fun_upd_apply)
+        apply (smt (z3) min.absorb2 min_def_raw order.trans)
+        apply(rule progress_mono_gen)
+        apply(simp)
+                apply (intro pred_mapping_map_upd progress_le_gen order_refl)
+         apply(assumption)+
+                apply (intro pred_mapping_map_upd progress_le_gen order_refl)
+          apply(assumption)+
+                apply (intro rel_mapping_map_upd progress_le_gen order_refl)
+          apply(rule progress_mono_gen)
+                apply (meson pred_mapping_map_upd  order_refl)
+                apply (meson pred_mapping_map_upd  order_refl)
+                apply (meson pred_mapping_map_upd  order_refl)
+          apply (intro rel_mapping_map_upd  order_refl)
+           apply(assumption)
+        apply(simp add: rel_mapping_reflp reflp_def)
+           apply(assumption)
+        apply(simp add: rel_mapping_reflp reflp_def)
+        done
+        done
+      done
+    subgoal
+      apply(subst sup_alt)
+        apply(simp)
+       apply (meson pred_mapping_map_upd)
+      apply(subst sup_alt)
+        apply(simp)
+       apply (meson order_refl pred_mapping_map_upd)
+      apply (erule thin_rl)
+      apply (erule thin_rl)
+      apply (erule thin_rl)
+      apply (drule meta_spec2[of _ "P(e \<mapsto> Monitor.progress \<sigma> (P(e\<mapsto>j)) \<phi> j)" "x"])
+      by (simp add: fun_upd_twist progress_le_gen)
+    using \<open>\<lbrakk>\<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred e \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(e \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<phi> j); \<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j); \<And>P x. \<lbrakk>safe_letprev e \<psi>; pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(e \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<psi> j); \<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<psi> j); pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; safe_letprev e \<phi>; p \<noteq> e; safe_letprev p \<phi>; safe_letprev p \<psi>; contains_pred p \<phi>; contains_pred e \<psi>; safe_letprev e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> letprev_progress \<sigma> (P(p \<mapsto> x)) e \<phi> j)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> letprev_progress \<sigma> (P(p \<mapsto> j)) e \<phi> j)) \<psi> j)\<close> \<open>\<lbrakk>\<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred e \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(e \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<phi> j); \<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j); \<And>P x. \<lbrakk>safe_letprev e \<psi>; pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred e \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(e \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(e \<mapsto> j)) \<psi> j); \<And>P x. \<lbrakk>pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; contains_pred p \<psi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j)) \<psi> j); pred_mapping (\<lambda>x. x \<le> j) P; x \<le> j; safe_letprev e \<phi>; p \<noteq> e; safe_letprev p \<phi>; safe_letprev p \<psi>; contains_pred p \<psi>; \<not> contains_pred p \<phi>\<rbrakk> \<Longrightarrow> \<exists>y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x, e \<mapsto> letprev_progress \<sigma> (P(p \<mapsto> x)) e \<phi> j)) \<psi> j = min y (Monitor.progress \<sigma> (P(p \<mapsto> j, e \<mapsto> letprev_progress \<sigma> (P(p \<mapsto> j)) e \<phi> j)) \<psi> j)\<close> by fastforce
+next
+  case (7 p \<phi>)
+  then show ?case 
+    by auto
+next
+  case (8 p \<phi> \<psi>)
+  then show ?case 
+    by (smt (verit, ccfv_SIG) contains_pred.simps(8) min.assoc min.boundedI min.commute not_contains_pred_progress progress_simps(8) safe_letprev.simps(8))
+next
+  case (9 p \<phi> \<psi>)
+  then show ?case 
+    by (smt (verit, ccfv_SIG) contains_pred.simps(9) min.assoc min.boundedI min.commute not_contains_pred_progress progress_simps(9) safe_letprev.simps(9))
+next
+  case (10 p l)
+    define as where "as = filter (\<lambda> \<phi>. contains_pred p \<phi>) l" 
+  define bs where "bs = filter (\<lambda> \<phi>. \<not>contains_pred p \<phi>) l"
+  have as_not_empty: "as \<noteq> []"
+    unfolding as_def using 10(2-)
+    by(auto simp add: filter_empty_conv)    
+  have l_set: "set l = set as \<union> set bs"
+    using as_def bs_def by auto
+  define Q where "Q = (\<lambda> y. \<exists> \<phi> \<in> set as. y\<ge> x \<and> progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (progress \<sigma> (P(p \<mapsto> j)) \<phi> j))"
+  have least_Q_eq: "\<exists>\<phi> \<in> set as. progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min (Least Q) (progress \<sigma> (P(p \<mapsto> j)) \<phi> j)"
+    using 10(1)[of _ P x] 10(2-) apply(simp del: fun_upd_apply)
+    by (smt (verit, best) LeastI_ex Q_def as_def mem_Collect_eq set_filter)
+  
+  have "\<exists>y\<ge>x. (MIN \<phi> \<in> (set as). progress \<sigma> (P(p \<mapsto> x)) \<phi> j) = min y (MIN \<phi> \<in> (set as). progress \<sigma> (P(p \<mapsto> j)) \<phi> j)"
+    thm hom_Min_commute
+    apply(rule exI[of _ "(Least Q)"])
+    apply(rule conjI)
+       using 10(1)[of _ P x] 10(2-) apply(simp del: fun_upd_apply)
+        apply (smt (verit, best) LeastI_ex Q_def as_def mem_Collect_eq set_filter)
+    apply(subst hom_Min_commute[where h = "min (Least Q)"])
+       apply presburger
+      apply(simp)
+      apply(simp add: as_not_empty)
+       apply(simp add: image_image cong del: image_cong)
+    apply(rule antisym)
+     apply(rule Min.boundedI)
+     apply(simp)
+      apply(simp add: as_not_empty)
+     apply(subst Min_le_iff)
+       apply(simp)
+         apply(simp add: as_not_empty)
+        apply(clarsimp)
+       subgoal for \<phi>
+         apply(cases "Least Q\<le> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j")
+         using least_Q_eq apply(auto)[]
+          apply (metis min.cobounded1 min_le_iff_disj)
+         apply(rule bexI[where x= "\<phi>"])
+         apply (subgoal_tac "contains_pred p \<phi>")
+         using 10(1)[of \<phi> P x] 10(2-)apply(auto simp add: l_set simp del: fun_upd_apply)[]
+         apply(simp_all add: as_def)
+         done
+       apply(rule Min.boundedI)
+         apply(simp)
+        apply(simp add: as_not_empty)
+       apply(subst Min_le_iff)
+       apply(simp)
+        apply(simp add: as_not_empty)
+       apply(clarsimp)
+       subgoal for \<phi>
+         apply(rule bexI[where x= "\<phi>"])
+         apply (subgoal_tac "contains_pred p \<phi>")
+         using 10(1)[of \<phi> P x] 10(2-) apply(simp add: l_set Q_def del: fun_upd_apply)
+           apply (smt (verit, del_insts) Least_le min.cobounded2 min.coboundedI1 min_def_raw)
+                  apply(simp_all add: as_def)
+         done
+       done
+  moreover have "bs\<noteq>[] \<Longrightarrow> (MIN \<phi> \<in> (set bs). progress \<sigma> (P(p \<mapsto> x)) \<phi> j) = (MIN \<phi> \<in> (set bs). progress \<sigma> (P(p \<mapsto> j)) \<phi> j)"
+    apply(rule arg_cong[where f="Min"])
+apply(rule image_cong)
+    using 10 by(auto simp add: bs_def)
+  ultimately show ?case using 10(2-)
+    apply(auto simp add: l_set simp del: fun_upd_apply)
+       apply (simp add: as_def)
+     apply(cases "bs=[]")
+      apply auto[1]
+    subgoal for a b 
+      apply(auto simp add: image_Un Min_Un as_not_empty as_def)[]
+      apply(subst  Min_Un)
+          apply(auto)[4]
+            apply(subst  Min_Un)
+          apply(auto)[4]
+      apply(simp)
+      by (meson min.assoc)
+    apply(cases "bs=[]")
+       apply (metis as_def bs_def empty_filter_conv filter_True l_set)
+      apply(auto simp add: image_Un Min_Un as_not_empty)[]
+    done
+next
+  case (11 p \<phi>)
+  then show ?case 
+    by auto
+next
+  case (12 p y \<omega> b' f \<phi>)
+  then show ?case 
+    by auto
+next
+  case (13 p I \<phi>)
+  then show ?case 
+    apply(auto simp del: fun_upd_apply)
+    by (smt (z3) le_imp_less_Suc le_less min.bounded_iff min_Suc_Suc min_def_raw)
+next
+  case (14 p I \<phi>)
+  then show ?case 
+    using contains_pred.simps(14) safe_letprev.simps(14) by blast
+next
+  case (15 p \<phi> I \<psi>)
+  then show ?case 
+    by (metis contains_pred.simps(15) safe_letprev.simps(15))
+next
+  case (16 p \<phi> I \<psi>)
+  then show ?case 
+    by (metis contains_pred.simps(16) safe_letprev.simps(16))
+next
+case (17 p I r)
+  then show ?case 
+    by(auto simp del: fun_upd_apply)
+next
+  case (18 p I r)
+  then show ?case 
+    by(auto simp del: fun_upd_apply)
+qed
+
 lemma min_letprev_progress_upd2:
   "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow>
   Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min x (Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j)" 
@@ -1767,7 +2128,9 @@ next
     apply(simp del: fun_upd_apply)
     apply(elim conjE disjE impCE)
            apply blast
-          apply (smt (verit, best) fun_upd_upd min.assoc min.cobounded1 min_def_raw)
+    subgoal
+      apply (smt (verit, best) fun_upd_upd min.assoc min.cobounded1 min_def_raw)
+      done
          apply blast
     subgoal
       apply (drule meta_spec2[of _ P x])
@@ -1922,11 +2285,6 @@ next
   then show ?case
     by(simp del: fun_upd_apply)
 qed
-
-lemma min_letprev_progress_upd_new:
-  "safe_letprev p \<phi> \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow> contains_pred p \<phi> \<Longrightarrow>
-  \<exists> y\<ge>x. Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (Monitor.progress \<sigma> (P(p\<mapsto>j)) \<phi> j)"
-  sorry (*TODO*)
 
 lemma progress_fixpoint_ex2:
   assumes "safe_letprev p \<phi>"
@@ -3281,7 +3639,7 @@ next
     apply (simp del: fun_upd_apply)
     apply (cases "i=0")
      apply(simp_all)
-    using "13.IH"[of i f g V] "13.prems" 
+    using "13.IH"[of i f g V]
     sorry (*TODO*)
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
