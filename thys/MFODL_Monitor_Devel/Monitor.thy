@@ -3639,7 +3639,7 @@ next
     apply (simp del: fun_upd_apply)
     apply (cases "i=0")
      apply(simp_all)
-    using "13.IH"[of i f g V]
+    using "13.IH"[of i f g V v]
     sorry (*TODO*)
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
@@ -6605,7 +6605,6 @@ lemma (in maux) letprev_meval_invar_post:
               apply(assumption)
       subgoal using step.prems(11)[of \<phi> ts "(P(p \<mapsto> i))" "(V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>')))" "(P'(p \<mapsto> i + length xs))" xs db]
         apply(cases "contains_pred p \<phi>'")
-         apply(subgoal_tac "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j \<le> i+ length xs")
         subgoal
           apply(rule case_prodI2)
           subgoal for xs' \<phi>\<^sub>n
@@ -6637,21 +6636,6 @@ lemma (in maux) letprev_meval_invar_post:
             apply (simp only: prod.case)
             done
           done
-         apply(subgoal_tac "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j = min (i + length xs) (Monitor.progress \<sigma> (P'(p \<mapsto> j)) \<phi>' j)")
-          apply linarith
-         apply(intro min_letprev_progress_upd2)
-            apply assumption
-           apply assumption
-        subgoal
-          apply(simp add: letprev_meval_invar_def Let_def del:fun_upd_apply upt_Suc)
-          apply(subgoal_tac "i + length buf = Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
-          subgoal
-            apply(cases "length buf \<le> j-i")
-             apply(simp_all add: xs_def del:fun_upd_apply upt_Suc)
-             apply linarith
-            by (metis diff_le_self eq_imp_le le_add_diff_inverse le_trans)
-          by (smt (z3) le_add_diff_inverse length_upt list_all2_lengthD)
-         apply assumption
         subgoal
           apply (drule meta_mp, rule refl)
           apply (drule meta_mp, assumption)
@@ -6728,7 +6712,6 @@ lemma (in maux) letprev_meval_invar_post:
           apply (subgoal_tac "[i..<i + length (take (j - i) buf)] = take (j - i)
                 [i..<Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))]")
            apply (simp only: list_all2_takeI)
-
           apply(subgoal_tac "i + length buf = Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
           subgoal
             apply(cases "length buf \<le> j-i")
@@ -6746,7 +6729,6 @@ lemma (in maux) letprev_meval_invar_post:
     (V(p \<mapsto> letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>')))
     (Mapping.update p (map (image (map the)) xs) db)")
        apply(subgoal_tac "letprev_meval_invar n V \<sigma> P' \<phi>' m j (i + length xs) (ys @ (fst ysp)) buf'' p [] (Mapping.map_values (\<lambda>_ _. []) db) (snd ysp) k")
-      thm step(1)[where xs2="xs" and ys'2="fst ysp" and \<phi>'2 = "snd ysp" and buf'2 = "buf''"]
         apply(rule step(1)[where xs2="xs" and ys'2="fst ysp" and \<phi>'2 = "snd ysp" and buf'2 = "buf''"])
                          apply(simp add: xs_def)
                         apply(simp add: ysp_def)
@@ -6786,7 +6768,6 @@ lemma (in maux) letprev_meval_invar_post:
       subgoal using step.prems(11)[of \<phi> ts "(P(p \<mapsto> i))" "(V(p \<mapsto>
                     letprev_sat m (\<lambda>X v i. Formula.sat \<sigma> (V(p \<mapsto> X)) v i \<phi>')))" "(P'(p \<mapsto> i + length xs))" xs db] 
         apply(cases "contains_pred p \<phi>'")
-         apply(subgoal_tac "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j \<le> i+ length xs")
         subgoal
           apply(rule case_prodI2)
           subgoal for xs' \<phi>\<^sub>n
@@ -6818,13 +6799,6 @@ lemma (in maux) letprev_meval_invar_post:
             apply (simp only: prod.case)
             done
           done
-         apply(subgoal_tac "Monitor.progress \<sigma> (P'(p \<mapsto> i + length xs)) \<phi>' j = min (i + length xs) (Monitor.progress \<sigma> (P'(p \<mapsto> j)) \<phi>' j)")
-          apply linarith
-         apply(intro min_letprev_progress_upd2)
-            apply assumption
-           apply assumption
-        using i''_def nat_le_linear apply blast
-         apply assumption
         subgoal
           apply (drule meta_mp, rule refl)
           apply (drule meta_mp, assumption)
@@ -6865,7 +6839,6 @@ lemma (in maux) letprev_meval_invar_post:
           apply (subgoal_tac "[i..<i + length (take (j - i) buf)] = take (j - i)
                 [i..<Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))]")
            apply (simp only: list_all2_takeI)
-
           apply(subgoal_tac "i + length buf = Suc (Monitor.progress \<sigma> (P(p \<mapsto> i)) \<phi>' (j - length ts))")
           subgoal
             apply(cases "length buf \<le> j-i")
