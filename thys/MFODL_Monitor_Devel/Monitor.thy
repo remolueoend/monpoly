@@ -3451,12 +3451,8 @@ next
   from "12.IH"[of i f g V] "12.prems" show ?case by simp
 next
   case (13 p I \<phi>)
-  then show ?case
-    apply (simp del: fun_upd_apply)
-    apply (cases "i=0")
-     apply(simp_all)
-    using "13.IH"[of i f g V v]
-    sorry (*TODO*)
+  from "13.IH"[of "i - 1" f g V v] "13.prems" show ?case
+    by (cases "i") simp_all
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
 lemma (in maux) invar_recursion_invar:
