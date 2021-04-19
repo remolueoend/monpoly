@@ -1617,11 +1617,12 @@ lemma min_letprev_progress_upd:
   apply(induct p \<phi> arbitrary: P x rule: safe_letprev.induct)
                    apply(simp_all add: min_le_iff_disj progress_regex_def Min_le_iff)
       defer
-      defer
-      apply auto [2]
+        defer
+        apply auto [2]
     apply auto []
      apply (meson linear order_trans)
-  apply (meson le_SucI)
+     apply (meson le_SucI)
+    apply auto[]
    apply (erule conjE)+
    apply (erule disjE_Not2)
     apply auto []
@@ -2091,7 +2092,7 @@ next
 next
   case (15 p \<phi> I \<psi>)
   then show ?case 
-    by (metis contains_pred.simps(15) safe_letprev.simps(15))
+    by (smt (verit, ccfv_threshold) contains_pred.simps(15) min.assoc min.boundedI min.commute not_contains_pred_progress progress_simps(15) safe_letprev.simps(15))
 next
   case (16 p \<phi> I \<psi>)
   then show ?case 
@@ -3453,6 +3454,22 @@ next
   case (13 p I \<phi>)
   from "13.IH"[of "i - 1" f g V v] "13.prems" show ?case
     by (cases "i") simp_all
+next
+  case(15 p \<phi> I \<psi>)
+  from "15.IH"[of i f g V v] "15.prems" show ?case
+    apply (simp del: fun_upd_apply)
+    apply (intro conj_cong ex_cong ball_cong)
+        apply simp +
+    subgoal for j
+      apply(rule "15.IH"[of j f g V v])
+       apply(simp)
+      by simp
+     apply(simp)
+    subgoal for j k
+      apply(rule "15.IH"[of k f g V v])
+       apply(simp)
+      by simp
+    done
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
 lemma (in maux) invar_recursion_invar:
