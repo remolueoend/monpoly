@@ -1622,7 +1622,8 @@ lemma min_letprev_progress_upd:
     apply auto []
      apply (meson linear order_trans)
      apply (meson le_SucI)
-    apply auto[]
+     apply auto[]
+    apply (metis le_trans nat_le_linear)
    apply (erule conjE)+
    apply (erule disjE_Not2)
     apply auto []
@@ -2098,9 +2099,95 @@ next
   then show ?case 
     by (metis contains_pred.simps(16) safe_letprev.simps(16))
 next
-case (17 p I r)
-  then show ?case 
-    by(auto simp del: fun_upd_apply)
+  case (17 p I r)
+  define as where "as = {\<phi> \<in> (Regex.atms r). contains_pred p \<phi>}"
+  define bs where "bs = {\<phi> \<in> (Regex.atms r). \<not>contains_pred p \<phi>}"
+  have finite_as: "finite as"
+    by (simp add: as_def)
+  have finite_bs: "finite bs"
+    by (simp add: bs_def)
+  have as_not_empty: "as \<noteq> {}"
+    unfolding as_def using 17(2-)
+    by(auto simp add: filter_empty_conv)    
+  have l_set: "(Regex.atms r) = as \<union> bs"
+    using as_def bs_def by auto
+  define Q where "Q = (\<lambda> y. \<exists> \<phi> \<in> as. y\<ge> x \<and> progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min y (progress \<sigma> (P(p \<mapsto> j)) \<phi> j))"
+  have least_Q_eq: "\<exists>\<phi> \<in> as. progress \<sigma> (P(p \<mapsto> x)) \<phi> j = min (Least Q) (progress \<sigma> (P(p \<mapsto> j)) \<phi> j)"
+    using 17(1)[of _ P x] 17(2-) apply(simp del: fun_upd_apply)
+    by (smt (verit, best) LeastI_ex Q_def as_def mem_Collect_eq set_filter)
+  have "\<exists>y\<ge>x. (MIN \<phi> \<in> (as). progress \<sigma> (P(p \<mapsto> x)) \<phi> j) = min y (MIN \<phi> \<in> (as). progress \<sigma> (P(p \<mapsto> j)) \<phi> j)"
+    apply(rule exI[of _ "(Least Q)"])
+    apply(rule conjI)
+       using 17(1)[of _ P x] 17(2-) apply(simp del: fun_upd_apply)
+        apply (smt (verit, best) LeastI_ex Q_def as_def mem_Collect_eq set_filter)
+    apply(subst hom_Min_commute[where h = "min (Least Q)"])
+          apply presburger
+         apply (simp add: finite_as)
+      apply(simp add: as_not_empty)
+       apply(simp add: image_image cong del: image_cong)
+    apply(rule antisym)
+        apply(rule Min.boundedI)
+         apply (simp add: finite_as)
+      apply(simp add: as_not_empty)
+        apply(subst Min_le_iff)
+         apply (simp add: finite_as)
+         apply(simp add: as_not_empty)
+        apply(clarsimp)
+       subgoal for \<phi>
+         apply(cases "Least Q\<le> Monitor.progress \<sigma> (P(p \<mapsto> j)) \<phi> j")
+         using least_Q_eq apply(auto)[]
+          apply (metis min.cobounded1 min_le_iff_disj)
+         apply(rule bexI[where x= "\<phi>"])
+         apply (subgoal_tac "contains_pred p \<phi>")
+         using 17(1)[of \<phi> P x] 17(2-)apply(auto simp add: l_set simp del: fun_upd_apply)[]
+         apply(simp_all add: as_def)
+         done
+       apply(rule Min.boundedI)
+         apply (simp add: finite_as)
+        apply(simp add: as_not_empty)
+       apply(subst Min_le_iff)
+         apply (simp add: finite_as)
+        apply(simp add: as_not_empty)
+       apply(clarsimp)
+       subgoal for \<phi>
+         apply(rule bexI[where x= "\<phi>"])
+         apply (subgoal_tac "contains_pred p \<phi>")
+         using 17(1)[of \<phi> P x] 17(2-) apply(simp add: l_set Q_def del: fun_upd_apply)
+           apply (smt (verit, del_insts) Least_le min.cobounded2 min.coboundedI1 min_def_raw)
+                  apply(simp_all add: as_def)
+         done
+       done
+  moreover have "bs\<noteq>{} \<Longrightarrow> (MIN \<phi> \<in> (bs). progress \<sigma> (P(p \<mapsto> x)) \<phi> j) = (MIN \<phi> \<in> (bs). progress \<sigma> (P(p \<mapsto> j)) \<phi> j)"
+    apply(rule arg_cong[where f="Min"])
+apply(rule image_cong)
+    using 17 by(auto simp add: bs_def)
+  ultimately show ?case using 17(2-)
+    apply(simp add: progress_regex_def del: fun_upd_apply)
+    apply(cases "regex.atms r={}")
+    apply(simp del: fun_upd_apply)
+    apply(simp del: fun_upd_apply)
+    apply(cases "bs={}")
+     apply(auto simp del: fun_upd_apply)[]
+     apply (metis l_set sup_bot.right_neutral)
+    apply(simp add: image_Un Min_Un as_not_empty as_def)[]
+    apply(subgoal_tac "    \<exists>y\<ge>x. Min ((\<lambda>z. Monitor.progress \<sigma> (P(p \<mapsto> x)) z j) ` {z \<in> Regex.atms r. contains_pred p z} \<union>
+                (\<lambda>z. Monitor.progress \<sigma> (P(p \<mapsto> x)) z j) ` bs) =
+           min y
+            (Min ((\<lambda>z. Monitor.progress \<sigma> (P(p \<mapsto> j)) z j) ` {z \<in> Regex.atms r. contains_pred p z} \<union>
+                  (\<lambda>z. Monitor.progress \<sigma> (P(p \<mapsto> j)) z j) ` bs))")
+    apply (metis (no_types, lifting) as_def image_Un l_set)
+      apply(subst  Min_Un)
+    using as_def finite_as apply blast
+       apply blast
+    using finite_bs apply blast
+     apply blast
+      apply(subst  Min_Un)
+    using as_def finite_as apply blast
+       apply blast
+    using finite_bs apply blast
+     apply blast
+      apply(simp)
+    by (metis (no_types, lifting) min.assoc)
 next
   case (18 p I r)
   then show ?case 
@@ -3469,6 +3556,18 @@ next
       apply(rule "15.IH"[of k f g V v])
        apply(simp)
       by simp
+    done
+next 
+  case (17 p I r)
+  from "17.IH"[of _ i f g V v] "17.prems" show ?case
+    apply (simp del: fun_upd_apply)
+    apply(intro ex_cong conj_cong match_cong_strong) 
+      apply simp+
+    subgoal for j k z
+      apply(rule "17.IH"[of z k f g V v])
+        apply(assumption)
+       apply(simp)
+      by (meson le_trans less_Suc_eq_le)
     done
 qed (simp_all del: fun_upd_apply cong: nat.case_cong match_cong)
 
