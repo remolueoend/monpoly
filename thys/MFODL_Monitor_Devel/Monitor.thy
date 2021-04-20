@@ -3423,11 +3423,6 @@ lemma (in maux) letprev_meval_invar_init:
       by(simp add: Let_def del: upt_Suc)
   qed
 
-(* Move *)
-lemma qtable_cong_strong: "A = B \<Longrightarrow> (\<And>v. wf_tuple n A v \<Longrightarrow> P v \<Longrightarrow> Q v \<longleftrightarrow> Q' v) \<Longrightarrow> qtable n A P Q = qtable n B P Q'"
-  apply (auto simp: qtable_def fun_eq_iff)
-  using table_def by blast+
-
 lemma V_subst_letprev_sat:
   "(\<And>X v j. j < i \<Longrightarrow> f X v j = g X v j) \<Longrightarrow>
   Formula.letprev_sat n f i = Formula.letprev_sat n g i"

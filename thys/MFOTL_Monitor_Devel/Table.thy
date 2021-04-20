@@ -367,6 +367,10 @@ qed
 lemma qtable_cong: "qtable n A P Q X \<Longrightarrow> A = B \<Longrightarrow> (\<And>v. P v \<Longrightarrow> Q v \<longleftrightarrow> Q' v) \<Longrightarrow> qtable n B P Q' X"
   by (auto simp: qtable_def)
 
+lemma qtable_cong_strong: "A = B \<Longrightarrow> (\<And>v. wf_tuple n A v \<Longrightarrow> P v \<Longrightarrow> Q v \<longleftrightarrow> Q' v) \<Longrightarrow> qtable n A P Q = qtable n B P Q'"
+  apply (auto simp: qtable_def fun_eq_iff)
+  using table_def by blast+
+
 (*<*)
 end
 (*>*)
