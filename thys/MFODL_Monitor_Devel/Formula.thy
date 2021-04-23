@@ -105,6 +105,17 @@ qualified datatype (discs_sels) formula = Pred name "trm list"
   | Since formula \<I> formula | Until formula \<I> formula
   | MatchF \<I> "formula Regex.regex" | MatchP \<I> "formula Regex.regex"
 
+(*
+qualified datatype (discs_sels) 't formula = Pred name "trm list"
+  | Let name "'t formula" "'t formula"
+  | Eq trm trm | Less trm trm | LessEq trm trm
+  | Neg "'t formula" | Or "'t formula" "'t formula" | And "'t formula" "'t formula" | Ands "'t formula list" | Exists 't "'t formula"
+  | Agg nat agg_op "'t list" trm "'t formula"
+  | Prev \<I> "'t formula" | Next \<I> "'t formula"
+  | Since "'t formula" \<I> "'t formula" | Until "'t formula" \<I> "'t formula"
+  | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
+*)
+
 qualified definition "FF = Exists (Neg (Eq (Var 0) (Var 0)))"
 qualified definition "TT \<equiv> Neg FF"
 
