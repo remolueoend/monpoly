@@ -53,7 +53,7 @@ lemma ty_of_div: "ty_of x = t \<Longrightarrow> ty_of y = t \<Longrightarrow> t 
 lemma ty_of_mod: "ty_of x = t \<Longrightarrow> ty_of y = t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> ty_of (x mod y) = t"
   by (cases x; cases y) (simp_all add: numeric_ty_def)
 
-lemma ty_of_eval_trm: "E \<turnstile> x :: t \<Longrightarrow> \<forall>y\<in>fv_trm x. y < length v \<and> ty_of (v ! y) = E y \<Longrightarrow> 
+lemma ty_of_eval_trm: "E \<turnstile> x :: t \<Longrightarrow> \<forall>y\<in>fv_trm x. ty_of (v ! y) = E y \<Longrightarrow> 
 ty_of (Formula.eval_trm v x) = t"
   by (induction pred: wty_trm) (simp_all add: ty_of_plus ty_of_minus ty_of_uminus 
       ty_of_mult ty_of_div ty_of_mod)
@@ -118,9 +118,10 @@ inductive wty_formula :: "sig \<Rightarrow> tyenv \<Rightarrow> Formula.formula 
 | Or: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.Or \<phi> \<psi>"
 | And: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.And \<phi> \<psi>" 
 | Ands: "\<forall>\<phi> \<in> set \<phi>s. S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Ands \<phi>s"
-| Exists: "S, case_nat t E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Exists \<phi>" 
+| Exists: "S, case_nat t E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Exists \<phi>"
 | Sum: "E s =  t \<Longrightarrow>  E' \<turnstile> x :: t \<Longrightarrow> S,E' \<turnstile> \<phi>  \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow>
           S, E \<turnstile> Formula.Agg s (Formula.Agg_Sum, d) b x \<phi>"
+ (* (\<lambda>z. if z < b then tys ! z else E (z - b))*)
 | Cnt: "E s =  TInt \<Longrightarrow>  E' \<turnstile> x :: t \<Longrightarrow> S,E' \<turnstile> \<phi>  \<Longrightarrow> S, E \<turnstile> Formula.Agg s (Formula.Agg_Cnt, d)  b x \<phi>"
 | Avg: "E s =  TFloat \<Longrightarrow>  E' \<turnstile> x :: t \<Longrightarrow> S,E' \<turnstile> \<phi>  \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> 
          S, E \<turnstile> Formula.Agg s (Formula.Agg_Cnt, d) b x \<phi>"
@@ -233,7 +234,7 @@ next
     by cases
   from neq_Var(4)  have "x = xa" by auto
   from this  varty have "E x = t" using  wty_trm.cases by fastforce
-  from neq_Var have "safe_formula 
+  (*TODO*)
 
   then show ?case by cases (* TODO *)
 next
@@ -328,7 +329,7 @@ next
   from Exists.prems(1) obtain t where "S, case_nat t E \<turnstile> \<phi>" by cases
   from Exists.prems(3) obtain z where "Formula.sat \<sigma> V (z#v) i \<phi>" by auto
   from Exists.prems(4) have "Suc x \<in> fv \<phi>" by (simp add: fvi_Suc)
-  have "ty_of ((z#v) ! Suc x) = case_nat t E (Suc x)
+  have "ty_of ((z#v) ! Suc x) = case_nat t E (Suc x)"
     by (rule Exists.IH) (simp?, fact)+
   then show ?case by simp
 next
