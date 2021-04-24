@@ -95,7 +95,7 @@ fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Righta
       if even u then
         (double_of_event_data (xs ! (u'-1)) + double_of_event_data (xs ! u') / double_of_int 2)
       else double_of_event_data (xs ! u'))"
-
+(*
 qualified datatype (discs_sels) formula = Pred name "trm list"
   | Let name formula formula
   | Eq trm trm | Less trm trm | LessEq trm trm
@@ -104,8 +104,8 @@ qualified datatype (discs_sels) formula = Pred name "trm list"
   | Prev \<I> formula | Next \<I> formula
   | Since formula \<I> formula | Until formula \<I> formula
   | MatchF \<I> "formula Regex.regex" | MatchP \<I> "formula Regex.regex"
+*)
 
-(*
 qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | Let name "'t formula" "'t formula"
   | Eq trm trm | Less trm trm | LessEq trm trm
@@ -114,12 +114,12 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | Prev \<I> "'t formula" | Next \<I> "'t formula"
   | Since "'t formula" \<I> "'t formula" | Until "'t formula" \<I> "'t formula"
   | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
-*)
 
-qualified definition "FF = Exists (Neg (Eq (Var 0) (Var 0)))"
+
+qualified definition "FF = Exists None (Neg (Eq (Var 0) (Var 0)))" (* what should the type be?*)
 qualified definition "TT \<equiv> Neg FF"
 
-qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
+qualified fun fvi :: "nat \<Rightarrow> 't formula \<Rightarrow> nat set" where
   "fvi b (Pred r ts) = (\<Union>t\<in>set ts. fvi_trm b t)"
 | "fvi b (Let p \<phi> \<psi>) = fvi b \<psi>"
 | "fvi b (Eq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
@@ -129,8 +129,8 @@ qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
 | "fvi b (Or \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (And \<phi> \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (Ands \<phi>s) = (let xs = map (fvi b) \<phi>s in \<Union>x\<in>set xs. x)"
-| "fvi b (Exists \<phi>) = fvi (Suc b) \<phi>"
-| "fvi b (Agg y \<omega> b' f \<phi>) = fvi (b + b') \<phi> \<union> fvi_trm (b + b') f \<union> (if b \<le> y then {y - b} else {})"
+| "fvi b (Exists t \<phi>) = fvi (Suc b) \<phi>"
+| "fvi b (Agg y \<omega> tys f \<phi>) = fvi (b + length tys) \<phi> \<union> fvi_trm (b + length tys) f \<union> (if b \<le> y then {y - b} else {})"
 | "fvi b (Prev I \<phi>) = fvi b \<phi>"
 | "fvi b (Next I \<phi>) = fvi b \<phi>"
 | "fvi b (Since \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
@@ -164,8 +164,9 @@ proof (induction \<phi> arbitrary: b rule: formula.induct)
   case (Exists \<phi>)
   then show ?case by force
 next
-  case (Agg y \<omega> b' f \<phi>)
-  have *: "b + c + b' = b + b' + c" by simp
+  case (Agg y \<omega> tys f \<phi>)
+  let ?b' = "length tys"
+  have *: "b + c +?b' = b + ?b' + c" by simp
   from Agg show ?case by (force simp: * fvi_trm_plus)
 qed (auto simp add: fvi_trm_plus fv_regex_commute[where g = "\<lambda>x. x + c"])
 
@@ -198,13 +199,13 @@ lemma fvi_Suc_bound:
 lemma fvi_iff_fv: "x \<in> fvi b \<phi> \<longleftrightarrow> x + b \<in> fv \<phi>"
   using fvi_plus[where b=0 and c=b] by simp_all
 
-qualified definition nfv :: "formula \<Rightarrow> nat" where
+qualified definition nfv :: "'t formula \<Rightarrow> nat" where
   "nfv \<phi> = Max (insert 0 (Suc ` fv \<phi>))"
 
 qualified abbreviation nfv_regex where
   "nfv_regex \<equiv> Regex.nfv_regex fv"
 
-qualified definition envs :: "formula \<Rightarrow> env set" where
+qualified definition envs :: "'t formula \<Rightarrow> env set" where
   "envs \<phi> = {v. length v = nfv \<phi>}"
 
 lemma nfv_simps[simp]:
@@ -249,7 +250,7 @@ lemma fvi_less_nfv_regex: "\<forall>i\<in>fv_regex \<phi>. i < nfv_regex \<phi>"
 
 subsubsection \<open>Future reach\<close>
 
-qualified fun future_bounded :: "formula \<Rightarrow> bool" where
+qualified fun future_bounded :: "'t formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
 | "future_bounded (Let p \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Eq _ _) = True"
@@ -259,8 +260,8 @@ qualified fun future_bounded :: "formula \<Rightarrow> bool" where
 | "future_bounded (Or \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (And \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Ands l) = list_all future_bounded l"
-| "future_bounded (Exists \<phi>) = future_bounded \<phi>"
-| "future_bounded (Agg y \<omega> b f \<phi>) = future_bounded \<phi>"
+| "future_bounded (Exists t \<phi>) = future_bounded \<phi>"
+| "future_bounded (Agg y \<omega> tys f \<phi>) = future_bounded \<phi>"
 | "future_bounded (Prev I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Next I \<phi>) = future_bounded \<phi>"
 | "future_bounded (Since \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
@@ -273,7 +274,7 @@ subsubsection \<open>Semantics\<close>
 
 definition "ecard A = (if finite A then card A else \<infinity>)"
 
-qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
+qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> 't formula \<Rightarrow> bool" where
   "sat \<sigma> V v i (Pred r ts) = (case V r of
        None \<Rightarrow> (r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i
      | Some X \<Rightarrow> map (eval_trm v) ts \<in> X i)"
@@ -286,10 +287,10 @@ qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarr
 | "sat \<sigma> V v i (Or \<phi> \<psi>) = (sat \<sigma> V v i \<phi> \<or> sat \<sigma> V v i \<psi>)"
 | "sat \<sigma> V v i (And \<phi> \<psi>) = (sat \<sigma> V v i \<phi> \<and> sat \<sigma> V v i \<psi>)"
 | "sat \<sigma> V v i (Ands l) = (\<forall>\<phi> \<in> set l. sat \<sigma> V v i \<phi>)"
-| "sat \<sigma> V v i (Exists \<phi>) = (\<exists>z. sat \<sigma> V (z # v) i \<phi>)"
-| "sat \<sigma> V v i (Agg y \<omega> b f \<phi>) =
-    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> V (zs @ v) i \<phi> \<and> eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
-    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M)"
+| "sat \<sigma> V v i (Exists t \<phi>) = (\<exists>z. sat \<sigma> V (z # v) i \<phi>)"
+| "sat \<sigma> V v i (Agg y \<omega> tys f \<phi>) =
+    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> sat \<sigma> V (zs @ v) i \<phi> \<and> eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
+    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..< length tys}) \<and> v ! y = eval_agg_op \<omega> M)"
 | "sat \<sigma> V v i (Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<phi>)"
 | "sat \<sigma> V v i (Next I \<phi>) = (mem I ((\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i)) \<and> sat \<sigma> V v (Suc i) \<phi>)"
 | "sat \<sigma> V v i (Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> V v k \<phi>))"
@@ -468,15 +469,16 @@ next
   case (Exists \<phi>)
   then show ?case unfolding sat.simps by (intro iff_exI) (simp add: fvi_Suc nth_Cons')
 next
-  case (Agg y \<omega> b f \<phi>)
+  case (Agg y \<omega> tys f \<phi>)
+  let ?b = "length tys"
   have "v ! y = v' ! y"
     using Agg.prems by simp
-  moreover have "sat \<sigma> V (zs @ v) i \<phi> = sat \<sigma> V (zs @ v') i \<phi>" if "length zs = b" for zs
+  moreover have "sat \<sigma> V (zs @ v) i \<phi> = sat \<sigma> V (zs @ v') i \<phi>" if "length zs = ?b" for zs
     using that Agg.prems by (simp add: Agg.hyps[where v="zs @ v" and v'="zs @ v'"]
-        nth_append fvi_iff_fv(1)[where b=b])
-  moreover have "eval_trm (zs @ v) f = eval_trm (zs @ v') f" if "length zs = b" for zs
+        nth_append fvi_iff_fv(1)[where b= ?b])
+  moreover have "eval_trm (zs @ v) f = eval_trm (zs @ v') f" if "length zs = ?b" for zs
     using that Agg.prems by (auto intro!: eval_trm_fv_cong[where v="zs @ v" and v'="zs @ v'"]
-        simp: nth_append fvi_iff_fv(1)[where b=b] fvi_trm_iff_fv_trm[where b="length zs"])
+        simp: nth_append fvi_iff_fv(1)[where b= ?b] fvi_trm_iff_fv_trm[where b="length zs"])
   ultimately show ?case
     by (simp cong: conj_cong)
 next
