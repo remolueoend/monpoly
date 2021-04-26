@@ -1539,6 +1539,272 @@ next
     by (auto simp add: nfv_convert_multiway fun_upd_def)
 qed (auto cong: nat.case_cong)
 
+lemma safe_formula_finite: "safe_formula \<phi> \<Longrightarrow> future_bounded \<phi> \<Longrightarrow> n\<ge> (nfv \<phi>) \<Longrightarrow> \<forall> i. finite (\<Gamma> \<sigma> i) \<Longrightarrow> \<forall> p\<in>dom V. \<forall> i. finite (the (V p) i) \<Longrightarrow> finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
+proof(induct \<phi> arbitrary: i n V rule: safe_formula_induct)
+  case (Eq_Const c d)
+  then show ?case
+    by(simp flip: in_unit_table add: unit_table_def)
+next
+  case (Eq_Var1 c x)
+  then have "finite (singleton_table n x c)"
+    unfolding singleton_table_def by(simp)
+  then show ?case using Eq_Var1
+    apply(elim finite_subset[rotated])
+    apply(auto intro: nth_equalityI simp add: singleton_table_def wf_tuple_def tabulate_alt nfv_def Suc_le_eq)
+    done
+next
+  case (Eq_Var2 c x)
+  then have "finite (singleton_table n x c)"
+    unfolding singleton_table_def by(simp)
+  then show ?case
+    apply(simp)
+    apply(elim finite_subset[rotated])
+    apply(auto intro: nth_equalityI simp add: singleton_table_def wf_tuple_def tabulate_alt nfv_def Suc_le_eq)
+    done
+next
+  case (neq_Var x)
+  then show ?case by(simp)
+next
+case (Pred e ts)
+  then show ?case 
+    apply(simp)
+    apply(cases "V e")
+     apply(simp)
+     defer
+     apply(simp)
+    sorry
+next
+  case (Let p \<phi> \<psi>)
+  then show ?case using Let
+    apply(simp)
+    apply(rule  "Let"(5)[of n "(V(p \<mapsto> \<lambda>i. {v. length v = nfv \<phi> \<and> sat \<sigma> V v i \<phi>}))" i])
+       apply(simp)
+      apply(assumption)+
+    apply(auto)
+    subgoal for j
+      thm finite_subset[of "{v. length v = nfv \<phi> \<and> sat \<sigma> V (map the v) j \<phi>}" "{v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) j \<phi>}" ,rotated]
+      apply(subgoal_tac "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) j \<phi>}")
+      subgoal
+        thm finite_subset[of  "{v. length v = nfv \<phi> \<and> sat \<sigma> V (map the v) j \<phi>}" "{v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) j \<phi>}",rotated]
+              apply(subgoal_tac "finite {v. length v = nfv \<phi> \<and> sat \<sigma> V (map the v) j \<phi>}")
+        subgoal
+          sorry
+    apply(elim finite_subset[of  "{v. length v = nfv \<phi> \<and> sat \<sigma> V (map the v) j \<phi>}" "{v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) j \<phi>}",rotated])
+        apply(auto)
+        sorry
+      apply(rule "Let"(4))
+         apply(assumption)+
+      subgoal
+        sorry
+         apply(assumption)+
+      sorry
+    sorry
+next
+  case (LetPrev p \<phi> \<psi>)
+  then have "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> (V(p \<mapsto>
+                \<lambda>j. if j \<le> i
+                     then letprev_sat (nfv \<phi>)
+                           (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j
+                     else {})) (map the v) i \<phi>}"
+    thm "LetPrev"(5)[of n "(V(p \<mapsto> \<lambda>j. if j \<le> i then letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j else {}))" i]
+
+    
+    sorry
+  then have "finite
+          {v. length v = n \<and>
+              sat \<sigma>
+               (V(p \<mapsto>
+                \<lambda>j. if j \<le> i
+                     then letprev_sat (nfv \<phi>)
+                           (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j
+                     else {}))
+               v i \<phi>}"
+    sorry
+  then show ?case using LetPrev
+    apply(simp)
+    apply(rule  "LetPrev"(6)[of n "(V(p \<mapsto> letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) \<circ> Suc))" i])
+       apply(simp)+
+    apply(auto)
+    subgoal for ia
+    thm "LetPrev"(5)[of n "(V(p \<mapsto> \<lambda>j. if j \<le> i then letprev_sat (nfv \<phi>) (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j else {}))" i]
+    apply(subgoal_tac "finite
+          {v. length v = nfv \<phi> \<and>
+              sat \<sigma>
+               (V(p \<mapsto>
+                \<lambda>j. if j \<le> ia
+                     then letprev_sat (nfv \<phi>)
+                           (\<lambda>X v i. sat \<sigma> (V(p \<mapsto> X)) v i \<phi>) j
+                     else {}))
+               v ia \<phi>}")
+    apply(elim finite_subset[rotated])
+     apply(auto)
+    sorry
+    sorry
+next
+  case (And_assign \<phi> \<psi>)
+  then have " finite {v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>}"
+    apply(simp)
+    apply(subgoal_tac "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}") 
+     apply(elim finite_subset[rotated])
+     apply(simp add: subset_iff)
+     apply(elim conjE impCE disjE_Not2)
+    apply(clarsimp)
+    sorry
+     (*apply(auto)[]
+          apply(auto simp add: wf_tuple_def)
+      apply (metis nth_restrict)
+    subgoal for x i2
+      thm sat_fv_cong
+          sorry
+        by (meson map_the_restrict sat_fv_cong)
+  then show ?case using And_assign
+    apply(elim finite_subset[rotated])
+    apply(auto)
+     apply (meson inf_sup_ord(3) wf_tuple_restrict_simple)
+      apply(auto simp add: wf_tuple_def)
+    by (meson map_the_restrict sat_fv_cong)*)
+next
+  case (And_safe \<phi> \<psi>)
+  then have " finite {v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>}"
+    apply(auto)
+    apply(subgoal_tac "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}") 
+    apply(elim finite_subset[of "{v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>}" "{v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}",rotated])
+     apply(auto)[]
+          apply(auto simp add: wf_tuple_def)
+      apply (metis nth_restrict)
+    subgoal for x i2
+      sorry
+    by (meson map_the_restrict sat_fv_cong)
+  moreover from And_safe have "finite {v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>}"
+    apply(auto)
+    apply(subgoal_tac "finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<psi>}") 
+    apply(elim finite_subset[of "{v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>}" "{v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<psi>}",rotated])
+     apply(auto)[]
+          apply(auto simp add: wf_tuple_def)
+      apply (metis nth_restrict) 
+    subgoal for x i2
+      sorry
+    by (meson map_the_restrict sat_fv_cong)
+  ultimately have "finite ({v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>} \<inter> {v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>})"
+    by simp
+  then show ?case using And_safe
+    apply(elim finite_subset[rotated])
+    apply(auto)
+            apply (meson inf_sup_ord wf_tuple_restrict_simple)+
+      apply(auto simp add: wf_tuple_def)
+       apply (meson map_the_restrict sat_fv_cong)
+      apply (metis nth_restrict)
+         apply(simp add: restrict_def)
+     apply (meson map_the_restrict sat_fv_cong)
+    done
+next
+  case (And_constraint \<phi> \<psi>)
+  then have " finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
+    by(simp)
+  then show ?case using And_constraint
+    apply(elim finite_subset[rotated])
+    apply(auto)
+    by (metis sup.order_iff)
+next
+  case (And_Not \<phi> \<psi>)
+  then have " finite {v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>}"
+    apply(simp)
+  sorry
+  moreover from And_Not have "finite {v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>}"
+    apply(simp)
+  sorry
+  ultimately have "finite ({v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>} \<union> {v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>})"
+    by(simp)
+  then show ?case using And_Not
+    apply(elim finite_subset[rotated])
+    apply(auto)
+    sorry
+next
+  case (Ands l pos neg)
+  then show ?case 
+    apply(simp)
+    sorry
+next
+  case (Neg \<phi>)
+  then show ?case 
+   by(simp flip: in_unit_table add: unit_table_def)
+next
+  case (Or \<phi> \<psi>)
+  then have "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
+    by(simp)
+  moreover from Or have "finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<psi>}"
+    by(simp)
+  ultimately have "finite ({v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>} \<union> {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<psi>})"
+    by(simp)
+  then show ?case using Or
+    apply(elim finite_subset[rotated])
+    by(auto)
+next
+  case (Exists \<phi>)
+ then have "finite (fvi (Suc 0) \<phi>)"
+   by(simp)
+  moreover from Exists have "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
+    apply(simp)
+    sorry
+  ultimately show ?case using Exists
+    apply(simp)
+    sorry
+next
+  case (Agg y \<omega> b f \<phi>)
+  then show ?case 
+    apply(simp)
+    sorry
+next
+  case (Prev I \<phi>)
+  then have "finite
+            {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) (i-1) \<phi>}"
+    apply(simp)
+    done
+  then show ?case 
+    apply(simp)
+    apply(cases "i")
+     apply(simp)
+    apply(simp)
+    apply(elim finite_subset[rotated])
+    by(auto)
+next
+  case (Next I \<phi>)
+  then have "finite
+     {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) (Suc i) \<phi>}"
+    apply(simp)
+    done
+  then show ?case using Next
+    apply(elim finite_subset[rotated])
+    by(auto)
+next
+  case (Since \<phi> I \<psi>)
+  then show ?case 
+    apply(simp)
+    sorry
+next
+  case (Not_Since \<phi> I \<psi>)
+  then show ?case 
+    apply(simp)
+    sorry
+next
+  case (Until \<phi> I \<psi>)
+  then show ?case 
+    apply(simp)
+    sorry
+next
+  case (Not_Until \<phi> I \<psi>)
+  then show ?case 
+    apply(simp)
+    apply(auto)
+    sorry
+next
+  case (MatchP I r)
+  then show ?case sorry
+next
+  case (MatchF I r)
+  then show ?case sorry
+qed
+
 end (*context*)
 
 interpretation Formula_slicer: abstract_slicer "relevant_events \<phi>" for \<phi> .
