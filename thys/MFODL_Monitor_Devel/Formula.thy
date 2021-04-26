@@ -1539,6 +1539,9 @@ next
     by (auto simp add: nfv_convert_multiway fun_upd_def)
 qed (auto cong: nat.case_cong)
 
+lemma sat_the_restrict: "fv \<phi> \<subseteq> A \<Longrightarrow> Formula.sat \<sigma> V (map the (restrict A v)) i \<phi> = Formula.sat \<sigma> V (map the v) i \<phi>"
+  by (rule sat_fv_cong) (auto intro!: map_the_restrict)
+
 lemma safe_formula_finite: "safe_formula \<phi> \<Longrightarrow> future_bounded \<phi> \<Longrightarrow> n\<ge> (nfv \<phi>) \<Longrightarrow> \<forall> i. finite (\<Gamma> \<sigma> i) \<Longrightarrow> \<forall> p\<in>dom V. \<forall> i. finite (the (V p) i) \<Longrightarrow> finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
 proof(induct \<phi> arbitrary: i n V rule: safe_formula_induct)
   case (Eq_Const c d)
@@ -1664,39 +1667,28 @@ next
       apply(auto simp add: wf_tuple_def)
     by (meson map_the_restrict sat_fv_cong)*)
 next
-  case (And_safe \<phi> \<psi>)
-  then have " finite {v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>}"
-    apply(auto)
-    apply(subgoal_tac "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}") 
-    apply(elim finite_subset[of "{v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>}" "{v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}",rotated])
-     apply(auto)[]
-          apply(auto simp add: wf_tuple_def)
-      apply (metis nth_restrict)
-    subgoal for x i2
-      sorry
-    by (meson map_the_restrict sat_fv_cong)
-  moreover from And_safe have "finite {v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>}"
-    apply(auto)
-    apply(subgoal_tac "finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<psi>}") 
-    apply(elim finite_subset[of "{v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>}" "{v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<psi>}",rotated])
-     apply(auto)[]
-          apply(auto simp add: wf_tuple_def)
-      apply (metis nth_restrict) 
-    subgoal for x i2
-      sorry
-    by (meson map_the_restrict sat_fv_cong)
-  ultimately have "finite ({v. wf_tuple n (fv \<phi>) (restrict (fv \<phi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<phi>) v)) i \<phi>} \<inter> {v. wf_tuple n (fv \<psi>) (restrict (fv \<psi>) v) \<and> sat \<sigma> V (map the (restrict (fv \<psi>) v)) i \<psi>})"
-    by simp
-  then show ?case using And_safe
-    apply(elim finite_subset[rotated])
-    apply(auto)
-            apply (meson inf_sup_ord wf_tuple_restrict_simple)+
-      apply(auto simp add: wf_tuple_def)
-       apply (meson map_the_restrict sat_fv_cong)
-      apply (metis nth_restrict)
-         apply(simp add: restrict_def)
-     apply (meson map_the_restrict sat_fv_cong)
-    done
+  case (And_safe \<phi> \<psi>) 
+  let ?A = "\<lambda>\<phi>. {v | v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
+  let ?p = "\<lambda>v. (restrict (fv \<phi>) v, restrict (fv \<psi>) v)"
+  have "finite (?A \<phi>)" and "finite (?A \<psi>)" using And_safe by auto
+  then have "finite (?A \<phi> \<times> ?A \<psi>)" ..
+  then have "finite (Option.these (join1 ` (?A \<phi> \<times> ?A \<psi>)))"
+    by (auto simp: Option.these_def)
+  moreover have "{v. wf_tuple n (fv \<phi> \<union> fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<phi> \<and> sat \<sigma> V (map the v) i \<psi>}
+      \<subseteq> Option.these (join1 ` (?A \<phi> \<times> ?A \<psi>))" (is "?B \<subseteq> ?B'")
+  proof
+    fix v
+    assume "v \<in> ?B"
+    then have "(restrict (fv \<phi>) v, restrict (fv \<psi>) v) \<in> ?A \<phi> \<times> ?A \<psi>"
+      by (auto simp: wf_tuple_restrict_simple sat_the_restrict)
+    moreover have "join1 (restrict (fv \<phi>) v, restrict (fv \<psi>) v) = Some v"
+      using \<open>v \<in> ?B\<close>
+      by (subst join1_Some_restrict) (auto simp: wf_tuple_restrict_simple)
+    ultimately show "v \<in> ?B'"
+      by (force simp: Option.these_def)
+  qed
+  ultimately show ?case
+    by (auto elim!: finite_subset)
 next
   case (And_constraint \<phi> \<psi>)
   then have " finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
