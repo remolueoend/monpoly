@@ -156,6 +156,9 @@ lemma finite_fvi[simp]: "finite (fvi b \<phi>)"
 lemma fvi_trm_plus: "x \<in> fvi_trm (b + c) t \<longleftrightarrow> x + c \<in> fvi_trm b t"
   by (induction t) auto
 
+lemma fvi_trm_minus: "x \<in> fvi_trm b t \<and> x \<ge> c \<longrightarrow> x-c \<in> fvi_trm (b+c) t"
+  by (induction t) auto
+
 lemma fvi_trm_iff_fv_trm: "x \<in> fvi_trm b t \<longleftrightarrow> x + b \<in> fv_trm t"
   using fvi_trm_plus[where b=0 and c=b] by simp_all
 
@@ -169,6 +172,9 @@ next
   have *: "b + c +?b' = b + ?b' + c" by simp
   from Agg show ?case by (force simp: * fvi_trm_plus)
 qed (auto simp add: fvi_trm_plus fv_regex_commute[where g = "\<lambda>x. x + c"])
+
+lemma fvi_minus: "x \<in> fvi b \<phi> \<and> x \<ge> c \<longrightarrow> x - c \<in> fvi (b+c) \<phi>"
+  by (simp add: fvi_plus)
 
 lemma fvi_Suc: "x \<in> fvi (Suc b) \<phi> \<longleftrightarrow> Suc x \<in> fvi b \<phi>"
   using fvi_plus[where c=1] by simp
@@ -1384,7 +1390,7 @@ interpretation Formula_slicer: abstract_slicer "relevant_events \<phi>" for \<ph
 
 lemma sat_slice_iff:
   assumes "v \<in> S"
-  shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat (Formula_slicer.slice \<phi> S \<sigma>) V v i \<phi>"
+  shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> Formula.sat (Formula_slicer.slice Formula_slicer \<phi> S \<sigma>) V v i \<phi>" (*added Formula_slicer*)
   by (rule sat_slice_strong[OF assms]) auto
 
 lemma Neg_splits:
