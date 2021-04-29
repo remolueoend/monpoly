@@ -1818,6 +1818,27 @@ next
     by(auto simp add: Un_absorb2)
 next
   case (Ands l pos neg)
+  (*let ?A = "\<lambda>\<phi>. {v | v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
+  let ?p = "\<lambda>v. (\<lambda> \<phi>.(restrict (fv \<phi>) v))"
+  have "listset (map (?A \<phi>) pos)" using Ands by auto
+  then have "finite (?A \<phi> \<times> ?A \<psi>)" ..
+  then have "finite (Option.these (join1 ` (?A \<phi> \<times> ?A \<psi>)))"
+    by (auto simp: Option.these_def)
+  moreover have "{v. wf_tuple n (fv \<phi> \<union> fv \<psi>) v \<and> sat \<sigma> V (map the v) i \<phi> \<and> sat \<sigma> V (map the v) i \<psi>}
+      \<subseteq> Option.these (join1 ` (?A \<phi> \<times> ?A \<psi>))" (is "?B \<subseteq> ?B'")
+  proof
+    fix v
+    assume "v \<in> ?B"
+    then have "(restrict (fv \<phi>) v, restrict (fv \<psi>) v) \<in> ?A \<phi> \<times> ?A \<psi>"
+      by (auto simp: wf_tuple_restrict_simple sat_the_restrict)
+    moreover have "join1 (restrict (fv \<phi>) v, restrict (fv \<psi>) v) = Some v"
+      using \<open>v \<in> ?B\<close>
+      by (subst join1_Some_restrict) (auto simp: wf_tuple_restrict_simple)
+    ultimately show "v \<in> ?B'"
+      apply(simp)
+      by (force simp: Option.these_def)
+  qed*)
+  find_theorems name:"finite_listset"
 (*lemma finite_listset: "(\<And>A. A \<in> set xs \<Longrightarrow> finite A) \<Longrightarrow> finite (listset xs)"
   by (induct xs) (simp_all add: set_Cons_def finite_image_set2)
 *)
@@ -1908,15 +1929,62 @@ next
     by(auto simp add: Un_absorb1)
 next
   case (Until \<phi> I \<psi>)
-  then show ?case 
-    apply(simp)
-    sorry
+  then obtain m j where m: "\<not> memR I m" and "m = (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+    apply(auto)
+    apply(atomize_elim)
+    apply(simp add: bounded_memR)
+    by (metis (no_types, hide_lams) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
+  moreover from Until have "\<forall> j. finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j \<psi>}"
+    by(simp)
+  moreover from Until have "finite (\<Union> j'\<le>j. {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j' \<psi>})"
+    by(auto)
+  ultimately show ?case using Until
+    apply(elim finite_subset[rotated])
+    apply(simp add: Un_absorb1)
+    apply(auto)
+    subgoal for v j2
+      apply(cases "(\<tau> \<sigma> j2 - \<tau> \<sigma> i)\<le>m")
+      subgoal
+        apply(auto)
+        apply(subgoal_tac "j2\<le>j")
+         apply blast
+        by (metis \<tau>_mono diff_le_mono le_antisym nat_le_linear)
+      subgoal
+        apply(subgoal_tac "\<not> memR I (\<tau> \<sigma> j2 - \<tau> \<sigma> i)")
+         apply blast
+        apply(auto)
+        by (meson memR_antimono nat_le_linear)
+      done
+    done
 next
   case (Not_Until \<phi> I \<psi>)
-  then show ?case 
-    apply(simp)
+  then obtain m j where m: "\<not> memR I m" and "m = (\<tau> \<sigma> j - \<tau> \<sigma> i)"
     apply(auto)
-    sorry
+    apply(atomize_elim)
+    apply(simp add: bounded_memR)
+    by (metis (no_types, hide_lams) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
+  moreover from Not_Until have "\<forall> j. finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j \<psi>}"
+    by(simp)
+  moreover from Not_Until have "finite (\<Union> j'\<le>j. {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j' \<psi>})"
+    by(auto)
+  ultimately show ?case using Not_Until
+    apply(elim finite_subset[rotated])
+    apply(simp add: Un_absorb1)
+    apply(auto)
+    subgoal for v j2
+      apply(cases "(\<tau> \<sigma> j2 - \<tau> \<sigma> i)\<le>m")
+      subgoal
+        apply(auto)
+        apply(subgoal_tac "j2\<le>j")
+         apply blast
+        by (metis \<tau>_mono diff_le_mono le_antisym nat_le_linear)
+      subgoal
+        apply(subgoal_tac "\<not> memR I (\<tau> \<sigma> j2 - \<tau> \<sigma> i)")
+         apply blast
+        apply(auto)
+        by (meson memR_antimono nat_le_linear)
+      done
+    done
 next
   case (MatchP I r)
   then show ?case sorry
