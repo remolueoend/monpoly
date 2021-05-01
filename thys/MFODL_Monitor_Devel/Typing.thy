@@ -58,7 +58,6 @@ ty_of (Formula.eval_trm v x) = t"
   by (induction pred: wty_trm) (simp_all add: ty_of_plus ty_of_minus ty_of_uminus 
       ty_of_mult ty_of_div ty_of_mod)
 
-
 lemma wty_trm_fv_cong:
   assumes "\<And>y. y \<in> fv_trm x \<Longrightarrow> E y = E' y"
   shows "E \<turnstile> x :: t \<longleftrightarrow> E' \<turnstile> x :: t"
@@ -111,6 +110,26 @@ lemma wty_envs_V_D: "wty_envs S \<sigma> V \<Longrightarrow> p \<in> dom V \<Lon
 find_theorems "Regex.pred_regex"
 declare regex.pred_mono[mono]
 
+definition agg_env :: "tyenv \<Rightarrow> ty list \<Rightarrow> tyenv " where
+"agg_env E tys =  (\<lambda>z. if z < length tys then tys ! z else E (z - length tys))"
+
+fun t_res :: "Formula.agg_type \<Rightarrow> ty \<Rightarrow> ty" where
+"t_res Formula.Agg_Sum t = t"
+| "t_res Formula.Agg_Cnt _ = TInt"
+| "t_res Formula.Agg_Avg _ = TFloat"
+| "t_res agg_type.Agg_Med _ = TFloat "
+| "t_res Formula.Agg_Min t = t"
+| "t_res Formula.Agg_Max t = t"
+
+fun agg_trm_type :: "Formula.agg_type \<Rightarrow> ty set" where
+"agg_trm_type Formula.Agg_Sum = numeric_ty"
+| "agg_trm_type Formula.Agg_Cnt = UNIV"
+| "agg_trm_type Formula.Agg_Avg = numeric_ty"
+| "agg_trm_type Formula.Agg_Med = numeric_ty"
+| "agg_trm_type Formula.Agg_Min = UNIV"
+| "agg_trm_type Formula.Agg_Max = UNIV"
+
+
 inductive wty_formula :: "sig \<Rightarrow> tyenv \<Rightarrow> ty Formula.formula \<Rightarrow> bool" ("(_),/ (_)/ \<turnstile> (_)" [50,50,50] 50) where
   Pred: "S p = Some tys \<Longrightarrow> list_all2 (\<lambda>tm ty. E \<turnstile> tm :: ty) tms tys \<Longrightarrow> S, E \<turnstile> Formula.Pred p tms"
 | Let: "S, E' \<turnstile> \<phi> \<Longrightarrow> S(p \<mapsto> tabulate E' 0 (Formula.nfv \<phi>)), E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.Let p \<phi> \<psi>"
@@ -122,28 +141,15 @@ inductive wty_formula :: "sig \<Rightarrow> tyenv \<Rightarrow> ty Formula.formu
 | And: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.And \<phi> \<psi>" 
 | Ands: "\<forall>\<phi> \<in> set \<phi>s. S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Ands \<phi>s"
 | Exists: "S, case_nat t E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Exists t \<phi>"
-| Sum: "E s =  t \<Longrightarrow>  (\<lambda>z. if z < length tys then tys ! z else E (z - length tys))  \<turnstile> x :: t \<Longrightarrow>
-         S, (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> \<phi>  \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow>
-          S, E \<turnstile> Formula.Agg s (Formula.Agg_Sum, d) tys x \<phi>"
-| Cnt: "E s =  TInt \<Longrightarrow>   (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> x :: t \<Longrightarrow> 
-         S,  (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> \<phi>  \<Longrightarrow> S, E \<turnstile> Formula.Agg s (Formula.Agg_Cnt, d) tys x \<phi>"
-| Avg: "E s =  TFloat \<Longrightarrow>  (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> x :: t \<Longrightarrow>
-         S,  (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> \<phi>  \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> 
-         S, E \<turnstile> Formula.Agg s (Formula.Agg_Avg, d) tys x \<phi>"
-| Med: "E s =  TFloat \<Longrightarrow>   (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> x :: t \<Longrightarrow> 
-        S, (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> \<phi>  \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow>
-        S, E \<turnstile> Formula.Agg s (Formula.Agg_Med, d) tys x \<phi>"
-| Min: "E s =  t \<Longrightarrow>   (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> x :: t \<Longrightarrow>
-       S, (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> \<phi>  \<Longrightarrow> S, E \<turnstile> Formula.Agg s (Formula.Agg_Min, d) tys x \<phi>"
-| Max: "E s =  t \<Longrightarrow>   (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> x :: t \<Longrightarrow>
-         S, (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) \<turnstile> \<phi>  \<Longrightarrow> S, E \<turnstile> Formula.Agg s (Formula.Agg_Max, d) tys x \<phi>" 
+| Agg: " E s =  t_res agg_type t \<Longrightarrow> agg_env E tys  \<turnstile> f :: t \<Longrightarrow> S, agg_env E tys \<turnstile> \<phi>  \<Longrightarrow>
+   t \<in> agg_trm_type agg_type \<Longrightarrow> ty_of d = t_res agg_type t \<Longrightarrow>
+          S, E \<turnstile> Formula.Agg s (agg_type, d) tys f \<phi>"
 | Prev: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Prev \<I> \<phi>"
 | Next: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Next \<I> \<phi>"
 | Since: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.Since \<phi> \<I> \<psi>" 
 | Until: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.Until \<phi> \<I> \<psi>" 
 | MatchP: "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r \<Longrightarrow> S, E \<turnstile> Formula.MatchP I r"
 | MatchF: "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r \<Longrightarrow> S, E \<turnstile> Formula.MatchF I r"
-(* TODO: remaining cases *)
 
 lemma wty_formula_fv_cong:
   assumes "\<And>y. y \<in> fv \<phi> \<Longrightarrow> E y = E' y"
@@ -187,7 +193,7 @@ proof -
     case (Exists S t E \<phi>)
     then show ?case
       by (fastforce simp: fvi_Suc intro!: wty_formula.Exists[where t=t] split: nat.split)
-  next 
+ (* next 
     case (Sum E s t tys x S \<phi> d E')
     let ?\<psi> = "(formula.Agg s (agg_type.Agg_Sum, d) tys x \<phi>)"
     from Sum.prems Sum.hyps(1) have part1: "E' s = t" by auto
@@ -201,76 +207,10 @@ proof -
     from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
     from this Sum.hyps(2) Sum.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
     from part1 part2 part3 Sum.hyps(4) show ?case by (simp add:  wty_formula.Sum)
- next 
-    case (Cnt E s tys x t S \<phi> d E')
-    let ?\<psi> = "(formula.Agg s (agg_type.Agg_Cnt, d) tys x \<phi>)"
-    from Cnt.prems Cnt.hyps(1) have part1: "E' s = TInt" by auto
-    from Cnt have  "\<forall>y\<in> Formula.fvi_trm (length tys) x. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi_trm 0 x. y\<ge> length tys \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
-    from this have "\<forall>y\<in>fv_trm x. (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) y =
-                (\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) y " by auto
-    from this Cnt.hyps(2) have part2: "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> x :: t" using wty_trm_fv_cong by fastforce
-    
-    from Cnt have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
-    from this Cnt.hyps(2) Cnt.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
-    from part1 part2 part3 show ?case by (simp add:  wty_formula.Cnt)
- next 
-    case (Avg E s tys x t S \<phi> d E')
-    let ?\<psi> = "(formula.Agg s (agg_type.Agg_Cnt, d) tys x \<phi>)"
-    from Avg.prems Avg.hyps(1) have part1: "E' s = TFloat" by auto
-    from Avg have  "\<forall>y\<in> Formula.fvi_trm (length tys) x. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi_trm 0 x. y\<ge> length tys \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
-    from this have "\<forall>y\<in>fv_trm x. (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) y =
-                (\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) y " by auto
-    from this Avg.hyps(2) have part2: "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> x :: t" using wty_trm_fv_cong by fastforce
-    
-    from Avg have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
-    from this Avg.hyps(2) Avg.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
-    from part1 part2 part3 Avg.hyps(4) show ?case by (simp add:  wty_formula.Avg)
- next 
-    case (Med E s tys x t S \<phi> d E')
-    let ?\<psi> = "(formula.Agg s (agg_type.Agg_Cnt, d) tys x \<phi>)"
-    from Med.prems Med.hyps(1) have part1: "E' s = TFloat" by auto
-    from Med have  "\<forall>y\<in> Formula.fvi_trm (length tys) x. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi_trm 0 x. y\<ge> length tys   \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
-    from this have "\<forall>y\<in>fv_trm x. (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) y =
-                (\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) y " by auto
-    from this Med.hyps(2) have part2: "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> x :: t" using wty_trm_fv_cong by fastforce
-    
-    from Med have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
-    from this Med.hyps(2) Med.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
-    from part1 part2 part3 Med.hyps(4) show ?case by (simp add:  wty_formula.Med)
- next 
-    case (Min E s t tys x S \<phi> d E')
-    let ?\<psi> = "(formula.Agg s (agg_type.Agg_Min, d) tys x \<phi>)"
-    from Min.prems Min.hyps(1) have part1: "E' s = t" by auto
-    from Min have  "\<forall>y\<in> Formula.fvi_trm (length tys) x. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi_trm 0 x. y\<ge> length tys \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
-    from this have "\<forall>y\<in>fv_trm x. (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) y =
-                (\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) y " by auto
-    from this Min.hyps(2) have part2: "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> x :: t" using wty_trm_fv_cong by fastforce
-    
-    from Min have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
-    from this Min.hyps(2) Min.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
-    from part1 part2 part3  show ?case by (simp add:  wty_formula.Min)
-next 
-    case (Max E s t tys x S \<phi> d E')
-    let ?\<psi> = "(formula.Agg s (agg_type.Agg_Max, d) tys x \<phi>)"
-    from Max.prems Max.hyps(1) have part1: "E' s = t" by auto
-    from Max have  "\<forall>y\<in> Formula.fvi_trm (length tys) x. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi_trm 0 x. y\<ge> length tys \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
-    from this have "\<forall>y\<in>fv_trm x. (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) y =
-                (\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) y " by auto
-    from this Max.hyps(2) have part2: "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> x :: t" using wty_trm_fv_cong by fastforce
-    
-    from Max have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
-    from this Max.hyps(2) Max.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
-    from part1 part2 part3  show ?case by (simp add:  wty_formula.Max)
+*)
+  next
+    case (Agg E s agg_type t tys f S \<phi> d) (* TODO *)
+    have ?case sorry
   next
     case (Prev S E \<phi> \<I>)
     thus ?case by (simp add: wty_formula.Prev)
@@ -296,8 +236,8 @@ next
   with assms show ?thesis by auto
 qed
 
-lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow>
-  Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> Formula.fv \<phi> \<Longrightarrow> x < length v \<Longrightarrow> ty_of (v ! x) = E x"
+lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow> 
+  Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> Formula.fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x) = E x"
 proof (induction arbitrary: S E V v i x rule: safe_formula_induct)
   case (Eq_Const c d)
   then show ?case by auto
@@ -373,14 +313,47 @@ next
     by (auto simp: wty_envs_def wty_event_def)
   from Let.prems(3) have "Formula.sat \<sigma> ?V' v i \<psi>" by simp
   from Let.prems(4) have "x \<in> fv \<psi>" by simp
+  from Let have "Formula.nfv \<psi> \<le> length v" by auto
   show ?case by (rule Let.IH(2)) fact+
 next
-  case (And_assign \<phi> \<psi>) (* TODO *)
-  from And_assign.hyps(2) obtain a b where \<psi>_eq: "\<psi> = Formula.Eq a b"
-    by (auto simp: safe_assignment_def split: formula.splits)
-  from And_assign.prems(1) show ?case
-   unfolding \<psi>_eq by (blast elim: wty_formula.cases)
-next
+  case (And_assign \<phi> \<psi>)
+  from And_assign.prems(1) have phi1: "S, E \<turnstile> \<phi>" by cases
+  from And_assign.prems(3) have phi2: "Formula.sat \<sigma> V v i \<psi>" by auto
+  from And_assign.prems(4) have "x \<in> fv \<phi> \<or> x \<in> fv \<psi>" by auto
+  from this show ?case
+  proof cases
+    assume "x \<in> fv \<phi>"
+    from this And_assign phi1 phi2 show ?case by auto
+  next
+    assume x_not_\<phi>: "x \<notin> fv \<phi>"
+    from this And_assign.prems(4) have "x \<in> fv \<psi>" by auto
+    from And_assign.hyps(2) obtain a b where \<psi>_eq: "\<psi> = Formula.Eq a b"
+      by (auto simp: safe_assignment_def split: formula.splits)
+    moreover {
+      assume a_def: "a = Formula.Var x"
+      from this  x_not_\<phi> have fvb: "fv_trm b \<subseteq> fv \<phi>" using And_assign(2) by  (auto simp: safe_assignment_def \<psi>_eq split: trm.splits) 
+      have eval:" v! x = Formula.eval_trm v b" using And_assign(6) a_def \<psi>_eq by auto
+      have Ebx: "E \<turnstile> b :: E  x"  using And_assign(4) by (auto simp: \<psi>_eq a_def elim: wty_trm.cases wty_formula.cases)
+      have "(\<lambda>y. ty_of (v ! y)) \<turnstile> b :: E x" apply (rule  iffD1[OF wty_trm_fv_cong,OF _ Ebx]) apply (subst eq_commute) 
+        apply (rule And_assign(3)) using And_assign fvb by (auto elim: wty_formula.cases) 
+      then have ?case using ty_of_eval_trm unfolding eval
+        using And_assign(4) by (auto simp: \<psi>_eq a_def elim: wty_formula.cases)
+    }
+    moreover {
+     assume a_def: "b = Formula.Var x"
+      from this  x_not_\<phi> have fvb: "fv_trm a \<subseteq> fv \<phi>" using And_assign(2) by  (auto simp: safe_assignment_def \<psi>_eq split: trm.splits) 
+      have eval:" v! x = Formula.eval_trm v a" using And_assign(6) a_def \<psi>_eq by auto
+      have Ebx: "E \<turnstile> a :: E  x"  using And_assign(4) by (auto simp: \<psi>_eq a_def elim: wty_trm.cases wty_formula.cases)
+      have "(\<lambda>y. ty_of (v ! y)) \<turnstile> a :: E x" apply (rule  iffD1[OF wty_trm_fv_cong,OF _ Ebx]) apply (subst eq_commute) 
+        apply (rule And_assign(3)) using And_assign fvb by (auto elim: wty_formula.cases) 
+      then have ?case using ty_of_eval_trm unfolding eval
+        using And_assign(4) by (auto simp: \<psi>_eq a_def elim: wty_formula.cases)
+    }
+    moreover
+      have "a = Formula.Var x \<or> b = Formula.Var x" using And_assign(2) And_assign(7) x_not_\<phi> by (auto simp: \<psi>_eq safe_assignment_def split: Formula.trm.splits) 
+    ultimately show ?case by auto
+qed
+ next
   case (And_safe \<phi> \<psi>)
   from And_safe.prems(1) obtain "S, E \<turnstile> \<phi>" and "S, E \<turnstile> \<psi>" by cases
   from And_safe.prems(3) have "Formula.sat \<sigma> V v i \<phi>" and "Formula.sat \<sigma> V v i \<psi>"
@@ -389,9 +362,11 @@ next
   then show ?case
   proof cases
     case in_\<phi>
+  from And_safe have "Formula.nfv \<phi> \<le> length v" by auto
     show ?thesis by (rule And_safe.IH(1)) fact+
   next
     case in_\<psi>
+  from And_safe have "Formula.nfv \<psi> \<le> length v" by auto
     show ?thesis by (rule And_safe.IH(2)) fact+
   qed
 next
@@ -416,6 +391,9 @@ next
   from Exists.prems(1) obtain t where "S, case_nat t E \<turnstile> \<phi>" by cases
   from Exists.prems(3) obtain z where "Formula.sat \<sigma> V (z#v) i \<phi>" by auto
   from Exists.prems(4) have "Suc x \<in> fv \<phi>" by (simp add: fvi_Suc)
+  from Exists have "Formula.nfv \<phi> \<le> Suc (length v)" apply (auto simp add: Formula.nfv_def)
+    by (metis fvi_Suc le0 old.nat.exhaust)
+
   have "ty_of ((z#v) ! Suc x) = case_nat t E (Suc x)"
     by (rule Exists.IH) (simp?, fact)+
   then show ?case by simp
