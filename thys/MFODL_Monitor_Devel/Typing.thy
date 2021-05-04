@@ -193,24 +193,19 @@ proof -
     case (Exists S t E \<phi>)
     then show ?case
       by (fastforce simp: fvi_Suc intro!: wty_formula.Exists[where t=t] split: nat.split)
- (* next 
-    case (Sum E s t tys x S \<phi> d E')
-    let ?\<psi> = "(formula.Agg s (agg_type.Agg_Sum, d) tys x \<phi>)"
-    from Sum.prems Sum.hyps(1) have part1: "E' s = t" by auto
-    from Sum have  "\<forall>y\<in> Formula.fvi_trm (length tys) x. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi_trm 0 x. y\<ge> length tys \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
-    from this have "\<forall>y\<in>fv_trm x. (\<lambda>z. if z < length tys then tys ! z else E (z - length tys)) y =
-                (\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) y " by auto
-    from this Sum.hyps(2) have part2: "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> x :: t" using wty_trm_fv_cong by fastforce
-    
-    from Sum have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
-    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
-    from this Sum.hyps(2) Sum.IH have part3: "S,(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> \<phi>" by simp
-    from part1 part2 part3 Sum.hyps(4) show ?case by (simp add:  wty_formula.Sum)
-*)
   next
-    case (Agg E s agg_type t tys f S \<phi> d) (* TODO *)
-    have ?case sorry
+    case (Agg E s agg_type t tys f S \<phi> d)
+    from Agg.prems Agg.hyps(1) have part1: "E' s = t_res agg_type t" by auto
+    from Agg  have  aggenv: "\<forall>y\<in> Formula.fvi_trm (length tys) f. E y = E' y" by (auto simp: agg_env_def)
+    from this have "\<forall>y\<in> Formula.fvi_trm 0 f. y\<ge> length tys \<longrightarrow>  E (y - length tys)  = E' (y - length tys) " by (meson fvi_trm_iff_fv_trm fvi_trm_minus fvi_trm_plus)
+    from this  Agg.hyps(2) have  "(\<lambda>z. if z < length tys then tys ! z else E' (z - length tys)) \<turnstile> f :: t" using wty_trm_fv_cong
+    by (smt (verit, del_insts) agg_env_def not_less) 
+  from this have part2: "agg_env E' tys \<turnstile> f :: t" by (auto simp add: agg_env_def)
+
+    from Agg have  "\<forall>y\<in> Formula.fvi (length tys) \<phi>. E y = E' y" by auto
+    from this have "\<forall>y\<in> Formula.fvi 0 \<phi>. y\<ge> length tys \<longrightarrow>  (E (y - length tys)  = E' (y - length tys))" using fvi_minus[where b=0] by auto
+    from this Agg have part3: " S, agg_env E' tys \<turnstile> \<phi>" by (auto simp: agg_env_def)
+    from part1 part2 part3 Agg.hyps(5) Agg.hyps(4) show ?case by (simp add: wty_formula.Agg)
   next
     case (Prev S E \<phi> \<I>)
     thus ?case by (simp add: wty_formula.Prev)
@@ -370,22 +365,58 @@ qed
     show ?thesis by (rule And_safe.IH(2)) fact+
   qed
 next
-  case (And_constraint \<phi> \<psi>) (* TODO *)
-  from \<open>is_constraint \<psi>\<close> show ?case
-    by (cases \<psi> rule: is_constraint.cases)
-      (use And_constraint.prems(1) in "auto elim: wty_formula.cases")
+  case (And_constraint \<phi> \<psi>)
+  have xfree: "x \<in> fv \<phi>" using And_constraint(4) And_constraint(10) by auto
+  from And_constraint(7) have "S, E \<turnstile> \<phi>" by cases
+  from this xfree And_constraint(6,8-9,11) show ?case by auto
 next
   case (And_Not \<phi> \<psi>)
-  then show ?case by (blast elim: wty_formula.cases) (* TODO *)
+  from And_Not.prems(4) And_Not.hyps(4) have xfree: "x \<in> fv \<phi>" by auto
+  from And_Not.prems(1) have "S, E \<turnstile> \<phi>" by cases
+  from this xfree And_Not  show ?case by auto 
 next
   case (Ands l pos neg)
-  from Ands.prems(1) show ?case by cases (* TODO *)
+  from Ands have "\<exists>\<phi> \<in> set l . x \<in> fv \<phi>" by auto
+  from this obtain \<psi> where psidef: "\<psi> \<in> set l \<and> x \<in> fv \<psi>" by blast
+  from this have "\<exists>\<phi>\<in>set pos. x \<in>fv  \<phi>" 
+  proof cases
+    assume "safe_formula \<psi>"
+    then have "\<psi> \<in> set pos" using Ands(1) by (auto simp add: psidef)
+    thus "\<exists>\<phi>\<in>set pos. x \<in>fv  \<phi>" using psidef by auto
+  next
+    assume " \<not> safe_formula \<psi>"
+    then have "\<psi> \<in> set neg" using Ands(1) by (auto simp add: psidef)
+    thus "\<exists>\<phi>\<in>set pos. x \<in>fv  \<phi>" using Ands(1) Ands(5) psidef by auto
+  qed
+  from this obtain \<phi> where phidef: "\<phi> \<in> set pos \<and> x \<in> fv \<phi>" by blast
+  from this Ands(1) have phi_in_l: "\<phi> \<in> set l" by auto
+  from phidef Ands(6) have phi_IH: "S, E \<turnstile> \<phi> \<Longrightarrow>
+    wty_envs S \<sigma> V \<Longrightarrow>
+    Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x) = E x"
+        using list_all2_iff by (smt (verit, ccfv_SIG) Ball_set_list_all)
+      from Ands.prems(1) have  "\<forall>\<phi> \<in> set l. S, E \<turnstile> \<phi>" by cases
+      from this phi_in_l have p1: "S, E \<turnstile> \<phi>"  by auto
+      from phi_in_l Ands.prems(3) have p3: "Formula.sat \<sigma> V v i \<phi>" by auto
+      from phi_in_l Ands have p5: "Formula.nfv \<phi> \<le> length v" by auto
+  from  phi_IH p1 Ands.prems(2) p3 phidef p5  show ?case by auto
 next
   case (Neg \<phi>)
-  from Neg.prems(1) show ?case by cases (* TODO *)
+  from Neg show ?case by auto
 next
   case (Or \<phi> \<psi>)
-  from Or.prems(1) show ?case by cases (* TODO *)
+  from Or.prems(3) have " (Formula.sat \<sigma> V v i \<phi>) \<or>( Formula.sat \<sigma> V v i \<psi>)" by auto
+  from this show ?case 
+  proof
+    assume assm: "(Formula.sat \<sigma> V v i \<phi>)"
+  from Or(1) Or.prems(4) have xfv: "x \<in> fv \<phi>" by auto
+  from Or.prems(1) have "S, E \<turnstile> \<phi>" by cases
+  from this assm Or.prems(2,3) Or(4) Or.prems(5) xfv show ?case by auto
+next 
+  assume assm: "( Formula.sat \<sigma> V v i \<psi>)"
+ from Or(1) Or.prems(4) have xfv: "x \<in> fv \<psi>" by auto
+  from Or.prems(1) have "S, E \<turnstile> \<psi>" by cases
+  from this assm Or.prems(2,3) Or(5) Or.prems(5) xfv show ?case by auto
+qed
 next
   case (Exists \<phi>)
   from Exists.prems(1) obtain t where "S, case_nat t E \<turnstile> \<phi>" by cases
@@ -402,29 +433,67 @@ next
   from Agg.prems(1) show ?case by cases (* TODO *)
 next
   case (Prev I \<phi>)
-  from Prev.prems(1) show ?case by cases (* TODO *)
+  from Prev.prems(1) have wty: "S, E \<turnstile> \<phi>" by cases
+  from Prev.prems(3) have forall_j: "\<forall>j . i = Suc j \<longrightarrow> Formula.sat \<sigma> V v j \<phi>" by auto
+  from this have " Formula.sat \<sigma> V v (Nat.pred i) \<phi>"
+    by (smt (z3) Prev.prems(3) nat.split_sels(2) old.nat.simps(4) pred_def sat.simps(12))
+  from this wty Prev.prems(2-5) Prev.IH show ?case by auto
 next
   case (Next I \<phi>)
-  from Next.prems(1) show ?case by cases (* TODO *)
+  from Next.prems(1) have wty: "S, E \<turnstile> \<phi>" by cases
+  from Next.prems(2-5) wty Next.IH show ?case by auto
 next
   case (Since \<phi> I \<psi>)
-  from Since.prems(1) show ?case by cases (* TODO *)
+  from Since.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
+  from Since(1,9) have xfv: "x \<in> fv \<psi>" by auto
+  from this wty Since.prems(2-5) Since.IH show ?case by auto
 next
   case (Not_Since \<phi> I \<psi>)
-  from Not_Since.prems(1) show ?case by cases (* TODO *)
+  from Not_Since.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
+  from Not_Since(1,10) have xfv: "x \<in> fv \<psi>" by auto
+  from this wty Not_Since.prems(2-5) Not_Since.IH show ?case by auto
 next
   case (Until \<phi> I \<psi>)
-  from Until.prems(1) show ?case by cases (* TODO *)
+  from Until.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
+  from Until(1,9) have xfv: "x \<in> fv \<psi>" by auto
+  from this wty Until.prems(2-5) Until.IH show ?case by auto
 next
   case (Not_Until \<phi> I \<psi>)
-  from Not_Until.prems(1) show ?case by cases (* TODO *)
+ from Not_Until.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
+  from Not_Until(1,10) have xfv: "x \<in> fv \<psi>" by auto
+  from this wty Not_Until.prems(2-5) Not_Until.IH show ?case by auto
 next
   case (MatchP I r)
-  from MatchP.prems(1) show ?case by cases (* TODO *)
+  from this show ?case 
+  proof (induction r)
+    case (Skip n)
+    thus ?case by auto
+  next
+    case (Test \<phi>)
+    from Test.prems(3) have wty: "S, E \<turnstile> \<phi>" by cases auto
+    from this Test have " \<forall>x xa. x, xa \<turnstile> \<phi> \<longrightarrow>
+          (\<forall>xb. wty_envs x \<sigma> xb \<longrightarrow>
+                (\<forall>x xc.
+                    Formula.sat \<sigma> xb x xc \<phi> \<longrightarrow>
+                    (\<forall>xb. xb \<in> fv \<phi> \<longrightarrow> Formula.nfv \<phi> \<le> length x \<longrightarrow> ty_of (x ! xb) = xa xb)))" by auto
+    from Test have "x \<in> fv \<phi>" by auto
+    from Test have "Formula.nfv \<phi> \<le> length v" by auto
+    from this wty Test show ?case by auto 
+(*
+from MatchP.prems(4) have " Formula.fv (formula.MatchP I r) = (\<Union>z \<in> atms r. Formula.fv z)" using fv_regex_alt apply auto
+  from MatchP.prems(4) have  " \<exists>\<phi> \<in> atms r. x \<in> fv \<phi>" using iffD1[OF fv_regex_alt[ OF MatchP.prems(4)] ] apply auto
+    from this  obtain \<phi> where phidef: "\<phi> \<in> atms r \<and> x \<in> fv \<phi>" by blast
+    from MatchP.prems(1) have "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r" by cases
+    from this phidef MatchP(1) have wty: "S,E \<turnstile> \<phi>" apply (induction r) apply auto 
+      apply (auto elim: safe_regex.cases) by auto
+    from this MatchP.prems  show ?case by auto
+   from this show ?case by auto (* TODO *) *)
+
 next
   case (MatchF I r)
   from MatchF.prems(1) show ?case by cases (* TODO *)
 qed
+
 
 (*<*)
 end
