@@ -1954,8 +1954,6 @@ next
       by (auto simp: sat_the_restrict in_listset_conv_list_all2 list.rel_map intro!: list.rel_refl_strong wf_tuple_restrict_simple)
     moreover have "joinN (?p v) = Some v"
       using \<open>v \<in> ?B\<close> using Ands(1, 5) Ands.hyps(2)
-      (*apply(cases "(map (\<lambda>\<phi>. restrict (fv \<phi>) v) pos)")
-      using Ands.hyps(2) apply blast*)
       thm joinN_Some_restrict[of n "map fv pos" "map (\<lambda>\<phi>. restrict (fv \<phi>) v) pos" v]
       apply(subst joinN_Some_restrict[of n "map fv pos" "map (\<lambda>\<phi>. restrict (fv \<phi>) v) pos" v])
        apply(auto simp: wf_tuple_restrict_simple list.rel_map intro!: list.rel_refl_strong wf_tuple_restrict_simple)
