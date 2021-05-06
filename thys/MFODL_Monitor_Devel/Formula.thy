@@ -1679,6 +1679,38 @@ lemma finite_letprev:
   done
   done
 
+lemma safe_regex_Past_finite: "safe_regex Past Strict r \<Longrightarrow>
+  (\<And>i \<phi>. \<phi> \<in> atms r \<Longrightarrow> finite {v. wf_tuple n (fv \<phi>) v \<and> test v i \<phi>}) \<Longrightarrow>
+  finite {v. wf_tuple n (fv_regex r) v \<and> (\<exists>j\<le>i. Regex.match (test v) r j i)}"
+  apply (induct Past Strict r arbitrary: i rule: safe_regex.induct)
+      apply (auto simp flip: in_unit_table simp add: unit_table_def
+        conj_disj_distribL ex_disj_distrib relcompp_apply Un_absorb2)
+  subgoal for r s i
+  apply (rule finite_subset[rotated])
+     apply (rule finite_UN_I[where B="\<lambda>i. {v. wf_tuple n (fv_regex r) v \<and> (\<exists>j\<le>i. Regex.match (test v) r j i)}"])
+      apply (rule finite_atLeastAtMost[of 0 i])
+     apply assumption
+    apply (auto simp: Bex_def)
+    apply (meson match_le)
+    done
+  done
+
+lemma safe_regex_Future_finite: "safe_regex Futu Strict r \<Longrightarrow>
+  (\<And>i \<phi>. \<phi> \<in> atms r \<Longrightarrow> finite {v. wf_tuple n (fv \<phi>) v \<and> test v i \<phi>}) \<Longrightarrow>
+  finite {v. wf_tuple n (fv_regex r) v \<and> (\<exists>j\<in>{i..thr}. Regex.match (test v) r i j)}"
+  apply (induct Futu Strict r arbitrary: i rule: safe_regex.induct)
+      apply (auto simp flip: in_unit_table simp add: unit_table_def Bex_def
+        conj_disj_distribL ex_disj_distrib relcompp_apply Un_absorb1 intro: rev_finite_subset)
+  subgoal for r s i
+  apply (rule finite_subset[rotated])
+     apply (rule finite_UN_I[where B="\<lambda>i. {v. wf_tuple n (fv_regex s) v \<and> (\<exists>j\<ge>i. j \<le> thr \<and> Regex.match (test v) s i j)}"])
+      apply (rule finite_atLeastAtMost[of i thr])
+     apply assumption
+    apply (auto simp: Bex_def)
+    apply (meson match_le order_trans)
+    done
+  done
+
 lemma safe_formula_finite: "safe_formula \<phi> \<Longrightarrow> future_bounded \<phi> \<Longrightarrow> n\<ge> (nfv \<phi>) \<Longrightarrow> \<forall> i. finite (\<Gamma> \<sigma> i) \<Longrightarrow> \<forall> p\<in>dom V. \<forall> i. finite (the (V p) i) \<Longrightarrow> finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
 proof(induct \<phi> arbitrary: i n V rule: safe_formula_induct)
   case (Eq_Const c d)
@@ -2195,10 +2227,34 @@ next
     done
 next
   case (MatchP I r)
-  then show ?case sorry
+  from MatchP(1,3-) have IH: "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) k \<phi>}"
+    if "\<phi> \<in> atms r" for k \<phi> using that
+    apply (intro MatchP(2)[rule_format, OF that])
+       apply (auto simp: regex.pred_set atms_def Regex.nfv_regex_def fv_regex_alt nfv_def)
+     apply (auto split: formula.splits)
+    done
+  from MatchP(3-) show ?case
+    by (intro finite_subset[OF _ safe_regex_Past_finite[OF MatchP(1) IH, of i]]) auto
 next
   case (MatchF I r)
-  then show ?case sorry
+  then obtain m j where m: "\<not> memR I m" "m = (\<tau> \<sigma> j - \<tau> \<sigma> i)"
+    apply(auto)
+    apply(atomize_elim)
+    apply(simp add: bounded_memR)
+    by (metis (no_types, hide_lams) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
+  from MatchF(1,3-) have IH: "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) k \<phi>}"
+    if "\<phi> \<in> atms r" for k \<phi> using that
+    apply (intro MatchF(2)[rule_format, OF that])
+       apply (auto simp: regex.pred_set atms_def Regex.nfv_regex_def fv_regex_alt nfv_def)
+     apply (auto split: formula.splits)
+    done
+  from MatchF(3-) m show ?case
+    apply (intro finite_subset[OF _ safe_regex_Future_finite[OF MatchF(1) IH, of i j]])
+     apply clarsimp
+     apply (erule bexI[where A = "{i .. j}"])
+     apply auto
+    apply (meson \<tau>_mono diff_le_mono le_cases memR_antimono)
+    done
 qed
 
 end (*context*)
