@@ -141,15 +141,20 @@ inductive wty_formula :: "sig \<Rightarrow> tyenv \<Rightarrow> ty Formula.formu
 | And: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.And \<phi> \<psi>" 
 | Ands: "\<forall>\<phi> \<in> set \<phi>s. S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Ands \<phi>s"
 | Exists: "S, case_nat t E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Exists t \<phi>"
-| Agg: " E s =  t_res agg_type t \<Longrightarrow> agg_env E tys  \<turnstile> f :: t \<Longrightarrow> S, agg_env E tys \<turnstile> \<phi>  \<Longrightarrow>
+| Agg: " E y =  t_res agg_type t \<Longrightarrow> agg_env E tys  \<turnstile> f :: t \<Longrightarrow> S, agg_env E tys \<turnstile> \<phi>  \<Longrightarrow>
    t \<in> agg_trm_type agg_type \<Longrightarrow> ty_of d = t_res agg_type t \<Longrightarrow>
-          S, E \<turnstile> Formula.Agg s (agg_type, d) tys f \<phi>"
+          S, E \<turnstile> Formula.Agg y (agg_type, d) tys f \<phi>"
 | Prev: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Prev \<I> \<phi>"
 | Next: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> Formula.Next \<I> \<phi>"
 | Since: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.Since \<phi> \<I> \<psi>" 
 | Until: "S, E \<turnstile> \<phi> \<Longrightarrow> S, E \<turnstile> \<psi> \<Longrightarrow> S, E \<turnstile> Formula.Until \<phi> \<I> \<psi>" 
 | MatchP: "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r \<Longrightarrow> S, E \<turnstile> Formula.MatchP I r"
 | MatchF: "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r \<Longrightarrow> S, E \<turnstile> Formula.MatchF I r"
+
+lemma wty_regexatms_atms: "(\<forall>x \<in> Regex.atms r. S, E \<turnstile> x) \<Longrightarrow> (\<forall>x \<in> atms r. S, E \<turnstile> x)"
+  apply (induction r)
+      apply (auto split: formula.splits elim: wty_formula.cases)
+  done
 
 lemma wty_formula_fv_cong:
   assumes "\<And>y. y \<in> fv \<phi> \<Longrightarrow> E y = E' y"
@@ -230,6 +235,29 @@ proof -
   qed 
   with assms show ?thesis by auto
 qed
+
+lemma match_sat_fv: assumes "safe_regex temp Strict r"
+    "Regex.match (Formula.sat \<sigma> V v) r j i"
+    "x \<in> fv (formula.MatchP I r) \<or> x \<in>fv (formula.MatchF I r)"
+  shows "\<exists>\<phi>\<in>atms r. \<exists>k. Formula.sat \<sigma> V v k \<phi> \<and> x \<in> fv \<phi>"
+  using assms
+  proof (induction r arbitrary:i j)
+
+    case (Plus r1 r2)
+  moreover obtain k where "\<exists>j. Regex.match (Formula.sat \<sigma> V v) r1 j k \<or>  Regex.match (Formula.sat \<sigma> V v) r2 j k" using  Plus.prems(2)  by auto
+  moreover {
+    assume assm: "\<exists>j. Regex.match (Formula.sat \<sigma> V v) r1 j k"
+    then have ?case using Plus.prems(1,3) Plus.IH(1)  by (fastforce simp add: atms_def) 
+  } moreover {
+    assume assm: "\<exists>j. Regex.match (Formula.sat \<sigma> V v) r2 j k"
+    from this have ?case using Plus.prems(1,3) Plus.IH(2) by (fastforce simp add: atms_def)
+  }
+  ultimately show ?case by auto
+next
+  case (Times r1 r2)
+  then show ?case  using Times.prems match_le Times.IH  apply (cases temp)
+      apply auto  apply blast apply blast apply blast by blast
+qed  auto
 
 lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow> 
   Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> Formula.fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x) = E x"
@@ -429,8 +457,26 @@ next
     by (rule Exists.IH) (simp?, fact)+
   then show ?case by simp
 next
-  case (Agg y \<omega> b f \<phi>)
-  from Agg.prems(1) show ?case by cases (* TODO *)
+  case (Agg y \<omega> tys f \<phi>)
+   have case_split:" x \<in> Formula.fvi (length tys) \<phi> \<or> x \<in> Formula.fvi_trm (length tys) f \<or> x = y" using Agg.prems(4) by auto
+  moreover {
+    assume asm: "x \<in> Formula.fvi (length tys) \<phi>"
+    from this have "\<not> fv \<phi> \<subseteq> {0..< length tys}" using fvi_iff_fv[of x "length tys" \<phi>] by auto
+    from this have M: "{(x, ecard Zs) | 
+  x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<noteq> {}" using Agg.prems(3) by auto
+    from this obtain zs where sat: "Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> length zs = length tys" by auto
+    have "\<forall>z \<in>Formula.fvi (length tys) \<phi>. Suc z \<le> length v " using Agg.prems(5) by (auto simp add: Formula.nfv_def)
+    from this have "\<forall>z \<in>Formula.fv \<phi>. Suc z - length tys \<le> length v "  using  fvi_iff_fv  nat_le_linear 
+      by (metis Suc_diff_le diff_add diff_is_0_eq' diff_zero not_less_eq_eq) 
+    from this have nfv: "Formula.nfv \<phi> \<le> length (zs @ v)" using length_append  by (auto simp add: Formula.nfv_def sat)
+      from Agg.IH[of \<phi> S "agg_env E tys" V "zs @ v" i "x+ length tys"] have ?case using sat asm Agg.prems(1-2) apply auto by auto
+  } 
+  moreover {
+    assume "x \<notin> Formula.fvi (length tys) \<phi>"
+    from this have "x = y" using Agg(3) case_split fvi_iff_fv fvi_trm_iff_fv_trm by blast
+    from this have ?case by auto
+  } 
+  ultimately show ?case by auto(* TODO *)
 next
   case (Prev I \<phi>)
   from Prev.prems(1) have wty: "S, E \<turnstile> \<phi>" by cases
@@ -440,13 +486,11 @@ next
   from this wty Prev.prems(2-5) Prev.IH show ?case by auto
 next
   case (Next I \<phi>)
-  from Next.prems(1) have wty: "S, E \<turnstile> \<phi>" by cases
-  from Next.prems(2-5) wty Next.IH show ?case by auto
+  from Next.prems(1,2-5) Next.IH show ?case by (auto elim: wty_formula.cases)
 next
   case (Since \<phi> I \<psi>)
-  from Since.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
   from Since(1,9) have xfv: "x \<in> fv \<psi>" by auto
-  from this wty Since.prems(2-5) Since.IH show ?case by auto
+  from this  Since.prems(1,2-5) Since.IH show ?case by (auto elim: wty_formula.cases)
 next
   case (Not_Since \<phi> I \<psi>)
   from Not_Since.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
@@ -454,9 +498,8 @@ next
   from this wty Not_Since.prems(2-5) Not_Since.IH show ?case by auto
 next
   case (Until \<phi> I \<psi>)
-  from Until.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
   from Until(1,9) have xfv: "x \<in> fv \<psi>" by auto
-  from this wty Until.prems(2-5) Until.IH show ?case by auto
+  from this  Until.prems(1,2-5) Until.IH show ?case by (auto elim: wty_formula.cases)
 next
   case (Not_Until \<phi> I \<psi>)
  from Not_Until.prems(1) have wty: "S, E \<turnstile> \<psi>" by cases
@@ -464,34 +507,32 @@ next
   from this wty Not_Until.prems(2-5) Not_Until.IH show ?case by auto
 next
   case (MatchP I r)
-  from this show ?case 
-  proof (induction r)
-    case (Skip n)
-    thus ?case by auto
-  next
-    case (Test \<phi>)
-    from Test.prems(3) have wty: "S, E \<turnstile> \<phi>" by cases auto
-    from this Test have " \<forall>x xa. x, xa \<turnstile> \<phi> \<longrightarrow>
-          (\<forall>xb. wty_envs x \<sigma> xb \<longrightarrow>
-                (\<forall>x xc.
-                    Formula.sat \<sigma> xb x xc \<phi> \<longrightarrow>
-                    (\<forall>xb. xb \<in> fv \<phi> \<longrightarrow> Formula.nfv \<phi> \<le> length x \<longrightarrow> ty_of (x ! xb) = xa xb)))" by auto
-    from Test have "x \<in> fv \<phi>" by auto
-    from Test have "Formula.nfv \<phi> \<le> length v" by auto
-    from this wty Test show ?case by auto 
-(*
-from MatchP.prems(4) have " Formula.fv (formula.MatchP I r) = (\<Union>z \<in> atms r. Formula.fv z)" using fv_regex_alt apply auto
-  from MatchP.prems(4) have  " \<exists>\<phi> \<in> atms r. x \<in> fv \<phi>" using iffD1[OF fv_regex_alt[ OF MatchP.prems(4)] ] apply auto
-    from this  obtain \<phi> where phidef: "\<phi> \<in> atms r \<and> x \<in> fv \<phi>" by blast
-    from MatchP.prems(1) have "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r" by cases
-    from this phidef MatchP(1) have wty: "S,E \<turnstile> \<phi>" apply (induction r) apply auto 
-      apply (auto elim: safe_regex.cases) by auto
-    from this MatchP.prems  show ?case by auto
-   from this show ?case by auto (* TODO *) *)
-
+  from MatchP.prems(3) have "(\<exists>j. Regex.match (Formula.sat \<sigma> V v) r j i)" by auto
+    from this  MatchP(1)  MatchP.prems(4) obtain \<phi> j where phidef: " \<phi> \<in> atms r" " Formula.sat \<sigma> V v j \<phi>" "x \<in> fv \<phi> " using match_sat_fv  by auto blast
+    have "\<forall>a \<in> fv \<phi>. a \<in> fv_regex r" using   phidef(1)  apply (induction r) apply auto 
+      subgoal for \<psi>  apply (cases "safe_formula \<psi>") apply auto by (cases \<psi>) auto 
+      done
+    from  this MatchP.prems(4,5) phidef  have nfv: "Formula.nfv \<phi> \<le> length v"  by  (auto simp add: Formula.nfv_def)
+    from MatchP.IH MatchP.prems have IH: "S, E \<turnstile> \<phi> \<Longrightarrow>\<phi> \<in> atms r \<Longrightarrow>
+     Formula.sat \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
+    for \<phi> E  v  x by blast
+   from MatchP.prems(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
+  then show ?case apply (rule IH) using nfv  MatchP.prems(5)  phidef by auto
+ 
 next
   case (MatchF I r)
-  from MatchF.prems(1) show ?case by cases (* TODO *)
+ from MatchF.prems(3) have "(\<exists>j. Regex.match (Formula.sat \<sigma> V v) r  i j)" by auto
+    from this  MatchF(1)  MatchF.prems(4) obtain \<phi> j where phidef: " \<phi> \<in> atms r" " Formula.sat \<sigma> V v j \<phi>" "x \<in> fv \<phi> " using match_sat_fv  by auto blast
+    have "\<forall>a \<in> fv \<phi>. a \<in> fv_regex r" using   phidef(1)  apply (induction r) apply auto 
+      subgoal for \<psi>  apply (cases "safe_formula \<psi>") apply auto by (cases \<psi>) auto 
+      done
+    from  this MatchF.prems(4,5) phidef  have nfv: "Formula.nfv \<phi> \<le> length v"  by  (auto simp add: Formula.nfv_def)
+    from MatchF.IH MatchF.prems have IH: "S, E \<turnstile> \<phi> \<Longrightarrow>\<phi> \<in> atms r \<Longrightarrow>
+     Formula.sat \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
+    for \<phi> E  v  x by blast
+    from MatchF.prems(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
+  then show ?case apply (rule IH) using nfv  MatchF.prems(5)  phidef by auto
+
 qed
 
 
