@@ -151,10 +151,29 @@ inductive wty_formula :: "sig \<Rightarrow> tyenv \<Rightarrow> ty Formula.formu
 | MatchP: "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r \<Longrightarrow> S, E \<turnstile> Formula.MatchP I r"
 | MatchF: "Regex.pred_regex (\<lambda>\<phi>. S, E \<turnstile> \<phi>) r \<Longrightarrow> S, E \<turnstile> Formula.MatchF I r"
 
-lemma wty_regexatms_atms: "(\<forall>x \<in> Regex.atms r. S, E \<turnstile> x) \<Longrightarrow> (\<forall>x \<in> atms r. S, E \<turnstile> x)"
-  apply (induction r)
-      apply (auto split: formula.splits elim: wty_formula.cases)
-  done
+lemma wty_regexatms_atms:
+  assumes "safe_formula (Formula.MatchP I r) \<or> safe_formula (Formula.MatchF I r)"
+  shows "(\<forall>x \<in> Regex.atms r. S, E \<turnstile> x) \<longleftrightarrow> (\<forall>x \<in> atms r. S, E \<turnstile> x)"
+proof -
+  have "\<forall>x \<in> Regex.atms r. S, E \<turnstile> x" if "\<forall>x \<in> atms r. S, E \<turnstile> x"
+    "Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
+      (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) m g r" for m g
+    using that
+    apply (induction r arbitrary: m g)
+        apply auto
+    subgoal for x
+      by (cases "safe_formula x") (auto split: formula.splits intro: wty_formula.intros)
+    subgoal for r1 r2 m g x
+      by (cases m) auto
+    subgoal for r1 r2 m g x
+      by (cases m) auto
+    done
+  moreover have "\<forall>x \<in> Regex.atms r. S, E \<turnstile> x \<Longrightarrow> \<forall>x \<in> atms r. S, E \<turnstile> x"
+    by (induction r) (auto split: formula.splits elim: wty_formula.cases)
+  ultimately show ?thesis
+    using assms
+    by fastforce
+qed
 
 lemma wty_formula_fv_cong:
   assumes "\<And>y. y \<in> fv \<phi> \<Longrightarrow> E y = E' y"
