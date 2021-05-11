@@ -275,7 +275,7 @@ lemma match_sat_fv: assumes "safe_regex temp Strict r"
 next
   case (Times r1 r2)
   then show ?case  using Times.prems match_le Times.IH  apply (cases temp)
-      apply auto  apply blast apply blast apply blast by blast
+      apply auto by blast+
 qed  auto
 
 lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow> 
@@ -488,12 +488,26 @@ next
     from this have "\<forall>z \<in>Formula.fv \<phi>. Suc z - length tys \<le> length v "  using  fvi_iff_fv  nat_le_linear 
       by (metis Suc_diff_le diff_add diff_is_0_eq' diff_zero not_less_eq_eq) 
     from this have nfv: "Formula.nfv \<phi> \<le> length (zs @ v)" using length_append  by (auto simp add: Formula.nfv_def sat)
-      from Agg.IH[of \<phi> S "agg_env E tys" V "zs @ v" i "x+ length tys"] have ?case using sat asm Agg.prems(1-2) apply auto by auto
+    have "ty_of ((zs@v) ! (x + length tys)) = agg_env E tys (x + length tys)"
+      apply (rule Agg.IH[of \<phi> S "agg_env E tys" V "zs @ v" i "x+ length tys"]) using Agg.prems(1) Agg(4) sat asm nfv Agg.prems(1-2) fvi_iff_fv
+      by (auto elim: wty_formula.cases)
+    from this have ?case apply (auto simp add: agg_env_def) by (metis add.commute nth_append_length_plus sat)
   } 
   moreover {
     assume "x \<notin> Formula.fvi (length tys) \<phi>"
-    from this have "x = y" using Agg(3) case_split fvi_iff_fv fvi_trm_iff_fv_trm by blast
-    from this have ?case by auto
+    from this have eq: "x = y" using Agg(3) case_split fvi_iff_fv fvi_trm_iff_fv_trm by blast
+    obtain d agg_type where omega_def: "\<omega> = (agg_type, d)" using surjective_pairing by blast
+    from Agg.prems(1) this have  "\<exists>t .E y = t_res agg_type t" by cases auto
+    from this eq obtain t where t_def: "E x = t_res agg_type t" by blast
+    from  Agg.prems(1) have ty_of_d: "ty_of d = t_res agg_type t" apply cases using eq omega_def t_def by auto
+    from Agg.prems(3) eq obtain M where  M_def: "M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>
+ \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<and> v!x = eval_agg_op \<omega> M" by auto
+    from M_def t_def omega_def  have ?case apply (cases agg_type) apply auto apply (cases "flatten_multiset M") apply (auto simp add: ty_of_d)
+      apply (auto simp add: flatten_multiset_def csorted_list_of_set_def)
+    subgoal for a list apply (induction list)  apply auto
+      sorry sorry
+      
+    find_theorems concat
   } 
   ultimately show ?case by auto(* TODO *)
 next
@@ -535,7 +549,7 @@ next
     from MatchP.IH MatchP.prems have IH: "S, E \<turnstile> \<phi> \<Longrightarrow>\<phi> \<in> atms r \<Longrightarrow>
      Formula.sat \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
     for \<phi> E  v  x by blast
-   from MatchP.prems(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
+   from MatchP.prems(1) MatchP(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
   then show ?case apply (rule IH) using nfv  MatchP.prems(5)  phidef by auto
  
 next
@@ -549,7 +563,7 @@ next
     from MatchF.IH MatchF.prems have IH: "S, E \<turnstile> \<phi> \<Longrightarrow>\<phi> \<in> atms r \<Longrightarrow>
      Formula.sat \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
     for \<phi> E  v  x by blast
-    from MatchF.prems(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
+    from MatchF.prems(1) MatchF(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
   then show ?case apply (rule IH) using nfv  MatchF.prems(5)  phidef by auto
 
 qed

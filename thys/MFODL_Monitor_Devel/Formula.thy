@@ -116,7 +116,7 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
 
 
-qualified definition "FF = Exists undefined (Neg (Eq (Var 0) (Var 0)))" (* what should the type be?*)
+qualified definition "FF = Exists undefined (Neg (Eq (Var 0) (Var 0)))" 
 qualified definition "TT \<equiv> Neg FF"
 
 qualified fun fvi :: "nat \<Rightarrow> 't formula \<Rightarrow> nat set" where
