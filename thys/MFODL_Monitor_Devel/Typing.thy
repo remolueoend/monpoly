@@ -278,6 +278,29 @@ next
       apply auto by blast+
 qed  auto
 
+
+lemma safe_formula_finite:
+  assumes "Formula.safe_formula \<phi>" "{0..<n} \<subseteq> Formula.fv \<phi>" "Formula.nfv \<phi> \<le> n + length v"
+  shows "finite {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}"
+  using assms
+  apply (induction \<phi> arbitrary: i rule: safe_formula_induct)
+  sorry
+
+lemma set_of_flatten_multiset:
+  assumes "M = {(x, ecard Zs) | x Zs. Zs = f x \<and> Zs \<noteq> {}}" "finite {x. f x \<noteq> {}}"
+  shows "set (flatten_multiset M) \<subseteq> fst ` M"
+proof -
+  have fin_M: "finite M"
+    using assms(2)
+    by (auto simp: assms(1))
+  obtain c :: "(event_data \<times> enat) comparator" where c: "ID ccompare = Some c"
+    by (auto simp: ID_def ccompare_prod_def ccompare_event_data_def ccompare_enat_def)
+  show ?thesis
+    using fin_M image_iff
+    by (fastforce simp: flatten_multiset_def csorted_list_of_set_def c
+        linorder.set_sorted_list_of_set[OF ID_ccompare[OF c]])
+qed
+
 lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow> 
   Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> Formula.fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x) = E x"
 proof (induction arbitrary: S E V v i x rule: safe_formula_induct)
@@ -477,17 +500,20 @@ next
   then show ?case by simp
 next
   case (Agg y \<omega> tys f \<phi>)
-   have case_split:" x \<in> Formula.fvi (length tys) \<phi> \<or> x \<in> Formula.fvi_trm (length tys) f \<or> x = y" using Agg.prems(4) by auto
+ have "\<forall>z \<in>Formula.fvi (length tys) \<phi>. Suc z \<le> length v " using Agg.prems(5) by (auto simp add: Formula.nfv_def)
+    from this have "\<forall>z \<in>Formula.fv \<phi>. Suc z - length tys \<le> length v "  using  fvi_iff_fv  nat_le_linear 
+      by (metis Suc_diff_le diff_add diff_is_0_eq' diff_zero not_less_eq_eq) 
+    from this have nfv_tys_v: "Formula.nfv \<phi> \<le> length tys + length v" by (auto simp add: Formula.nfv_def)
+
+  have case_split:" x \<in> Formula.fvi (length tys) \<phi> \<or> x \<in> Formula.fvi_trm (length tys) f \<or> x = y" using Agg.prems(4) by auto
+ 
   moreover {
     assume asm: "x \<in> Formula.fvi (length tys) \<phi>"
     from this have "\<not> fv \<phi> \<subseteq> {0..< length tys}" using fvi_iff_fv[of x "length tys" \<phi>] by auto
     from this have M: "{(x, ecard Zs) | 
   x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<noteq> {}" using Agg.prems(3) by auto
     from this obtain zs where sat: "Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> length zs = length tys" by auto
-    have "\<forall>z \<in>Formula.fvi (length tys) \<phi>. Suc z \<le> length v " using Agg.prems(5) by (auto simp add: Formula.nfv_def)
-    from this have "\<forall>z \<in>Formula.fv \<phi>. Suc z - length tys \<le> length v "  using  fvi_iff_fv  nat_le_linear 
-      by (metis Suc_diff_le diff_add diff_is_0_eq' diff_zero not_less_eq_eq) 
-    from this have nfv: "Formula.nfv \<phi> \<le> length (zs @ v)" using length_append  by (auto simp add: Formula.nfv_def sat)
+    from nfv_tys_v have nfv: "Formula.nfv \<phi> \<le> length (zs @ v)"  by (auto simp add: sat)
     have "ty_of ((zs@v) ! (x + length tys)) = agg_env E tys (x + length tys)"
       apply (rule Agg.IH[of \<phi> S "agg_env E tys" V "zs @ v" i "x+ length tys"]) using Agg.prems(1) Agg(4) sat asm nfv Agg.prems(1-2) fvi_iff_fv
       by (auto elim: wty_formula.cases)
@@ -502,12 +528,38 @@ next
     from  Agg.prems(1) have ty_of_d: "ty_of d = t_res agg_type t" apply cases using eq omega_def t_def by auto
     from Agg.prems(3) eq obtain M where  M_def: "M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>
  \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<and> v!x = eval_agg_op \<omega> M" by auto
-    from M_def t_def omega_def  have ?case apply (cases agg_type) apply auto apply (cases "flatten_multiset M") apply (auto simp add: ty_of_d)
-      apply (auto simp add: flatten_multiset_def csorted_list_of_set_def)
-    subgoal for a list apply (induction list)  apply auto
-      sorry sorry
-      
-    find_theorems concat
+    have  finite: "finite {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using Agg(4) Agg(2) nfv_tys_v
+      by (rule safe_formula_finite[of \<phi> "length tys" v \<sigma> V i])
+   
+    from this have finite_set:  
+"finite {x. {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<noteq> {}}"
+      apply auto sorry
+    have flatten: "set (flatten_multiset M) \<subseteq> fst ` M" using M_def finite_set set_of_flatten_multiset[of M
+ "(\<lambda>x . {zs . length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} )"]
+      by auto
+    from this have evaltrm: "z \<in> set (flatten_multiset M) \<Longrightarrow>  \<exists> zs. Formula.eval_trm (zs @ v) f = z" for z using M_def by (auto simp add: image_def)
+     have th2: ?case if min: "agg_type = agg_type.Agg_Min \<or> agg_type = agg_type.Agg_Max \<or> agg_type = agg_type.Agg_Sum" and alist_def: " flatten_multiset
+     {(x, ecard {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x}) |x.
+      \<exists>xa. Formula.sat \<sigma> V (xa @ v) i \<phi> \<and> length xa = length tys \<and> Formula.eval_trm (xa @ v) f = x} =
+    a # list" for a list
+     proof -
+      have ty_of_list: "z=a \<or> z \<in> set list \<Longrightarrow> \<exists>zs .ty_of (Formula.eval_trm (zs @ v) f) = t" for z
+      proof -
+          assume z_def: "z=a \<or> z \<in> set list"
+        from z_def obtain zs where " Formula.eval_trm (zs @ v) f = z" using alist_def evaltrm M_def by auto
+        from Agg.prems(1) have wty_f: " agg_env E tys  \<turnstile> f :: t" apply cases  using omega_def t_def min eq  by auto  
+        have fv_ty:"\<forall>y\<in>fv_trm f. ty_of ((zs @ v) ! y) = agg_env E tys y" using  wty_f
+          apply (auto simp add: agg_env_def Formula.nfv_def) sorry
+        have ty_of_z: "ty_of (Formula.eval_trm (zs @ v) f) = t" using wty_f fv_ty   ty_of_eval_trm[of "agg_env E tys" f t "zs@v" ]
+          by auto
+        show ?thesis sorry
+      qed 
+      show ?thesis sorry
+    qed
+    thm th2
+    from  th2  M_def t_def omega_def  have ?case apply (cases agg_type) 
+         by (auto simp add: ty_of_d split: list.splits) 
+     
   } 
   ultimately show ?case by auto(* TODO *)
 next
