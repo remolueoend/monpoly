@@ -1019,17 +1019,19 @@ let expand_let f =
   | LessEq _ as f -> f
 
   | Pred (p)  -> 
-    let (n,_,ts) = get_info p in
-    if List.mem_assoc n m
+    let (n,a,ts) = get_info p in
+    if List.mem_assoc (n,a) m
     then 
-      let (args,f) = List.assoc n m  in
+      let (args,f) = List.assoc (n,a) m  in
       let args = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") args in (* We allow only variables here with check_let *)
       let subm = Misc.zip args ts in
-      expand_let_rec (List.remove_assoc n m) (substitute_vars subm f)
+      expand_let_rec (List.remove_assoc (n,a) m) (substitute_vars subm f)
     else Pred (p)
 
-  | Let (p, f1, f2) -> expand_let_rec ((get_name p,(get_args p,f1))::m) f2
-  | LetPrev (p, f1, f2) -> failwith "Internal error"
+  | Let (p, f1, f2) ->
+    let (n,a,ts) = get_info p in
+    expand_let_rec (((n, a), (ts, f1))::m) f2
+  | LetPrev (p, f1, f2) -> failwith "Cannot unfold LETPREV"
 
   | Neg f -> Neg (expand_let_rec m f)
   | Exists (v, f) -> Exists (v,expand_let_rec m f)
@@ -1128,20 +1130,20 @@ let type_error t1 t2 t =
 
 let first_debug = ref true
 
-let string_of_delta sch = 
+let string_of_delta sch =
   if (List.length sch > 0)
-  then 
-    let string_of_types ts = 
-      if (List.length ts > 0) 
-      then 
-        let ft = List.hd ts in 
+  then
+    let string_of_types ts =
+      if (List.length ts > 0)
+      then
+        let ft = List.hd ts in
         List.fold_left (fun a e -> a ^ ", " ^ (string_of_type e)) (string_of_type ft) (List.tl ts)
-      else "()" 
+      else "()"
     in
-    let (fp, fs) = List.hd sch 
-    in List.fold_left 
-          (fun a (p,ts) -> a ^ ", " ^ p ^ ":(" ^ (string_of_types ts) ^ ")") 
-          (fp ^ ":(" ^ (string_of_types fs) ^ ")") (List.tl sch)
+    let (fp, fs) = List.hd sch
+    in List.fold_left
+          (fun a (p,ts) -> a ^ ", " ^ fst p ^ ":(" ^ (string_of_types ts) ^ ")")
+          (fst fp ^ ":(" ^ (string_of_types fs) ^ ")") (List.tl sch)
   else "_"
 
 let string_of_gamma vars = 
@@ -1283,12 +1285,12 @@ let rec type_check_formula (sch, vars) f =
     let v2 = propagate_constraints t1_typ t2_typ v2 in
     (s2,v2,f)
   | Pred p as f ->
-    let name = Predicate.get_name p in
+    let (name, arity, _) = Predicate.get_info p in
     let exp_typ_list =
-    if List.mem_assoc name sch then
-      List.assoc name sch
+    if List.mem_assoc (name, arity) sch then
+      List.assoc (name, arity) sch
     else failwith ("[Rewriting.check_syntax] unknown predicate " ^ name  ^
-                   " in input formula")
+                   "/" ^ string_of_int arity ^ " in input formula")
     in 
     let t_list = Predicate.get_args p in 
     if (List.length t_list) = (List.length exp_typ_list) then
@@ -1306,32 +1308,32 @@ let rec type_check_formula (sch, vars) f =
       failwith ("[Rewriting.check_syntax] wrong arity for predicate " ^ name ^
                 " in input formula")
   | Let (p, f1, f2) -> 
-    let (n,_,ts) = get_info p in
+    let (n,a,ts) = get_info p in
     let new_vars = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") ts in (* We allow only variables here with check_let *)
     let new_typed_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] new_vars in
     let (s1,v1,f1) = type_check_formula (sch, new_typed_vars) f1 in
     assert((List.length v1) = (List.length new_typed_vars));
     let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
     let new_sig = List.map (fun (_,t) -> t) new_sig in
-    let (shadowed_pred,rest) = List.partition (fun (p,_) -> n=p) s1 in
-    let delta = (n,new_sig)::rest in
+    let (shadowed_pred,rest) = List.partition (fun (p,_) -> (n,a)=p) s1 in
+    let delta = ((n,a),new_sig)::rest in
     let (s2, v2, f2) = type_check_formula (delta,vars) f2 in
-    let new_delta = List.filter (fun (p,_) -> not (n=p)) s2 in
+    let new_delta = List.filter (fun (p,_) -> not ((n,a)=p)) s2 in
     (shadowed_pred@new_delta, v2, Let(p,f1,f2))
 
   | LetPrev (p, f1, f2) -> 
-    let (n,_,ts) = get_info p in
+    let (n,a,ts) = get_info p in
     let new_vars = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") ts in (* We allow only variables here with check_let *)
     let new_typed_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] new_vars in
     let new_sig = List.map (fun (_,t) -> t) new_typed_vars in
-    let (s1,v1,f1) = type_check_formula ((n,new_sig)::sch, new_typed_vars) f1 in
+    let (s1,v1,f1) = type_check_formula (((n,a),new_sig)::sch, new_typed_vars) f1 in
     assert((List.length v1) = (List.length new_typed_vars));
     let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
     let new_sig = List.map (fun (_,t) -> t) new_sig in
-    let (shadowed_pred,rest) = List.partition (fun (p,_) -> n=p) s1 in
-    let delta = (n,new_sig)::rest in
+    let (shadowed_pred,rest) = List.partition (fun (p,_) -> (n,a)=p) s1 in
+    let delta = ((n,a),new_sig)::rest in
     let (s2, v2, f2) = type_check_formula (delta,vars) f2 in
-    let new_delta = List.filter (fun (p,_) -> not (n=p)) s2 in
+    let new_delta = List.filter (fun (p,_) -> not ((n,a)=p)) s2 in
     (shadowed_pred@new_delta, v2, LetPrev(p,f1,f2))
 
   | Neg f -> let (s,v,f) = type_check_formula (sch, vars) f in (s,v, Neg f)
@@ -1435,7 +1437,9 @@ and type_check_re_formula (sch, vars) = function
 
 let rec check_syntax db_schema f =
   let lift_type t = TCst t in
-  let sch = List.map (fun (t, l) -> (t, List.map (fun (_,t) -> lift_type t) l)) db_schema in 
+  let sch = List.map (fun (t, l) ->
+    ((t, List.length l), List.map (fun (_,t) -> lift_type t) l)) db_schema
+  in
   let debug = !first_debug && (Misc.debugging Dbg_formula) in 
   let fvs = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] (MFOTL.free_vars f) in
   let (s,v,f) = type_check_formula_debug debug (sch,fvs) f in

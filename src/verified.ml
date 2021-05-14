@@ -108,10 +108,10 @@ module Monitor : sig
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
   val mk_db :
-    (string * (event_data list) set) list ->
-      (string, ((event_data list) set list)) mapping
+    ((string * nat) * (event_data list) set) list ->
+      ((string * nat), ((event_data list) set list)) mapping
   val mstep :
-    (string, ((event_data list) set list)) mapping * nat ->
+    ((string * nat), ((event_data list) set list)) mapping * nat ->
       ((nat *
          (nat *
            (bool list *
@@ -153,7 +153,7 @@ module Monitor : sig
             unit)
             mstate_ext
   val vmstep :
-    (string, ((event_data list) set list)) mapping * nat ->
+    ((string * nat), ((event_data list) set list)) mapping * nat ->
       ((nat * (nat * ((event_data option) list) set) list),
         (nat *
           (nat *
@@ -751,6 +751,16 @@ let rec compare_nat x = comparator_of (equal_nat, linorder_nat) x;;
 let ccompare_nata : (nat -> nat -> ordera) option = Some compare_nat;;
 
 let ccompare_nat = ({ccompare = ccompare_nata} : nat ccompare);;
+
+type mapping_impla = Mapping_Choose | Mapping_Assoc_List | Mapping_RBT |
+  Mapping_Mapping;;
+
+let mapping_impl_nata : (nat, mapping_impla) phantom = Phantom Mapping_RBT;;
+
+type 'a mapping_impl = {mapping_impl : ('a, mapping_impla) phantom};;
+let mapping_impl _A = _A.mapping_impl;;
+
+let mapping_impl_nat = ({mapping_impl = mapping_impl_nata} : nat mapping_impl);;
 
 let rec proper_interval_nat
   no x1 = match no, x1 with no, None -> true
@@ -2528,14 +2538,8 @@ let rec ccompare_lista _A
 let rec ccompare_list _A =
   ({ccompare = ccompare_lista _A} : ('a list) ccompare);;
 
-type mapping_impla = Mapping_Choose | Mapping_Assoc_List | Mapping_RBT |
-  Mapping_Mapping;;
-
 let mapping_impl_lista : (('a list), mapping_impla) phantom
   = Phantom Mapping_Choose;;
-
-type 'a mapping_impl = {mapping_impl : ('a, mapping_impla) phantom};;
-let mapping_impl _A = _A.mapping_impl;;
 
 let mapping_impl_list =
   ({mapping_impl = mapping_impl_lista} : ('a list) mapping_impl);;
@@ -3008,6 +3012,10 @@ let ccompare_enata : (enat -> enat -> ordera) option
 
 let ccompare_enat = ({ccompare = ccompare_enata} : enat ccompare);;
 
+let rec equal_proda _A _B (x1, x2) (y1, y2) = eq _A x1 y1 && eq _B x2 y2;;
+
+let rec equal_prod _A _B = ({equal = equal_proda _A _B} : ('a * 'b) equal);;
+
 let rec equality_prod eq_a eq_b (x, xa) (y, ya) = eq_a x y && eq_b xa ya;;
 
 let rec ceq_proda _A _B
@@ -3079,6 +3087,20 @@ let rec ccompare_proda _A _B
 
 let rec ccompare_prod _A _B =
   ({ccompare = ccompare_proda _A _B} : ('a * 'b) ccompare);;
+
+let rec mapping_impl_choose2
+  x y = match x, y with Mapping_RBT, Mapping_RBT -> Mapping_RBT
+    | Mapping_Assoc_List, Mapping_Assoc_List -> Mapping_Assoc_List
+    | Mapping_Mapping, Mapping_Mapping -> Mapping_Mapping
+    | x, y -> Mapping_Choose;;
+
+let rec mapping_impl_proda _A _B
+  = Phantom
+      (mapping_impl_choose2 (of_phantom (mapping_impl _A))
+        (of_phantom (mapping_impl _B)));;
+
+let rec mapping_impl_prod _A _B =
+  ({mapping_impl = mapping_impl_proda _A _B} : ('a * 'b) mapping_impl);;
 
 let rec cproper_interval_proda _A _B
   x0 x1 = match x0, x1 with None, None -> true
@@ -3442,7 +3464,7 @@ and rbt_comp_del_from_right
 
 let rec rbt_comp_delete c k t = paint B (rbt_comp_del c k t);;
 
-let rec deletec _A
+let rec deleteb _A
   xb xc =
     Mapping_RBTa (rbt_comp_delete (the (ccompare _A)) xb (impl_ofa _A xc));;
 
@@ -3485,7 +3507,7 @@ and remove (_A1, _A2)
           with None ->
             failwith "remove RBT_set: ccompare = None"
               (fun _ -> remove (_A1, _A2) x (RBT_set rbt))
-          | Some _ -> RBT_set (deletec _A2 x rbt))
+          | Some _ -> RBT_set (deleteb _A2 x rbt))
     | x, DList_set dxs ->
         (match ceq _A1
           with None ->
@@ -3892,8 +3914,6 @@ let rec rpd
         sup_seta (ceq_mregex, ccompare_mregex) (mTimesL r (rpd s)) (rpd r)
     | MStar r -> mTimesL (MStar r) (rpd r);;
 
-let rec delete _A k = filtera (fun (ka, _) -> not (eq _A k ka));;
-
 let rec update _A
   k v x2 = match k, v, x2 with k, v, [] -> [(k, v)]
     | k, v, p :: ps ->
@@ -4032,17 +4052,17 @@ let rec delete_aux _A
     | ka, (k, v) :: xs ->
         (if eq _A ka k then xs else (k, v) :: delete_aux _A ka xs);;
 
-let rec deleteb _A xb xc = Alist (delete_aux _A xb (impl_of xc));;
+let rec deletea _A xb xc = Alist (delete_aux _A xb (impl_of xc));;
 
-let rec deletea (_A1, _A2)
+let rec delete (_A1, _A2)
   k x1 = match k, x1 with
     k, RBT_Mapping t ->
       (match ccompare _A1
         with None ->
           failwith "delete RBT_Mapping: ccompare = None"
-            (fun _ -> deletea (_A1, _A2) k (RBT_Mapping t))
-        | Some _ -> RBT_Mapping (deletec _A1 k t))
-    | k, Assoc_List_Mapping al -> Assoc_List_Mapping (deleteb _A2 k al)
+            (fun _ -> delete (_A1, _A2) k (RBT_Mapping t))
+        | Some _ -> RBT_Mapping (deleteb _A1 k t))
+    | k, Assoc_List_Mapping al -> Assoc_List_Mapping (deletea _A2 k al)
     | k, Mapping m -> Mapping (fun_upd _A2 m k None);;
 
 let rec filterc _A
@@ -4148,9 +4168,6 @@ let rec restrict
   a v = mapa (fun i ->
                (if member (ceq_nat, ccompare_nat) i a then nth v i else None))
           (upt zero_nata (size_list v));;
-
-let rec clearjunk _A = function [] -> []
-                       | p :: ps -> p :: clearjunk _A (delete _A (fst p) ps);;
 
 let rec combine _B
   f (RBT_Mapping t) (RBT_Mapping u) =
@@ -4750,13 +4767,15 @@ let rec contains_pred
   p x1 = match p, x1 with p, Eq (t1, t2) -> false
     | p, Less (t1, t2) -> false
     | p, LessEq (t1, t2) -> false
-    | p, Pred (e, ts) -> Pervasives.(=) e p
+    | p, Pred (e, ts) -> equal_proda equal_string8 equal_nat p (e, size_list ts)
     | p, Let (e, phi, psi) ->
-        contains_pred p phi && contains_pred e psi ||
-          not (Pervasives.(=) p e) && contains_pred p psi
+        contains_pred p phi && contains_pred (e, nfv phi) psi ||
+          not (equal_proda equal_string8 equal_nat p (e, nfv phi)) &&
+            contains_pred p psi
     | p, LetPrev (e, phi, psi) ->
-        not (Pervasives.(=) p e) &&
-          (contains_pred p phi && contains_pred e psi || contains_pred p psi)
+        not (equal_proda equal_string8 equal_nat p (e, nfv phi)) &&
+          (contains_pred p phi && contains_pred (e, nfv phi) psi ||
+            contains_pred p psi)
     | p, Neg phi -> contains_pred p phi
     | p, Or (phi, psi) -> contains_pred p phi || contains_pred p psi
     | p, And (phi, psi) -> contains_pred p phi || contains_pred p psi
@@ -4777,13 +4796,14 @@ let rec safe_letprev
     | p, Pred (e, ts) -> true
     | p, Let (e, phi, psi) ->
         safe_letprev p phi &&
-          ((not (contains_pred p phi) || safe_letprev e psi) &&
-            (Pervasives.(=) p e || safe_letprev p psi))
+          ((not (contains_pred p phi) || safe_letprev (e, nfv phi) psi) &&
+            (equal_proda equal_string8 equal_nat p (e, nfv phi) ||
+              safe_letprev p psi))
     | p, LetPrev (e, phi, psi) ->
-        safe_letprev e phi &&
-          (Pervasives.(=) p e ||
+        safe_letprev (e, nfv phi) phi &&
+          (equal_proda equal_string8 equal_nat p (e, nfv phi) ||
             safe_letprev p phi &&
-              ((not (contains_pred p phi) || safe_letprev e psi) &&
+              ((not (contains_pred p phi) || safe_letprev (e, nfv phi) psi) &&
                 safe_letprev p psi))
     | p, Neg phi -> safe_letprev p phi
     | p, Or (phi, psi) -> safe_letprev p phi && safe_letprev p psi
@@ -4849,7 +4869,7 @@ let rec safe_formula
           (fvi zero_nata phi) &&
           (safe_formula phi && safe_formula psi)
     | LetPrev (p, phi, psi) ->
-        safe_letprev p phi &&
+        safe_letprev (p, nfv phi) phi &&
           (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
              (set (ceq_nat, ccompare_nat, set_impl_nat)
                (upt zero_nata (nfv phi)))
@@ -5434,7 +5454,7 @@ let rec eval_step_mmuaux (_A1, _A2)
            a2_map
          in
        let a2_mapb =
-         deletea (ccompare_nat, equal_nat) (minus_nata tp len) a2_mapa in
+         delete (ccompare_nat, equal_nat) (minus_nata tp len) a2_mapa in
         (tp, (tl_queue tssa,
                (minus_nata len one_nata,
                  (maskL,
@@ -6867,7 +6887,7 @@ let rec filter_cfi _B (_A1, _A2)
   xa = Abs_comp_fun_idem
          (fun a m ->
            (match lookupa (_A1, _A2) m a with None -> m
-             | Some u -> (if eq _B xa u then deletea (_A1, _A2) a m else m)));;
+             | Some u -> (if eq _B xa u then delete (_A1, _A2) a m else m)));;
 
 let rec filter_set (_A1, _A2, _A3, _A4) _B
   m a t =
@@ -6906,7 +6926,7 @@ let rec add_new_ts_mmsaux (_A1, _A2, _A3)
     add_new_ts_mmsauxa (_A1, _A2, _A3) args nt
       (shift_end (_A1, _A2, _A3) args nt aux);;
 
-let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (deletea (_A1, _A2));;
+let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (delete (_A1, _A2));;
 
 let rec filter_join (_A1, _A2, _A3, _A4)
   pos a m =
@@ -7474,11 +7494,14 @@ let rec meval
            in
           (zs, MAnd (a_phi, phia, pos, a_psi, psia, bufa)))
     | j, n, ts, db, MLetPrev (p, m, phi, psi, i, buf) ->
-        (let (ia, (xs, (bufa, phia))) = letprev_meval m j i [] buf p ts db phi
-           in
+        (let (ia, (xs, (bufa, phia))) =
+           letprev_meval m j i [] buf (p, m) ts db phi in
          let (ys, psia) =
            meval j n ts
-             (updateb (ccompare_string8, equal_string8) p
+             (updateb
+               ((ccompare_prod ccompare_string8 ccompare_nat),
+                 (equal_prod equal_string8 equal_nat))
+               (p, m)
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
@@ -7494,7 +7517,10 @@ let rec meval
         (let (xs, phia) = meval j m ts db phi in
          let (ys, psia) =
            meval j n ts
-             (updateb (ccompare_string8, equal_string8) p
+             (updateb
+               ((ccompare_prod ccompare_string8 ccompare_nat),
+                 (equal_prod equal_string8 equal_nat))
+               (p, m)
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
@@ -7507,7 +7533,11 @@ let rec meval
            in
           (ys, MLet (p, m, phia, psia)))
     | lookahead, n, ts, db, MPred (e, tms) ->
-        ((match lookupa (ccompare_string8, equal_string8) db e
+        ((match
+           lookupa
+             ((ccompare_prod ccompare_string8 ccompare_nat),
+               (equal_prod equal_string8 equal_nat))
+             db (e, size_list tms)
            with None ->
              replicate (size_list ts)
                (set_empty
@@ -7554,14 +7584,16 @@ and letprev_meval
     (let xs = take (minus_nata j i) buf in
      let (ysa, phia) =
        meval j m ts
-         (updateb (ccompare_string8, equal_string8) p
-           (mapa (image
-                   ((ceq_list (ceq_option ceq_event_data)),
-                     (ccompare_list (ccompare_option ccompare_event_data)))
-                   ((ceq_list ceq_event_data),
-                     (ccompare_list ccompare_event_data), set_impl_list)
-                   (mapa the))
-             xs)
+         (updateb
+           ((ccompare_prod ccompare_string8 ccompare_nat),
+             (equal_prod equal_string8 equal_nat))
+           p (mapa (image
+                     ((ceq_list (ceq_option ceq_event_data)),
+                       (ccompare_list (ccompare_option ccompare_event_data)))
+                     ((ceq_list ceq_event_data),
+                       (ccompare_list ccompare_event_data), set_impl_list)
+                     (mapa the))
+               xs)
            db)
          phi
        in
@@ -7569,9 +7601,9 @@ and letprev_meval
       (if null bufa || less_eq_nat j (plus_nata i (size_list xs))
         then (plus_nata i (size_list xs), (ys @ ysa, (bufa, phia)))
         else letprev_meval m j (plus_nata i (size_list xs)) (ys @ ysa) bufa p []
-               (map_values ccompare_string8 (fun _ _ -> []) db) phia));;
-
-let mapping_impl_nat : (nat, mapping_impla) phantom = Phantom Mapping_RBT;;
+               (map_values (ccompare_prod ccompare_string8 ccompare_nat)
+                 (fun _ _ -> []) db)
+               phia));;
 
 let rec args_n
   (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_n;;
@@ -7594,7 +7626,7 @@ let rec init_mmuaux _A
                 (updateb (ccompare_nat, equal_nat) zero_nata
                    (mapping_empty (ccompare_list (ccompare_option _A))
                      (of_phantom mapping_impl_lista))
-                   (mapping_empty ccompare_nat (of_phantom mapping_impl_nat)),
+                   (mapping_empty ccompare_nat (of_phantom mapping_impl_nata)),
                   ([], zero_nata))))))));;
 
 let rec init_mmsaux _A
@@ -7796,15 +7828,11 @@ let rec minit
           Mstate_ext (zero_nata, zero_nata, minit0 n phi, n, ()));;
 
 let rec mk_db
-  t = of_alist (ccompare_string8, equal_string8, mapping_impl_string8)
-        (map_filter
-          (fun (p, x) ->
-            (if is_empty
-                  (card_UNIV_list, (ceq_list ceq_event_data),
-                    (cproper_interval_list ccompare_event_data))
-                  x
-              then None else Some (p, [x])))
-          (clearjunk equal_string8 t));;
+  m = of_alist
+        ((ccompare_prod ccompare_string8 ccompare_nat),
+          (equal_prod equal_string8 equal_nat),
+          (mapping_impl_prod mapping_impl_string8 mapping_impl_nat))
+        (mapa (fun (p, x) -> (p, [x])) m);;
 
 let rec mstate_n
   (Mstate_ext (mstate_i, mstate_j, mstate_m, mstate_n, more)) = mstate_n;;
@@ -8080,11 +8108,14 @@ let rec vmeval
            in
           (zs, MAnd (a_phi, phia, pos, a_psi, psia, bufa)))
     | j, n, ts, db, MLetPrev (p, m, phi, psi, i, buf) ->
-        (let (ia, (xs, (bufa, phia))) = letprev_vmeval m j i [] buf p ts db phi
-           in
+        (let (ia, (xs, (bufa, phia))) =
+           letprev_vmeval m j i [] buf (p, m) ts db phi in
          let (ys, psia) =
            vmeval j n ts
-             (updateb (ccompare_string8, equal_string8) p
+             (updateb
+               ((ccompare_prod ccompare_string8 ccompare_nat),
+                 (equal_prod equal_string8 equal_nat))
+               (p, m)
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
@@ -8100,7 +8131,10 @@ let rec vmeval
         (let (xs, phia) = vmeval j m ts db phi in
          let (ys, psia) =
            vmeval j n ts
-             (updateb (ccompare_string8, equal_string8) p
+             (updateb
+               ((ccompare_prod ccompare_string8 ccompare_nat),
+                 (equal_prod equal_string8 equal_nat))
+               (p, m)
                (mapa (image
                        ((ceq_list (ceq_option ceq_event_data)),
                          (ccompare_list (ccompare_option ccompare_event_data)))
@@ -8113,7 +8147,11 @@ let rec vmeval
            in
           (ys, MLet (p, m, phia, psia)))
     | lookahead, n, ts, db, MPred (e, tms) ->
-        ((match lookupa (ccompare_string8, equal_string8) db e
+        ((match
+           lookupa
+             ((ccompare_prod ccompare_string8 ccompare_nat),
+               (equal_prod equal_string8 equal_nat))
+             db (e, size_list tms)
            with None ->
              replicate (size_list ts)
                (set_empty
@@ -8160,14 +8198,16 @@ and letprev_vmeval
     (let xs = take (minus_nata j i) buf in
      let (ysa, phia) =
        vmeval j m ts
-         (updateb (ccompare_string8, equal_string8) p
-           (mapa (image
-                   ((ceq_list (ceq_option ceq_event_data)),
-                     (ccompare_list (ccompare_option ccompare_event_data)))
-                   ((ceq_list ceq_event_data),
-                     (ccompare_list ccompare_event_data), set_impl_list)
-                   (mapa the))
-             xs)
+         (updateb
+           ((ccompare_prod ccompare_string8 ccompare_nat),
+             (equal_prod equal_string8 equal_nat))
+           p (mapa (image
+                     ((ceq_list (ceq_option ceq_event_data)),
+                       (ccompare_list (ccompare_option ccompare_event_data)))
+                     ((ceq_list ceq_event_data),
+                       (ccompare_list ccompare_event_data), set_impl_list)
+                     (mapa the))
+               xs)
            db)
          phi
        in
@@ -8175,7 +8215,9 @@ and letprev_vmeval
       (if null bufa || less_eq_nat j (plus_nata i (size_list xs))
         then (plus_nata i (size_list xs), (ys @ ysa, (bufa, phia)))
         else letprev_vmeval m j (plus_nata i (size_list xs)) (ys @ ysa) bufa p
-               [] (map_values ccompare_string8 (fun _ _ -> []) db) phia));;
+               [] (map_values (ccompare_prod ccompare_string8 ccompare_nat)
+                    (fun _ _ -> []) db)
+               phia));;
 
 let rec init_vmuaux x = (fun _ -> (zero_nata, [])) x;;
 
@@ -8344,7 +8386,7 @@ let rec mmonitorable_exec
           (fvi zero_nata phi) &&
           (mmonitorable_exec phi && mmonitorable_exec psi)
     | LetPrev (p, phi, psi) ->
-        safe_letprev p phi &&
+        safe_letprev (p, nfv phi) phi &&
           (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
              (set (ceq_nat, ccompare_nat, set_impl_nat)
                (upt zero_nata (nfv phi)))
@@ -8659,4 +8701,3 @@ let rec vminit_safe
   phi = (if mmonitorable_exec phi then vminit phi else failwith "undefined");;
 
 end;; (*struct Monitor*)
-

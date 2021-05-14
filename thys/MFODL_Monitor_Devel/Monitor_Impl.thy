@@ -126,12 +126,12 @@ lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
 
 lemma meval_MPred: "meval lookahead n ts db (MPred e tms) =
-  (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
+  (case Mapping.lookup db (e, length tms) of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
   (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
   by (force split: option.splits simp: Option.these_def image_iff)
 
 lemma vmeval_MPred: "vmeval lookahead n ts db (MPred e tms) =
-  (case Mapping.lookup db e of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
+  (case Mapping.lookup db (e, length tms) of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
   (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
   by (force split: option.splits simp: Option.these_def image_iff)
 
@@ -139,8 +139,8 @@ declare [[code drop: meval vmeval]]
 lemmas meval_code[code] = default_maux.meval_simps(1) meval_MPred default_maux.meval_simps(3-)
 lemmas vmeval_code[code] = verimon_maux.meval_simps(1) vmeval_MPred verimon_maux.meval_simps(3-)
 
-definition mk_db :: "(Formula.name \<times> event_data list set) list \<Rightarrow> _" where
-  "mk_db t = Monitor.mk_db (\<Union>n \<in> set (map fst t). (\<lambda>v. (n, v)) ` the (map_of t n))"
+definition mk_db :: "((Formula.name \<times> nat) \<times> event_data list set) list \<Rightarrow> database" where
+  "mk_db m = Mapping.of_alist (map (\<lambda>(p, X). (p, [X])) m)"
 
 definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"
@@ -465,30 +465,6 @@ lemma remove_Union_code[code]: "remove_Union A X B =
 
 lemma tabulate_remdups: "Mapping.tabulate xs f = Mapping.tabulate (remdups xs) f"
   by (transfer fixing: xs f) (auto simp: map_of_map_restrict)
-
-lift_definition clearjunk :: "(string8 \<times> event_data list set) list \<Rightarrow> (string8, event_data list set list) alist" is
-  "\<lambda>t. List.map_filter (\<lambda>(p, X). if X = {} then None else Some (p, [X])) (AList.clearjunk t)"
-  unfolding map_filter_def o_def list.map_comp
-  by (subst map_cong[OF refl, of _ _ fst]) (auto simp: map_filter_def distinct_map_fst_filter split: if_splits)
-
-lemma map_filter_snd_map_filter: "List.map_filter (\<lambda>(a, b). if P b then None else Some (f a b)) xs =
-    map (\<lambda>(a, b). f a b) (filter (\<lambda>x. \<not> P (snd x)) xs)"
-  by (simp add: map_filter_def prod.case_eq_if)
-
-lemma mk_db_code_alist:
-  "mk_db t = Assoc_List_Mapping (clearjunk t)"
-  unfolding mk_db_def Assoc_List_Mapping_def
-  by (transfer' fixing: t)
-    (auto simp: map_filter_snd_map_filter fun_eq_iff map_of_map image_iff map_of_clearjunk
-      map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
-      split: if_splits option.splits)
-
-lemma mk_db_code[code]:
-  "mk_db t = Mapping.of_alist (List.map_filter (\<lambda>(p, X). if X = {} then None else Some (p, [X])) (AList.clearjunk t))"
-  unfolding mk_db_def
-  by (transfer' fixing: t) (auto simp: map_filter_snd_map_filter fun_eq_iff map_of_map image_iff
-      map_of_clearjunk map_of_filter_apply dest: weak_map_of_SomeI intro!: bexI[rotated, OF map_of_SomeD]
-      split: if_splits option.splits)
 
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin_code[folded remove_Union_def, code]

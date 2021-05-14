@@ -142,11 +142,16 @@ let unorderedFlatMap m =
 let convert_db md =
   let rbt_single x = RBT_set (rbt_insert x rbt_empty) in
   let add_builtin xs (name, tup) =
-    (name, rbt_single (List.map convert_cst tup)) :: xs in
+    let arity = nat_of_int (List.length tup) in
+    ((name, arity), rbt_single (List.map convert_cst tup)) :: xs
+  in
   let convert_table t =
-    let (name,_) = (Table.get_schema t) in
-    (name, RBT_set (Relation.fold (fun v -> rbt_insert (List.map convert_cst v))
-      (Table.get_relation t) rbt_empty)) in
+    let (name, attrs) = (Table.get_schema t) in
+    let arity = nat_of_int (List.length attrs) in
+    ((name, arity), RBT_set (Relation.fold
+      (fun v -> rbt_insert (List.map convert_cst v))
+      (Table.get_relation t) rbt_empty))
+  in
   let db_events = List.map convert_table (Db.get_tables md.db) in
   let all_events = List.fold_left add_builtin db_events
     ["tp", [Int md.tp]; "ts", [Float md.ts]; "tpts", [Int md.tp; Float md.ts]]
