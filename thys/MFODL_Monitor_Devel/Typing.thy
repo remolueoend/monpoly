@@ -279,10 +279,11 @@ next
 qed  auto
 
 
-lemma safe_formula_finite:
+lemma safe_formula_finite':
   assumes "Formula.safe_formula \<phi>" "{0..<n} \<subseteq> Formula.fv \<phi>" "Formula.nfv \<phi> \<le> n + length v"
   shows "finite {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}"
-  using assms
+  using assms safe_formula_finite
+  apply (auto simp add: wf_tuple_def)
   apply (induction \<phi> arbitrary: i rule: safe_formula_induct)
   sorry
 
@@ -529,7 +530,7 @@ next
     from Agg.prems(3) eq obtain M where  M_def: "M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>
  \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<and> v!x = eval_agg_op \<omega> M" by auto
     have  finite: "finite {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using Agg(4) Agg(2) nfv_tys_v
-      by (rule safe_formula_finite[of \<phi> "length tys" v \<sigma> V i])
+      by (rule safe_formula_finite'[of \<phi> "length tys" v \<sigma> V i])
    
     from this have finite_set:  
 "finite {x. {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<noteq> {}}"
