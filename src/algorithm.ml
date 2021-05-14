@@ -592,14 +592,14 @@ let neval_get_crt neval last crt q =
 
 let add_let_index f n rels =
   let rec update = function
-    | EPred (p, comp, inf) ->
-      if Predicate.get_name p = n then
+    | EPred ((p, a, _), comp, inf) ->
+      if (p, a) = n then
         List.iter (fun (i,tsi,rel) -> Queue.add (i,tsi, comp rel) inf) rels
       else ()
 
-    | ELet (p, comp, f1, f2, inf) ->
+    | ELet ((p, a, _), comp, f1, f2, inf) ->
       update f1;
-      if Predicate.get_name p = n then () else update f2
+      if (p, a) = n then () else update f2
 
     | ERel _ -> ()
 
@@ -668,7 +668,7 @@ let rec eval f neval crt discard =
       Some rel
     end
 
-  | ELet (p, comp, f1, f2, inf) ->
+  | ELet ((p, a, _), comp, f1, f2, inf) ->
       let rec eval_f1 rels =
         let (lastq, _) = NEval.get_last neval in
         if inf.llastq = lastq then
@@ -683,7 +683,7 @@ let rec eval f neval crt discard =
             eval_f1 ((i, tsi, comp rel) :: rels)
           | None -> rels
       in
-      add_let_index f2 (Predicate.get_name p) (List.rev (eval_f1 []));
+      add_let_index f2 (p, a) (List.rev (eval_f1 []));
       eval f2 neval crt discard
 
   | ENeg f1 ->
