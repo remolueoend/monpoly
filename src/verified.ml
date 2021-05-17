@@ -310,10 +310,10 @@ let rec minus_nata
   m n = Nat (max ord_integer Z.zero
               (Z.sub (integer_of_nat m) (integer_of_nat n)));;
 
-type 'a minus = {minus : 'a -> 'a -> 'a};;
-let minus _A = _A.minus;;
+type 'a minus = {minusa : 'a -> 'a -> 'a};;
+let minusa _A = _A.minusa;;
 
-let minus_nat = ({minus = minus_nata} : nat minus);;
+let minus_nat = ({minusa = minus_nata} : nat minus);;
 
 let rec min _A a b = (if less_eq _A a b then a else b);;
 
@@ -1114,60 +1114,187 @@ let rec insertb _A
   xc xd xe =
     Mapping_RBTa (rbt_comp_insert (the (ccompare _A)) xc xd (impl_ofa _A xe));;
 
-let rec comp_sunion_with
-  c f asa bs = match c, f, asa, bs with
-    c, f, (ka, va) :: asa, (k, v) :: bs ->
-      (match c k ka with Eqa -> (ka, f ka va v) :: comp_sunion_with c f asa bs
-        | Lt -> (k, v) :: comp_sunion_with c f ((ka, va) :: asa) bs
-        | Gt -> (ka, va) :: comp_sunion_with c f asa ((k, v) :: bs))
-    | c, f, [], bs -> bs
-    | c, f, asa, [] -> asa;;
+let rec rbt_baliR
+  t1 ab bb x3 = match t1, ab, bb, x3 with
+    t1, ab, bb, Branch (R, t2, aa, ba, Branch (R, t3, a, b, t4)) ->
+      Branch (R, Branch (B, t1, ab, bb, t2), aa, ba, Branch (B, t3, a, b, t4))
+    | t1, ab, bb, Branch (R, Branch (R, t2, aa, ba, t3), a, b, Empty) ->
+        Branch
+          (R, Branch (B, t1, ab, bb, t2), aa, ba, Branch (B, t3, a, b, Empty))
+    | t1, ab, bb,
+        Branch (R, Branch (R, t2, aa, ba, t3), a, b, Branch (B, va, vb, vc, vd))
+        -> Branch
+             (R, Branch (B, t1, ab, bb, t2), aa, ba,
+               Branch (B, t3, a, b, Branch (B, va, vb, vc, vd)))
+    | t1, a, b, Empty -> Branch (B, t1, a, b, Empty)
+    | t1, a, b, Branch (B, va, vb, vc, vd) ->
+        Branch (B, t1, a, b, Branch (B, va, vb, vc, vd))
+    | t1, a, b, Branch (v, Empty, vb, vc, Empty) ->
+        Branch (B, t1, a, b, Branch (v, Empty, vb, vc, Empty))
+    | t1, a, b, Branch (v, Branch (B, ve, vf, vg, vh), vb, vc, Empty) ->
+        Branch
+          (B, t1, a, b, Branch (v, Branch (B, ve, vf, vg, vh), vb, vc, Empty))
+    | t1, a, b, Branch (v, Empty, vb, vc, Branch (B, vf, vg, vh, vi)) ->
+        Branch
+          (B, t1, a, b, Branch (v, Empty, vb, vc, Branch (B, vf, vg, vh, vi)))
+    | t1, a, b,
+        Branch
+          (v, Branch (B, ve, vj, vk, vl), vb, vc, Branch (B, vf, vg, vh, vi))
+        -> Branch
+             (B, t1, a, b,
+               Branch
+                 (v, Branch (B, ve, vj, vk, vl), vb, vc,
+                   Branch (B, vf, vg, vh, vi)));;
 
-type compare = LT | GT | EQ;;
-
-let rec skip_red = function Branch (R, l, k, v, r) -> l
-                   | Empty -> Empty
-                   | Branch (B, va, vb, vc, vd) -> Branch (B, va, vb, vc, vd);;
-
-let rec skip_black
-  t = (let ta = skip_red t in
-        (match ta with Empty -> ta | Branch (R, _, _, _, _) -> ta
-          | Branch (B, l, _, _, _) -> l));;
-
-let rec compare_height
-  sx s t tx =
-    (match (skip_red sx, (skip_red s, (skip_red t, skip_red tx)))
-      with (Empty, (Empty, (_, Empty))) -> EQ
-      | (Empty, (Empty, (_, Branch (_, _, _, _, _)))) -> LT
-      | (Empty, (Branch (_, _, _, _, _), (Empty, _))) -> EQ
-      | (Empty, (Branch (_, _, _, _, _), (Branch (_, _, _, _, _), Empty))) -> EQ
-      | (Empty,
-          (Branch (_, sa, _, _, _),
-            (Branch (_, ta, _, _, _), Branch (_, txa, _, _, _))))
-        -> compare_height Empty sa ta (skip_black txa)
-      | (Branch (_, _, _, _, _), (Empty, (Empty, Empty))) -> GT
-      | (Branch (_, _, _, _, _), (Empty, (Empty, Branch (_, _, _, _, _)))) -> LT
-      | (Branch (_, _, _, _, _), (Empty, (Branch (_, _, _, _, _), Empty))) -> EQ
-      | (Branch (_, _, _, _, _),
-          (Empty, (Branch (_, _, _, _, _), Branch (_, _, _, _, _))))
-        -> LT
-      | (Branch (_, _, _, _, _), (Branch (_, _, _, _, _), (Empty, _))) -> GT
-      | (Branch (_, sxa, _, _, _),
-          (Branch (_, sa, _, _, _), (Branch (_, ta, _, _, _), Empty)))
-        -> compare_height (skip_black sxa) sa ta Empty
-      | (Branch (_, sxa, _, _, _),
-          (Branch (_, sa, _, _, _),
-            (Branch (_, ta, _, _, _), Branch (_, txa, _, _, _))))
-        -> compare_height (skip_black sxa) sa ta (skip_black txa));;
+let rec equal_color x0 x1 = match x0, x1 with R, B -> false
+                      | B, R -> false
+                      | B, B -> true
+                      | R, R -> true;;
 
 let rec suc n = plus_nata n one_nata;;
+
+let rec bheight
+  = function Empty -> zero_nata
+    | Branch (c, lt, k, v, rt) ->
+        (if equal_color c B then suc (bheight lt) else bheight lt);;
+
+let rec rbt_joinR
+  l a b r =
+    (if less_eq_nat (bheight l) (bheight r) then Branch (R, l, a, b, r)
+      else (match l
+             with Branch (R, la, ab, ba, ra) ->
+               Branch (R, la, ab, ba, rbt_joinR ra a b r)
+             | Branch (B, la, ab, ba, ra) ->
+               rbt_baliR la ab ba (rbt_joinR ra a b r)));;
+
+let rec rbt_baliL
+  x0 a b t4 = match x0, a, b, t4 with
+    Branch (R, Branch (R, t1, ab, bb, t2), aa, ba, t3), a, b, t4 ->
+      Branch (R, Branch (B, t1, ab, bb, t2), aa, ba, Branch (B, t3, a, b, t4))
+    | Branch (R, Empty, ab, bb, Branch (R, t2, aa, ba, t3)), a, b, t4 ->
+        Branch
+          (R, Branch (B, Empty, ab, bb, t2), aa, ba, Branch (B, t3, a, b, t4))
+    | Branch
+        (R, Branch (B, va, vb, vc, vd), ab, bb, Branch (R, t2, aa, ba, t3)),
+        a, b, t4
+        -> Branch
+             (R, Branch (B, Branch (B, va, vb, vc, vd), ab, bb, t2), aa, ba,
+               Branch (B, t3, a, b, t4))
+    | Empty, a, b, t2 -> Branch (B, Empty, a, b, t2)
+    | Branch (B, va, vb, vc, vd), a, b, t2 ->
+        Branch (B, Branch (B, va, vb, vc, vd), a, b, t2)
+    | Branch (v, Empty, vb, vc, Empty), a, b, t2 ->
+        Branch (B, Branch (v, Empty, vb, vc, Empty), a, b, t2)
+    | Branch (v, Empty, vb, vc, Branch (B, ve, vf, vg, vh)), a, b, t2 ->
+        Branch
+          (B, Branch (v, Empty, vb, vc, Branch (B, ve, vf, vg, vh)), a, b, t2)
+    | Branch (v, Branch (B, vf, vg, vh, vi), vb, vc, Empty), a, b, t2 ->
+        Branch
+          (B, Branch (v, Branch (B, vf, vg, vh, vi), vb, vc, Empty), a, b, t2)
+    | Branch
+        (v, Branch (B, vf, vg, vh, vi), vb, vc, Branch (B, ve, vj, vk, vl)),
+        a, b, t2
+        -> Branch
+             (B, Branch
+                   (v, Branch (B, vf, vg, vh, vi), vb, vc,
+                     Branch (B, ve, vj, vk, vl)),
+               a, b, t2);;
+
+let rec rbt_joinL
+  l a b r =
+    (if less_eq_nat (bheight r) (bheight l) then Branch (R, l, a, b, r)
+      else (match r
+             with Branch (R, la, ab, ba, ra) ->
+               Branch (R, rbt_joinL l a b la, ab, ba, ra)
+             | Branch (B, la, ab, ba, ra) ->
+               rbt_baliL (rbt_joinL l a b la) ab ba ra));;
+
+let rec rbt_join
+  l a b r =
+    (let bhl = bheight l in
+     let bhr = bheight r in
+      (if less_nat bhr bhl then paint B (rbt_joinR l a b r)
+        else (if less_nat bhl bhr then paint B (rbt_joinL l a b r)
+               else Branch (B, l, a, b, r))));;
+
+let rec rbt_split_comp
+  c x1 k = match c, x1, k with c, Empty, k -> (Empty, (None, Empty))
+    | c, Branch (uu, l, a, b, r), x ->
+        (match c x a with Eqa -> (l, (Some b, r))
+          | Lt ->
+            (let (l1, (beta, l2)) = rbt_split_comp c l x in
+              (l1, (beta, rbt_join l2 a b r)))
+          | Gt ->
+            (let (r1, (beta, r2)) = rbt_split_comp c r x in
+              (rbt_join l a b r1, (beta, r2))));;
+
+let rec nat_of_integer k = Nat (max ord_integer Z.zero k);;
+
+let rec folda
+  f xa1 x = match f, xa1, x with
+    f, Branch (c, lt, k, v, rt), x -> folda f rt (f k v (folda f lt x))
+    | f, Empty, x -> x;;
+
+let rec rbt_comp_union_swap_rec
+  c f gamma t1 t2 =
+    (let bh1 = bheight t1 in
+     let bh2 = bheight t2 in
+     let (gammaa, (t2a, (bh2a, (t1a, _)))) =
+       (if less_nat bh1 bh2 then (not gamma, (t1, (bh1, (t2, bh2))))
+         else (gamma, (t2, (bh2, (t1, bh1)))))
+       in
+     let fa = (if gammaa then (fun k v va -> f k va v) else f) in
+      (if less_nat bh2a (nat_of_integer (Z.of_int 4))
+        then folda (rbt_comp_insert_with_key c fa) t2a t1a
+        else (match t1a with Empty -> t2a
+               | Branch (_, l1, a, b, r1) ->
+                 (let (l2, (beta, r2)) = rbt_split_comp c t2a a in
+                   rbt_join (rbt_comp_union_swap_rec c f gammaa l1 l2) a
+                     (match beta with None -> b | Some ca -> fa a b ca)
+                     (rbt_comp_union_swap_rec c f gammaa r1 r2)))));;
+
+let rec rbt_comp_union_with_key
+  c f t1 t2 = paint B (rbt_comp_union_swap_rec c f false t1 t2);;
+
+let rec joina _A
+  xc xd xe =
+    Mapping_RBTa
+      (rbt_comp_union_with_key (the (ccompare _A)) xc (impl_ofa _A xd)
+        (impl_ofa _A xe));;
+
+let rec list_insert
+  equal x xs = (if list_member equal xs x then xs else x :: xs);;
+
+let rec inserta _A
+  xb xc = Abs_dlist (list_insert (the (ceq _A)) xb (list_of_dlist _A xc));;
+
+let rec fold f x1 s = match f, x1, s with f, x :: xs, s -> fold f xs (f x s)
+               | f, [], s -> s;;
+
+let rec foldc _A x xc = fold x (list_of_dlist _A xc);;
+
+let rec union _A = foldc _A (inserta _A);;
+
+let rec id x = (fun xa -> xa) x;;
+
+let rec is_none = function Some x -> false
+                  | None -> true;;
+
+let rec inter_list _A
+  xb xc =
+    Mapping_RBTa
+      (fold (fun k -> rbt_comp_insert (the (ccompare _A)) k ())
+        (filtera
+          (fun x ->
+            not (is_none
+                  (rbt_comp_lookup (the (ccompare _A)) (impl_ofa _A xb) x)))
+          xc)
+        Empty);;
 
 let rec gen_length n x1 = match n, x1 with n, x :: xs -> gen_length (suc n) xs
                      | n, [] -> n;;
 
 let rec size_list x = gen_length zero_nata x;;
-
-let rec nat_of_integer k = Nat (max ord_integer Z.zero k);;
 
 let rec apfst f (x, y) = (f x, y);;
 
@@ -1219,67 +1346,8 @@ let rec gen_entries
 
 let rec entries x = gen_entries [] x;;
 
-let rec folda
-  f xa1 x = match f, xa1, x with
-    f, Branch (c, lt, k, v, rt), x -> folda f rt (f k v (folda f lt x))
-    | f, Empty, x -> x;;
-
-let rec rbt_comp_union_with_key
-  c f t1 t2 =
-    (match compare_height t1 t1 t2 t2
-      with LT -> folda (rbt_comp_insert_with_key c (fun k v w -> f k w v)) t1 t2
-      | GT -> folda (rbt_comp_insert_with_key c f) t2 t1
-      | EQ -> rbtreeify (comp_sunion_with c f (entries t1) (entries t2)));;
-
-let rec joina _A
-  xc xd xe =
-    Mapping_RBTa
-      (rbt_comp_union_with_key (the (ccompare _A)) xc (impl_ofa _A xd)
-        (impl_ofa _A xe));;
-
-let rec list_insert
-  equal x xs = (if list_member equal xs x then xs else x :: xs);;
-
-let rec inserta _A
-  xb xc = Abs_dlist (list_insert (the (ceq _A)) xb (list_of_dlist _A xc));;
-
-let rec fold f x1 s = match f, x1, s with f, x :: xs, s -> fold f xs (f x s)
-               | f, [], s -> s;;
-
-let rec foldc _A x xc = fold x (list_of_dlist _A xc);;
-
-let rec union _A = foldc _A (inserta _A);;
-
-let rec id x = (fun xa -> xa) x;;
-
-let rec is_none = function Some x -> false
-                  | None -> true;;
-
-let rec inter_list _A
-  xb xc =
-    Mapping_RBTa
-      (fold (fun k -> rbt_comp_insert (the (ccompare _A)) k ())
-        (filtera
-          (fun x ->
-            not (is_none
-                  (rbt_comp_lookup (the (ccompare _A)) (impl_ofa _A xb) x)))
-          xc)
-        Empty);;
-
 let rec filtere _A
   xb xc = Mapping_RBTa (rbtreeify (filtera xb (entries (impl_ofa _A xc))));;
-
-let rec comp_sinter_with
-  c f uv uu = match c, f, uv, uu with
-    c, f, (ka, va) :: asa, (k, v) :: bs ->
-      (match c k ka with Eqa -> (ka, f ka va v) :: comp_sinter_with c f asa bs
-        | Lt -> comp_sinter_with c f ((ka, va) :: asa) bs
-        | Gt -> comp_sinter_with c f asa ((k, v) :: bs))
-    | c, f, [], uu -> []
-    | c, f, uv, [] -> [];;
-
-let rec map_option f x1 = match f, x1 with f, None -> None
-                     | f, Some x2 -> Some (f x2);;
 
 let rec map_filter
   f x1 = match f, x1 with f, [] -> []
@@ -1287,22 +1355,52 @@ let rec map_filter
         (match f x with None -> map_filter f xs
           | Some y -> y :: map_filter f xs);;
 
-let rec rbt_comp_inter_with_key
+let rec map_filter_comp_inter
   c f t1 t2 =
-    (match compare_height t1 t1 t2 t2
-      with LT ->
-        rbtreeify
-          (map_filter
-            (fun (k, v) ->
-              map_option (fun w -> (k, f k v w)) (rbt_comp_lookup c t2 k))
-            (entries t1))
-      | GT ->
-        rbtreeify
-          (map_filter
-            (fun (k, v) ->
-              map_option (fun w -> (k, f k w v)) (rbt_comp_lookup c t1 k))
-            (entries t2))
-      | EQ -> rbtreeify (comp_sinter_with c f (entries t1) (entries t2)));;
+    map_filter
+      (fun (k, v) ->
+        (match rbt_comp_lookup c t1 k with None -> None
+          | Some va -> Some (k, f k va v)))
+      (entries t2);;
+
+let rec is_rbt_empty
+  t = (match t with Empty -> true | Branch (_, _, _, _, _) -> false);;
+
+let rec rbt_split_min
+  = function Empty -> failwith "undefined"
+    | Branch (uu, l, a, b, r) ->
+        (if is_rbt_empty l then (a, (b, r))
+          else (let (aa, (ba, la)) = rbt_split_min l in
+                 (aa, (ba, rbt_join la a b r))));;
+
+let rec rbt_join2
+  l r = (if is_rbt_empty r then l
+          else (let a = rbt_split_min r in
+                let (aa, b) = a in
+                let (ba, c) = b in
+                 rbt_join l aa ba c));;
+
+let rec rbt_comp_inter_swap_rec
+  c f gamma t1 t2 =
+    (let bh1 = bheight t1 in
+     let bh2 = bheight t2 in
+     let (gammaa, (t2a, (bh2a, (t1a, _)))) =
+       (if less_nat bh1 bh2 then (not gamma, (t1, (bh1, (t2, bh2))))
+         else (gamma, (t2, (bh2, (t1, bh1)))))
+       in
+     let fa = (if gammaa then (fun k v va -> f k va v) else f) in
+      (if less_nat bh2a (nat_of_integer (Z.of_int 4))
+        then rbtreeify (map_filter_comp_inter c fa t1a t2a)
+        else (match t1a with Empty -> Empty
+               | Branch (_, l1, a, b, r1) ->
+                 (let (l2, (beta, r2)) = rbt_split_comp c t2a a in
+                  let l = rbt_comp_inter_swap_rec c f gammaa l1 l2 in
+                  let r = rbt_comp_inter_swap_rec c f gammaa r1 r2 in
+                   (match beta with None -> rbt_join2 l r
+                     | Some ba -> rbt_join l a (fa a b ba) r)))));;
+
+let rec rbt_comp_inter_with_key
+  c f t1 t2 = paint B (rbt_comp_inter_swap_rec c f false t1 t2);;
 
 let rec meet _A
   xc xd xe =
@@ -3604,6 +3702,9 @@ let rec set_option (_A1, _A2, _A3)
   = function None -> bot_set (_A1, _A2, _A3)
     | Some x2 -> insert (_A1, _A2) x2 (bot_set (_A1, _A2, _A3));;
 
+let rec map_option f x1 = match f, x1 with f, None -> None
+                     | f, Some x2 -> Some (f x2);;
+
 let rec join1 _A
   = function ([], []) -> Some []
     | (None :: xs, None :: ys) ->
@@ -4163,6 +4264,29 @@ let rec lookup_default (_B1, _B2)
 
 let rec lookupb (_A1, _A2) (_B1, _B2, _B3)
   = lookup_default (_A1, _A2) (empty_table (_B1, _B2, _B3));;
+
+let rec filter_comp_minus
+  c t1 t2 =
+    filtera (fun (k, _) -> is_none (rbt_comp_lookup c t2 k)) (entries t1);;
+
+let rec small_rbt t = less_nat (bheight t) (nat_of_integer (Z.of_int 4));;
+
+let rec comp_minus
+  c t1 t2 =
+    (if small_rbt t2 then folda (fun k _ -> rbt_comp_delete c k) t2 t1
+      else (if small_rbt t1 then rbtreeify (filter_comp_minus c t1 t2)
+             else (match t2 with Empty -> t1
+                    | Branch (_, l2, a, _, r2) ->
+                      (let (l1, (_, r1)) = rbt_split_comp c t1 a in
+                        rbt_join2 (comp_minus c l1 l2)
+                          (comp_minus c r1 r2)))));;
+
+let rec rbt_comp_minus c t1 t2 = paint B (comp_minus c t1 t2);;
+
+let rec minus _A
+  xb xc =
+    Mapping_RBTa
+      (rbt_comp_minus (the (ccompare _A)) (impl_ofa _A xb) (impl_ofa _A xc));;
 
 let rec restrict
   a v = mapa (fun i ->
@@ -5374,7 +5498,15 @@ let rec upd_nested_max_tstp (_A1, _A2, _A3, _A4) (_B1, _B2, _B3, _B4, _B5)
                upd_nested_max_tstp (_A1, _A2, _A3, _A4)
                  (_B1, _B2, _B3, _B4, _B5) m d x));;
 
-let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
+let rec minus_set (_A1, _A2)
+  a b = match a, b with
+    RBT_set rbt1, RBT_set rbt2 ->
+      (match ccompare _A2
+        with None ->
+          failwith "minus RBT_set RBT_set: ccompare = None"
+            (fun _ -> minus_set (_A1, _A2) (RBT_set rbt1) (RBT_set rbt2))
+        | Some _ -> RBT_set (minus _A2 rbt1 rbt2))
+    | a, b -> inf_seta (_A1, _A2) a (uminus_set b);;
 
 let rec ts_tp_lt
   i ts tp tstp =
