@@ -287,6 +287,11 @@ lemma safe_formula_finite':
   apply (induction \<phi> arbitrary: i rule: safe_formula_induct)
   sorry
 
+lemma finite_sets: "finite {zs. P zs} \<Longrightarrow> \<forall>zs. finite {x. E zs x} \<Longrightarrow> finite {x. {zs. P zs \<and> E zs x} \<noteq> {}}" by auto
+
+
+
+
 lemma set_of_flatten_multiset:
   assumes "M = {(x, ecard Zs) | x Zs. Zs = f x \<and> Zs \<noteq> {}}" "finite {x. f x \<noteq> {}}"
   shows "set (flatten_multiset M) \<subseteq> fst ` M"
@@ -526,43 +531,77 @@ next
     obtain d agg_type where omega_def: "\<omega> = (agg_type, d)" using surjective_pairing by blast
     from Agg.prems(1) this have  "\<exists>t .E y = t_res agg_type t" by cases auto
     from this eq obtain t where t_def: "E x = t_res agg_type t" by blast
-    from  Agg.prems(1) have ty_of_d: "ty_of d = t_res agg_type t" apply cases using eq omega_def t_def by auto
+    from  Agg.prems(1) have
+ ty_of_d: "ty_of d = t_res agg_type t" apply cases using eq omega_def t_def by auto
     from Agg.prems(3) eq obtain M where  M_def: "M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>
- \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<and> v!x = eval_agg_op \<omega> M" by auto
-    have  finite: "finite {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using Agg(4) Agg(2) nfv_tys_v
+        \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<and> v!x = eval_agg_op \<omega> M" by auto
+    have "finite {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using Agg(4) Agg(2) nfv_tys_v
       by (rule safe_formula_finite'[of \<phi> "length tys" v \<sigma> V i])
-   
-    from this have finite_set:  
-"finite {x. {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<noteq> {}}"
-      apply auto sorry
+    from this  have finite_set:"finite {x. {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<noteq> {}}"
+      using finite_sets[of "(\<lambda>zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>)" "\<lambda>zs x .Formula.eval_trm (zs @ v) f = x" ]
+      by auto
     have flatten: "set (flatten_multiset M) \<subseteq> fst ` M" using M_def finite_set set_of_flatten_multiset[of M
  "(\<lambda>x . {zs . length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} )"]
       by auto
-    from this have evaltrm: "z \<in> set (flatten_multiset M) \<Longrightarrow>  \<exists> zs. Formula.eval_trm (zs @ v) f = z" for z using M_def by (auto simp add: image_def)
-     have th2: ?case if min: "agg_type = agg_type.Agg_Min \<or> agg_type = agg_type.Agg_Max \<or> agg_type = agg_type.Agg_Sum" and alist_def: " flatten_multiset
+    from this have evaltrm: "z \<in> set (flatten_multiset M) \<Longrightarrow>  \<exists> zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = z" for z using M_def by (auto simp add: image_def)
+     have th2: ?case if minmaxsum: "agg_type = agg_type.Agg_Min \<or> agg_type = agg_type.Agg_Max \<or> agg_type = agg_type.Agg_Sum" and alist_def: " flatten_multiset
      {(x, ecard {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x}) |x.
       \<exists>xa. Formula.sat \<sigma> V (xa @ v) i \<phi> \<and> length xa = length tys \<and> Formula.eval_trm (xa @ v) f = x} =
     a # list" for a list
      proof -
-      have ty_of_list: "z=a \<or> z \<in> set list \<Longrightarrow> \<exists>zs .ty_of (Formula.eval_trm (zs @ v) f) = t" for z
+      have ty_of_list: "z=a \<or> z \<in> set list \<Longrightarrow> \<exists>zs .ty_of (Formula.eval_trm (zs @ v) f) = t \<and> ty_of z = t" for z
       proof -
           assume z_def: "z=a \<or> z \<in> set list"
-        from z_def obtain zs where " Formula.eval_trm (zs @ v) f = z" using alist_def evaltrm M_def by auto
-        from Agg.prems(1) have wty_f: " agg_env E tys  \<turnstile> f :: t" apply cases  using omega_def t_def min eq  by auto  
-        have fv_ty:"\<forall>y\<in>fv_trm f. ty_of ((zs @ v) ! y) = agg_env E tys y" using  wty_f
-          apply (auto simp add: agg_env_def Formula.nfv_def) sorry
+        from z_def obtain zs where zs_def: " length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = z" using alist_def evaltrm M_def by auto
+        from Agg.prems(1) have wty_f: " agg_env E tys  \<turnstile> f :: t" apply cases  using omega_def t_def minmaxsum eq  by auto  
+        have fv_ty:"\<forall>y\<in>fv_trm f. ty_of ((zs @ v) ! y) = agg_env E tys y"
+        proof 
+          fix y
+          assume assm: "y \<in> fv_trm f"
+          have  sat: "Formula.sat \<sigma> V (zs @ v) i \<phi>"  using zs_def by auto 
+          show "ty_of ((zs @ v) ! y) = agg_env E tys y" using zs_def assm Agg(3,4) Agg.prems(1-2) nfv_tys_v sat  Agg.IH[of \<phi> S "agg_env E tys" V "zs@v" i y]
+            by (auto elim: wty_formula.cases)
+        qed      
         have ty_of_z: "ty_of (Formula.eval_trm (zs @ v) f) = t" using wty_f fv_ty   ty_of_eval_trm[of "agg_env E tys" f t "zs@v" ]
           by auto
-        show ?thesis sorry
+        from this zs_def show  ?thesis by auto
       qed 
-      show ?thesis sorry
+      from this obtain zs where zs_def: "ty_of (Formula.eval_trm (zs @ v) f) = t" by auto
+      from ty_of_list have indass: "ty_of a = t \<and> (\<forall>z \<in> set list . ty_of z = t)" by auto
+     
+      from this have foldl_evaltrm: "foldfun = min \<or> foldfun = max
+        \<Longrightarrow> ty_of (foldl foldfun a list) = ty_of (Formula.eval_trm (zs @ v) f)" for foldfun using indass 
+          proof  (induction list arbitrary: a foldfun)
+            case Nil
+            then show ?case using zs_def by auto
+          next
+            case (Cons aa tail)
+             have minmax: " ty_of (foldl foldfun (foldfun a aa) tail) = ty_of (Formula.eval_trm (zs @ v) f)"
+              using Cons.IH[of _ "foldfun a aa"] Cons apply auto 
+               apply (metis min_def) by (metis max_def) 
+              then show ?case by auto
+            qed
+
+          from indass have foldl_evaltrm_Sum: 
+              "t \<in> numeric_ty \<Longrightarrow> ty_of (foldl (+) a list) = ty_of (Formula.eval_trm (zs@v) f)" 
+              proof (induction list arbitrary: a)
+                case Nil
+                  then show ?case using zs_def by auto
+                next
+                  case (Cons aa tail)
+            from this have "ty_of (a + aa) = t"  by (cases aa) ( auto simp add: numeric_ty_def ty_of_plus)
+                  then show ?case using Cons.prems(1) Cons.IH[of "a+aa"] apply auto 
+                    by (metis Cons.prems(2) list.set_intros(2))
+              qed
+           from Agg.prems(1) t_def eq omega_def have num_ty: "agg_type = agg_type.Agg_Sum \<Longrightarrow> t \<in> numeric_ty" by cases auto
+          from  M_def  omega_def indass minmaxsum  alist_def num_ty  show ?thesis apply (cases agg_type)
+             by (auto simp add: ty_of_d  foldl_evaltrm foldl_evaltrm_Sum t_def zs_def  split: list.splits) 
     qed
-    thm th2
     from  th2  M_def t_def omega_def  have ?case apply (cases agg_type) 
          by (auto simp add: ty_of_d split: list.splits) 
      
   } 
-  ultimately show ?case by auto(* TODO *)
+  ultimately show ?case by auto
 next
   case (Prev I \<phi>)
   from Prev.prems(1) have wty: "S, E \<turnstile> \<phi>" by cases
