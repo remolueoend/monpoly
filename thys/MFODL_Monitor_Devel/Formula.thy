@@ -77,29 +77,38 @@ qualified type_synonym agg_op = "agg_type \<times> event_data"
 definition flatten_multiset :: "(event_data \<times> enat) set \<Rightarrow> event_data list" where
   "flatten_multiset M = concat (map (\<lambda>(x, c). replicate (the_enat c) x) (csorted_list_of_set M))"
 
+definition finite_multiset :: "(event_data \<times> enat) set \<Rightarrow> bool" where
+"finite_multiset M = (finite M \<and> \<not>(\<exists>s. (s,\<infinity>) \<in> M ))"
+
 fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
- "eval_agg_op (Agg_Cnt, y0) M = (case flatten_multiset M of
-      [] \<Rightarrow> y0
-  | xs \<Rightarrow> EInt (integer_of_int (length xs)))"
-| "eval_agg_op (Agg_Min, y0) M = (case flatten_multiset M of
-      [] \<Rightarrow> y0
-    | x # xs \<Rightarrow> foldl min x xs)"
-| "eval_agg_op (Agg_Max, y0) M = (case flatten_multiset M of
-      [] \<Rightarrow> y0
-    | x # xs \<Rightarrow> foldl max x xs)"
-| "eval_agg_op (agg_type.Agg_Sum, y0) M = (case flatten_multiset M of
-      [] \<Rightarrow> y0
-    | x # xs \<Rightarrow> foldl (+) x xs)"
-| "eval_agg_op (Agg_Avg, y0) M =(case flatten_multiset M of
-      [] \<Rightarrow> y0
-    | x#xs \<Rightarrow> EFloat ( double_of_event_data (foldl plus x xs) / double_of_int (length (x#xs))))"
-| "eval_agg_op (Agg_Med, y0) M =(case flatten_multiset M of
-[] \<Rightarrow> y0
-| xs \<Rightarrow> EFloat (let u = length xs;  u' = u div 2 in
-      if even u then
-        (double_of_event_data (xs ! (u'-1)) + double_of_event_data (xs ! u') / double_of_int 2)
-      else double_of_event_data (xs ! u')))"
-(*
+  "eval_agg_op (Agg_Cnt, y0) M = (case (flatten_multiset M, finite_multiset M) of
+    (_, False) \<Rightarrow> y0
+    |    ([],_) \<Rightarrow> y0
+    | (xs,_) \<Rightarrow> EInt (integer_of_int (length xs)))"
+| "eval_agg_op (Agg_Min, y0) M = (case  (flatten_multiset M, finite_multiset M) of
+    (_, False) \<Rightarrow> y0
+    |    ([],_) \<Rightarrow> y0
+    | (x # xs,_) \<Rightarrow> foldl min x xs)"
+| "eval_agg_op (Agg_Max, y0) M = (case  (flatten_multiset M, finite_multiset M) of
+    (_, False) \<Rightarrow> y0
+    |    ([],_) \<Rightarrow> y0
+    | (x # xs,_) \<Rightarrow> foldl max x xs)"
+| "eval_agg_op (agg_type.Agg_Sum, y0) M = (case  (flatten_multiset M, finite_multiset M) of
+    (_, False) \<Rightarrow> y0
+    |    ([],_) \<Rightarrow> y0
+    | (x # xs,_) \<Rightarrow> foldl (+) x xs)"
+| "eval_agg_op (Agg_Avg, y0) M =(case  (flatten_multiset M, finite_multiset M) of
+    (_, False) \<Rightarrow> y0
+    |    ([],_) \<Rightarrow> y0
+    | (x#xs,_) \<Rightarrow> EFloat ( double_of_event_data (foldl plus x xs) / double_of_int (length (x#xs))))"
+| "eval_agg_op (Agg_Med, y0) M =(case (flatten_multiset M, finite_multiset M) of
+    (_, False) \<Rightarrow> y0
+    |    ([],_) \<Rightarrow> y0
+    | (xs,_) \<Rightarrow> EFloat (let u = length xs;  u' = u div 2 in
+          if even u then
+            (double_of_event_data (xs ! (u'-1)) + double_of_event_data (xs ! u') / double_of_int 2)
+          else double_of_event_data (xs ! u')))"
+ (*
 qualified datatype (discs_sels) formula = Pred name "trm list"
   | Let name formula formula
   | Eq trm trm | Less trm trm | LessEq trm trm

@@ -279,18 +279,69 @@ next
 qed  auto
 
 
+definition finite_formula_map :: "'t Formula.formula \<Rightarrow> event_data list \<Rightarrow> nat \<Rightarrow> event_data list \<Rightarrow> event_data option list" where
+  "finite_formula_map \<phi> v n zs = map (\<lambda>(i,z). if i \<in> fv \<phi> then Some z else None) (zip [0..<n+ length v] (zs@v))"
+
+lemma finite_formula_map_fv:
+  assumes "i \<in> fv \<phi>" "length x = n" " i< length (x@v)"
+  shows  "(finite_formula_map \<phi> v n x) !i = Some ((x@v) !i)" 
+  using  nth_map[of i " (zip [0..<n+ length v] (x@v))" "(\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None)" ]apply (auto simp add: finite_formula_map_def)
+  apply (cases "zip [0..<n + length v] (x @ v) ! i")
+       subgoal for a b apply (cases "a \<in> fv \<phi>") using  assms by (auto simp add: nth_append) done
+
+lemma finite_formula_inj: 
+  assumes "{0..<n} \<subseteq> Formula.fv \<phi>"
+  shows "inj_on (finite_formula_map \<phi> v n)  {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}"
+proof -
+  have inj_th: "x = y" if inj_assms: "Formula.sat \<sigma> V (x @ v) i \<phi>" "n = length x"    "  length y = length x" "Formula.sat \<sigma> V (y @ v) i \<phi>" 
+ " map (\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None) (zip [0..<length x + length v] (x @ v))  =
+           map (\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None) (zip [0..<length x + length v] (y @ v))"  for x y
+  proof (rule ccontr)
+    assume noteq: "x \<noteq> y"
+    from noteq inj_assms(2,3) obtain i where i_def: "i< n \<and> x!i \<noteq> y!i" by (metis  nth_equalityI)
+     from this have xi: " map2 (\<lambda>x y. if x \<in> fv \<phi> then Some y else None) [0..<length x + length v] (x @ v)!i = Some (x!i)"
+       using  nth_map[of i " (zip [0..<n+ length v] (x@v))" "(\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None)" ] apply (cases "zip [0..<n + length v] (x @ v) ! i")
+       subgoal for a b apply (cases "a \<in> fv \<phi>") using inj_assms(2) assms by (auto simp add: nth_append) done
+     from i_def have yi: " map2 (\<lambda>x y. if x \<in> fv \<phi> then Some y else None) [0..<length y + length v] (y @ v)!i = Some (y!i)"
+       using  nth_map[of i " (zip [0..<n+ length v] (y@v))" "(\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None)" ] apply (cases "zip [0..<n + length v] (y @ v) ! i")
+       subgoal for a b apply (cases "a \<in> fv \<phi>") using inj_assms(2,3) assms by (auto simp add: nth_append) done
+         (*TODO: clean this up: use finite_formula_map_fv*)
+    show "False" using noteq inj_assms(5) assms i_def inj_assms(3) xi yi by auto
+  qed
+  thus ?thesis using assms by (auto simp add: inj_on_def finite_formula_map_def) 
+
+qed
+lemma safe_formula_finite_subset: 
+  assumes "Formula.nfv \<phi> \<le> n + length v"
+  shows "(finite_formula_map \<phi> v n) ` {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>} \<subseteq> {v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}"
+proof -
+  have fv_inj: "\<forall>x\<in>fv \<phi>. (xa @ v) ! x = map (the \<circ> (\<lambda>(i, z). if i \<in> fv \<phi> then Some z else None)) (zip [0..<length xa + length v] (xa @ v)) ! x"
+    if "length xa = n"
+    for xa apply auto  subgoal for x  using  nth_map assms that by (auto simp add: finite_formula_map_def comp_def Formula.nfv_def) done
+  show "(finite_formula_map \<phi> v n) ` {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>} \<subseteq> {v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}"
+      apply (auto simp add: wf_tuple_def finite_formula_map_def)
+    subgoal for xa  using sat_fv_cong[of \<phi> "xa@v" "(map the (finite_formula_map \<phi> v n xa))" \<sigma> V i] fv_inj by ( auto simp add: finite_formula_map_def) done
+qed
+
 lemma safe_formula_finite':
   assumes "Formula.safe_formula \<phi>" "{0..<n} \<subseteq> Formula.fv \<phi>" "Formula.nfv \<phi> \<le> n + length v"
   shows "finite {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}"
-  using assms safe_formula_finite
-  apply (auto simp add: wf_tuple_def)
-  apply (induction \<phi> arbitrary: i rule: safe_formula_induct)
-  sorry
+proof -
+  from assms(1) have  "Formula.future_bounded \<phi> \<and> (\<forall>i. finite (\<Gamma> \<sigma> i)) \<and>  (\<forall>pn\<in>dom V. \<forall>i. finite (the (V pn) i))"
+  apply  (induction \<phi> arbitrary: i v V \<sigma> rule: safe_formula_induct)  sorry
+  from  this have finite': "finite {v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}"
+    using assms safe_formula_finite[of \<phi> "n +length v" \<sigma> V i]  by auto
+  from assms(2) have inj: "inj_on (finite_formula_map \<phi> v n ) {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using finite_formula_inj by blast
+  show ?thesis using  inj_on_finite[of "finite_formula_map \<phi> v n" 
+  "{zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" "{v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}" ] 
+ inj finite' assms(3) safe_formula_finite_subset[of \<phi> n v \<sigma> V i] by auto 
+qed
 
 lemma finite_sets: "finite {zs. P zs} \<Longrightarrow> \<forall>zs. finite {x. E zs x} \<Longrightarrow> finite {x. {zs. P zs \<and> E zs x} \<noteq> {}}" by auto
 
-
-
+find_theorems Formula.future_bounded
+find_theorems Formula.sat fv
+find_theorems  mem
 
 lemma set_of_flatten_multiset:
   assumes "M = {(x, ecard Zs) | x Zs. Zs = f x \<and> Zs \<noteq> {}}" "finite {x. f x \<noteq> {}}"
@@ -642,7 +693,7 @@ next
      Formula.sat \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
     for \<phi> E  v  x by blast
    from MatchP.prems(1) MatchP(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
-  then show ?case apply (rule IH) using nfv  MatchP.prems(5)  phidef by auto
+  then show ?case apply (rule IH) using nfv  MatchP.prems(5) phidef by auto
  
 next
   case (MatchF I r)
