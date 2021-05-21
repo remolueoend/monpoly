@@ -934,7 +934,7 @@ let rec check_let = function
       free variables %s of %s" n (string_of_vars prms) (string_of_vars fv1) (string_of_formula "" f1)
       in failwith str
     else ();
-    check_let f2
+    check_let f1 && check_let f2
 
   | Equal _
   | Less _
