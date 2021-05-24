@@ -31,7 +31,7 @@ inductive wty_trm :: "tyenv \<Rightarrow> Formula.trm \<Rightarrow> ty \<Rightar
 | UMinus: "E \<turnstile> x :: t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> E \<turnstile>  Formula.UMinus x :: t"
 | Mult: "E \<turnstile> x :: t \<Longrightarrow> E \<turnstile> y :: t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> E \<turnstile> Formula.Mult x y :: t"
 | Div: "E \<turnstile> x :: t \<Longrightarrow> E \<turnstile> y :: t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> E \<turnstile> Formula.Div x y :: t"
-| Mod:"E \<turnstile> x :: t \<Longrightarrow> E \<turnstile> y :: t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> E \<turnstile> Formula.Mod x y :: t"
+| Mod:"E \<turnstile> x :: TInt \<Longrightarrow> E \<turnstile> y :: TInt \<Longrightarrow> E \<turnstile> Formula.Mod x y :: TInt"
 | F2i: "E \<turnstile> x ::  TFloat \<Longrightarrow> E \<turnstile> Formula.F2i x :: TInt"
 | I2f: "E \<turnstile> x ::  TInt \<Longrightarrow> E \<turnstile> Formula.I2f x :: TFloat"
 
@@ -50,8 +50,8 @@ lemma ty_of_mult: "ty_of x = t \<Longrightarrow> ty_of y = t \<Longrightarrow> t
 lemma ty_of_div: "ty_of x = t \<Longrightarrow> ty_of y = t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> ty_of (x div y) = t"
   by (cases x; cases y) (simp_all add: numeric_ty_def)
 
-lemma ty_of_mod: "ty_of x = t \<Longrightarrow> ty_of y = t \<Longrightarrow> t \<in> numeric_ty \<Longrightarrow> ty_of (x mod y) = t"
-  by (cases x; cases y) (simp_all add: numeric_ty_def)
+lemma ty_of_mod: "ty_of x = TInt \<Longrightarrow> ty_of y = TInt \<Longrightarrow> ty_of (x mod y) = TInt"
+  by (cases x; cases y) simp_all
 
 lemma ty_of_eval_trm: "E \<turnstile> x :: t \<Longrightarrow> \<forall>y\<in>fv_trm x. ty_of (v ! y) = E y \<Longrightarrow> 
 ty_of (Formula.eval_trm v x) = t"
@@ -278,7 +278,7 @@ next
       apply auto by blast+
 qed  auto
 
-
+(*
 definition finite_formula_map :: "'t Formula.formula \<Rightarrow> event_data list \<Rightarrow> nat \<Rightarrow> event_data list \<Rightarrow> event_data option list" where
   "finite_formula_map \<phi> v n zs = map (\<lambda>(i,z). if i \<in> fv \<phi> then Some z else None) (zip [0..<n+ length v] (zs@v))"
 
@@ -336,12 +336,14 @@ proof -
   "{zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" "{v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}" ] 
  inj finite' assms(3) safe_formula_finite_subset[of \<phi> n v \<sigma> V i] by auto 
 qed
+*) 
 
-lemma finite_sets: "finite {zs. P zs} \<Longrightarrow> \<forall>zs. finite {x. E zs x} \<Longrightarrow> finite {x. {zs. P zs \<and> E zs x} \<noteq> {}}" by auto
+lemma finite_fst: assumes "finite  {(x,f x) | x. P x}" shows "finite {x . P x}"
+proof -
+  have  fstSet: " fst ` {(x, f x) |x. P x} = {x . P x}" by (auto simp add: image_iff)
+  show ?thesis using assms fstSet finite_image_iff[of fst "{(x,f x) | x. P x}"] by (auto simp add: inj_on_def)
+qed
 
-find_theorems Formula.future_bounded
-find_theorems Formula.sat fv
-find_theorems  mem
 
 lemma set_of_flatten_multiset:
   assumes "M = {(x, ecard Zs) | x Zs. Zs = f x \<and> Zs \<noteq> {}}" "finite {x. f x \<noteq> {}}"
@@ -586,19 +588,20 @@ next
  ty_of_d: "ty_of d = t_res agg_type t" apply cases using eq omega_def t_def by auto
     from Agg.prems(3) eq obtain M where  M_def: "M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>
         \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}} \<and> v!x = eval_agg_op \<omega> M" by auto
-    have "finite {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using Agg(4) Agg(2) nfv_tys_v
-      by (rule safe_formula_finite'[of \<phi> "length tys" v \<sigma> V i])
-    from this  have finite_set:"finite {x. {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<noteq> {}}"
-      using finite_sets[of "(\<lambda>zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>)" "\<lambda>zs x .Formula.eval_trm (zs @ v) f = x" ]
-      by auto
-    have flatten: "set (flatten_multiset M) \<subseteq> fst ` M" using M_def finite_set set_of_flatten_multiset[of M
+   
+        {
+           assume finite_M: "finite_multiset M"
+    from this   have finite_set:"finite {x. {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<noteq> {}}"
+       using finite_fst by (auto simp add: finite_multiset_def M_def ) 
+    have flatten: "set (flatten_multiset M) \<subseteq> fst ` M" using finite_set  set_of_flatten_multiset[of M
  "(\<lambda>x . {zs . length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} )"]
-      by auto
-    from this have evaltrm: "z \<in> set (flatten_multiset M) \<Longrightarrow>  \<exists> zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = z" for z using M_def by (auto simp add: image_def)
+       by (auto simp add:  M_def) 
+    from this  have evaltrm: "z \<in> set (flatten_multiset M) \<Longrightarrow>  \<exists> zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = z" 
+      for z using  M_def by (auto simp add: image_def)
      have th2: ?case if minmaxsum: "agg_type = agg_type.Agg_Min \<or> agg_type = agg_type.Agg_Max \<or> agg_type = agg_type.Agg_Sum" and alist_def: " flatten_multiset
      {(x, ecard {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x}) |x.
       \<exists>xa. Formula.sat \<sigma> V (xa @ v) i \<phi> \<and> length xa = length tys \<and> Formula.eval_trm (xa @ v) f = x} =
-    a # list" for a list
+    a # list"  for a list
      proof -
       have ty_of_list: "z=a \<or> z \<in> set list \<Longrightarrow> \<exists>zs .ty_of (Formula.eval_trm (zs @ v) f) = t \<and> ty_of z = t" for z
       proof -
@@ -645,11 +648,22 @@ next
                     by (metis Cons.prems(2) list.set_intros(2))
               qed
            from Agg.prems(1) t_def eq omega_def have num_ty: "agg_type = agg_type.Agg_Sum \<Longrightarrow> t \<in> numeric_ty" by cases auto
-          from  M_def  omega_def indass minmaxsum  alist_def num_ty  show ?thesis apply (cases agg_type)
-             by (auto simp add: ty_of_d  foldl_evaltrm foldl_evaltrm_Sum t_def zs_def  split: list.splits) 
-    qed
-    from  th2  M_def t_def omega_def  have ?case apply (cases agg_type) 
-         by (auto simp add: ty_of_d split: list.splits) 
+         
+    
+            from  num_ty  finite_M foldl_evaltrm foldl_evaltrm_Sum  show  ?thesis apply (cases agg_type)
+               by (auto simp add: M_def  alist_def omega_def finite_multiset_def   
+                      t_def zs_def  split: list.splits) 
+   
+         qed
+          from  finite_M th2  M_def t_def omega_def  have ?case apply (cases agg_type) 
+            by (auto simp add: ty_of_d split: list.splits)        
+        }
+        moreover{
+             assume not_finite: "\<not> finite_multiset M"
+         from this t_def  M_def  omega_def have  ?case apply (cases agg_type)
+                by ( auto simp add: ty_of_d split: list.splits) 
+         }
+         ultimately have ?case by auto 
      
   } 
   ultimately show ?case by auto
