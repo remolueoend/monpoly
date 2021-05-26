@@ -1,45 +1,22 @@
 theory Optimized_Agg
   imports Monitor
-  Ordered_Statistics_Tree
+  Order_Statistic_Tree
 begin
-
-
-fun less_eq_event_data' where
-  "less_eq_event_data' (EInt x) (EInt y) \<longleftrightarrow> x \<le> y"
-| "less_eq_event_data' (EInt _) _ \<longleftrightarrow> True"
-| "less_eq_event_data' (EFloat _) (EInt _) \<longleftrightarrow> False"
-| "less_eq_event_data' (EFloat x) (EFloat y) \<longleftrightarrow> lle_double x y"
-| "less_eq_event_data' (EFloat _) (EString _) \<longleftrightarrow> True"
-| "less_eq_event_data' (EString x) (EString y) \<longleftrightarrow> x \<le> y"
-| "less_eq_event_data' (EString _) _ \<longleftrightarrow> False"
-
-fun less_event_data' :: "event_data \<Rightarrow> event_data \<Rightarrow> bool"  where
-  "less_event_data' (EFloat x) (EFloat y) \<longleftrightarrow> lless_double x y" |
-  "less_event_data' x y \<longleftrightarrow> less_eq_event_data' x y \<and> \<not> (y = x)"
-
-lemma lin1: "less_event_data' x y = (less_eq_event_data' x y \<and> \<not> less_eq_event_data' y x)"
-proof(cases x)
-case (EInt x1) then show ?thesis by (cases y) auto
-next case (EFloat x2) then show ?thesis by (cases y) auto
-next case (EString x3) then show ?thesis by (cases y) auto
-qed
-
-lemma lin2: "less_eq_event_data' x x"
-  by(cases x) auto
-
-interpretation event_data_linorder : linorder less_eq_event_data' less_event_data'
-  using lin1 lin2  sorry
-
-instantiation event_data :: linorder 
-begin
-instance sorry
-end
 
 type_synonym 'a agg_map = "(event_data tuple, 'a) mapping"
 
-datatype aggaux = CntAux "nat agg_map" | 
-                  SumAux "(nat \<times> event_data) agg_map" | 
-                  RankAux "(event_data wbt) agg_map"
+datatype list_aux = LInt "integer list" | LString "string8 list"
+
+datatype aggaux' = CntAux "nat agg_map" | 
+                  SumAux "(nat \<times> integer) agg_map" | 
+                  RankAux "list_aux agg_map"
+
+type_synonym aggaux = "(bool \<times> aggaux')"
+
+fun remove1_always :: "'a \<Rightarrow> 'a list \<Rightarrow> 'a list" where
+"remove1_always x [] = []" |
+"remove1_always x [y] = []" |
+"remove1_always x (y # xs) = (if x = y then xs else y # remove1_always x xs)"
 
 definition group where [simp]:
   "group k b X = Set.filter (\<lambda>x. drop b x = k) X"
@@ -49,292 +26,236 @@ definition group_multiset where [simp]:
                       (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group)"
 
 definition valid_finite_mset where
-  "valid_finite_mset X = ((\<forall>k x y. x \<noteq> y \<and> (k, x) \<in> X \<longrightarrow> (k, y) \<notin> X) \<and> 
-                              (\<forall>k x. (k, x) \<in> X \<longrightarrow> x \<noteq> \<infinity>))"
+  "valid_finite_mset X = (finite X \<and> (\<forall>k x y. x \<noteq> y \<and> (k, x) \<in> X \<longrightarrow> (k, y) \<notin> X) \<and> 
+                              (\<forall>k x. (k, x) \<in> X \<longrightarrow> x \<noteq> \<infinity> \<and> x \<noteq> 0))"
 
-fun mset_conv :: "(event_data \<times> enat) set  \<Rightarrow> event_data multiset" where
-  "mset_conv s = Finite_Set.fold (\<lambda> (t, m) b. (replicate_mset (the_enat m) t) + b) {#} s"
+definition mset_conv where
+  "mset_conv f s = Finite_Set.fold (\<lambda> (t, m) b. (case f t of 
+                                                       Some k \<Rightarrow> (replicate_mset (the_enat m) k) + b |
+                                                       _ \<Rightarrow> b)) {#} s"
+definition unpack_int :: "event_data \<Rightarrow> integer option" where
+  "unpack_int e = (case e of EInt i \<Rightarrow> Some i |
+                            _ \<Rightarrow> None)"
+
+definition unpack_string :: "event_data \<Rightarrow> string8 option" where
+  "unpack_string e = (case e of EString s \<Rightarrow> Some s |
+                            _ \<Rightarrow> None)"
+
+definition int_mset_conv :: "(event_data \<times> enat) set  \<Rightarrow> integer multiset" where
+  "int_mset_conv = mset_conv unpack_int"
+
+definition str_mset_conv :: "(event_data \<times> enat) set  \<Rightarrow> string8 multiset" where
+  "str_mset_conv = mset_conv unpack_string"
+
+fun valid_input :: "aggaux \<Rightarrow> bool" where
+  "valid_input (v, aux) = v"
 
 definition valid_aggmap :: "('a option \<Rightarrow> (event_data \<times> enat) set \<Rightarrow>  bool) \<Rightarrow> nat \<Rightarrow> Formula.trm \<Rightarrow> (event_data option list, 'a) mapping \<Rightarrow> event_data option list set \<Rightarrow> bool" where [simp]:
   "valid_aggmap P b f m X \<longleftrightarrow> (\<forall>k. k \<in> (drop b) ` X \<longleftrightarrow> k \<in> Mapping.keys m) \<and>
                     (\<forall>k. k \<in> Mapping.keys m \<longrightarrow> (let M = group_multiset k b f X
                     in P (Mapping.lookup m k) M))"
 
+definition type_restr_mset :: "('a \<Rightarrow> event_data) \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> bool" where
+  "type_restr_mset f s = (\<forall>t m. (t, m) \<in> s \<longrightarrow> t \<in> range f)"
+
+definition get_length :: "list_aux \<Rightarrow> nat" where
+  "get_length l = (case l of LInt k \<Rightarrow> length k |
+                             LString k \<Rightarrow> length k)"
+
+definition valid_list_aux' :: "'a list \<Rightarrow> 'a multiset \<Rightarrow> bool" where
+  "valid_list_aux' l m = (mset l = m)"
+
+definition valid_list_aux :: "list_aux \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> bool" where
+  "valid_list_aux l s = (case l of LInt k \<Rightarrow> valid_list_aux' k (int_mset_conv s) \<and> type_restr_mset EInt s| 
+                                  LString k \<Rightarrow> valid_list_aux' k (str_mset_conv s) \<and> type_restr_mset EString s)"
+
+definition type_restr_list :: "event_data \<Rightarrow> list_aux \<Rightarrow> bool" where
+  "type_restr_list y0 l = (case y0 of EInt k \<Rightarrow> l \<in> range LInt |
+                                      EString k \<Rightarrow> l \<in> range LString)"
+
+
 fun valid_maggaux :: "aggargs \<Rightarrow> aggaux \<Rightarrow> event_data table \<Rightarrow> bool" where
-  "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> aux X = 
-  (finite X \<and>
-  (let aggtype = fst \<omega> in case aux of 
+  "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (valid, aux) X = 
+  (if valid then 
+  (finite X \<and> (type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X) \<and>
+  (let aggtype = fst \<omega>;
+       y0 = snd \<omega> in case aux of 
       CntAux m \<Rightarrow>
         (aggtype = Formula.Agg_Cnt) \<and> 
         (valid_aggmap (\<lambda>k s. 
-                      k = Some(length(flatten_multiset(s)))) 
+                      k = Some(size (mset_conv Some s))) 
                       b f m X)
-    | SumAux m \<Rightarrow> (aggtype = Formula.Agg_Sum \<or> aggtype = Formula.Agg_Avg) \<and> (type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X) \<and>
+    | SumAux m \<Rightarrow> (aggtype = Formula.Agg_Sum \<or> aggtype = Formula.Agg_Avg) \<and>
                   (let y0 = (if aggtype = Formula.Agg_Sum then snd \<omega> else EInt 0) in
                   (valid_aggmap 
-                  (\<lambda>k s. k = Some(length(flatten_multiset(s)), foldl plus y0 (flatten_multiset s))) 
+                  (\<lambda>k s. k = Some(size (int_mset_conv s), fold_mset (+) 0 (int_mset_conv s))) 
                   b f m X))
     | RankAux m \<Rightarrow> (aggtype = Formula.Agg_Min \<or> aggtype = Formula.Agg_Max \<or> aggtype = Formula.Agg_Med) \<and>
                    valid_aggmap 
-                   (\<lambda>k s. (case k of Some(t) \<Rightarrow> valid_wbt_mset t (mset_conv s) |
+                   (\<lambda>k s. (case k of Some(l) \<Rightarrow> valid_list_aux l s |
                                      None \<Rightarrow> False)) 
-                   b f m X))"
+                   b f m X))
+  else True)"
 
 fun init_maggaux :: "aggargs \<Rightarrow> aggaux" where
-  "init_maggaux args =
+  "init_maggaux args = (True, 
   (let aggtype = fst (aggargs_\<omega> args) in case aggtype of
       Formula.Agg_Cnt \<Rightarrow> CntAux Mapping.empty
     | Formula.Agg_Sum \<Rightarrow> SumAux Mapping.empty
     | Formula.Agg_Min \<Rightarrow> RankAux Mapping.empty
     | Formula.Agg_Max \<Rightarrow> RankAux Mapping.empty
     | Formula.Agg_Avg \<Rightarrow> SumAux Mapping.empty
-    | Formula.Agg_Med \<Rightarrow> RankAux Mapping.empty)"
+    | Formula.Agg_Med \<Rightarrow> RankAux Mapping.empty))"
 
-fun insert_cnt :: "aggargs \<Rightarrow>  event_data tuple \<Rightarrow> nat agg_map \<Rightarrow> nat agg_map" where
-  "insert_cnt args t m = (let group = drop (aggargs_b args) t 
+fun insert_cnt :: "aggargs \<Rightarrow>  event_data tuple \<Rightarrow> (bool \<times> nat agg_map) \<Rightarrow> (bool \<times> nat agg_map)" where
+  "insert_cnt args t (v, m) = 
+                (if v then (v, (let group = drop (aggargs_b args) t 
                           in case (Mapping.lookup m group) of
                             Some i \<Rightarrow> Mapping.update group (i + 1) m |
-                            None \<Rightarrow> Mapping.update group 1 m)"
+                            None \<Rightarrow> Mapping.update group 1 m))
+                 else (v, m))"
 
-fun insert_sum :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (nat \<times> event_data) agg_map \<Rightarrow> (nat \<times> event_data) agg_map" where
-  "insert_sum args t m = (let group = drop (aggargs_b args) t;
-                              aggtype = fst (aggargs_\<omega> args);
-                              y0 = (if aggtype = Formula.Agg_Sum then snd (aggargs_\<omega> args) else EInt 0);
+fun insert_sum :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (bool \<times> ((nat \<times> integer) agg_map)) \<Rightarrow> (bool \<times> ((nat \<times> integer) agg_map))" where
+  "insert_sum args t (v, m) = 
+              (if v then (let group = drop (aggargs_b args) t;
                               term = meval_trm (aggargs_f args) t
-                          in case (Mapping.lookup m group) of
-                            Some (cnt, agg_sum) \<Rightarrow> Mapping.update group (cnt + 1, agg_sum + term) m |
-                            None \<Rightarrow> Mapping.update group (1, y0 + term) m)"
+                          in case (Mapping.lookup m group, term) of
+                            (Some (cnt, agg_sum), EInt i) \<Rightarrow> (True, Mapping.update group (cnt + 1, agg_sum + i) m) |
+                            (None, EInt i) \<Rightarrow> (True, Mapping.update group (1, i) m) |
+                            _ \<Rightarrow> (False, Mapping.empty)) 
+               else (v, m))"
 
-fun insert_rank :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (event_data wbt) agg_map \<Rightarrow> (event_data wbt) agg_map" where
-  "insert_rank args t m = (let group = drop (aggargs_b args) t;
-                               term = meval_trm (aggargs_f args) t
-                           in case (Mapping.lookup m group) of
-                            Some t \<Rightarrow> Mapping.update group (insert term t) m |
-                            None \<Rightarrow> Mapping.update group (insert term Leaf) m)"
+fun insert_rank :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> bool \<times> list_aux agg_map \<Rightarrow> bool \<times> list_aux agg_map" where
+  "insert_rank args t (v, m) = 
+              (if v then (let group = drop (aggargs_b args) t;
+                              term = meval_trm (aggargs_f args) t;
+                              (new_v, new_list) = (case ((Mapping.lookup m group), term, snd (aggargs_\<omega> args)) of 
+                                              (Some (LInt t'), EInt term', EInt _) => (True, LInt (insort term' t')) |
+                                              (Some (LString t'), EString term', EString _) \<Rightarrow> (True, LString (insort term' t')) |
+                                              (None, EInt term', EInt _) \<Rightarrow> (True, LInt [term']) |
+                                              (None, EString term', EString _) \<Rightarrow> (True, LString [term']) |
+                                              _ \<Rightarrow> (False, LInt []))
+                          in (new_v, (if new_v then Mapping.update group new_list m else Mapping.empty)))
+               else (v, m))"
 
-fun insert_maggaux :: "aggargs \<Rightarrow> event_data table \<Rightarrow> aggaux \<Rightarrow> aggaux" where
-  "insert_maggaux args data aux = (case aux of
-    CntAux m \<Rightarrow> CntAux (Finite_Set.fold (insert_cnt args) m data)
-  | SumAux m \<Rightarrow> SumAux (Finite_Set.fold (insert_sum args) m data)
-  | RankAux m \<Rightarrow> RankAux (Finite_Set.fold (insert_rank args) m data))"
-
-fun delete_cnt :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> nat agg_map \<Rightarrow> nat agg_map" where
-  "delete_cnt args t m = (let group = drop (aggargs_b args) t
+fun delete_cnt :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (bool \<times> nat agg_map) \<Rightarrow> (bool \<times> nat agg_map)" where
+  "delete_cnt args t (v, m) = 
+                (if v then (v, (let group = drop (aggargs_b args) t
                        in case (Mapping.lookup m group) of
                          Some i \<Rightarrow> (if i = 1 then Mapping.delete group m 
                                     else Mapping.update group (i - 1) m)
-                       | None \<Rightarrow> m)"
+                       | None \<Rightarrow> m))
+                else (v, m))"
 
-fun delete_sum :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (nat \<times> event_data) agg_map \<Rightarrow> (nat \<times> event_data) agg_map" where
-  "delete_sum args t m = (let group = drop (aggargs_b args) t;
+fun delete_sum :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (bool \<times> ((nat \<times> integer) agg_map)) \<Rightarrow> (bool \<times> ((nat \<times> integer) agg_map))" where
+  "delete_sum args t (v, m) = 
+              (if v then (let group = drop (aggargs_b args) t;
                               term = meval_trm (aggargs_f args) t
-                          in case (Mapping.lookup m group) of
-                            Some (cnt, agg_sum) \<Rightarrow> (if cnt = 1 then Mapping.delete group m
-                                                    else Mapping.update group (cnt - 1, agg_sum - term) m)
-                          | None \<Rightarrow> m)"
+                          in case (Mapping.lookup m group, term) of
+                            (Some (cnt, agg_sum), EInt i) \<Rightarrow> (True, (if cnt = 1 then Mapping.delete group m
+                                                    else Mapping.update group (cnt - 1, agg_sum - i) m)) |
+                           _ \<Rightarrow> (False, Mapping.empty))
+              else (v, m))"
 
-fun delete_rank :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (event_data wbt) agg_map \<Rightarrow> (event_data wbt) agg_map" where
-  "delete_rank args t m = (let group = drop (aggargs_b args) t;
-                               term = meval_trm (aggargs_f args) t
-                           in case (Mapping.lookup m group) of
-                            Some (Node Leaf _ Leaf) \<Rightarrow> Mapping.delete group m |
-                            Some t \<Rightarrow> Mapping.update group (delete term t) m |
-                            None \<Rightarrow> m)"
+fun delete_rank :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> bool \<times> list_aux agg_map \<Rightarrow> bool \<times> list_aux agg_map" where
+  "delete_rank args t (v, m) = 
+              (if v then (let group = drop (aggargs_b args) t;
+                              term = meval_trm (aggargs_f args) t;
+                              (new_v, new_map) = (case (Mapping.lookup m group, term) of
+                            (Some (LString [t']), EString term') \<Rightarrow> (True, Mapping.delete group m) |
+                            (Some (LInt [t']), EInt term') \<Rightarrow> (True, Mapping.delete group m) |
+                            (Some (LString t'), EString term') \<Rightarrow> (True, Mapping.update group (LString (remove1_always term' t')) m) |
+                            (Some (LInt t'), EInt term') \<Rightarrow> (True, Mapping.update group (LInt (remove1_always term' t')) m) |
+                            _ \<Rightarrow> (False, Mapping.empty))
+                          in (new_v, new_map)) 
+              else (v, m))"
+
+fun insert_maggaux :: "aggargs \<Rightarrow> event_data table \<Rightarrow> aggaux \<Rightarrow> aggaux" where
+  "insert_maggaux args data (v, aux) = (if v then (case aux of
+    CntAux m \<Rightarrow> let (v', m') = Finite_Set.fold (insert_cnt args) (v, m) data in (v', CntAux m')
+  | SumAux m \<Rightarrow> let (v', m') = Finite_Set.fold (insert_sum args) (v, m) data in (v', SumAux m')
+  | RankAux m \<Rightarrow> let (v', m') = Finite_Set.fold (insert_rank args) (v, m) data in (v', RankAux m'))
+     else (v, aux))"
 
 fun delete_maggaux :: "aggargs \<Rightarrow> event_data table \<Rightarrow> aggaux \<Rightarrow> aggaux" where
-  "delete_maggaux args data aux = (case aux of
-    CntAux m \<Rightarrow> CntAux (Finite_Set.fold (delete_cnt args) m data)
-  | SumAux m \<Rightarrow> SumAux (Finite_Set.fold (delete_sum args) m data)
-  | RankAux m \<Rightarrow> RankAux (Finite_Set.fold (delete_rank args) m data))"
+  "delete_maggaux args data (v, aux) = (if v then (case aux of
+    CntAux m \<Rightarrow> let (v', m') = Finite_Set.fold (delete_cnt args) (v, m) data in (v', CntAux m')
+  | SumAux m \<Rightarrow> let (v', m') = Finite_Set.fold (delete_sum args) (v, m) data in (v', SumAux m')
+  | RankAux m \<Rightarrow> let (v', m') = Finite_Set.fold (delete_rank args) (v, m) data in (v', RankAux m'))
+    else (v, aux))"
+
+fun get_edata_list :: "list_aux \<Rightarrow> nat \<Rightarrow> event_data" where
+  "get_edata_list (LString l) n = EString (List.sort l ! n)" |
+  "get_edata_list (LInt l) n = EInt (List.sort l ! n)"
+
+definition get_map_result where
+  "get_map_result m y f = (\<lambda>k. (case Mapping.lookup m k of
+                             Some i \<Rightarrow> k[y:=Some (f i)]
+                           | None \<Rightarrow> k))` Mapping.keys m"
 
 fun result_maggaux :: "aggargs \<Rightarrow> aggaux \<Rightarrow> event_data table" where
-  "result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> aux = (case aux of
-    CntAux m \<Rightarrow> (if g0 \<and> Mapping.keys m = {} 
-                then singleton_table n y (eval_agg_op \<omega> {})
-                else (\<lambda>k. (case Mapping.lookup m k of
-                             Some i \<Rightarrow> k[y:=Some (EInt (integer_of_int i))]
-                           | None \<Rightarrow> k))` Mapping.keys m)
-  | SumAux m \<Rightarrow> (if g0 \<and> Mapping.keys m = {}
-                      then singleton_table n y (eval_agg_op \<omega> {})
-                      else if fst \<omega> = Formula.Agg_Sum
-                      then (\<lambda>k. (case Mapping.lookup m k of 
-                                   Some (_, agg_sum) \<Rightarrow> k[y:=Some agg_sum]
-                                 | None \<Rightarrow> k)) ` Mapping.keys m
-                      else (\<lambda>k. (case Mapping.lookup m k of
-                                   Some (cnt, agg_sum) \<Rightarrow> k[y:=Some (EFloat ((double_of_event_data agg_sum) / (double_of_int cnt)))] 
-                                 | None \<Rightarrow> k)) ` Mapping.keys m)
-  | RankAux m \<Rightarrow> (if g0 \<and> Mapping.keys m = {}
-                      then singleton_table n y (eval_agg_op \<omega> {})
-                      else if fst \<omega> = Formula.Agg_Min
-                      then (\<lambda>k. (case Mapping.lookup m k of 
-                                   Some t \<Rightarrow> k[y:=Some (select t 0)]
-                                 | None \<Rightarrow> k)) ` Mapping.keys m
-                      else if fst \<omega> = Formula.Agg_Max
-                      then (\<lambda>k. (case Mapping.lookup m k of
-                                   Some t \<Rightarrow> k[y:=Some (select t (size t - 1))]
-                                 | None \<Rightarrow> k)) ` Mapping.keys m
-                      else (\<lambda>k. (case Mapping.lookup m k of
-                                   Some t \<Rightarrow> (let u = size t;
-                                              u' = u div 2;
-      aggval = (if even u then (double_of_event_data (select t (u' - 1)) + double_of_event_data (select t u') / double_of_int 2)
-                          else double_of_event_data (select t u')) in
-                                              k[y:=Some (EFloat aggval)])
-                                 | None \<Rightarrow> k)) ` Mapping.keys m))"
+  "result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, aux) = (case aux of
+    CntAux m \<Rightarrow> 
+    (if g0 \<and> Mapping.keys m = {} 
+     then singleton_table n y (eval_agg_op \<omega> {})
+     else get_map_result m y (\<lambda>k. EInt (integer_of_int k))) |
+    SumAux m \<Rightarrow> 
+    (if g0 \<and> Mapping.keys m = {}
+     then singleton_table n y (eval_agg_op \<omega> {})
+     else (case fst \<omega> of 
+     Formula.Agg_Sum \<Rightarrow> get_map_result m y (\<lambda>k. EInt (snd k)) |
+     Formula.Agg_Avg \<Rightarrow> get_map_result m y (\<lambda>k. EFloat ((double_of_event_data (EInt (snd k)) / (double_of_int (fst k))))))) |
+    RankAux m \<Rightarrow> 
+    (if g0 \<and> Mapping.keys m = {}
+     then singleton_table n y (eval_agg_op \<omega> {})
+     else (case fst \<omega> of 
+     Formula.Agg_Min \<Rightarrow> get_map_result m y (\<lambda>k. get_edata_list k 0) |
+     Formula.Agg_Max \<Rightarrow> get_map_result m y (\<lambda>k. get_edata_list k (get_length k - 1)) |
+     Formula.Agg_Med \<Rightarrow> get_map_result m y (\<lambda>k. let u = get_length k;
+                                  u' = u div 2;
+                                  aggval = (if even u then (double_of_event_data (get_edata_list k (u' - 1)) + double_of_event_data (get_edata_list k u') / double_of_int 2)
+                                            else double_of_event_data (get_edata_list k u')) in
+                                            EFloat aggval))))"
 
-fun plus' :: "event_data \<Rightarrow> event_data \<Rightarrow> event_data" where
-  "plus' (EInt x) (EInt y) = EInt (x + y)"
-| "plus' (_::event_data)  _ = EFloat nan"
+lemma filter_insert:
+  "Set.filter p (Set.insert x X) = (if p x then Set.insert x (Set.filter p X) else (Set.filter p X))"
+  by auto
 
-fun minus' :: "event_data \<Rightarrow> event_data \<Rightarrow> event_data" where
-  "minus' (EInt x) (EInt y) = EInt (y - x)"
-| "minus' (_::event_data) _ = EFloat nan"
+lemma mset_conv_comm:
+  "comp_fun_commute (\<lambda>(t, m) b. case f t of None \<Rightarrow> b | Some k \<Rightarrow> replicate_mset (the_enat m) k + b)"
+  by(unfold_locales) (auto split:option.splits)
 
-
-lemma iter_plus'_int: 
-  assumes "t \<in> range EInt" and "y \<in> range EInt"
-  shows "(plus' t ^^ n) y \<in> range EInt"
-  using assms by (induction n) auto
-
-lemma iter_minus'_int:
-  assumes "t \<in> range EInt" and "y \<in> range EInt"
-  shows "(minus' t ^^ n) y \<in> range EInt"
-  using assms by (induction n) auto
-
-lemma plus'_minus'_comm: 
-  assumes "y0 \<in> range EInt" and "t \<in> range EInt"
-  shows "(minus' t ^^ n) (plus' t y0)  = plus' t ((minus' t ^^ n) y0)"
-proof(induction n)
-case 0
-  then show ?case by auto
-next
-  case (Suc n)
-  have "(minus' t ^^ n) y0 \<in> range EInt" using iter_minus'_int assms by auto
-  then show ?case using assms Suc by auto
+lemma mset_conv_insert_remove:
+  assumes "(t, enat n) \<in> M" and "f t \<in> range Some" and "(t, enat (n + 1)) \<notin> M" and "finite M"
+  shows "mset_conv f (Set.insert (t, enat (n + 1)) (M - {(t, enat n)})) = add_mset (the (f t)) (mset_conv f M)"
+proof -
+  have *: "finite (M - {(t, enat n)})" using assms(4) by auto
+  have **: "(t, enat (n + 1)) \<notin> (M - {(t, enat n)})" using assms(3) by auto
+  have ***: "(t, enat n) \<notin> (M - {(t, enat n)})" by auto
+  have simp1: "mset_conv f (Set.insert (t, enat (n + 1)) (M - {(t, enat n)})) = replicate_mset (the_enat (n + 1)) (the (f t)) + mset_conv f (M - {(t, enat n)})"
+    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * **, of f] assms(2) by(auto simp add:mset_conv_def)
+  then have "mset_conv f (Set.insert (t, enat n) (M - {(t, enat n)})) = replicate_mset (the_enat n) (the (f t)) + mset_conv f (M - {(t, enat n)})"
+    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * ***, of f] assms(2) by(auto simp add:mset_conv_def) 
+  moreover have "Set.insert (t, enat n) (M - {(t, enat n)}) = M" using assms(1) by auto
+  ultimately have "mset_conv f M = replicate_mset (the_enat n) (the (f t)) + mset_conv f (M - {(t, enat n)})" by auto
+  then show ?thesis using simp1 by simp
 qed
 
-lemma plus'_minus'_comm': 
-  assumes "y0 \<in> range EInt" and "t \<in> range EInt"
-  shows "(plus' t ^^ n) (minus' t y0)  = minus' t ((plus' t ^^ n) y0)"
-proof(induction n)
-case 0
-  then show ?case by auto
-next
-  case (Suc n)
-  have "(plus' t ^^ n) y0 \<in> range EInt" using iter_plus'_int assms by auto
-  then show ?case using assms Suc by auto
+lemma mset_conv_insert_remove':
+  assumes "(t, enat (n + 1)) \<in> M" and "f t \<in> range Some" and "(t, enat n) \<notin> M" and "finite M"
+  shows "mset_conv f (Set.insert (t, enat n) (M - {(t, enat (n + 1))})) + {#the (f t)#} = mset_conv f M"
+proof -
+  have *: "finite (M - {(t, enat (n + 1))})" using assms(4) by auto
+  have **: "(t, enat n) \<notin> (M - {(t, enat (n + 1))})" using assms(3) by auto
+  have ***: "(t, enat (n + 1)) \<notin> (M - {(t, enat (n + 1))})" by auto
+  have simp1: "mset_conv f (Set.insert (t, enat n) (M - {(t, enat (n + 1))})) = replicate_mset (the_enat n) (the (f t)) + mset_conv f (M - {(t, enat (n + 1))})"
+    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * **, of f] assms(2) by(auto simp add:mset_conv_def)
+  then have "mset_conv f (Set.insert (t, enat (n + 1)) (M - {(t, enat (n + 1))})) = replicate_mset (the_enat (n + 1)) (the (f t)) + mset_conv f (M - {(t, enat (n + 1))})"
+    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * ***, of f] assms(2) by(auto simp add:mset_conv_def) 
+  moreover have "Set.insert (t, enat (n + 1)) (M - {(t, enat (n + 1))}) = M" using assms(1) by auto
+  ultimately have "mset_conv f M = replicate_mset (the_enat (n + 1)) (the (f t)) + mset_conv f (M - {(t, enat (n + 1))})" by auto
+  then show ?thesis using simp1 by auto
 qed
-
-lemma plus'_minus'_id:
-  assumes "t \<in> range EInt" and "y0 \<in> range EInt"
-  shows "((minus' t) ^^ n \<circ> (plus' t) ^^ n) y0 = y0"
-  using Suc plus'_minus'_comm iter_plus'_int assms by (induction n) auto
-
-lemma plus'_minus'_minus:
-  assumes "t \<in> range EInt" and "y0 \<in> range EInt"
-  shows "((plus' t) ^^ i \<circ> ((minus' t) ^^ (i + 1))) y0 = minus' t y0"
-proof(induction i)
-case 0
-  then show ?case by auto
-next
-  case (Suc i)
-  have "minus' t ((minus' t ^^ i) y0) \<in> range EInt" using assms iter_minus'_int by(auto simp: funpow_swap1)
-  then show ?case using plus'_minus'_comm' assms  Suc by(auto) 
-qed
-
-lemma plus_plus'_equiv:
-  assumes "x \<in> range EInt" and "y \<in> range EInt"
-  shows "plus x y = plus' x y"
-  using assms by auto
-
-lemma minus_minus'_equiv:
-  assumes "x \<in> range EInt" and "y \<in> range EInt"
-  shows "minus x y = minus' y x"
-  using assms by auto
-
-lemma plus'_aux: "\<And>y x. plus' y \<circ> plus' x = plus' x \<circ> plus' y"
-proof
-  fix xa x y
-  show "(plus' y \<circ> plus' x) xa = (plus' x \<circ> plus' y) xa"
-  proof(cases xa)
-    case (EInt x1)
-    then have xa_int: "xa = EInt x1" by auto
-    then show ?thesis
-    proof(cases x)
-      case (EInt x1)
-      then have x_int: "x = EInt x1" by auto
-      then show ?thesis
-      proof(cases y)
-        case (EInt x1)
-        then show ?thesis using xa_int x_int by auto
-      next
-        case (EFloat x2)
-        then show ?thesis by auto
-      next
-        case (EString x3)
-        then show ?thesis by auto
-      qed
-    next
-      case (EFloat x2)
-      then show ?thesis by auto
-    next
-      case (EString x3)
-      then show ?thesis by auto
-    qed
-  next
-    case (EFloat x2)
-    then show ?thesis by auto
-  next
-    case (EString x3)
-    then show ?thesis by auto
-  qed
-qed
-
-lemma minus'_aux: "\<And>y x. minus' y \<circ> minus' x = minus' x \<circ> minus' y"
-proof
-  fix xa x y
-  show "(minus' y \<circ> minus' x) xa = (minus' x \<circ> minus' y) xa"
-  proof(cases xa)
-    case (EInt x1)
-    then have xa_int: "xa = EInt x1" by auto
-    then show ?thesis
-    proof(cases x)
-      case (EInt x1)
-      then have x_int: "x = EInt x1" by auto
-      then show ?thesis
-      proof(cases y)
-        case (EInt x1)
-        then show ?thesis using xa_int x_int by auto
-      next
-        case (EFloat x2)
-        then show ?thesis by auto
-      next
-        case (EString x3)
-        then show ?thesis by auto
-      qed
-    next
-      case (EFloat x2)
-      then show ?thesis by auto
-    next
-      case (EString x3)
-      then show ?thesis by auto
-    qed
-  next
-    case (EFloat x2)
-    then show ?thesis by auto
-  next
-    case (EString x3)
-    then show ?thesis by auto
-  qed
-qed
-
-lemma comp_fun_commute_plus': "comp_fun_commute plus'"
-  using plus'_aux by(unfold_locales) auto
-
-lemma comp_fun_commute_minus': "comp_fun_commute minus'"
-  using minus'_aux by(unfold_locales) auto
-
-lemma comm_plus': "plus' x y = plus' y x"
-  by (smt (verit, best) add.commute plus'.elims plus'.simps(1))
 
 lemma unique_term_multiset: "(t, y1) \<in> group_multiset k b f X \<Longrightarrow> y2 \<noteq> y1 \<Longrightarrow> (t, y2) \<notin> group_multiset k b f X"
 proof rule
@@ -345,36 +266,188 @@ proof rule
   ultimately show False using not_eq by auto
 qed
 
-lemma valid_init_maggaux_unfolded: "safe_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> \<Longrightarrow> valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (init_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>) {}"
-  (*by (cases "fst \<omega>") (auto simp: type_restr_def Let_def)*)
-  sorry
+lemma valid_init_maggaux_unfolded: 
+   "safe_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> \<Longrightarrow> 
+    type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> {} \<Longrightarrow>
+    valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (init_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>) {}"
+  by (cases "fst \<omega>") (auto simp: type_restr_def)
 
-lemma valid_init_maggaux': "safe_aggargs args \<Longrightarrow> valid_maggaux args (init_maggaux args) {}"
-  using valid_init_maggaux_unfolded by (cases args) fast
+lemma valid_init_maggaux': "safe_aggargs args \<Longrightarrow> type_restr args {} \<Longrightarrow> valid_maggaux args (init_maggaux args) {}"
+  using valid_init_maggaux_unfolded by(cases args) fast
 
-definition valid_sumaux_maps where "valid_sumaux_maps = {m::(nat \<times> event_data) agg_map. \<forall>k a b. Mapping.lookup m k = Some (a, b) \<longrightarrow> b \<in> range EInt}"
+context linorder
+begin
 
-fun insert_sum_comm :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (nat \<times> event_data) agg_map \<Rightarrow> (nat \<times> event_data) agg_map" where
-  "insert_sum_comm args t m = (let group = drop (aggargs_b args) t;
-                              aggtype = fst (aggargs_\<omega> args);
-                              y0 = (if aggtype = Formula.Agg_Sum then snd (aggargs_\<omega> args) else EInt 0);
-                                         term = meval_trm (aggargs_f args) t in 
-                        (if term \<in> range EInt then (case (Mapping.lookup m group) of
-                        Some (cnt, agg_sum) \<Rightarrow> Mapping.update group (cnt + 1, plus' term agg_sum) m
-                      | None \<Rightarrow> Mapping.update group (1, plus' y0 term) m) else m))"
+lemma sorted_foldl_min:
+  assumes "sorted (x # xs)"
+  shows "foldl min x xs = (x # xs) ! 0"
+  using assms by(induction xs) auto
 
-fun delete_sum_comm :: "aggargs \<Rightarrow> event_data tuple \<Rightarrow> (nat \<times> event_data) agg_map \<Rightarrow> (nat \<times> event_data) agg_map" where
-  "delete_sum_comm args t m = (let group = drop (aggargs_b args) t;
-                              term = meval_trm (aggargs_f args) t in 
-                           (if term \<in> range EInt then (case (Mapping.lookup m group) of
-                            Some (cnt, agg_sum) \<Rightarrow> (if cnt = 1 then Mapping.delete group m
-                                                    else Mapping.update group (cnt - 1, minus' term agg_sum) m)
-                          | None \<Rightarrow> m) else m))"
+lemma sorted_foldl_max:
+  assumes "sorted (x # xs)"
+  and "length (x # xs) = n"
+  shows "foldl max x xs = (x # xs) ! (n - 1)"
+  using assms by(induction xs arbitrary:x n) (auto simp: linorder_class.max.absorb2)
 
-lemma flatten_multiset_eint:
-  assumes "\<And> t m. (t, m) \<in> M \<Longrightarrow> t \<in> range EInt"
+lemma set_insert_flatten_mset:
+  assumes "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
+  and "valid_finite_mset (Set.insert (t, m) F)"
+  and "(t, m) \<notin> F"
+  shows "set (flatten_multiset (Set.insert (t, m) F)) = Set.insert t (set (flatten_multiset (F)))"
+proof -
+  have "finite F" "m > 0" "m \<noteq> \<infinity>" using assms(2) 
+    unfolding valid_finite_mset_def by (meson finite_insert gr_zeroI insertI1)+
+  moreover have "the_enat m > 0" using calculation(2-3) gr0I zero_enat_def by force
+  ultimately show ?thesis using assms(1) assms(3) linorder.sorted_list_of_set_insert[OF ID_ccompare[OF assms(1)]] 
+  linorder.set_insort_key[OF ID_ccompare[OF assms(1)], of "\<lambda>x. x"] by(simp add:flatten_multiset_def csorted_list_of_set_def) 
+qed
+
+
+lemma bulk_insort_aux:
+  assumes "(\<forall>k. k \<in> set xs \<longrightarrow> k < e)" 
+  and "(\<forall>k. k \<in> set ys \<longrightarrow> e < k)" 
+  shows "linorder_class.insort e (xs @ replicate n e @ ys) = xs @ e # replicate n e @ ys"
+  using assms
+proof(induction xs)
+  case Nil
+  then show ?case using assms(2) by (induction n) (simp add: local.insort_is_Cons local.less_imp_le)+
+next
+  case (Cons a xs)
+  then show ?case using Cons by(simp add:local.less_le_not_le) 
+qed
+
+lemma bulk_insort:
+  assumes "(\<forall>k. k \<in> set xs \<longrightarrow> k < e)" 
+  and "(\<forall>k. k \<in> set ys \<longrightarrow> e < k)" 
+  shows "((linorder.insort (\<le>) e) ^^ n) (xs @ ys) = xs @ replicate n e @ ys"
+proof(induction n)
+  case 0
+  then show ?case by auto
+next
+  case (Suc n)
+  then show ?case using assms bulk_insort_aux by(auto) 
+qed
+
+lemma split_insort:
+  assumes "x \<notin> set list"
+  and "sorted_wrt (\<le>) list"
+  shows "\<exists>xs ys. (linorder.insort (\<le>) x list = xs @ x # ys \<and> list = xs @ ys \<and> (\<forall>k. k \<in> set xs \<longrightarrow> k < x) \<and> (\<forall>k. k \<in> set ys \<longrightarrow> k > x))"
+proof -
+  let ?xs = "linorder.insort (\<le>) x list"
+  have "x \<in> set ?xs" 
+    using set_insort_key[of "\<lambda>x. x" x list] assms(1) by(auto) 
+  show ?thesis using assms
+  proof(induction list)
+    case Nil
+    then have "linorder.insort (\<le>) x [] = [x]" by(auto simp:insort_key_def) 
+    then show ?case by auto
+  next
+    case (Cons a list)
+    have neq: "x \<noteq> a" using Cons(2) by auto
+    show ?case 
+    proof(cases "x <= a")
+      case True
+      then have *: "\<forall>k. k \<in> set (a # list) \<longrightarrow> k > x" using Cons(3) neq by(auto)
+      show ?thesis using True by (auto simp:insort_key_def) (metis "*" append_Nil empty_iff empty_set)
+    next
+      case False
+      then have *: "a \<le> x" by auto
+      have **: "linorder.insort (\<le>) x (a#list) = a # (linorder.insort (\<le>) x list)" 
+        using False by(auto simp:insort_key_def)
+      obtain xs ys where "linorder.insort (\<le>) x list = xs @ x # ys \<and> list = xs @ ys \<and> (\<forall>k. k \<in> set xs \<longrightarrow> k < x) \<and> (\<forall>k. k \<in> set ys \<longrightarrow> k > x)" 
+        using Cons(1-3) by auto
+      then show ?thesis using * ** False by(auto) (metis append_Cons insert_iff list.simps(15) local.dual_order.order_iff_strict)
+    qed
+  qed
+qed
+end
+
+lemma ccomp_eq':
+  assumes "ID ccompare = Some (c :: event_data comparator)" 
+  and "e1 = EString k"
+  and "e2 = EString k'" 
+  shows "c e1 e2 = comp_of_ords (\<le>) (<) k k'"
+proof -
+  have "c = comparator_event_data" using assms(1) by(simp add:ccompare_event_data_def ID_def)
+  then show ?thesis using assms(2-3) by(auto simp: comp_of_ords_def comparator_of_def)
+qed
+
+lemma ccomp_eq:
+  assumes "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
+  and "ID ccompare = Some (c' :: event_data comparator)" 
+  and "e1 \<noteq> e2"
+  shows "c (e1, t1) (e2, t2) = c' e1 e2"
+  using assms
+proof -
+  obtain c'' where "ID ccompare = Some (c'' :: enat comparator)"
+    by (simp add: ccompare_enat_def ID_def)
+  then have "c = comparator_prod c' c''" 
+    using assms(1-2) by(auto simp: ccompare_prod_def) (simp add: ID_def)
+  moreover have "c' e1 e2 \<noteq> Eq" using ID_ccompare'[OF assms(2)] assms(3) by (auto simp:comparator.weak_eq)
+  ultimately show ?thesis by (cases "c' e1 e2") auto
+qed
+
+lemma insort_mset_bulk_insort:
+  assumes "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
+  and "ID ccompare = Some (c' :: event_data comparator)" 
+  and "valid_finite_mset (Set.insert (e, enat n) F)"
+  and "(e, enat n) \<notin> F"
+  shows "concat (map (\<lambda>(x, c). replicate (the_enat c) x) (linorder.insort (le_of_comp c) (e, enat n) (linorder.sorted_list_of_set (le_of_comp c) F))) =
+     ((linorder.insort (le_of_comp c') e) ^^ n) (concat (map (\<lambda>(x, c). replicate (the_enat c) x) (linorder.sorted_list_of_set (le_of_comp c) F)))" (is "?lhs = ?rhs")
+proof -
+  let ?xs = "linorder.sorted_list_of_set (le_of_comp c) F"
+  let ?f = "\<lambda>(x, c). replicate (the_enat c) x"
+  let ?x = "(e, enat n)"
+  interpret linorder "(le_of_comp c)" "(lt_of_comp c)"
+    using assms(1) ID_ccompare by auto
+  note c' = ID_ccompare'[OF assms(2)] 
+  note c'_class = comparator.linorder[OF c']
+  have finite: "finite F" using assms(3) by (auto simp:valid_finite_mset_def)
+  then have "(e, enat n) \<notin> set ?xs" using assms(4) set_sorted_list_of_set by auto
+  moreover have "sorted_wrt (le_of_comp c) (sorted_list_of_set F)" 
+    using sorted_sorted_wrt[symmetric] sorted_sorted_list_of_set by(auto)
+  ultimately obtain xs ys where split: "insort ?x ?xs = xs @ (e, enat n) # ys \<and> ?xs = xs @ ys \<and> (\<forall>k. k \<in> set xs \<longrightarrow> (lt_of_comp c) k ?x) \<and> (\<forall>k. k \<in> set ys \<longrightarrow> (lt_of_comp c) ?x k)"
+    using split_insort[of ?x ?xs] by blast
+  then have concat: "?xs = xs @ ys" by auto
+  have "F = set (xs @ ys)" using split set_sorted_list_of_set[OF finite] by auto
+  then have subs: "set xs \<subseteq> F \<and> set ys \<subseteq> F" by auto
+  have inv1: "(\<forall>k. k \<in> set (concat (map ?f xs)) \<longrightarrow> (lt_of_comp c') k e)" 
+  proof (rule allI, rule impI)
+    fix k
+    assume "k \<in> set (concat (map ?f xs))"
+    moreover have "\<And>b. (k, b) \<in> set xs \<Longrightarrow> lt_of_comp c' k e"
+    proof -
+      fix b
+      assume *: "(k, b) \<in> set xs"
+      then have "k \<noteq> e" using assms(3) subs by(simp add:valid_finite_mset_def) (metis assms(4) subsetD)
+      then show "lt_of_comp c' k e" 
+        using split * ccomp_eq[OF assms(1), OF assms(2), of k e] lt_of_comp_def[of c] lt_of_comp_def[of c'] by auto metis
+    qed
+    ultimately show "(lt_of_comp c') k e" by(auto)
+  qed
+  have inv2: "(\<forall>k. k \<in> set (concat (map ?f ys)) \<longrightarrow> (lt_of_comp c') e k)" 
+  proof (rule allI, rule impI)
+    fix k
+    assume "k \<in> set (concat (map ?f ys))"
+    moreover have "\<And>b. (k, b) \<in> set ys \<Longrightarrow> lt_of_comp c' e k"
+    proof -
+      fix b
+      assume *: "(k, b) \<in> set ys"
+      then have "k \<noteq> e" using assms(3) subs by(simp add:valid_finite_mset_def) (metis assms(4) subsetD)
+      then show "lt_of_comp c' e k" 
+        using split * ccomp_eq[OF assms(1), OF assms(2), of e k] lt_of_comp_def[of c] lt_of_comp_def[of c'] by auto metis
+    qed
+    ultimately show "(lt_of_comp c') e k" by(auto)
+  qed
+  have "?lhs = concat (map ?f xs) @ (replicate n e) @ concat (map ?f ys)" using split by(auto)
+  moreover have "?rhs = ((linorder.insort (le_of_comp c') e) ^^ n) (concat (map ?f xs) @ concat (map ?f ys))" using concat by auto
+  ultimately show ?thesis using linorder.bulk_insort[OF c'_class, OF inv1, OF inv2] by(auto)
+qed
+
+lemma flatten_multiset_range:
+  assumes "\<And> t m. (t, m) \<in> M \<Longrightarrow> t \<in> range f"
   and "finite M"
-  shows "set (flatten_multiset M) \<subseteq> range EInt"
+  shows "set (flatten_multiset M) \<subseteq> range f"
 proof
   obtain c where c_def: "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
     by (simp add: ID_def ccompare_prod_def ccompare_event_data_def ccompare_enat_def split:if_splits option.splits)
@@ -384,68 +457,48 @@ proof
   assume "x \<in> set (flatten_multiset M)"
   then obtain b where [simp]: "(x, b) \<in> set (csorted_list_of_set M)" by (auto simp:flatten_multiset_def)
   then have "(x, b) \<in> M" using assms(2) linorder.set_sorted_list_of_set[OF c_class] by(auto simp:csorted_list_of_set_def c_def)
-  then show "x \<in> range EInt" using assms by auto
+  then show "x \<in> range f" using assms by auto
 qed
 
-lemma valid_maggaux_valid_map:
-  assumes "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m) X"
-  shows "m \<in> valid_sumaux_maps"
-proof -
-  have "\<And>k l s. Mapping.lookup m k = Some (l, s) \<Longrightarrow> s \<in> range EInt"
-  proof -
-    fix k l s
-    assume assm: "Mapping.lookup m k = Some (l, s)"
-    define y0 where "y0 = (if fst \<omega> = Formula.Agg_Sum then snd \<omega> else EInt 0)"
-    define M where "M = flatten_multiset(group_multiset k b f X)"
-    have "k \<in> Mapping.keys m" by (simp add: assm keys_is_none_rep)
-    then have s_def: "s = foldl (+) y0 (M)" 
-      using assms y0_def assm by(auto simp: M_def)
-    have "\<And>t m. (t, m) \<in> group_multiset k b f X \<Longrightarrow> t \<in> range EInt"
-      using assms by(auto simp: type_restr_def image_subset_iff)
-    moreover have "finite (group_multiset k b f X)"
-      using assms by simp
-    ultimately have "set(M) \<subseteq> range EInt"
-      using flatten_multiset_eint by (auto simp:M_def)
-    moreover have "y0 \<in> range EInt" using assms
-      by(auto simp:y0_def type_restr_def)
-    ultimately show "s \<in> range EInt" using s_def
-      by(induction M arbitrary: y0) auto
-  qed
-  then show ?thesis by (auto simp:valid_sumaux_maps_def)
-qed
+lemma insert_sum_comm': "(insert_sum args x \<circ> insert_sum args y) (v, m)  = (insert_sum args y \<circ> insert_sum args x) (v, m)"
+  by (auto simp:lookup_update' mapping_eqI update_update split:option.splits event_data.splits)
 
-lemma insert_sum_equiv:
-  assumes "meval_trm (aggargs_f args) t \<in> range EInt"
-  and "snd (aggargs_\<omega> args) \<in> range EInt"
-  and "m \<in> valid_sumaux_maps"
-  shows "insert_sum args t m = insert_sum_comm args t m"
-  using assms plus_plus'_equiv comm_plus' by (auto simp: valid_sumaux_maps_def split:option.splits) 
+lemma insert_sum_comm: "(insert_sum args x \<circ> insert_sum args y) aux  = (insert_sum args y \<circ> insert_sum args x) aux"
+  using insert_sum_comm' by (cases aux) fastforce
 
-lemma delete_sum_equiv:
-  assumes "meval_trm (aggargs_f args) t \<in> range EInt"
-  and "snd (aggargs_\<omega> args) \<in> range EInt"
-  and "m \<in> valid_sumaux_maps"
-  shows "delete_sum args t m = delete_sum_comm args t m"
-  using assms minus_minus'_equiv comm_plus' by (auto simp: valid_sumaux_maps_def split:option.splits) 
+lemma lookup_delete: "Mapping.lookup (Mapping.delete k m) k' = (if k = k' then None else Mapping.lookup m k')"
+  by transfer auto
 
-lemma insert_sum_comm: "(insert_sum_comm args x \<circ> insert_sum_comm args y) m  = (insert_sum_comm args y \<circ> insert_sum_comm args x) m"
-  unfolding insert_sum_comm.simps Let_def
-  using comp_fun_commute_plus' comp_fun_commute.fun_left_comm[of plus'] comm_plus'
-  by(transfer) (auto split:option.splits)
+lemma delete_sum_comm': "(delete_sum args x \<circ> delete_sum args y) (v, m)  = (delete_sum args y \<circ> delete_sum args x) (v, m)"
+  by(auto simp:lookup_update' delete_update lookup_delete update_update mapping_eqI cong:option.case_cong split:event_data.splits option.splits)
 
-lemma insert_cnt_comm: "(insert_cnt args x \<circ> insert_cnt args y) m  = (insert_cnt args y \<circ> insert_cnt args x) m"
-  unfolding insert_cnt.simps Let_def by(transfer) (auto split:option.splits)
+lemma delete_sum_comm: "(delete_sum args x \<circ> delete_sum args y) aux  = (delete_sum args y \<circ> delete_sum args x) aux"
+  using delete_sum_comm' by (cases aux) fastforce
 
+lemma insert_cnt_comm: "(insert_cnt args x \<circ> insert_cnt args y) (v, m)  = (insert_cnt args y \<circ> insert_cnt args x) (v, m)"
+  apply(auto) by(transfer) (auto split:option.splits)
 
-lemma delete_sum_comm: "(delete_sum_comm args x \<circ> delete_sum_comm args y) m  = (delete_sum_comm args y \<circ> delete_sum_comm args x) m"
-  unfolding delete_sum_comm.simps Let_def
-  using comp_fun_commute_minus' comp_fun_commute.fun_left_comm[of minus'] 
-  by(transfer) (auto split:option.splits)
+lemma delete_cnt_comm:  "(delete_cnt args x \<circ> delete_cnt args y) (v, aux)  = (delete_cnt args y \<circ> delete_cnt args x) (v, aux)"
+   apply(auto) by(transfer) (auto split:option.splits)
 
-lemma delete_cnt_comm: "(delete_cnt args x \<circ> delete_cnt args y) m  = (delete_cnt args y \<circ> delete_cnt args x) m"
-  unfolding delete_cnt.simps Let_def
-  by(transfer) (auto split:option.splits)
+lemma insort_comm: "(insort a (insort b x)) = (insort b (insort a x))" 
+  by (simp add: insort_eq2 insort_left_comm)
 
+lemma insert_rank_comm': "(insert_rank args x \<circ> insert_rank args y) (v, m)  = (insert_rank args y \<circ> insert_rank args x) (v, m)"
+  apply(auto split:event_data.splits)
+  apply(auto simp:lookup_update' mapping_eqI update_update split:option.splits)
+  by(auto simp:lookup_update' mapping_eqI update_update insort_comm split: list_aux.splits)
+  (* Slow *)
+
+lemma remove1_always_comm: "(remove1_always x \<circ> remove1_always y) xs = (remove1_always y \<circ> remove1_always x) xs"
+  sorry
+
+lemma delete_rank_comm: 
+  shows "(delete_rank args x \<circ> delete_rank args y) aux  = (delete_rank args y \<circ> delete_rank args x) aux"
+  sorry
+
+lemma insert_rank_comm: "(insert_rank args x \<circ> insert_rank args y) aux  = (insert_rank args y \<circ> insert_rank args x) aux"
+  using insert_rank_comm' by (cases aux) fastforce
 
 lemma cmp_comm: 
   assumes commute_f: "comp_fun_commute f"
@@ -460,6 +513,11 @@ next
     using aux1 commute_f comp_fun_commute.fun_left_comm[of f t1 t2] by(induction n2) auto
   ultimately show ?case using Suc by auto
 qed
+
+lemma valid_finite_group_mset:
+  assumes "finite X"
+  shows "valid_finite_mset (group_multiset k b f X)"
+  using assms by(auto simp:valid_finite_mset_def ecard_def zero_enat_def)+ 
 
 lemma fold_flatten_multiset: 
   assumes finite_m: "finite M"
@@ -502,20 +560,6 @@ proof -
   qed
 qed
 
-lemma sumaux_finite_set_fold_eq:
-  assumes "\<And>a b. a \<in> X \<Longrightarrow> b \<in> valid_sumaux_maps \<Longrightarrow> f a b = g a b"
-  and "(\<And>a b. a \<in> X \<Longrightarrow>
-          b \<in> valid_sumaux_maps \<Longrightarrow>
-          g a b \<in> valid_sumaux_maps)"
-  and "finite X"
-  and "m \<in> valid_sumaux_maps"
-  shows "Finite_Set.fold f m X = Finite_Set.fold g m X"
-proof -
-  have "fold_graph f m X = fold_graph g m X" using assms fold_graph_closed_eq[of X "{m. (\<forall> k a b. (Mapping.lookup m k = Some (a, b) \<longrightarrow> b \<in> range EInt))}" f g m] 
-    by (auto simp:valid_sumaux_maps_def)
-  then show ?thesis using assms by(simp add: Finite_Set.fold_def)
-qed
-
 lemma fold_eq:
   assumes commute_f: "comp_fun_commute f"
   and comm_f: "\<And>x y. f x y = f y x"
@@ -531,12 +575,6 @@ lemma foldl_flatten_multiset:
 
 lemma length_fold: "length xs = fold (\<lambda> _ n. n + 1) xs 0"
   by (induction xs) (auto simp:fold_commute_apply)
-
-lemma plus'_iter_one_enat: "((plus') (meval_trm f elem) ^^ the_enat 1) = (plus') (meval_trm f elem)"
-  by (simp add: enat_defs(2))
-
-lemma minus'_iter_one_enat: "((minus') (meval_trm f elem) ^^ the_enat 1) = (minus') (meval_trm f elem)"
-  by (simp add: enat_defs(2))
 
 lemma other_evals_unchanged:
   assumes elem_group: "drop b elem = k"
@@ -625,11 +663,11 @@ qed
 lemma multiset_multiple_term_remove:
   assumes elem_group: "drop b elem = k"
   and old_term_eval: "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) \<noteq> {elem}"
-  and old_val: "(meval_trm f elem, y) \<in> group_multiset k b f X" 
+  and old_val: "(meval_trm f elem, enat y) \<in> group_multiset k b f X" 
   and inside: "elem \<in> X"
   and finite: "finite X"
   shows "group_multiset k b f (X - {elem}) = 
-         Set.insert (meval_trm f elem, y - 1) ((group_multiset k b f X) - {(meval_trm f elem, y)})"
+         Set.insert (meval_trm f elem, enat (y - 1)) ((group_multiset k b f X) - {(meval_trm f elem, enat y)})"
 proof (rule set_eqI, rule iffI)
   fix x
   assume x_in_M: "x \<in> group_multiset k b f (X - {elem})"
@@ -642,19 +680,19 @@ proof (rule set_eqI, rule iffI)
   then obtain elem' where elem'_def:  "elem' \<in> Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) \<and> elem \<noteq> elem'" 
     using old_term_eval by blast
   have group_ins: "new_group = old_group - {elem}" using elem_group by (auto simp: new_group_def old_group_def updated_data_def)
-  have y_card: "y = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by (auto simp: old_group_def)
+  have y_card: "enat y = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by (auto simp: old_group_def)
   have "Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group = (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group) - {elem}"
     using group_ins by fastforce
-  then have correct_card: "y - 1 = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
-    using y_card by (simp add: ecard_def elem_group enat_defs(2) inside old_group_def)
+  then have correct_card: "enat (y - 1) = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
+    using y_card by (smt (z3) Optimized_Agg.group_def card_Diff_singleton_if ecard_def elem_group enat.distinct(2) enat.inject filter_insert finite.emptyI finite.insertI finite_Diff2 insertCI insert_Diff inside old_group_def)
   obtain v' where v'_def: "(meval_trm f elem, v') \<in> group_multiset k b f updated_data" using elem'_def 
     by(simp add: updated_data_def) (metis (mono_tags) Set.member_filter imageI insert_Diff_single insert_iff)
   then have "v' = y - 1" using correct_card by (auto simp: new_group_def)
-  then have aux1: "(meval_trm f elem, y - 1) \<in> group_multiset k b f updated_data" using v'_def by auto
-  have "y \<noteq> y - 1" using y_card by (smt (z3) Diff_insert_absorb Optimized_Agg.group_def cancel_comm_monoid_add_class.diff_cancel card.insert card_Diff_singleton_if diff_add_inverse2 ecard_def elem'_def enat.inject enat_defs(2) finite_Diff finite_filter idiff_enat_enat local.finite mk_disjoint_insert old_group_def plus_1_eq_Suc zero_neq_one)
-  then have aux2: "(meval_trm f elem, y) \<notin> group_multiset k b f (updated_data)" 
-    using unique_term_multiset[of "meval_trm f elem" "y - 1" k b f updated_data y] y_card aux1 by auto
-  show "x \<in> Set.insert (meval_trm f elem, y - 1) ((group_multiset k b f X) - {(meval_trm f elem, y)})"
+  then have aux1: "(meval_trm f elem, enat (y - 1)) \<in> group_multiset k b f updated_data" using v'_def by auto
+  have "enat y \<noteq> enat (y - 1)" using y_card by (smt (z3) Diff_insert_absorb Optimized_Agg.group_def cancel_comm_monoid_add_class.diff_cancel card.insert card_Diff_singleton_if diff_add_inverse2 ecard_def elem'_def enat.inject enat_defs(2) finite_Diff finite_filter idiff_enat_enat local.finite mk_disjoint_insert old_group_def plus_1_eq_Suc zero_neq_one)
+  then have aux2: "(meval_trm f elem, enat y) \<notin> group_multiset k b f (updated_data)" 
+    using unique_term_multiset[of "meval_trm f elem" "enat (y - 1)" k b f updated_data y] y_card aux1 by auto
+  show "x \<in> Set.insert (meval_trm f elem, enat (y - 1)) ((group_multiset k b f X) - {(meval_trm f elem, enat y)})"
   proof (cases "t = meval_trm f elem")
     case True
     then have "v = y - 1" using x_in_M x_def aux1 using unique_term_multiset updated_data_def by blast
@@ -665,7 +703,7 @@ proof (rule set_eqI, rule iffI)
   qed
 next
   fix x
-  assume x_in_oldM: "x \<in> Set.insert (meval_trm f elem, y - 1) ((group_multiset k b f X) - {(meval_trm f elem, y)})"
+  assume x_in_oldM: "x \<in> Set.insert (meval_trm f elem, enat (y - 1)) ((group_multiset k b f X) - {(meval_trm f elem, enat y)})"
   then obtain t v where x_def: "x = (t, v)" by force
   define updated_data where "updated_data = X - {elem}"
   define old_group where "old_group = group k b X"
@@ -675,11 +713,11 @@ next
   then obtain elem' where elem'_def:  "elem' \<in> Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) \<and> elem \<noteq> elem'" 
     using old_term_eval by blast
   have group_ins: "new_group = old_group - {elem}" using elem_group by (auto simp: new_group_def old_group_def updated_data_def)
-  have y_card: "y = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by (auto simp: old_group_def)
+  have y_card: "enat y = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by (auto simp: old_group_def)
   have "Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group = (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group) - {elem}"
     using group_ins by fastforce
-  then have correct_card: "y - 1 = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
-    using y_card by (simp add: ecard_def elem_group enat_defs(2) inside old_group_def)
+  then have correct_card: "enat (y - 1) = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
+    using y_card by (smt (z3) Optimized_Agg.group_def Set.member_filter card_Diff_singleton_if ecard_def elem_group enat.distinct(1) enat.inject finite.emptyI finite_Diff2 finite_insert inside old_group_def)
   obtain v' where v'_def: "(meval_trm f elem, v') \<in> group_multiset k b f updated_data" using elem'_def 
     by(simp add: updated_data_def) (metis (mono_tags) Set.member_filter imageI insert_Diff_single insert_iff)
   then have "v' = y - 1" using correct_card by (auto simp: new_group_def)
@@ -699,11 +737,11 @@ qed
 lemma multiset_old_term_insert:
   assumes elem_group: "drop b elem = k"
   and old_term_eval: "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) \<noteq> {}"
-  and old_val: "(meval_trm f elem, y) \<in> group_multiset k b f X" 
+  and old_val: "(meval_trm f elem, enat n) \<in> group_multiset k b f X" 
   and disjoint: "elem \<notin> X"
   and finite: "finite X"
   shows "group_multiset k b f (Set.insert elem X) = 
-         Set.insert (meval_trm f elem, y + 1) ((group_multiset k b f X) - {(meval_trm f elem, y)})"
+         Set.insert (meval_trm f elem, enat (n + 1)) ((group_multiset k b f X) - {(meval_trm f elem, enat n)})"
 proof (rule set_eqI, rule iffI)
   fix x
   assume x_in_M: "x \<in> group_multiset k b f (Set.insert elem X)"
@@ -713,20 +751,20 @@ proof (rule set_eqI, rule iffI)
   define new_group where [simp]: "new_group = group k b updated_data"
   define old_evals where "old_evals = meval_trm f ` old_group"
   have group_ins: "new_group = Set.insert elem old_group" using elem_group by auto
-  have y_card: "y = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by auto
+  have y_card: "enat n = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by auto
   moreover have "Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) (Set.insert elem (Set.filter (\<lambda>x. drop b x = k) X)) =
                  Set.insert elem  (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) (Set.filter (\<lambda>x. drop b x = k) X))" by auto
   moreover have "elem \<notin> Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) (Set.filter (\<lambda>x. drop b x = k) X)" by (meson Set.member_filter disjoint)
-  ultimately have correct_card: "y + 1 = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
-    using eSuc_enat plus_1_eSuc(2) group_ins by(auto simp: ecard_def) 
-  then have aux1: "(meval_trm f elem, y + 1) \<in> group_multiset k b f (Set.insert elem X)" using group_ins by auto
-  have aux2: "(meval_trm f elem, y) \<notin> group_multiset k b f (Set.insert elem X)" 
-    using unique_term_multiset[of "meval_trm f elem" "y + 1" k b f updated_data y] aux1 y_card
-    by simp (meson ecard_def finite_filter finite valid_maggaux.simps)
-  show "x \<in> Set.insert (meval_trm f elem, y + 1) ((group_multiset k b f X) - {(meval_trm f elem, y)})"
+  ultimately have correct_card: "enat (n + 1) = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
+    using eSuc_enat plus_1_eSuc(2) group_ins by(auto simp: ecard_def) (metis enat.distinct(2))
+  then have aux1: "(meval_trm f elem, enat(n + 1)) \<in> group_multiset k b f (Set.insert elem X)" using group_ins by auto
+  have aux2: "(meval_trm f elem, enat n) \<notin> group_multiset k b f (Set.insert elem X)" 
+    using unique_term_multiset[of "meval_trm f elem" "enat (n + 1)" k b f updated_data "enat n"] aux1 y_card
+    by simp (smt (z3) the_enat.simps)
+  show "x \<in> Set.insert (meval_trm f elem, enat (n + 1)) ((group_multiset k b f X) - {(meval_trm f elem, enat n)})"
   proof (cases "t = meval_trm f elem")
     case True
-    then have "v = y + 1" using x_in_M x_def aux1 using unique_term_multiset by blast
+    then have "v = enat (n + 1)" using x_in_M x_def aux1 using unique_term_multiset by blast
     then show ?thesis using x_def x_in_M True by auto
   next
     case False
@@ -735,24 +773,24 @@ proof (rule set_eqI, rule iffI)
   qed
 next
   fix x
-  assume x_in_oldM: "x \<in> Set.insert (meval_trm f elem, y + 1) ((group_multiset k b f X) - {(meval_trm f elem, y)})"
+  assume x_in_oldM: "x \<in> Set.insert (meval_trm f elem, enat (n + 1)) ((group_multiset k b f X) - {(meval_trm f elem, enat n)})"
   then obtain t v where x_def: "x = (t, v)" by force
   define updated_data where [simp]: "updated_data = X \<union> {elem}"
   define old_group where [simp]: "old_group = group k b X"
   define new_group where [simp]: "new_group = group k b updated_data"
   define old_evals where "old_evals = meval_trm f ` old_group"
   have group_ins: "new_group = Set.insert elem old_group" using elem_group by auto
-  have y_card: "y = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by auto
+  have y_card: "enat n = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) old_group)" using old_val by auto
   moreover have "Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) (Set.insert elem (Set.filter (\<lambda>x. drop b x = k) X)) =
                  Set.insert elem  (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) (Set.filter (\<lambda>x. drop b x = k) X))" by auto
   moreover have "elem \<notin> Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) (Set.filter (\<lambda>x. drop b x = k) X)" by (meson Set.member_filter disjoint)
-  ultimately have correct_card: "y + 1 = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
-    using eSuc_enat plus_1_eSuc(2) group_ins by(auto simp: ecard_def) 
-  then have aux1: "(meval_trm f elem, y + 1) \<in> group_multiset k b f (Set.insert elem X)" using group_ins by auto
+  ultimately have correct_card: "enat (n + 1) = ecard (Set.filter (\<lambda>xa. meval_trm f xa = meval_trm f elem) new_group)" 
+    using eSuc_enat plus_1_eSuc(2) group_ins by(auto simp: ecard_def) (metis enat.distinct(2))
+  then have aux1: "(meval_trm f elem, enat (n + 1)) \<in> group_multiset k b f (Set.insert elem X)" using group_ins by auto
   show "x \<in> group_multiset k b f (Set.insert elem X)" 
   proof (cases "t = meval_trm f elem")
     case True
-    then have "v = y + 1" using x_in_oldM x_def by (metis DiffE insertE old.prod.inject old_val singleton_iff unique_term_multiset)
+    then have "v = enat (n + 1)" using x_in_oldM x_def by (metis DiffE insertE old.prod.inject old_val singleton_iff unique_term_multiset)
     then show ?thesis using True aux1 x_def by blast
   next
     case False
@@ -796,23 +834,22 @@ next
       ultimately show ?thesis using both_finite length_flatten_multiset by (simp add: enat_defs(2) length_flatten_multiset)
     next
       case False
-      then obtain y where y_def: "(meval_trm f elem, y) \<in> old_M" 
-        by (smt (z3) Collect_empty_eq Set.filter_def image_eqI old_M_def)
-      then obtain xa where xa_def: "y = ecard (Set.filter (\<lambda>x. meval_trm f x = meval_trm f xa) (Set.filter (\<lambda>x. drop b x = drop b xa) F))" 
-        by(auto)
+      then obtain n where n_def: "(meval_trm f elem, enat n) \<in> old_M" 
+        using valid_finite_group_mset[OF assms, of k b f] by(auto) (smt (z3) ecard_def filter_insert finite_filter image_insert insert.hyps(1) insertI1 mk_disjoint_insert)
+      then obtain xa where xa_def: "enat n = ecard (Set.filter (\<lambda>x. meval_trm f x = meval_trm f xa) (Set.filter (\<lambda>x. drop b x = drop b xa) F))" 
+        by auto
       have aux1: "finite (Set.filter (\<lambda>x. meval_trm f x = meval_trm f xa) (Set.filter (\<lambda>x. drop b x = drop b xa) F))" using insert by auto
-      then obtain i where i_def: "y = i" by auto
-      have finite_remove: "finite (old_M - {(meval_trm f elem, y)})" using both_finite finite_Diff  by (auto simp: Set.remove_def)
-      have finite_insert: "finite (Set.insert (meval_trm f elem, y) old_M)" using both_finite by blast
-      have M_insert_remove_def: "M = Set.insert (meval_trm f elem, y + 1) (old_M - {(meval_trm f elem, y)})" 
-        using multiset_old_term_insert group_elem False y_def insert
+      have finite_remove: "finite (old_M - {(meval_trm f elem, enat n)})" using both_finite finite_Diff  by (auto simp: Set.remove_def)
+      have finite_insert: "finite (Set.insert (meval_trm f elem, enat n) old_M)" using both_finite by blast
+      have M_insert_remove_def: "M = Set.insert (meval_trm f elem, enat (n + 1)) (old_M - {(meval_trm f elem, enat n)})" 
+        using multiset_old_term_insert group_elem False n_def insert
         by(simp only: M_def old_M_def group_def old_group_def updated_data_def group_multiset_def Let_def Optimized_Agg.group_def) auto
-      then have aux: "length(flatten_multiset(Set.insert (meval_trm f elem, y) old_M)) = length(flatten_multiset(old_M - {(meval_trm f elem, y)})) + i" 
-        using both_finite finite_insert finite_remove Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m) y. y + the_enat m" old_M 0 "(meval_trm f elem, y)"]
-        by (simp only: length_flatten_multiset) (metis aux1 comp_fun_commute_axioms ecard_def i_def old.prod.case plus_enat_simps(1) the_enat.simps xa_def)
-      have "(meval_trm f elem, y + 1) \<notin> old_M - {(meval_trm f elem, y)}" using y_def by auto
-      then show ?thesis using both_finite finite_remove M_insert_remove_def i_def Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m) y. y + the_enat m" "old_M - {(meval_trm f elem, y)}" "(meval_trm f elem, y + 1)" 0]
-        by (smt (z3) add.commute add.left_commute aux1 case_prod_conv comp_fun_commute_axioms ecard_def fold_insert_remove insert_absorb length_flatten_multiset one_enat_def plus_enat_simps(1) the_enat.simps xa_def y_def)
+      then have aux: "length(flatten_multiset(Set.insert (meval_trm f elem, enat n) old_M)) = length(flatten_multiset(old_M - {(meval_trm f elem, enat n)})) + n" 
+        using both_finite finite_insert finite_remove Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m) y. y + the_enat m" old_M 0 "(meval_trm f elem, enat n)"]
+        by (simp only: length_flatten_multiset) (metis comp_fun_commute_axioms old.prod.case the_enat.simps)
+      have "(meval_trm f elem, enat (n + 1)) \<notin> old_M - {(meval_trm f elem, enat n)}" using n_def old_M_def by force
+      then show ?thesis using both_finite finite_remove M_insert_remove_def Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m) y. y + the_enat m" "old_M - {(meval_trm f elem, enat n)}" "(meval_trm f elem, enat (n + 1))" 0]
+        by (smt (z3) add.commute add.left_commute aux1 case_prod_conv comp_fun_commute_axioms ecard_def fold_insert_remove insert_absorb length_flatten_multiset one_enat_def plus_enat_simps(1) the_enat.simps xa_def n_def)
     qed
     moreover have "group = Set.insert elem old_group"
       using True insert by(auto) 
@@ -825,810 +862,854 @@ next
   qed
 qed
 
-lemma foldl_eint_equival: 
-  assumes "set X \<subseteq> range EInt"
-  and "y0 \<in> range EInt"
-  shows "foldl (+) y0 X = foldl (plus') y0 X"
-  using assms
-proof(induction X arbitrary: y0)
-case Nil
-  then show ?case by auto
-next
-  case (Cons a X)
-  then show ?case using Cons by auto
+lemma length_mset_eq:
+  assumes "\<And> t m. ((t, m) \<in> s \<Longrightarrow> g t \<in> range Some)"
+  and "valid_finite_mset s"
+  shows "size (mset_conv g s) = length (flatten_multiset s)"
+proof -
+  obtain c where c_def: "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
+    by (simp add: ID_def ccompare_prod_def ccompare_event_data_def ccompare_enat_def split:if_splits option.splits)
+  interpret linorder "le_of_comp c" "lt_of_comp c"
+    using ID_ccompare[OF c_def] by auto
+  interpret comp_fun_commute "\<lambda>(t, m) y. y + the_enat m"
+    by unfold_locales auto
+  have "finite s" using assms(2) by (simp add:valid_finite_mset_def)
+  then show ?thesis using assms(1-2) 
+  proof(induction s)
+    case empty
+    then show ?case by(simp add:flatten_multiset_def csorted_list_of_set_def c_def mset_conv_def)
+  next
+    case (insert x F)
+    then have *: "finite (Set.insert x F)" by auto
+    have length_eq: "length (flatten_multiset F) = size (mset_conv g F)" using insert by(auto) (metis insertI2 valid_finite_mset_def)
+    obtain t i where [simp]: "x = (t, enat i)" using insert(5) by(simp add:valid_finite_mset_def) (metis surj_pair) 
+    then obtain k where "g t = Some k" using insert(4) by auto
+    then show ?case using length_flatten_multiset[OF *] fold_insert[OF insert(1-2)] length_eq 
+      Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of g] insert(1-2)] 
+      length_flatten_multiset[OF insert(1)] by(simp add:mset_conv_def)
+  qed
 qed
 
-lemma finite_set_fold_int:
-  assumes "finite M" and "\<And>t m. (t, m) \<in> M \<Longrightarrow> t \<in> range EInt" and "y0 \<in> range EInt"
-  shows "(Finite_Set.fold (\<lambda>(t, m). plus' t ^^ the_enat m) y0 M) \<in> range EInt"
-  using assms
-proof(induction M)
-case empty
-  then show ?case by auto
-next
-  case (insert x F)
-  then obtain t m where x_def: "x = (t, m)" by (meson surj_pair)
-  have "t \<in> range EInt" using assms(2) insert x_def by blast
-  moreover have plus'_comp_commute: "comp_fun_commute (\<lambda>(t, m) y. ((plus' t) ^^ (the_enat m)) y)"
-    using cmp_comm[of plus'] comp_fun_commute_plus' by(unfold_locales) auto
-  ultimately show ?case 
-    using x_def iter_plus'_int insert Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m) y. ((plus' t) ^^ (the_enat m)) y" F x]  by auto metis
-qed
+lemma foldl_unpack_eq:
+  assumes "set xs \<subseteq> range EInt"
+  shows "foldl plus k (map (\<lambda>k. (the (unpack_int k))) xs) = the (unpack_int (foldl plus (EInt k) xs))"
+  using assms by(induction xs arbitrary:k) (auto simp:unpack_int_def)
+
+lemma insort_mset:
+  shows "mset (insort a xs) = add_mset a (mset xs)" by (simp add: insort_eq)
 
 lemma valid_insert_sum_unfolded:
-  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m) X" 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, SumAux m) X" 
   and disjoint: "elem \<notin> X"
-  and type_restr: "type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> {elem}"
-  shows "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
-        (SumAux (insert_sum \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m)) (X \<union> {elem})"
+  shows "let (v', m') = insert_sum \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem (v, m) in
+      valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v', SumAux m') (X \<union> {elem})"
 proof - 
-  define updated_map where [simp]: "updated_map = insert_sum \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m"
-  define updated_data where [simp]: "updated_data = X \<union> {elem}"
-  interpret comp_fun_commute "\<lambda>(t, m) y. y + the_enat m" 
-    by(unfold_locales) auto
-  have len_commute: "comp_fun_commute (\<lambda>(t, m) y. y + the_enat m)" by unfold_locales
-  have plus'_comp_commute: "comp_fun_commute (\<lambda>(t, m) y. ((plus' t) ^^ (the_enat m)) y)"
-    using cmp_comm[of plus'] comp_fun_commute_plus' by(unfold_locales) auto
-  have valid_finite: "finite updated_data" using valid_before by auto
-  have valid_key_invariant: "\<And>k. k \<in> (drop b) ` updated_data \<longleftrightarrow> k \<in> Mapping.keys updated_map"
-  proof (rule iffI)
-    fix k
-    assume assm: "k \<in> (drop b) ` updated_data"
-    show "k \<in>  Mapping.keys updated_map"
-      using valid_before assm
-      by (cases "k \<in> (drop b) ` X") (auto split:option.splits)
-  next
-    fix k
-    assume assm: "k \<in> Mapping.keys updated_map"
-    show "k \<in> (drop b) ` updated_data"
-      using valid_before assm
-      by (cases "k \<in> Mapping.keys m") (auto split:option.splits)
-  qed
-  have valid_value_invariant: "\<And>k. k \<in> Mapping.keys updated_map \<longrightarrow> Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
-           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group;
-           M_list = flatten_multiset M;
-           aggtype = fst \<omega>;
-           y0 = (if aggtype = Formula.Agg_Sum then snd \<omega> else EInt 0)
-          in Some (length M_list, foldl plus y0 M_list))"
-  proof rule
-    fix k
-    define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) updated_data"
-    define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-    define old_group where [simp]: "old_group = Set.filter (\<lambda>x. drop b x = k) X"
-    define old_M where [simp]: "old_M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) old_group))) ` meval_trm f ` old_group"
-    define old_evals where "old_evals = meval_trm f ` old_group"
-    define y0 where [simp]: "y0 = (if fst \<omega>  = Formula.Agg_Sum then snd \<omega> else EInt 0)"
-    define term' where [simp]: "term' = meval_trm f elem"
-    assume assm: "k \<in> Mapping.keys updated_map"
-    have finite: "finite M" using valid_before by auto
-    have y0_int: "y0 \<in> range EInt" using type_restr valid_before by (auto simp: type_restr_def)
-    have multiset_int: "\<And>t m. (t, m) \<in> M \<Longrightarrow> t \<in> range EInt" using type_restr valid_before by (auto simp: type_restr_def image_subset_iff)  
-    then have M_int: "set (flatten_multiset M) \<subseteq> range EInt" using flatten_multiset_eint[of M] finite by auto
-    have old_multiset_int: "\<And>t m. (t, m) \<in> old_M \<Longrightarrow> t \<in> range EInt" using type_restr valid_before by (auto simp: type_restr_def image_subset_iff)  
-    then have M_old_int: "set (flatten_multiset old_M) \<subseteq> range EInt" using flatten_multiset_eint[of old_M] finite valid_before by auto
-    show "Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
-           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group;
-           M_list = flatten_multiset M;
-           aggtype = fst \<omega>;
-           y0 = (if aggtype = Formula.Agg_Sum then snd \<omega> else EInt 0)
-          in Some (length M_list, foldl plus y0 M_list))"
-    proof (cases "k \<in> Mapping.keys m")
-      case False
-      then have map_val: "Mapping.lookup updated_map k = Some (1, y0 + term')" 
-        using assm valid_before by (auto simp: keys_is_none_rep lookup_update' split:option.splits)
-      have "drop b elem = k" 
-        using assm False 
-        by(auto simp: split:option.splits)
-      then have group_single_elem: "group = {elem}" 
-        using False valid_before image_iff
-        by auto fastforce+
-      then have M_single: "M = Set.insert (meval_trm f elem, enat 1) {}"
-        using group_single_elem unfolding M_def Set.filter_def ecard_def by (auto cong: conj_cong)
-      then have correct_len: "length(flatten_multiset(M)) = 1" 
-        using length_flatten_multiset[of M] Finite_Set.comp_fun_commute.fold_insert by simp
-      have "foldl plus y0 (flatten_multiset M) = foldl (plus') y0 (flatten_multiset M)"
-        using foldl_eint_equival y0_int M_int by auto
-      moreover have "foldl (plus') y0 (flatten_multiset M) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M"
-        using foldl_flatten_multiset[of M plus' y0] comp_fun_commute_plus' comm_plus'  finite by auto
-      moreover have "Finite_Set.fold (\<lambda>(t, m). plus' t ^^ the_enat m) y0 (Set.insert (meval_trm f elem, enat 1) {}) = plus' y0 term'"
-        using  Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m). plus' t ^^ the_enat m"] finite plus'_comp_commute comm_plus' by auto
-      moreover have "meval_trm f elem \<in> range EInt" using valid_before multiset_int M_single by blast
-      ultimately have "foldl plus y0 (flatten_multiset(M)) = y0 + term'" using M_single y0_int by force
-      then show ?thesis using map_val correct_len by simp
-    next
-      case True
-      then have in_map: "k \<in> Mapping.keys m" by auto
-      show ?thesis
+  let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+  let ?new_data = "(X \<union> {elem})"
+  obtain v' m' where ins_def: "(v', m') = insert_sum ?args elem (v, m)" by (metis surj_pair)
+  interpret comp_fun_commute "((+)::(integer \<Rightarrow> integer \<Rightarrow> integer))"  
+    by unfold_locales auto
+  show ?thesis
+  proof(cases v')
+    case True
+    then have valid: "v = True" using ins_def by auto (metis Pair_inject)
+    then obtain i where i_def: "meval_trm f elem = EInt i" using True ins_def by(auto split:event_data.splits option.splits)
+    then have new_map_def: "m' = Mapping.update (drop b elem) (case Mapping.lookup m (drop b elem) of
+                         Some (c, s) \<Rightarrow> (c + 1, s + i) |
+                         None \<Rightarrow> (1, i)) m"
+      using ins_def valid i_def by(auto cong:option.case_cong split:option.splits)
+    have finite_X: "finite X" using valid valid_before by auto
+    then have valid_finite: "finite ?new_data" by auto
+    have valid_aggtype: "fst \<omega> = Formula.Agg_Sum \<or> fst \<omega> = Formula.Agg_Avg" using valid_before valid by auto
+    have valid_type_restr: "type_restr ?args (Set.insert elem X)" using valid_before valid i_def by(auto simp:type_restr_def)
+    have valid_key_invariant: "\<And>k. k \<in> (drop b) ` ?new_data \<longleftrightarrow> k \<in> Mapping.keys m'"
+      using valid_before valid new_map_def by simp
+    have valid_value_invariant: "\<And>k. k \<in> Mapping.keys m' \<longrightarrow> Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
+           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+          in Some (size (int_mset_conv M), fold_mset (+) 0 (int_mset_conv M)))"
+    proof rule
+      fix k
+      assume k_in: "k \<in> Mapping.keys m'"
+      let ?M = "group_multiset k b f ?new_data"
+      let ?old_M = "group_multiset k b f X"
+      have "(meval_trm f) ` ?new_data \<subseteq> range EInt" using valid_before valid i_def
+        by(auto simp:type_restr_def image_subset_iff)
+      then have "(\<And>t m. (t, m) \<in> (group_multiset k b f ?new_data) \<Longrightarrow> t \<in> range EInt)" by fastforce
+      then have type_restr: "set (flatten_multiset (group_multiset k b f ?new_data)) \<subseteq> range EInt"
+        using flatten_multiset_range[of _ EInt] valid_finite by auto
+      have finite_old_M: "finite ?old_M" using finite_filter finite_imageI valid_finite by auto
+      show "Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
+           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+          in Some (size (int_mset_conv M), fold_mset (+) 0 (int_mset_conv M)))"
       proof(cases "drop b elem = k")
         case True
-        then have elem_group: "drop b elem = k" by auto
-        then have newgroup_def: "group = Set.insert elem old_group" by auto
-        have both_finite: "finite old_M \<and> finite M" using valid_before by auto
-        obtain len sum where lookup_val: "Mapping.lookup m k = Some(len, sum)" 
-          by (metis domIff in_map keys_dom_lookup not_Some_eq prod.exhaust_sel)
-        have len_def: "len = length(flatten_multiset(old_M))" using lookup_val in_map valid_before by auto
-        moreover have sum_def: "sum = foldl plus y0 (flatten_multiset old_M)" using lookup_val in_map valid_before by auto
-        ultimately have "Mapping.lookup updated_map k = Some (len + 1, sum + term')"
-          using lookup_val True by(simp add: lookup_update)
-        moreover have "length(flatten_multiset(M)) = length(flatten_multiset(old_M)) + 1"
-        proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) old_group = {}")
-          case True
-          then have "M = Set.insert (meval_trm f elem, 1) old_M" using multiset_new_term_insert elem_group by simp
-          moreover have "(meval_trm f elem, 1) \<notin> old_M" using True by auto
-          ultimately show ?thesis using both_finite by (auto simp:length_flatten_multiset one_enat_def)
+        then have k_def: "drop b elem = k" by auto 
+        show ?thesis
+        proof(cases "Mapping.lookup m k")
+          case None
+          then have *: "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {}" "?old_M = {}"
+            using valid_before valid by(auto) (metis domIff keys_dom_lookup rev_image_eqI)+
+          have M_single: "?M = Set.insert (meval_trm f elem, enat 1) {}"
+            using multiset_new_term_insert[OF True *(1)] *(2) by (simp add: one_enat_def)
+          then have valid_size: "size (int_mset_conv ?M) = 1"
+            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int]] i_def
+            by(simp add:int_mset_conv_def mset_conv_def unpack_int_def)
+          then have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = i"
+            using M_single Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int]] i_def
+            by(simp add:int_mset_conv_def mset_conv_def unpack_int_def)
+          then show ?thesis using valid_size valid_fold new_map_def None True lookup_update'[of _ _ m] by simp
         next
-          case False
-          then obtain y where y_def: "(meval_trm f elem, y) \<in> old_M" 
-            by (smt (z3) Collect_empty_eq Set.filter_def image_eqI old_M_def)
-          then obtain i where i_def: "y = enat i" 
-            by (smt (z3) Pair_inject ecard_def finite_filter image_iff old_M_def old_group_def valid_before valid_maggaux.simps)
-          have finite_remove: "finite (old_M - {(meval_trm f elem, y)})" using both_finite finite_Diff  by (auto simp: Set.remove_def)
-          have finite_insert: "finite (Set.insert (meval_trm f elem, y) old_M)" using both_finite by blast
-          have M_insert_remove_def: "M = Set.insert (meval_trm f elem, y + 1) (old_M - {(meval_trm f elem, y)})" 
-            using multiset_old_term_insert[of b elem k f X y] elem_group False y_def valid_before disjoint
-            by(simp only: M_def old_M_def group_def old_group_def updated_data_def group_multiset_def Let_def Optimized_Agg.group_def) auto          
-          then have aux: "length(flatten_multiset(Set.insert (meval_trm f elem, y) old_M)) = length(flatten_multiset(old_M - {(meval_trm f elem, y)})) + i" 
-            using both_finite length_flatten_multiset finite_insert i_def len_commute
-            Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m) y. y + the_enat m" old_M 0 "(meval_trm f elem, y)"] by auto
-          have "(meval_trm f elem, y + 1) \<notin> old_M - {(meval_trm f elem, y)}" using y_def by auto
-          then show ?thesis using len_commute both_finite finite_remove M_insert_remove_def i_def Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m) y. y + the_enat m" "old_M - {(meval_trm f elem, y)}" "(meval_trm f elem, y + 1)" 0]
-            by (metis (mono_tags, lifting) aux case_prod_conv group_cancel.add1 insert_absorb length_flatten_multiset one_enat_def plus_enat_simps(1) the_enat.simps y_def)
+          case (Some a)
+          then obtain len sum where [simp]: "a = (len, sum)" by (meson surj_pair)
+          have k_in_old: "k \<in> Mapping.keys m" using Some by (simp add: keys_is_none_rep)
+          have a_def: "len = size (int_mset_conv ?old_M)" "sum = fold_mset (+) 0 (int_mset_conv ?old_M)" 
+            using valid valid_before Some new_map_def k_in_old by auto
+          then show ?thesis 
+          proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {}")
+            case True
+            then have not_in: "(meval_trm f elem, 1) \<notin> ?old_M" by auto
+            have M_def: "?M = Set.insert (meval_trm f elem, 1) ?old_M" 
+              using multiset_new_term_insert[OF k_def True] by simp
+            then have valid_size: "size (int_mset_conv ?M) = len + 1"
+              using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(1)
+              by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+            have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = sum + i"
+              using M_def Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(2)
+              by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+            show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def lookup_update)
+          next
+            case False
+            then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
+              using valid_finite_group_mset[of X k b f] k_def by(auto simp add:valid_finite_mset_def) (metis (mono_tags, lifting) Set.member_filter finite_Un imageI valid_finite)
+            then have not_in: "(meval_trm f elem, enat (n + 1)) \<notin> ?old_M" using unique_term_multiset[OF n_def] by auto
+            have valid_unpack: "unpack_int (meval_trm f elem) \<in> range Some" using i_def by(simp add: unpack_int_def)
+            have M_insert_remove_def: "?M = Set.insert (meval_trm f elem, enat (n + 1)) (?old_M - {(meval_trm f elem, enat n)})" 
+              using multiset_old_term_insert[OF k_def False n_def disjoint finite_X] by simp
+            then have mset_conv_eq: "int_mset_conv ?M = add_mset i (int_mset_conv ?old_M)" 
+              using mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of unpack_int] valid_unpack i_def
+              by(simp add:int_mset_conv_def unpack_int_def)
+            have valid_size: "size (int_mset_conv ?M) = len + 1"
+              using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(1)
+              by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+            moreover have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = sum + i"
+              using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(2)
+              by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+            ultimately show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def lookup_update)
+          qed
         qed
-        
-        moreover have "foldl plus y0 (flatten_multiset M) = (foldl plus y0 (flatten_multiset old_M)) + term'"
-        proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) old_group = {}")
-          case True
-          then have "M = Set.insert (meval_trm f elem, 1) old_M" using multiset_new_term_insert elem_group by simp
-          moreover have "(meval_trm f elem, 1) \<notin> old_M" using True by auto
-          moreover have "foldl (+) y0 (flatten_multiset M) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M"
-            using foldl_flatten_multiset foldl_eint_equival M_int y0_int both_finite comm_plus' comp_fun_commute_plus' by(simp)
-          moreover have "foldl (+) y0 (flatten_multiset old_M) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 old_M" 
-            using foldl_flatten_multiset foldl_eint_equival M_old_int y0_int both_finite comm_plus' comp_fun_commute_plus' by simp
-          moreover have "(Finite_Set.fold (\<lambda>(t, m). plus' t ^^ the_enat m) y0 old_M) \<in> range EInt" 
-            using finite_set_fold_int  both_finite old_multiset_int y0_int by blast
-          moreover have "meval_trm f elem \<in> range EInt" using calculation(1) multiset_int by blast
-          ultimately show ?thesis
-            using  both_finite plus_plus'_equiv plus'_iter_one_enat plus'_comp_commute type_restr comm_plus'
-              Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m). (plus') t ^^ the_enat m"] by simp
-        next
-          case False
-          then obtain y where y_def: "(meval_trm f elem, y) \<in> old_M" 
-            by (smt (z3) Collect_empty_eq Set.filter_def image_eqI old_M_def)
-          then obtain i where i_def: "y = enat i" 
-            by (smt (z3) Pair_inject ecard_def finite_filter image_iff old_M_def old_group_def valid_before valid_maggaux.simps)
-          have finite_remove: "finite (old_M - {(meval_trm f elem, y)})" using both_finite finite_Diff  by (auto simp: Set.remove_def)
-          have finite_insert: "finite (Set.insert (meval_trm f elem, y) old_M)" using both_finite by blast
-          have M_insert_remove_def: "M = Set.insert (meval_trm f elem, y + 1) (old_M - {(meval_trm f elem, y)})" 
-            using multiset_old_term_insert[of b elem k f X y] elem_group False y_def valid_before disjoint
-            by(simp only: M_def old_M_def group_def old_group_def updated_data_def group_multiset_def Let_def Optimized_Agg.group_def) auto 
-          have foldl_plus_plus'_equiv: "foldl (+) y0 (flatten_multiset M) = foldl (plus') y0 (flatten_multiset M)" using foldl_eint_equival M_int y0_int by auto
-          have aux1: "foldl (plus') y0 (flatten_multiset (Set.insert (term', y) old_M)) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 (Set.insert (term', y) old_M)"
-            using foldl_flatten_multiset[of "Set.insert (term', y) old_M" plus' y0] finite_insert comp_fun_commute_plus' comm_plus' by auto
-          moreover have foldl_remove_equiv: "foldl plus' y0 (flatten_multiset(old_M - {(term', y)})) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 (old_M - {(term', y)})"
-            using foldl_flatten_multiset[of "old_M - {(term', y)}" plus' y0] finite_insert comp_fun_commute_plus' comm_plus' by auto
-          ultimately have aux: "foldl plus' y0 (flatten_multiset(Set.insert (term', y) old_M)) = ((plus' term') ^^ (the_enat y)) (foldl plus' y0 (flatten_multiset(old_M - {(term', y)})))" 
-            using  finite_insert plus'_comp_commute Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m). (plus') t ^^ the_enat m"] by auto
-          moreover have term'_int: "term' \<in> range EInt" using old_multiset_int term'_def y_def by blast
-          moreover have "foldl plus' y0 (flatten_multiset(old_M - {(term', y)})) \<in> range EInt" 
-            using foldl_remove_equiv by (metis DiffD1 finite_remove finite_set_fold_int old_multiset_int term'_def y0_int)
-          ultimately have aux: "foldl plus' y0 (flatten_multiset(old_M - {(term', y)})) = ((minus' term') ^^ (the_enat y)) (foldl plus' y0 (flatten_multiset(old_M)))"
-            using plus'_minus'_id by (metis comp_apply insert_absorb term'_def y_def)
-          moreover have "(term', y + 1) \<notin> old_M - {(term', y)}" using y_def by auto
-          ultimately have "Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M = ((plus' term') ^^ (i + 1)) (((minus' term') ^^ i) (foldl plus' y0 (flatten_multiset(old_M))))"
-            using Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m). plus' t ^^ the_enat m"] plus'_comp_commute finite_remove i_def
-            by(simp only: M_insert_remove_def term'_def) (metis (no_types, lifting) case_prod_conv foldl_remove_equiv one_enat_def plus_enat_simps(1) term'_def the_enat.simps)
-          moreover have "foldl (plus') y0 (flatten_multiset(M)) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M"
-            using foldl_flatten_multiset[of M plus' y0] both_finite comp_fun_commute_plus' comm_plus' by auto
-          ultimately have "foldl (plus') y0 (flatten_multiset(M)) = plus' term' (foldl plus' y0 (flatten_multiset(old_M)))"
-            using aux1 by (smt (z3) add.commute aux comp_eq_dest_lhs comp_fun_commute.fold_insert comp_fun_commute.fold_insert_remove finite_remove foldl_remove_equiv funpow_add i_def insert_Diff insert_Diff_single old.prod.case one_enat_def plus'_comp_commute plus'_iter_one_enat term'_def the_enat.simps y_def)
-          moreover have "foldl plus' y0 (flatten_multiset(old_M)) \<in> range EInt" 
-            by (metis aux1 both_finite finite_set_fold_int insert_absorb old_multiset_int term'_def y0_int y_def)
-          ultimately show ?thesis 
-            using plus_plus'_equiv foldl_plus_plus'_equiv term'_int M_old_int comm_plus' foldl_eint_equival y0_int by auto
-        qed
-        ultimately show ?thesis using len_def sum_def by auto
       next
         case False
-        then have same_group: "group = old_group" by auto
-        then have "M = old_M" by auto
-        then have "Mapping.lookup updated_map k = Mapping.lookup m k" 
-          using False by (auto split:option.splits simp: lookup_update')
-        then show ?thesis using valid_before same_group in_map 
-          by auto
+        then show ?thesis using new_map_def lookup_update'[of _ _ m] valid_before 
+            valid k_in filter_insert[of "(\<lambda>x. drop b x = k)"] by(auto split:option.splits)
       qed
     qed
+    have "valid_maggaux ?args (v', SumAux m') (X \<union> {elem})" 
+      using valid_finite valid_aggtype valid_type_restr valid_key_invariant valid_value_invariant by auto
+    then show ?thesis using ins_def  by(simp only:Let_def) fastforce  
+  next
+    case False
+    then show ?thesis using ins_def[symmetric] by simp
   qed
-  have valid_type_restr: "type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (Set.insert elem X)"
-    using valid_before type_restr by (auto simp:type_restr_def)
-  show ?thesis using valid_value_invariant valid_key_invariant valid_finite valid_before valid_type_restr
-    by auto
 qed
 
 lemma valid_insert_cnt_unfolded: 
-  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (CntAux m) X" 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, CntAux m) X" 
   and disjoint: "elem \<notin> X"
-  shows "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
-        (CntAux (insert_cnt \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m)) (X \<union> {elem})"
+  shows "let (v', m') = insert_cnt \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem (v, m) in
+      valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v', CntAux m') (X \<union> {elem})"
 proof - 
-  define updated_map where [simp]: "updated_map = insert_cnt \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m"
-  define updated_data where [simp]: "updated_data = X \<union> {elem}"
-  interpret comp_fun_commute "\<lambda>(t, m) y. y + the_enat m" 
-    by(unfold_locales) auto
-  have valid_finite: "finite updated_data" using valid_before by auto
-  have valid_key_invariant: "\<And>k. k \<in> (drop b) ` updated_data \<longleftrightarrow> k \<in> Mapping.keys updated_map"
-  proof (rule iffI)
-    fix k
-    assume assm: "k \<in> (drop b) ` updated_data"
-    show "k \<in>  Mapping.keys updated_map"
-      using valid_before assm
-      by (cases "k \<in> (drop b) ` X") (auto split:option.splits)
-  next
-    fix k
-    assume assm: "k \<in> Mapping.keys updated_map"
-    show "k \<in> (drop b) ` updated_data"
-      using valid_before assm
-      by (cases "k \<in> Mapping.keys m") (auto split:option.splits)
-  qed
-  have valid_value_invariant: "\<And>k. k \<in> Mapping.keys updated_map \<longrightarrow> Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
+  let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+  let ?new_data = "(X \<union> {elem})"
+  obtain v' m' where ins_def: "(v', m') = insert_cnt ?args elem (v, m)" by (metis insert_cnt.simps(1))
+  show ?thesis
+  proof(cases v')
+    case True
+    then have valid: "v = True" using ins_def by (auto split:if_splits)
+    have new_map_def: "m' = Mapping.update (drop b elem) (case Mapping.lookup m (drop b elem) of 
+                                 Some i \<Rightarrow> (i + 1) |
+                                 None \<Rightarrow>  1) m"
+      using ins_def valid by (auto split:option.splits)
+    have finite_X: "finite X" using valid valid_before by auto
+    then have valid_finite: "finite ?new_data" by auto
+    have valid_aggtype: "fst \<omega> = Formula.Agg_Cnt" using valid_before valid by auto
+    have valid_type_restr: "type_restr ?args (Set.insert elem X)" using valid_before valid  by(auto simp:type_restr_def)
+    have valid_key_invariant: "\<And>k. k \<in> (drop b) ` ?new_data \<longleftrightarrow> k \<in> Mapping.keys m'"
+      using valid_before valid new_map_def by simp
+  have valid_value_invariant: "\<And>k. k \<in> Mapping.keys m' \<longrightarrow> Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
            M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-          in Some (length (flatten_multiset M)))"
+          in Some (size (mset_conv Some M)))"
   proof rule
     fix k
-    define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) updated_data"
-    define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-    define old_group where [simp]: "old_group = Set.filter (\<lambda>x. drop b x = k) X"
-    define old_M where [simp]: "old_M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) old_group))) ` meval_trm f ` old_group"
-    define old_evals where "old_evals = meval_trm f ` old_group"
-    assume assm: "k \<in> Mapping.keys updated_map"
-    show "Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
+    assume k_in: "k \<in> Mapping.keys m'"
+    let ?M = "group_multiset k b f ?new_data"
+    let ?old_M = "group_multiset k b f X"
+    have finite_old_M: "finite ?old_M" using finite_filter finite_imageI valid_finite by auto
+    show "Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
            M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-          in Some (length (flatten_multiset M)))"
-    proof (cases "k \<in> Mapping.keys m")
-      case False
-      then have map_val: "Mapping.lookup updated_map k = Some 1" 
-        using assm by (auto simp: keys_is_none_rep lookup_update' split:option.splits)
-      have "drop b elem = k" 
-        using assm False 
-        by(auto  split:option.splits)
-      then have group_single_elem: "group = {elem}" 
-        using False valid_before image_iff
-        by fastforce
-      then have "M = Set.insert (meval_trm f elem, enat 1) {}"
-        using group_single_elem unfolding M_def Set.filter_def ecard_def by (auto cong: conj_cong)
-      then have "length(flatten_multiset M) = 1" 
-        using length_flatten_multiset[of M] Finite_Set.comp_fun_commute.fold_insert by(auto)
-      then show ?thesis using map_val by simp
-    next
+          in Some (size (mset_conv Some M)))"
+    proof(cases "drop b elem = k")
       case True
-      then have in_map: "k \<in> Mapping.keys m" by auto
-      show ?thesis
-      proof(cases "drop b elem = k")
-        case True
-        then have elem_group: "drop b elem = k" by auto
-        then have newgroup_def: "group = Set.insert elem old_group" by auto
-        have both_finite: "finite old_M \<and> finite M" using valid_before by auto
-        have "length(flatten_multiset(M)) = length(flatten_multiset(old_M)) + 1"
-        proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) old_group = {}")
+      then have k_def: "drop b elem = k" by auto 
+      then show ?thesis
+      proof(cases "Mapping.lookup m k")
+        case None
+        then have *: "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {}" "?old_M = {}"
+          using valid_before valid by(auto) (metis domIff keys_dom_lookup rev_image_eqI)+
+        have M_single: "?M = Set.insert (meval_trm f elem, enat 1) {}"
+          using multiset_new_term_insert[OF True *(1)] *(2) by (simp add: one_enat_def)
+        then have valid_size: "size (mset_conv Some ?M) = 1"
+          using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some], of "{}" "(meval_trm f elem, enat 1)"]
+          by(simp add:mset_conv_def)
+        then show ?thesis using valid_size new_map_def None True lookup_update'[of _ _ m] by simp
+      next
+        case (Some a)
+        have k_in_old: "k \<in> Mapping.keys m" using Some by (simp add: keys_is_none_rep)
+        have a_def: "a = size (mset_conv Some ?old_M)"
+          using valid valid_before Some new_map_def k_in_old by auto
+        then show ?thesis 
+        proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {}")
           case True
-          then have "M = Set.insert (meval_trm f elem, 1) old_M" using multiset_new_term_insert elem_group by simp
-          moreover have "(meval_trm f elem, 1) \<notin> old_M" using True by auto
-          ultimately show ?thesis using both_finite by (auto simp:length_flatten_multiset one_enat_def)
+          then have not_in: "(meval_trm f elem, 1) \<notin> ?old_M" by auto
+          have M_def: "?M = Set.insert (meval_trm f elem, 1) ?old_M" 
+            using multiset_new_term_insert[OF k_def True] by simp
+          then have valid_size: "size (mset_conv Some ?M) = a + 1"
+            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some] finite_old_M not_in] a_def
+            by(simp add: mset_conv_def one_enat_def)
+          then show ?thesis using new_map_def Some by (simp add: k_def lookup_update)
         next
           case False
-          then obtain y where y_def: "(meval_trm f elem, y) \<in> old_M" 
-            by (smt (z3) Collect_empty_eq Set.filter_def image_eqI old_M_def)
-          then obtain i where i_def: "y = enat i" 
-            by (smt (z3) Pair_inject ecard_def finite_filter image_iff old_M_def old_group_def valid_before valid_maggaux.simps)
-          have finite_remove: "finite (old_M - {(meval_trm f elem, y)})" using both_finite finite_Diff  by (auto simp: Set.remove_def)
-          have finite_insert: "finite (Set.insert (meval_trm f elem, y) old_M)" using both_finite by blast
-          have M_insert_remove_def: "M = Set.insert (meval_trm f elem, y + 1) (old_M - {(meval_trm f elem, y)})" 
-            using multiset_old_term_insert[of b elem k f X y] elem_group False y_def valid_before disjoint
-            by(simp only: M_def old_M_def group_def old_group_def updated_data_def group_multiset_def Let_def Optimized_Agg.group_def) auto          
-          then have aux: "length(flatten_multiset(Set.insert (meval_trm f elem, y) old_M)) = length(flatten_multiset(old_M - {(meval_trm f elem, y)})) + i" 
-            using both_finite finite_insert finite_remove 
-            Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m) y. y + the_enat m" old_M 0 "(meval_trm f elem, y)"]
-            by (simp only: length_flatten_multiset) (metis comp_fun_commute_axioms i_def old.prod.case the_enat.simps)
-          have "(meval_trm f elem, y + 1) \<notin> old_M - {(meval_trm f elem, y)}" using y_def by auto
-          then show ?thesis using both_finite finite_remove M_insert_remove_def i_def Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m) y. y + the_enat m" "old_M - {(meval_trm f elem, y)}" "(meval_trm f elem, y + 1)" 0]
-            by (metis (mono_tags, lifting) aux case_prod_conv comp_fun_commute_axioms group_cancel.add1 insert_absorb length_flatten_multiset one_enat_def plus_enat_simps(1) the_enat.simps y_def)
+          then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
+            using valid_finite_group_mset[of X k b f] k_def by(auto simp add:valid_finite_mset_def) (metis (mono_tags, lifting) Set.member_filter finite_Un imageI valid_finite)
+          then have not_in: "(meval_trm f elem, enat (n + 1)) \<notin> ?old_M" using unique_term_multiset[OF n_def] by auto
+          have M_insert_remove_def: "?M = Set.insert (meval_trm f elem, enat (n + 1)) (?old_M - {(meval_trm f elem, enat n)})" 
+            using multiset_old_term_insert[OF k_def False n_def disjoint finite_X] by simp
+          then have mset_conv_eq: "mset_conv Some ?M = add_mset (meval_trm f elem) (mset_conv Some ?old_M)" 
+            using mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of Some]
+            by simp
+          have valid_size: "size (mset_conv Some ?M) = a + 1"
+            using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some] finite_old_M not_in] a_def
+            by(simp add:mset_conv_def one_enat_def)
+          then show ?thesis using new_map_def Some by (simp add: k_def lookup_update)
         qed
-        moreover obtain len where len_def: "Mapping.lookup m k = Some len \<and> len = length(flatten_multiset(old_M))" 
-          using valid_before in_map by auto
-        then have "Mapping.lookup updated_map k = Some (len + 1)" by (simp add: elem_group lookup_update)
-        ultimately show ?thesis by (simp add: len_def)
-      next
-        case False
-        then have same_group: "group = old_group" by auto
-        then have "M = old_M" by auto
-        then have "Mapping.lookup updated_map k = Mapping.lookup m k" 
-          using False by (auto split:option.splits simp: lookup_update')
-        then show ?thesis using valid_before same_group in_map 
-          by auto
+      qed
+    next
+      case False
+      then show ?thesis using new_map_def lookup_update'[of _ _ m] valid_before 
+            valid k_in filter_insert[of "(\<lambda>x. drop b x = k)"] by(auto split:option.splits)
       qed
     qed
+    have "valid_maggaux ?args (v', CntAux m') (X \<union> {elem})" 
+      using valid_finite valid_aggtype valid_type_restr valid_key_invariant valid_value_invariant by auto
+    then show ?thesis using ins_def by(simp only:Let_def) fastforce
+  next
+    case False
+    then show ?thesis using ins_def[symmetric] by simp
   qed
-  show ?thesis using valid_value_invariant valid_key_invariant valid_finite valid_before
-    by auto
+qed
+
+lemma valid_insert_rank_unfolded: 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, RankAux m) X" 
+  and disjoint: "elem \<notin> X"
+  shows "let (v', m') = insert_rank \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem (v, m) in
+      valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v', RankAux m') (X \<union> {elem})"
+proof - 
+  let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+  let ?new_data = "Set.insert elem X"
+  obtain v' m' where ins_def: "(v', m') = insert_rank ?args elem (v, m)" using prod.collapse by blast
+  show ?thesis
+  proof(cases v')
+    case True
+    then have valid: "v = True" using ins_def by auto (metis Pair_inject)
+    have valid_new: "v' = True" using True by simp
+    obtain i s where meval_def: "meval_trm f elem = EInt i \<or> meval_trm f elem = EString s" 
+      using valid True ins_def by(auto split:event_data.splits option.splits list_aux.splits)
+    then have new_map_def: "m' = Mapping.update (drop b elem) (case (Mapping.lookup m (drop b elem), meval_trm f elem) of
+                              (Some (LInt t'), EInt term') \<Rightarrow> LInt (insort term' t') |
+                              (Some (LString t'), EString term') \<Rightarrow> LString (insort term' t') |
+                              (None, EInt term') \<Rightarrow> LInt [term'] |
+                              (None, EString term') \<Rightarrow> LString [term']) m"
+      using ins_def valid meval_def True by(auto split:event_data.splits option.splits list_aux.splits)
+    have finite_X: "finite X" using valid valid_before by auto
+    then have valid_finite: "finite ?new_data" by auto
+    have valid_aggtype: "fst \<omega> = Formula.Agg_Min \<or> fst \<omega> = Formula.Agg_Max \<or> fst \<omega> = Formula.Agg_Med" using valid_before valid by auto
+    have y0_restr: "snd \<omega> \<in> range EString \<longleftrightarrow> (meval_trm f elem) \<in> range EString" 
+      using valid valid_before True ins_def by(auto split:event_data.splits list_aux.splits option.splits)
+    have valid_type_restr: "type_restr ?args (Set.insert elem X)" using valid_before valid meval_def y0_restr 
+      by(auto simp:type_restr_def) (blast)+
+    have valid_key_invariant: "\<And>k. k \<in> (drop b) ` ?new_data \<longleftrightarrow> k \<in> Mapping.keys m'"
+      using valid_before valid new_map_def by simp
+    have valid_value_invariant: 
+    "\<And>k. k \<in> Mapping.keys m' \<longrightarrow> (case Mapping.lookup m' k of
+      Some t \<Rightarrow> (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
+                 M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+                 in valid_list_aux t M) |
+      None \<Rightarrow> False)" 
+    proof rule
+      fix k
+      let ?M = "group_multiset k b f ?new_data"
+      let ?old_M = "group_multiset k b f X"
+      have finite_old_M: "finite ?old_M" using finite_filter finite_imageI valid_finite by auto
+      assume k_in: "k \<in> Mapping.keys m'"
+      show "(case Mapping.lookup m' k of
+      Some t \<Rightarrow> (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
+                 M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+                 in valid_list_aux t M) |
+      None \<Rightarrow> False)"
+      proof(cases "drop b elem = k")
+        case True 
+        then have k_def: "drop b elem = k" by auto
+        have the_enat_one: "the_enat 1 = 1" by (simp add: replicate_mset_def one_enat_def)  
+        have list_elem_restr: "\<forall>l. Mapping.lookup m k = Some (LInt l) \<longrightarrow> meval_trm f elem \<in> range EInt"
+                              "\<forall>l. Mapping.lookup m k = Some (LString l) \<longrightarrow> meval_trm f elem \<in> range EString"
+        using True ins_def valid valid_new k_def by(auto split:event_data.splits option.splits)
+        then show ?thesis
+        proof(cases "Mapping.lookup m k")
+          case None
+          then have *: "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {}" "?old_M = {}"
+            using valid_before valid by(auto) (metis domIff keys_dom_lookup rev_image_eqI)+
+          have "?M = Set.insert (meval_trm f elem, 1) {}" using multiset_new_term_insert[OF k_def *(1)] *(2) by auto
+          then show ?thesis using None k_in new_map_def meval_def
+            Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int]]
+            Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_string]]
+            by(auto simp:k_def lookup_update valid_list_aux_def valid_list_aux'_def int_mset_conv_def 
+                  unpack_int_def the_enat_one type_restr_mset_def str_mset_conv_def unpack_string_def type_restr_def mset_conv_def
+                  split:event_data.splits list_aux.splits)
+        next
+          case (Some a)
+          have k_in_old: "k \<in> Mapping.keys m" using Some by (simp add: keys_is_none_rep)
+          have valid_old: "valid_list_aux a ?old_M" using valid_before valid Some k_in_old by auto
+          show ?thesis 
+          proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {}")
+            case True
+            have not_in: "(meval_trm f elem, 1) \<notin> ?old_M" using True by auto
+            have mset_rel: "?M = Set.insert (meval_trm f elem, 1) ?old_M"
+              using multiset_new_term_insert[OF k_def True] by auto
+            then show ?thesis using Some k_in new_map_def meval_def valid_old list_elem_restr
+                Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in]
+                Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_string] finite_old_M not_in]
+              by(auto simp:k_def lookup_update valid_list_aux_def valid_list_aux'_def int_mset_conv_def insort_mset
+                  unpack_int_def the_enat_one type_restr_mset_def str_mset_conv_def unpack_string_def type_restr_def mset_conv_def
+                  split:list_aux.splits event_data.splits) (* Slow *)
+          next
+            case False
+            then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
+              using valid_finite_group_mset[of X k b f] k_def by(auto simp add:valid_finite_mset_def) (metis (mono_tags, lifting) Set.member_filter finite_X imageI)
+            then have not_in: "(meval_trm f elem, enat (n + 1)) \<notin> ?old_M" using unique_term_multiset[OF n_def] by auto
+            have M_insert_remove_def: "?M = Set.insert (meval_trm f elem, enat (n + 1)) (?old_M - {(meval_trm f elem, enat n)})" 
+              using multiset_old_term_insert[OF k_def False n_def disjoint finite_X] by simp
+            then show ?thesis
+            proof (cases "meval_trm f elem")
+              case (EInt x1)
+              then obtain xa where [simp]:"a = LInt xa" using list_elem_restr(2) Some by(auto split:list_aux.splits) (meson list_aux.exhaust)
+              have "int_mset_conv ?M = add_mset x1 (int_mset_conv ?old_M)" 
+                using EInt M_insert_remove_def mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of unpack_int]
+                by(simp add:int_mset_conv_def unpack_int_def)
+              then show ?thesis using Some k_in meval_def EInt valid_old filter_insert[of "(\<lambda>x. drop b x = k)"]
+                apply(auto simp:k_def new_map_def  lookup_update valid_list_aux_def valid_list_aux'_def 
+                      insort_mset split:option.splits)
+                by(simp add:type_restr_mset_def k_def) blast
+            next
+              case (EFloat x2)
+              then show ?thesis using meval_def by auto
+            next
+              case (EString x3)
+              then obtain xa where [simp]:"a = LString xa" using list_elem_restr(1) Some by(auto split:list_aux.splits) (meson list_aux.exhaust)
+              have "str_mset_conv ?M = add_mset x3 (str_mset_conv ?old_M)" 
+                using EString M_insert_remove_def mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of unpack_string]
+                by(simp add:str_mset_conv_def unpack_string_def)
+              then show ?thesis using Some k_in meval_def EString valid_old filter_insert[of "(\<lambda>x. drop b x = k)"]
+                apply(auto simp:k_def new_map_def  lookup_update valid_list_aux_def valid_list_aux'_def 
+                      insort_mset split:option.splits)
+                by(simp add:type_restr_mset_def k_def) blast
+            qed
+          qed
+        qed
+      next
+        case False
+        then show ?thesis using new_map_def lookup_update'[of _ _ m] valid_before 
+            valid k_in filter_insert[of "(\<lambda>x. drop b x = k)"] by(auto split:option.splits)
+      qed
+    qed
+    have "valid_maggaux ?args (v', RankAux m') (X \<union> {elem})" 
+      using valid_finite valid_aggtype valid_type_restr valid_key_invariant valid_value_invariant
+      by(simp cong:option.case_cong)
+    then show ?thesis using ins_def by(simp only:Let_def) force
+  next
+    case False
+    then show ?thesis using ins_def[symmetric] by simp
+  qed
 qed
 
 lemma valid_insert_maggaux_unfolded: 
-  "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> aux X \<Longrightarrow>
-  finite Y \<Longrightarrow>
-  X \<inter> Y = {} \<Longrightarrow>
-  type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> Y \<Longrightarrow>
-  valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
-  (insert_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> Y aux) (X \<union> Y)" 
-proof(induction aux)
-  case (CntAux m)
-  have disjoint: "X \<inter> Y = {}" using CntAux by auto
-  have finite_y: "finite Y" using CntAux by auto
-  then show ?case using disjoint
-  proof(induction Y)
-    case empty
-    then show ?case using CntAux by auto
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, aux) X"
+  and finite: "finite Y"
+  and disjoint: "X \<inter> Y = {}"
+  shows "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
+  (insert_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> Y (v, aux)) (X \<union> Y)" 
+  using assms(1)
+proof(cases v)
+  case True
+  then have finite_X: "finite X" using valid_before by(auto)
+  show ?thesis using valid_before
+  proof(induction aux)
+    case (CntAux m)
+    show ?case using finite disjoint CntAux
+    proof(induction Y)
+      case empty
+      then show ?case  by auto blast
+    next
+      case (insert x F)
+      let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+      interpret comp_fun_commute "insert_cnt ?args"
+        using insert_cnt_comm by unfold_locales auto
+      obtain v' m' where intermediate_map_def: "(v', CntAux m') = insert_maggaux ?args F (v, CntAux m)" 
+        using insert(1) True apply(induction F) by(auto) (metis (no_types, lifting) case_prod_conv surj_pair)
+      then have fold_def: "Finite_Set.fold (insert_cnt ?args) (v, m) F = (v', m')" 
+        using True by(auto split:prod.splits)
+      obtain v_f m_f where final_map_def: "(v_f, m_f) = insert_cnt ?args x (v', m')" by auto metis
+      have disj: "X \<inter> F = {}" using insert(4) by blast
+      have not_in: "x \<notin> X \<union> F" using insert(2) insert(4) by force
+      have valid_inter: "valid_maggaux ?args (v', CntAux m') (X \<union> F)" 
+        using insert(3)[OF disj CntAux] by(simp only:intermediate_map_def)
+      have "valid_maggaux ?args (v_f, CntAux m_f) (X \<union> F \<union> {x})"
+        using valid_insert_cnt_unfolded[OF valid_inter not_in] final_map_def by(simp only:Let_def) force
+      then show ?case using fold_insert[OF insert(1-2)] final_map_def fold_def True
+        by(simp cong:option.case_cong del:insert_cnt.simps valid_maggaux.simps split:prod.splits) force
+    qed
   next
-    case (insert x F)
-    define args where "args = \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
-    interpret comp_fun_commute "insert_cnt args"
-      using insert_cnt_comm by unfold_locales auto
-    obtain intermediate_map where intermediate_map_def: "CntAux intermediate_map = insert_maggaux args F (CntAux m)" by auto
-    have valid_a: "valid_maggaux args (CntAux (insert_cnt args x intermediate_map)) (X \<union> F \<union> {x})" 
-      using insert valid_insert_cnt_unfolded disjoint Un_iff args_def intermediate_map_def by (metis disjoint_insert(1))
-    then have "Finite_Set.fold (insert_cnt args) m (Set.insert x F) = insert_cnt args x (Finite_Set.fold (insert_cnt args) m F)"
-      using  Finite_Set.comp_fun_commute.fold_insert[of "insert_cnt args" F x m] insert by auto
-    moreover have "CntAux (Finite_Set.fold (insert_cnt args) m F) = CntAux intermediate_map"
-      by(auto simp:intermediate_map_def)
-    ultimately have "insert_maggaux args (Set.insert x F) (CntAux m) = CntAux (insert_cnt args x intermediate_map)"
-      using  Finite_Set.comp_fun_commute.fold_insert[of "insert_cnt args" F x m]
-      by auto
-    then have "valid_maggaux args (insert_maggaux args (Set.insert x F) (CntAux m)) (X \<union> Set.insert x F)"
-      using valid_a
-      by auto
-    then show ?case
-      by (auto simp: args_def)
+    case (SumAux m)
+    show ?case using finite disjoint SumAux
+    proof(induction Y)
+      case empty
+      then show ?case by auto blast+
+    next
+      case (insert x F)
+      let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+      interpret comp_fun_commute "insert_sum ?args"
+        using insert_sum_comm by unfold_locales auto
+      obtain v' m' where intermediate_map_def: "(v', SumAux m') = insert_maggaux ?args F (v, SumAux m)" 
+        using insert(1) True apply(induction F) by(auto) (metis (no_types, lifting) case_prod_conv surj_pair)
+      then have fold_def: "Finite_Set.fold (insert_sum ?args) (v, m) F = (v', m')" 
+        using True by(auto split:prod.splits)
+      obtain v_f m_f where final_map_def: "(v_f, m_f) = insert_sum ?args x (v', m')" using prod.collapse by blast
+      have disj: "X \<inter> F = {}" using insert(4) by blast
+      have not_in: "x \<notin> X \<union> F" using insert(2) insert(4) by force
+      have valid_inter: "valid_maggaux ?args (v', SumAux m') (X \<union> F)" 
+        using insert(3)[OF disj SumAux] by(simp only:intermediate_map_def)
+      have "valid_maggaux ?args (v_f, SumAux m_f) (X \<union> F \<union> {x})"
+        using valid_insert_sum_unfolded[OF valid_inter not_in] final_map_def by(simp only:Let_def) force
+      then show ?case using fold_insert[OF insert(1-2)] final_map_def fold_def True
+        by(simp cong:option.case_cong del:insert_sum.simps valid_maggaux.simps split:prod.splits) force
+    qed
+  next
+    case (RankAux m)
+    show ?case using finite disjoint RankAux
+    proof(induction Y)
+      case empty
+      then show ?case by auto blast+
+    next
+      case (insert x F)
+      let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+      interpret comp_fun_commute "insert_rank ?args"
+        using insert_rank_comm by unfold_locales auto
+      obtain v' m' where intermediate_map_def: "(v', RankAux m') = insert_maggaux ?args F (v, RankAux m)" 
+        using insert(1) True apply(induction F) by(auto) (metis (no_types, lifting) case_prod_conv surj_pair)
+      then have fold_def: "Finite_Set.fold (insert_rank ?args) (v, m) F = (v', m')" 
+        using True by(auto split:prod.splits)
+      obtain v_f m_f where final_map_def: "(v_f, m_f) = insert_rank ?args x (v', m')" using prod.collapse by blast
+      have disj: "X \<inter> F = {}" using insert(4) by blast
+      have not_in: "x \<notin> X \<union> F" using insert(2) insert(4) by force
+      have valid_inter: "valid_maggaux ?args (v', RankAux m') (X \<union> F)" 
+        using insert(3)[OF disj RankAux] by(simp only:intermediate_map_def)
+      have "valid_maggaux ?args (v_f, RankAux m_f) (X \<union> F \<union> {x})"
+        using valid_insert_rank_unfolded[OF valid_inter not_in] final_map_def by(simp only:Let_def) force
+      then show ?case using fold_insert[OF insert(1-2)] final_map_def fold_def True
+        by(simp cong:option.case_cong del:insert_rank.simps valid_maggaux.simps split:prod.splits) force
+    qed
   qed
 next
-  case (SumAux m)
-  have disjoint: "X \<inter> Y = {}" using SumAux by auto
-  have valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m) X" using SumAux by auto
-  have type_restr: "type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> Y" using SumAux by auto
-  have finite_y: "finite Y" using SumAux by auto
-  then show ?case using disjoint type_restr valid_before
-  proof(induction Y)
-    case empty
-    then show ?case using SumAux by auto
-  next
-    case (insert x F)
-    define args where "args = \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
-    interpret comp_fun_commute "insert_sum_comm args"
-      using insert_sum_comm by unfold_locales auto
-    obtain intermediate_map where intermediate_map_def: "SumAux intermediate_map = insert_maggaux args F (SumAux m)" by auto
-    then have intermediate_map_def': "intermediate_map = Finite_Set.fold (insert_sum args) m F" by auto
-    have "X \<inter> F = {}" using insert(4) by auto
-    moreover have "type_restr args F" using insert(5)  by (cases "fst \<omega>") (auto simp: args_def type_restr_def) 
-    moreover have "valid_maggaux args (SumAux m) X" using valid_before by (auto simp:args_def)
-    ultimately have valid_int: "valid_maggaux args (SumAux intermediate_map) (X \<union> F)" using insert(3) by(simp only:intermediate_map_def args_def)
-    moreover have "x \<notin> X \<union> F" using insert(2) insert.prems(1) by auto
-    moreover have type_x: "type_restr args {x}" using insert(5) by (cases "fst \<omega>") (auto simp: args_def type_restr_def) 
-    ultimately have valid_a: "valid_maggaux args (SumAux (insert_sum args x intermediate_map)) (X \<union> F \<union> {x})" 
-      using valid_insert_sum_unfolded[of cols n g0 y \<omega> b f intermediate_map "(X \<union> F)" x] by(auto simp: args_def)
-    have y0_int: "snd (aggargs_\<omega> args) \<in> range EInt" using insert(5) SumAux.prems(1) by (auto simp: type_restr_def args_def)
-    have aux1: "(\<And>a b. a \<in> (Set.insert x F) \<Longrightarrow> b \<in> valid_sumaux_maps \<Longrightarrow> insert_sum args a b = insert_sum_comm args a b)" 
-    proof -
-      fix a b
-      assume a_def: "a \<in> (Set.insert x F)" and b_def: "b \<in> valid_sumaux_maps"
-      have "meval_trm (aggargs_f args) a \<in> range EInt" using insert(5) a_def SumAux.prems(1) by(auto simp: type_restr_def  args_def split:option.splits) (auto) 
-      then show "insert_sum args a b = insert_sum_comm args a b" using y0_int b_def insert_sum_equiv[of args a b] by auto
-    qed
-    moreover have aux2: "(\<And>a b. a \<in> (Set.insert x F) \<Longrightarrow> b \<in> valid_sumaux_maps \<Longrightarrow> insert_sum_comm args a b \<in> valid_sumaux_maps)"
-    proof -
-      fix a b
-      assume "a \<in> (Set.insert x F)" and "b \<in> valid_sumaux_maps"
-      then show "insert_sum_comm args a b \<in> valid_sumaux_maps"
-        using y0_int 
-        apply(auto simp: valid_sumaux_maps_def lookup_update' split:option.splits) 
-        by fastforce+
-    qed
-    moreover have valid_m: "m \<in> valid_sumaux_maps" using valid_maggaux_valid_map SumAux(1) by blast
-    ultimately have "Finite_Set.fold (insert_sum args) m (Set.insert x F) = Finite_Set.fold (insert_sum_comm args) m (Set.insert x F)"
-      using sumaux_finite_set_fold_eq[of "(Set.insert x F)" "insert_sum args" "insert_sum_comm args" m] insert by auto
-    moreover have "Finite_Set.fold (insert_sum args) m F = Finite_Set.fold (insert_sum_comm args) m F"
-      using sumaux_finite_set_fold_eq[of F "insert_sum args" "insert_sum_comm args" m] using insert aux1 aux2 valid_m by auto
-    moreover have "Finite_Set.fold (insert_sum_comm args) m (Set.insert x F) = insert_sum_comm args x (Finite_Set.fold (insert_sum_comm args) m F)"
-      using  Finite_Set.comp_fun_commute.fold_insert[of "insert_sum_comm args" F x m] insert by auto
-    moreover have "Finite_Set.fold (insert_sum args) m F \<in> valid_sumaux_maps" 
-      using valid_maggaux_valid_map[of cols n g0 y \<omega> b f intermediate_map "X \<union> F"] intermediate_map_def' valid_int by(simp only:args_def)
-    moreover have "meval_trm (aggargs_f args) x \<in> range EInt" 
-      using type_x SumAux.prems(1) by(auto simp: type_restr_def args_def split:option.splits)
-    ultimately have "Finite_Set.fold (insert_sum args) m (Set.insert x F) = insert_sum args x (Finite_Set.fold (insert_sum args) m F)"
-      using insert_sum_equiv[of args x "Finite_Set.fold (insert_sum args) m F"] y0_int by auto
-    then have "insert_maggaux args (Set.insert x F) (SumAux m) = SumAux (insert_sum args x intermediate_map)"
-      using intermediate_map_def' by auto
-    then have "valid_maggaux args (insert_maggaux args (Set.insert x F) (SumAux m)) (X \<union> Set.insert x F)"
-      using valid_a by auto
-    then show ?case by (simp only: args_def)
-  qed
-next
-  case (RankAux x) 
-  then show ?case sorry
+  case False
+  then show ?thesis by auto
 qed
 
 lemma valid_insert_maggaux': "valid_maggaux args aux X \<Longrightarrow> finite Y \<Longrightarrow>
     table (aggargs_b args + aggargs_n args) (aggargs_cols args) Y \<Longrightarrow>
-    type_restr args Y \<Longrightarrow> X \<inter> Y = {} \<Longrightarrow>
-    valid_maggaux args (insert_maggaux args Y aux) (X \<union> Y)"
-  using valid_insert_maggaux_unfolded by (cases args) fast
+    X \<inter> Y = {} \<Longrightarrow> valid_maggaux args (insert_maggaux args Y aux) (X \<union> Y)"
+  using valid_insert_maggaux_unfolded apply(cases args) apply(cases aux) by fastforce
+
 
 lemma valid_delete_sum_unfolded:
-  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m) X" 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, SumAux m) X" 
   and in_set: "elem \<in> X"
-  and type_restr: "type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> {elem}"
-  shows "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
-        (SumAux (delete_sum \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m)) (X - {elem})"
+  shows "let (v', m') = delete_sum \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem (v, m) in
+      valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v', SumAux m') (X - {elem})"
 proof - 
-  define updated_map where [simp]: "updated_map = delete_sum \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m"
-  define updated_data where [simp]: "updated_data = X - {elem}"
-  interpret comp_fun_commute "\<lambda>(t, m) y. y + the_enat m" 
-    by(unfold_locales) auto
-  have len_commute: "comp_fun_commute (\<lambda>(t, m) y. y + the_enat m)" by unfold_locales
-  have plus'_comp_commute: "comp_fun_commute (\<lambda>(t, m) y. ((plus' t) ^^ (the_enat m)) y)"
-    using cmp_comm[of plus'] comp_fun_commute_plus' by(unfold_locales) auto
-  have valid_finite: "finite updated_data" using valid_before by auto
-  have valid_key_invariant: "\<And>k. k \<in> (drop b) ` updated_data \<longleftrightarrow> k \<in> Mapping.keys updated_map"
-  proof (rule iffI)
-    fix k
-    assume assm: "k \<in> (drop b) ` updated_data"
-    show "k \<in>  Mapping.keys updated_map"
-    proof(cases "drop b elem = k")
-      case True
-      then show ?thesis using length_flatten_multiset' assm valid_before 
-        apply(auto split:option.splits)
-        by (smt (z3) Set.member_filter card_eq_Suc_0_ex1 imageI in_set option.inject prod.inject) (smt (z3) Set.member_filter card_eq_Suc_0_ex1 imageI in_set option.inject prod.inject)
-    next
-      case False
-      then have "k \<in> (drop b) ` X" using assm valid_before by auto
-      then have "k \<in> Mapping.keys m" using valid_before by auto
-      then show ?thesis using False by(auto split:option.splits)
-    qed
-  next
-    fix k
-    assume assm: "k \<in> Mapping.keys updated_map"
-    then have in_map: "k \<in> Mapping.keys m" by(auto split:option.splits) (smt (z3) Diff_iff is_none_simps(2) keys_delete keys_is_none_rep lookup_update_neq)
-    then have in_set: "k \<in> (drop b) ` X" using valid_before by auto
-    show "k \<in> (drop b) ` updated_data"
-    proof(cases "drop b elem = k")
-      case True
-      then obtain l s where l_def: "Mapping.lookup m k = Some (l, s)" using in_map by (metis domIff keys_dom_lookup not_None_eq prod.exhaust_sel)
-      then have not_1: "l \<noteq> 1" using assm in_map True by(auto split:option.splits)
-      then have "l = length (flatten_multiset (group_multiset k b f X))" using l_def valid_before in_map by auto
-      then have "card (group k b X) \<noteq> 1" using length_flatten_multiset' valid_before not_1 by auto
-      moreover have "group k b X \<noteq> {}" using True assms by auto
-      ultimately obtain k' where "k' \<in> group k b X \<and> k' \<noteq> elem" by (metis is_singletonI' is_singleton_altdef)
-      then show ?thesis by auto
-    next
-      case False
-      then show ?thesis using in_set by auto
-    qed
-  qed
-  have valid_value_invariant: "\<And>k. k \<in> Mapping.keys updated_map \<longrightarrow> Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
-           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group;
-           M_list = flatten_multiset M;
-           aggtype = fst \<omega>;
-           y0 = (if aggtype = Formula.Agg_Sum then snd \<omega> else EInt 0)
-          in Some (length M_list, foldl plus y0 M_list))"
-  proof rule
-    fix k
-    define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) updated_data"
-    define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-    define old_group where [simp]: "old_group = Set.filter (\<lambda>x. drop b x = k) X"
-    define old_M where [simp]: "old_M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) old_group))) ` meval_trm f ` old_group"
-    define old_evals where "old_evals = meval_trm f ` old_group"
-    define y0 where [simp]: "y0 = (if fst \<omega>  = Formula.Agg_Sum then snd \<omega> else EInt 0)"
-    define term' where [simp]: "term' = meval_trm f elem"
-    assume assm: "k \<in> Mapping.keys updated_map"
-    then have in_old: "k \<in> Mapping.keys m" by(auto split:option.splits) (smt (z3) Diff_iff insert_iff is_none_simps(2) keys_delete keys_is_none_rep keys_update)
-    have multiset_int: "\<And>t m. (t, m) \<in> M \<Longrightarrow> t \<in> range EInt" using type_restr valid_before by (auto simp: type_restr_def image_subset_iff)  
-    then have M_int: "set (flatten_multiset M) \<subseteq> range EInt" using flatten_multiset_eint[of M]  valid_finite by auto
-    have old_multiset_int: "\<And>t m. (t, m) \<in> old_M \<Longrightarrow> t \<in> range EInt" using type_restr valid_before by (auto simp: type_restr_def image_subset_iff)  
-    then have M_old_int: "set (flatten_multiset old_M) \<subseteq> range EInt" using flatten_multiset_eint[of old_M] finite valid_before by auto
-    have y0_int: "y0 \<in> range EInt" using type_restr valid_before by (auto simp: type_restr_def)
-    have both_finite: "finite M \<and> finite old_M" using valid_finite by auto
-    show "Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
-           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group;
-           M_list = flatten_multiset M;
-           aggtype = fst \<omega>;
-           y0 = (if aggtype = Formula.Agg_Sum then snd \<omega> else EInt 0)
-          in Some (length M_list, foldl plus y0 M_list))"
-    proof(cases "drop b elem = k")
-      case True
-      then have grp_def: "group = Set.remove elem old_group" by auto
-      have elem_group: "drop b elem = k" using True by auto
-      have "length(flatten_multiset(M)) = card group" using length_flatten_multiset' valid_before
-        by(simp only: M_def old_M_def group_multiset_def Let_def) (auto)
-      moreover have "length(flatten_multiset(old_M)) = card old_group" using length_flatten_multiset' valid_before
-        by(simp only: M_def old_M_def group_multiset_def Let_def) (auto)
-      ultimately have len: "length(flatten_multiset(M)) = length(flatten_multiset(old_M)) - 1" using grp_def in_set
-        by(auto) (smt (z3) One_nat_def Set.member_filter Set.remove_def True card_Diff_singleton finite_filter valid_before valid_maggaux.simps)
-      obtain len sum where ls_def: "Mapping.lookup m k = Some (len, sum)" using in_old by (metis domIff keys_dom_lookup not_Some_eq prod.exhaust_sel)
-      then have l_def: "len = length(flatten_multiset(old_M))" using valid_before in_old by auto
-      have len_not_1: "len \<noteq> 1" using assm ls_def elem_group by(auto split:option.splits)
-      have s_def: "sum = foldl plus y0 (flatten_multiset old_M)" using ls_def valid_before in_old by auto
-      have "foldl plus y0 (flatten_multiset M) = (foldl plus y0 (flatten_multiset old_M)) - term'"
-      proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) old_group = {elem}")
+  let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+  let ?new_data = "(X - {elem})"
+  interpret comp_fun_commute "((+)::(integer \<Rightarrow> integer \<Rightarrow> integer))"  
+    by unfold_locales auto
+  obtain v' m' where del_def: "(v', m') = delete_sum ?args elem (v, m)" by (metis surj_pair)
+  show ?thesis
+  proof(cases v')
+    case True
+    then have valid: "v = True" using del_def by (auto split:if_splits)
+    have finite_X: "finite X" using valid valid_before by auto
+    then have valid_finite: "finite ?new_data" by auto
+    have elem_in: "drop b elem \<in> Mapping.keys m" using in_set valid valid_before by auto
+    have all_int: "meval_trm f ` X \<subseteq> range EInt" using valid valid_before by(auto simp:type_restr_def) blast+
+    then have valid_unpack: "(\<And>t m. (t, m) \<in> group_multiset (drop b elem) b f X \<Longrightarrow> unpack_int t \<in> range Some)"
+      by(auto simp:unpack_int_def split:event_data.splits) fastforce+
+    obtain c s where lookup_def: "Mapping.lookup m (drop b elem) = Some (c, s)" using True del_def valid by(auto split:option.splits)
+    then have "c = length (flatten_multiset (group_multiset (drop b elem) b f X))" 
+      using length_mset_eq[OF _ valid_finite_group_mset[OF finite_X, of "(drop b elem)" b f], of unpack_int] valid_unpack
+      valid valid_before elem_in by(simp add:int_mset_conv_def) 
+    then have c_def: "c = card(group (drop b elem) b X)" using finite_X length_flatten_multiset' by blast
+    obtain i where i_def: "meval_trm f elem = EInt i" using True valid del_def lookup_def by(auto split:event_data.splits)
+    have new_map_def: "m' = (if c = 1 then Mapping.delete (drop b elem) m else Mapping.update (drop b elem) (c - 1, s - i) m)"
+      using del_def valid lookup_def i_def by simp
+    have valid_aggtype: "fst \<omega> = Formula.Agg_Sum \<or> fst \<omega> = Formula.Agg_Avg" using valid_before valid by auto
+    have valid_type_restr: "type_restr ?args (X - {elem})" using valid_before valid by(auto simp:type_restr_def) blast+
+    have valid_key_invariant: "\<And>k. k \<in> (drop b) ` ?new_data \<longleftrightarrow> k \<in> Mapping.keys m'"
+    proof (rule iffI)
+      fix k
+      assume assm: "k \<in> drop b ` (X - {elem})"
+      show "k \<in> Mapping.keys m'" 
+      proof(cases "drop b elem = k")
         case True
-        have "group_multiset k b f (X - {elem}) = group_multiset k b f X - {(meval_trm f elem, 1)}"
-          using multiset_single_term_remove elem_group True by auto
-        then have M_remove_def: "M = old_M - {(meval_trm f elem, 1)}" by simp
-        have in_M: "(meval_trm f elem, 1) \<in> old_M" using single_term_in_multiset True elem_group by auto
-        have fold_eq1: "foldl (+) y0 (flatten_multiset M) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M"
-          using foldl_flatten_multiset foldl_eint_equival M_int y0_int both_finite comm_plus' comp_fun_commute_plus' by(simp)
-        have fold_eq2: "foldl (+) y0 (flatten_multiset old_M) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 old_M" 
-          using foldl_flatten_multiset foldl_eint_equival M_old_int y0_int both_finite comm_plus' comp_fun_commute_plus' by simp
-        have "Finite_Set.fold (\<lambda>(t, m). plus' t ^^ the_enat m) y0 (Set.insert (meval_trm f elem, 1) (old_M - {(meval_trm f elem, 1)})) =
-              (plus' term' ^^ 1) (Finite_Set.fold (\<lambda>(t, m). plus' t ^^ the_enat m) y0 (old_M - {(meval_trm f elem, 1)} - {(meval_trm f elem, 1)}))"
-          using Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m). (plus') t ^^ the_enat m" "old_M - {(meval_trm f elem, 1)}" y0 "(meval_trm f elem, 1)"]
-            plus'_comp_commute M_remove_def by(simp) (smt (z3) finite_filter finite_imageI plus'_iter_one_enat valid_before valid_maggaux.elims(2))
-        then have aux: "Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 old_M = (plus' term' ^^ 1) (Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M)"
-          using in_M by (metis Diff_idemp M_remove_def insert_Diff)
-        moreover have fold_eint: "(Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M) \<in> range EInt"  using both_finite finite_set_fold_int multiset_int y0_int by blast
-        moreover have term'_eint: "term' \<in> range EInt" using in_M old_multiset_int term'_def by blast
-        ultimately have "Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M = (minus' term' ^^ 1) (Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 old_M)"
-          using plus'_minus'_id by auto
-        then have "Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M = (Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 old_M) - term'" 
-        by (metis fold_eint aux term'_eint iter_plus'_int minus'_iter_one_enat minus_minus'_equiv one_enat_def term'_def the_enat.simps)
-        then show ?thesis using fold_eq1 fold_eq2 by auto
+        then show ?thesis using length_flatten_multiset' assm valid_before valid
+          by(auto split:option.splits) (smt (z3) Optimized_Agg.group_def Set.member_filter c_def card_eq_Suc_0_ex1 elem_in in_set insert_absorb keys_update new_map_def)+
       next
         case False
-        then obtain y where y_def: "(meval_trm f elem, y) \<in> old_M" using elem_group in_set by fastforce
-        then obtain i where i_def: "y = enat i" by (smt (z3) Pair_inject ecard_def finite_filter image_iff old_M_def old_group_def valid_before valid_maggaux.simps)
-        have "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (Set.filter (\<lambda>x. drop b x = drop b elem) X) \<noteq> {}" using in_set by force
-        then have i_not_zero: "i \<noteq> 0" using y_def by(auto) (smt (z3) Set.member_filter card_eq_0_iff ecard_def enat_0_iff(2) finite.emptyI finite.insertI finite_Diff2 finite_filter i_def insert_absorb insert_not_empty updated_data_def valid_finite)
-        then obtain i' where i'_def: "i' = i - 1" by auto
-        then have i'_aux: "i' + 1 = i" using i_not_zero by auto
-        have finite_remove: "finite (old_M - {(meval_trm f elem, y)})" using both_finite finite_Diff  by (auto simp: Set.remove_def)
-        have finite_insert: "finite (Set.insert (meval_trm f elem, y) old_M)" using both_finite by blast
-        have "finite X" using valid_before by auto
-        moreover have "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (Optimized_Agg.group k b X) \<noteq> {elem}" using False by auto
-        ultimately have "group_multiset k b f (X - {elem}) = Set.insert (meval_trm f elem, y - 1) (group_multiset k b f X - {(meval_trm f elem, y)})"
-          using multiset_multiple_term_remove elem_group in_set False y_def by simp
-        then have M_insert_remove_def: "M = Set.insert (meval_trm f elem, y - 1) (old_M - {(meval_trm f elem, y)})" 
-          by simp
-        have foldl_plus_plus'_equiv: "foldl (+) y0 (flatten_multiset M) = foldl (plus') y0 (flatten_multiset M)" using foldl_eint_equival M_int y0_int by auto
-        have aux1: "foldl (plus') y0 (flatten_multiset (Set.insert (term', y) old_M)) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 (Set.insert (term', y) old_M)"
-          using foldl_flatten_multiset[of "Set.insert (term', y) old_M" plus' y0] finite_insert comp_fun_commute_plus' comm_plus' by auto
-        moreover have foldl_remove_equiv: "foldl plus' y0 (flatten_multiset(old_M - {(term', y)})) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 (old_M - {(term', y)})"
-          using foldl_flatten_multiset[of "old_M - {(term', y)}" plus' y0] finite_insert comp_fun_commute_plus' comm_plus' by auto
-        ultimately have aux: "foldl plus' y0 (flatten_multiset(Set.insert (term', y) old_M)) = ((plus' term') ^^ (the_enat y)) (foldl plus' y0 (flatten_multiset(old_M - {(term', y)})))" 
-          using  finite_insert plus'_comp_commute Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m). (plus') t ^^ the_enat m"] by auto
-        moreover have term'_int: "term' \<in> range EInt" using old_multiset_int term'_def y_def by blast
-        moreover have "foldl plus' y0 (flatten_multiset(old_M - {(term', y)})) \<in> range EInt" 
-          using foldl_remove_equiv by (metis DiffD1 finite_remove finite_set_fold_int old_multiset_int term'_def y0_int)
-        ultimately have aux: "foldl plus' y0 (flatten_multiset(old_M - {(term', y)})) = ((minus' term') ^^ (the_enat y)) (foldl plus' y0 (flatten_multiset(old_M)))"
-          using plus'_minus'_id by (metis comp_apply insert_absorb term'_def y_def)
-        moreover have "(term', y - 1) \<notin> old_M - {(term', y)}" using y_def by auto
-        ultimately have "Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M = ((plus' term') ^^ i') (((minus' term') ^^ (i' + 1)) (foldl plus' y0 (flatten_multiset(old_M))))"
-          using Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m). plus' t ^^ the_enat m"] plus'_comp_commute finite_remove i_def i'_def i'_aux
-          by(simp only: M_insert_remove_def term'_def) (metis (no_types, lifting) foldl_remove_equiv idiff_enat_enat old.prod.case one_enat_def term'_def the_enat.simps)
-        moreover have "foldl (plus') y0 (flatten_multiset(M)) = Finite_Set.fold (\<lambda>(t, m). (plus') t ^^ the_enat m) y0 M"
-          using foldl_flatten_multiset[of M plus' y0] both_finite comp_fun_commute_plus' comm_plus' by auto
-        ultimately have "foldl (plus') y0 (flatten_multiset(M)) = minus' term' (foldl plus' y0 (flatten_multiset(old_M)))"
-          using aux1 plus'_minus'_minus by (metis both_finite comp_eq_dest_lhs finite_set_fold_int insert_absorb old_multiset_int term'_def y0_int y_def)
-        moreover have "foldl plus' y0 (flatten_multiset(old_M)) \<in> range EInt" 
-          by (metis aux1 both_finite finite_set_fold_int insert_absorb old_multiset_int term'_def y0_int y_def)
-        ultimately show ?thesis using M_old_int foldl_eint_equival foldl_plus_plus'_equiv minus_minus'_equiv term'_int y0_int by auto
+        then have "k \<in> (drop b) ` X" using assm valid_before by auto
+        then have "k \<in> Mapping.keys m" using valid_before valid by auto
+        then show ?thesis using False new_map_def by auto
       qed
-      moreover have "Mapping.lookup updated_map k = Some (len - 1, sum - term')" using ls_def elem_group len_not_1
-        by(auto simp: lookup_update split:option.splits) 
-      ultimately show ?thesis using len l_def s_def by auto
     next
-      case False
-      then have "group = old_group" by auto
-      moreover have "Mapping.lookup updated_map k = Mapping.lookup m k" using False 
-        by(auto simp: lookup_update' split:option.splits) (metis lookup_update' update_delete)
-      ultimately show ?thesis using valid_before in_old by auto
+      fix k
+      assume assm: "k \<in> Mapping.keys m'" 
+      then have in_map: "k \<in> Mapping.keys m" using new_map_def elem_in by(auto split:if_splits) 
+      then have in_set: "k \<in> (drop b) ` X" using valid_before valid by auto
+      show "k \<in> (drop b) ` (X - {elem})"
+      proof(cases "drop b elem = k")
+        case True
+        then have not_1: "c \<noteq> 1" using assm new_map_def by(auto split:option.splits)
+        then have "card (group k b X) \<noteq> 1" using c_def True by(auto)
+        moreover have "group k b X \<noteq> {}" using True assms by auto
+        ultimately obtain k' where "k' \<in> group k b X" "k' \<noteq> elem" by (metis is_singletonI' is_singleton_altdef)
+        then show ?thesis by auto
+      next
+        case False
+        then show ?thesis using in_set by auto
+      qed
     qed
+    have valid_value_invariant: "\<And>k. k \<in> Mapping.keys m' \<longrightarrow> Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
+           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+          in Some (size (int_mset_conv M), fold_mset (+) 0 (int_mset_conv M)))"
+    proof rule
+      fix k
+      assume k_in: "k \<in> Mapping.keys m'"
+      let ?M = "group_multiset k b f ?new_data"
+      let ?old_M = "group_multiset k b f X"
+      obtain len sum where *: "Mapping.lookup m k = Some (len, sum)" using k_in by (metis Optimized_Agg.lookup_delete elem_in insert_absorb is_none_simps(1) keys_is_none_rep keys_update new_map_def not_None_eq prod.exhaust_sel)
+      then have k_in_old: "k \<in> Mapping.keys m" by (simp add: keys_is_none_rep)
+      then have vals: "len = size (int_mset_conv ?old_M)" "sum = fold_mset (+) 0 (int_mset_conv ?old_M)" using valid valid_before * k_in_old by auto
+      have "(meval_trm f) ` ?new_data \<subseteq> range EInt" using valid_before valid i_def
+        by(auto simp:type_restr_def image_subset_iff)
+      then have "(\<And>t m. (t, m) \<in> (group_multiset k b f ?new_data) \<Longrightarrow> t \<in> range EInt)" by fastforce
+      then have type_restr: "set (flatten_multiset (group_multiset k b f ?new_data)) \<subseteq> range EInt"
+        using flatten_multiset_range[of _ EInt] valid_finite by auto
+      have finite_old_M: "finite ?old_M" using finite_filter finite_imageI valid_finite by auto
+      have finite_M: "finite ?M" using finite_filter finite_imageI valid_finite by auto
+      show "Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
+           M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
+          in Some (size (int_mset_conv M), fold_mset (+) 0 (int_mset_conv M)))"
+      proof(cases "drop b elem = k")
+        case True
+        then have k_def: "drop b elem = k" by auto
+        then show ?thesis
+        proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {elem}")
+          case True
+          have in_M: "(meval_trm f elem, 1) \<in> ?old_M" using single_term_in_multiset[OF k_def True] by simp
+          have mset_eq: "?M = ?old_M - {(meval_trm f elem, 1)}"
+            using multiset_single_term_remove[OF k_def True] by simp
+          then have not_in: "(meval_trm f elem, 1) \<notin> ?M" by auto
+          have mset_insert: "?old_M = Set.insert (meval_trm f elem, 1) ?M" using in_M mset_eq by auto
+          then have mset_conv_eq: "int_mset_conv ?old_M = add_mset i (int_mset_conv ?M)"
+            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_M not_in] i_def
+            by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+          have "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
+          moreover have "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
+            using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M _] i_def vals(2)
+            by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+          ultimately show ?thesis using new_map_def k_def k_in by(auto) (metis * Pair_inject local.lookup_def lookup_update option.inject)
+        next
+          case False
+          then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
+            using k_def in_set valid_finite_group_mset[OF finite_X, of k b f] by(auto) (smt (z3) ecard_def filter_insert finite_X finite_filter insertI1 insert_image mk_disjoint_insert)
+          then have "n \<noteq> 0" by (metis enat_0_iff(1) finite_X valid_finite_group_mset valid_finite_mset_def)
+          then obtain n' where "n' = n - 1" by auto
+          then have n'_def: "(meval_trm f elem, enat (n' + 1)) \<in> ?old_M" using n_def \<open>n \<noteq> 0\<close> by force
+          then have not_in: "(meval_trm f elem, enat n') \<notin> ?old_M" using unique_term_multiset[OF n'_def] by auto
+          have "?M = Set.insert (meval_trm f elem, enat n') (?old_M - {(meval_trm f elem, enat (n' + 1))})"
+            using multiset_multiple_term_remove[OF k_def False n'_def in_set finite_X] by simp 
+          then have mset_conv_eq: "int_mset_conv ?old_M = add_mset i (int_mset_conv ?M)" 
+            using mset_conv_insert_remove'[OF n'_def _ not_in finite_old_M, of unpack_int] i_def by(simp add:int_mset_conv_def unpack_int_def) 
+          have "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
+          moreover have "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
+            using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def vals(2)
+            by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
+          ultimately show ?thesis using new_map_def k_def k_in by(auto) (metis "*" Pair_inject local.lookup_def lookup_update option.inject)
+        qed
+      next
+        case False
+        then have "Mapping.lookup m' k = Mapping.lookup m k" by (simp add: lookup_delete lookup_update' new_map_def)
+        moreover have "group k b (X - {elem}) = group k b X" using False by auto
+        ultimately show ?thesis using valid valid_before k_in by(simp) (simp add: keys_is_none_rep)
+      qed
+    qed
+    have "valid_maggaux ?args (v', SumAux m') (X - {elem})" 
+      using valid_finite valid_aggtype valid_type_restr valid_key_invariant valid_value_invariant by simp
+    then show ?thesis using del_def by(simp only:Let_def) fastforce
+  next
+    case False
+    then show ?thesis using del_def by auto
   qed
-  have "type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-    using valid_before by auto
-  then have valid_type_restr: "type_restr \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (X - {elem})"
-    using valid_before by (auto simp: type_restr_def) blast+
-  show ?thesis using valid_value_invariant valid_key_invariant valid_finite valid_before valid_type_restr
-    by auto
 qed
 
 lemma valid_delete_cnt_unfolded: 
-  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (CntAux m) X" 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, CntAux m) X" 
   and in_set: "elem \<in> X"
-  shows "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
-        (CntAux (delete_cnt \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m)) (X - {elem})"
+  shows "let (v', m') = delete_cnt \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem (v, m) in
+      valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v', CntAux m') (X - {elem})"
 proof - 
-  define updated_map where [simp]: "updated_map = delete_cnt \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem m"
-  define updated_data where [simp]: "updated_data = X - {elem}"
-  interpret comp_fun_commute "\<lambda>(t, m) y. y + the_enat m" 
-    by(unfold_locales) auto
-  have valid_finite: "finite updated_data" using valid_before by auto
-  have valid_key_invariant: "\<And>k. k \<in> (drop b) ` updated_data \<longleftrightarrow> k \<in> Mapping.keys updated_map"
-  proof (rule iffI)
-    fix k
-    assume assm: "k \<in> (drop b) ` updated_data"
-    show "k \<in>  Mapping.keys updated_map"
-    proof(cases "drop b elem = k")
-      case True
-      then show ?thesis using length_flatten_multiset' assm valid_before 
-        by(auto split:option.splits) (smt (z3) Set.member_filter card_eq_Suc_0_ex1 in_set is_none_simps(2) keys_is_none_rep option.inject)
+  let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+  let ?new_data = "(X - {elem})"
+  obtain v' m' where del_def: "(v', m') = delete_cnt ?args elem (v, m)" by (metis surj_pair)
+  show ?thesis
+  proof(cases v')
+    case True
+    then have valid: "v = True" using del_def by (auto split:if_splits)
+    have finite_X: "finite X" using valid valid_before by auto
+    then have valid_finite: "finite ?new_data" by auto
+    have elem_in: "drop b elem \<in> Mapping.keys m" using in_set valid valid_before by auto
+    then obtain c where lookup_def: "Mapping.lookup m (drop b elem) = Some c" 
+      using True del_def valid by(auto simp: keys_is_none_rep split:option.splits)
+    then have "c = length (flatten_multiset (group_multiset (drop b elem) b f X))" 
+      using length_mset_eq[OF _ valid_finite_group_mset[OF finite_X, of "(drop b elem)" b f], of Some] 
+      valid valid_before elem_in by simp 
+    then have c_def: "c = card(group (drop b elem) b X)" using finite_X length_flatten_multiset' by blast
+    have new_map_def: "m' = (if c = 1 then Mapping.delete (drop b elem) m else Mapping.update (drop b elem) (c - 1) m)"
+      using del_def valid lookup_def by simp
+    have valid_aggtype: "fst \<omega> = Formula.Agg_Cnt" using valid_before valid by auto
+    have valid_type_restr: "type_restr ?args (X - {elem})" using valid_before valid by(auto simp:type_restr_def)
+    have valid_key_invariant: "\<And>k. k \<in> (drop b) ` ?new_data \<longleftrightarrow> k \<in> Mapping.keys m'"
+    proof (rule iffI)
+      fix k
+      assume assm: "k \<in> drop b ` (X - {elem})"
+      show "k \<in> Mapping.keys m'" 
+      proof(cases "drop b elem = k")
+        case True
+        then show ?thesis using length_flatten_multiset' assm valid_before valid
+          by(auto split:option.splits) (smt (z3) Optimized_Agg.group_def Set.member_filter c_def card_eq_Suc_0_ex1 elem_in in_set insert_absorb keys_update new_map_def)+
+      next
+        case False
+        then have "k \<in> (drop b) ` X" using assm valid_before by auto
+        then have "k \<in> Mapping.keys m" using valid_before valid by auto
+        then show ?thesis using False new_map_def by auto
+      qed
     next
-      case False
-      then show ?thesis 
-        using valid_before assm
-        by(auto simp only: updated_map_def delete_cnt.simps Let_def updated_data_def split:option.splits) auto
+      fix k
+      assume assm: "k \<in> Mapping.keys m'" 
+      then have in_map: "k \<in> Mapping.keys m" using new_map_def elem_in by(auto split:if_splits) 
+      then have in_set: "k \<in> (drop b) ` X" using valid_before valid by auto
+      show "k \<in> (drop b) ` (X - {elem})"
+      proof(cases "drop b elem = k")
+        case True
+        then have not_1: "c \<noteq> 1" using assm new_map_def by(auto split:option.splits)
+        then have "card (group k b X) \<noteq> 1" using c_def True by(auto)
+        moreover have "group k b X \<noteq> {}" using True assms by auto
+        ultimately obtain k' where "k' \<in> group k b X" "k' \<noteq> elem" by (metis is_singletonI' is_singleton_altdef)
+        then show ?thesis by auto
+      next
+        case False
+        then show ?thesis using in_set by auto
+      qed
     qed
-  next
-    fix k
-    assume assm: "k \<in> Mapping.keys updated_map"
-    show "k \<in> (drop b) ` updated_data"
-    proof (cases "k \<in> Mapping.keys m")
-      case True
-      then show ?thesis using length_flatten_multiset' assm valid_before 
-        apply(auto split:option.splits) by(fastforce) (smt (z3) Diff_iff Set.member_filter card_eq_Suc_0_ex1 empty_iff image_iff insert_iff keys_delete option.sel)
-    next
-      case False
-      then show ?thesis using valid_before assm
-        by(auto) (smt (verit, best) imageI in_set insertCI insert_Diff insert_absorb keys_delete keys_update option.simps(5))
-    qed 
-  qed
-  have valid_value_invariant: "\<And>k. k \<in> Mapping.keys updated_map \<longrightarrow> Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
+  have valid_value_invariant: "\<And>k. k \<in> Mapping.keys m' \<longrightarrow> Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
            M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-          in Some (length (flatten_multiset M)))"
+          in Some (size (mset_conv Some M)))"
   proof rule
-    fix k
-    define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) updated_data"
-    define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-    define old_group where [simp]: "old_group = Set.filter (\<lambda>x. drop b x = k) X"
-    define old_M where [simp]: "old_M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) old_group))) ` meval_trm f ` old_group"
-    define old_evals where "old_evals = meval_trm f ` old_group"
-    assume assm: "k \<in> Mapping.keys updated_map"
-    then have in_old: "k \<in> Mapping.keys m" by(auto split:option.splits) (smt (z3) Diff_iff insert_iff is_none_simps(2) keys_delete keys_is_none_rep keys_update)
-    show "Mapping.lookup updated_map k = 
-          (let group = Set.filter (\<lambda>x. drop b x = k) updated_data;
+      fix k
+      assume k_in: "k \<in> Mapping.keys m'"
+      let ?M = "group_multiset k b f ?new_data"
+      let ?old_M = "group_multiset k b f X"
+      obtain len where *: "Mapping.lookup m k = Some len" using k_in by (metis Optimized_Agg.lookup_delete elem_in insert_absorb is_none_simps(1) keys_is_none_rep keys_update new_map_def not_None_eq)
+      then have k_in_old: "k \<in> Mapping.keys m" by (simp add: keys_is_none_rep)
+      then have vals: "len = size (mset_conv Some ?old_M)"  using valid valid_before * k_in_old by auto
+      have finite_old_M: "finite ?old_M" using finite_filter finite_imageI valid_finite by auto
+      have finite_M: "finite ?M" using finite_filter finite_imageI valid_finite by auto
+      show "Mapping.lookup m' k = 
+          (let group = Set.filter (\<lambda>x. drop b x = k) ?new_data;
            M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-          in Some (length (flatten_multiset M)))"
-    proof(cases "drop b elem = k")
-      case True
-      then have grp_def: "group = Set.remove elem old_group" by auto
-      have "length(flatten_multiset(M)) = card group" using length_flatten_multiset' valid_before
-        by(simp only: M_def old_M_def group_multiset_def Let_def) (auto)
-      moreover have "length(flatten_multiset(old_M)) = card old_group" using length_flatten_multiset' valid_before
-        by(simp only: M_def old_M_def group_multiset_def Let_def) (auto)
-      ultimately have len: "length(flatten_multiset(M)) = length(flatten_multiset(old_M)) - 1" using grp_def in_set
-        by(auto) (smt (z3) One_nat_def Set.member_filter Set.remove_def True card_Diff_singleton finite_filter valid_before valid_maggaux.simps)
-      obtain i where i_def: "Mapping.lookup m k = Some i" using in_old by (metis default_def lookup_default)
-      then have i_def': "i = length(flatten_multiset(old_M))" using valid_before in_old by auto
-      then have "Mapping.lookup updated_map k = Some (i - 1)" using True assm i_def by(auto simp: lookup_update split:option.splits)
-      then show ?thesis using len i_def' by(simp) 
-    next
-      case False
-      then have "group = old_group" by auto
-      moreover have "Mapping.lookup updated_map k = Mapping.lookup m k" using False 
-        by(auto simp: lookup_update' split:option.splits) (metis lookup_update' update_delete)
-      ultimately show ?thesis using valid_before in_old by auto
+          in Some (size (mset_conv Some M)))"
+      proof(cases "drop b elem = k")
+        case True
+        then have k_def: "drop b elem = k" by auto
+        then show ?thesis
+        proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {elem}")
+          case True
+          have in_M: "(meval_trm f elem, 1) \<in> ?old_M" using single_term_in_multiset[OF k_def True] by simp
+          have mset_eq: "?M = ?old_M - {(meval_trm f elem, 1)}"
+            using multiset_single_term_remove[OF k_def True] by simp
+          then have not_in: "(meval_trm f elem, 1) \<notin> ?M" by auto
+          have mset_insert: "?old_M = Set.insert (meval_trm f elem, 1) ?M" using in_M mset_eq by auto
+          then have mset_conv_eq: "mset_conv Some ?old_M = add_mset (meval_trm f elem) (mset_conv Some ?M)"
+            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some] finite_M not_in] 
+            by(simp add:mset_conv_def one_enat_def)
+          have "size (mset_conv Some ?M) = len - 1" using mset_conv_eq vals(1) by simp
+          then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def lookup_update option.inject)
+        next
+          case False
+          then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
+            using k_def in_set valid_finite_group_mset[OF finite_X, of k b f] by(auto) (smt (z3) ecard_def filter_insert finite_X finite_filter insertI1 insert_image mk_disjoint_insert)
+          then have "n \<noteq> 0" by (metis enat_0_iff(1) finite_X valid_finite_group_mset valid_finite_mset_def)
+          then obtain n' where "n' = n - 1" by auto
+          then have n'_def: "(meval_trm f elem, enat (n' + 1)) \<in> ?old_M" using n_def \<open>n \<noteq> 0\<close> by force
+          then have not_in: "(meval_trm f elem, enat n') \<notin> ?old_M" using unique_term_multiset[OF n'_def] by auto
+          have "?M = Set.insert (meval_trm f elem, enat n') (?old_M - {(meval_trm f elem, enat (n' + 1))})"
+            using multiset_multiple_term_remove[OF k_def False n'_def in_set finite_X] by simp 
+          then have mset_conv_eq: "mset_conv Some ?old_M = add_mset (meval_trm f elem) (mset_conv Some ?M)" 
+            using mset_conv_insert_remove'[OF n'_def _ not_in finite_old_M, of Some] by simp
+          have "size (mset_conv Some ?M) = len - 1" using mset_conv_eq vals(1) by simp
+          then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def lookup_update option.inject)
+        qed
+      next
+        case False
+        then have "Mapping.lookup m' k = Mapping.lookup m k" by (simp add: lookup_delete lookup_update' new_map_def)
+        moreover have "group k b (X - {elem}) = group k b X" using False by auto
+        ultimately show ?thesis using valid valid_before k_in by(simp) (simp add: keys_is_none_rep)
+      qed
     qed
+    have "valid_maggaux ?args (v', CntAux m') (X - {elem})" 
+      using valid_finite valid_aggtype valid_type_restr valid_key_invariant valid_value_invariant by simp
+    then show ?thesis using del_def by(simp only:Let_def) fastforce
+  next
+    case False
+    then show ?thesis using del_def by auto
   qed
-  show ?thesis using valid_value_invariant valid_key_invariant valid_finite valid_before
-    by auto
 qed
 
+lemma valid_delete_rank_unfolded: 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, RankAux m) X" 
+  and in_set: "elem \<in> X"
+  shows "let (v', m') = delete_rank \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> elem (v, m) in
+      valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v', RankAux m') (X - {elem})"
+  sorry
+
 lemma valid_delete_maggaux_unfolded: 
-  "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> aux X \<Longrightarrow>
-  Y \<subseteq> X  \<Longrightarrow>
-  valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
-  (delete_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> Y aux) (X - Y)" 
-proof(induction aux)
-  case (CntAux m)
-  have subset: "Y \<subseteq> X" using CntAux by auto
-  have finite_y: "finite Y" using CntAux rev_finite_subset by auto
-  then show ?case using subset
-  proof(induction Y)
-    case empty
-    then show ?case using CntAux by auto
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, aux) X"
+  and subset: "Y \<subseteq> X"
+  shows "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> 
+  (delete_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> Y (v, aux)) (X - Y)" 
+proof(cases v)
+  case True
+  then have finite_Y: "finite Y" using valid_before finite_subset subset by auto
+  show ?thesis using valid_before
+  proof(induction aux)
+    case (CntAux m)
+    show ?case using finite_Y subset CntAux
+    proof(induction Y)
+      case empty
+      then show ?case  by auto blast
+    next
+      case (insert x F)
+      let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+      interpret comp_fun_commute "delete_cnt ?args"
+        using delete_cnt_comm by unfold_locales auto
+      obtain v' m' where intermediate_map_def: "(v', CntAux m') = delete_maggaux ?args F (v, CntAux m)" 
+        using insert(1) True apply(induction F) by(auto) (metis (no_types, lifting) case_prod_conv surj_pair)
+      then have fold_def: "Finite_Set.fold (delete_cnt ?args) (v, m) F = (v', m')" 
+        using True by(auto split:prod.splits)
+      obtain v_f m_f where final_map_def: "(v_f, m_f) = delete_cnt ?args x (v', m')" by auto metis
+      have subs: "F \<subseteq> X" using insert(4) by force
+      have x_in: "x \<in> X - F" using insert by auto
+      have valid_inter: "valid_maggaux ?args (v', CntAux m') (X - F)" 
+        using insert(3)[OF subs] CntAux.prems by(simp only:intermediate_map_def) 
+      have "valid_maggaux ?args (v_f, CntAux m_f) (X - F - {x})"
+        using valid_delete_cnt_unfolded[OF valid_inter x_in] final_map_def by(simp only:Let_def) force
+      then have "valid_maggaux ?args (v_f, CntAux m_f) (X - Set.insert x F)" by (metis Diff_insert)
+      then show ?case using fold_insert[OF insert(1-2)] final_map_def fold_def True
+        by(simp cong:option.case_cong del:delete_cnt.simps valid_maggaux.simps split:prod.splits) force
+    qed
   next
-    case (insert x F)
-    define args where "args = \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
-    interpret comp_fun_commute "delete_cnt args"
-      using delete_cnt_comm by unfold_locales auto
-    obtain intermediate_map where intermediate_map_def: "CntAux intermediate_map = delete_maggaux args F (CntAux m)" by auto
-    have valid_a: "valid_maggaux args (CntAux (delete_cnt args x intermediate_map)) (X - F - {x})" 
-      using valid_delete_cnt_unfolded[of cols n g0 y \<omega> b f intermediate_map "X - F" x] insert args_def intermediate_map_def by(auto)
-    then have "Finite_Set.fold (delete_cnt args) m (Set.insert x F) = delete_cnt args x (Finite_Set.fold (delete_cnt args) m F)"
-      using Finite_Set.comp_fun_commute.fold_insert insert by auto
-    moreover have "CntAux (Finite_Set.fold (delete_cnt args) m F) = CntAux intermediate_map"
-      by(auto simp:intermediate_map_def)
-    ultimately have "delete_maggaux args (Set.insert x F) (CntAux m) = CntAux (delete_cnt args x intermediate_map)"
-      using  Finite_Set.comp_fun_commute.fold_insert by auto
-    then have "valid_maggaux args (delete_maggaux args (Set.insert x F) (CntAux m)) (X - Set.insert x F)"
-      using valid_a by (metis Diff_insert)
-    then show ?case
-      by (auto simp: args_def)
+    case (SumAux m)
+    show ?case using finite_Y subset SumAux
+    proof(induction Y)
+      case empty
+      then show ?case by auto blast+
+    next
+      case (insert x F)
+      let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+      interpret comp_fun_commute "delete_sum ?args"
+        using delete_sum_comm by unfold_locales auto
+      obtain v' m' where intermediate_map_def: "(v', SumAux m') = delete_maggaux ?args F (v, SumAux m)" 
+        using insert(1) True apply(induction F) by(auto) (metis (no_types, lifting) case_prod_conv surj_pair)
+      then have fold_def: "Finite_Set.fold (delete_sum ?args) (v, m) F = (v', m')" 
+        using True by(auto split:prod.splits)
+      obtain v_f m_f where final_map_def: "(v_f, m_f) = delete_sum ?args x (v', m')" using prod.collapse by blast
+      have subs: "F \<subseteq> X" using insert(4) by blast
+      have x_in: "x \<in> X - F" using insert(2) insert(4) by force
+      have valid_inter: "valid_maggaux ?args (v', SumAux m') (X - F)" 
+        using insert(3)[OF subs SumAux] by(simp only:intermediate_map_def)
+      have "valid_maggaux ?args (v_f, SumAux m_f) (X - F - {x})"
+        using valid_delete_sum_unfolded[OF valid_inter x_in] final_map_def by(simp only:Let_def) force
+      then have "valid_maggaux ?args (v_f, SumAux m_f) (X - Set.insert x F)" by (metis Diff_insert)
+      then show ?case using fold_insert[OF insert(1-2)] final_map_def fold_def True
+        by(simp cong:option.case_cong del:delete_sum.simps valid_maggaux.simps split:prod.splits) force
+    qed
+  next
+    case (RankAux m)
+    show ?case using finite_Y subset RankAux
+    proof(induction Y)
+      case empty
+      then show ?case by auto blast+
+    next
+      case (insert x F)
+      let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+      interpret comp_fun_commute "delete_rank ?args"
+        using delete_rank_comm by unfold_locales auto
+      obtain v' m' where intermediate_map_def: "(v', RankAux m') = delete_maggaux ?args F (v, RankAux m)" 
+        using insert(1) True apply(induction F) by(auto) (metis (no_types, lifting) case_prod_conv surj_pair)
+      then have fold_def: "Finite_Set.fold (delete_rank ?args) (v, m) F = (v', m')" 
+        using True by(auto split:prod.splits)
+      obtain v_f m_f where final_map_def: "(v_f, m_f) = delete_rank ?args x (v', m')" using prod.collapse by blast
+      have subs: "F \<subseteq> X" using insert(4) by blast
+      have x_in: "x \<in> X - F" using insert(2) insert(4) by force
+      have valid_inter: "valid_maggaux ?args (v', RankAux m') (X - F)" 
+        using insert(3)[OF subs RankAux] by(simp only:intermediate_map_def)
+      have "valid_maggaux ?args (v_f, RankAux m_f) (X - F - {x})"
+        using valid_delete_rank_unfolded[OF valid_inter x_in] final_map_def by(simp only:Let_def) force
+      then have "valid_maggaux ?args (v_f, RankAux m_f) (X - Set.insert x F)" by (metis Diff_insert)
+      then show ?case using fold_insert[OF insert(1-2)] final_map_def fold_def True
+        by(simp cong:option.case_cong del:delete_rank.simps valid_maggaux.simps split:prod.splits) force
+    qed
   qed
 next
-  case (SumAux m)
-  have subset: "Y \<subseteq> X" using SumAux by auto
-  have valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m) X" using SumAux by auto
-  have finite_y: "finite Y" using subset valid_before finite_subset by auto
-  then show ?case using subset 
-  proof(induction Y)
-    case empty
-    then show ?case using SumAux by auto
-  next
-    case (insert x F)
-    define args where "args = \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
-    interpret comp_fun_commute "delete_sum_comm args"
-      using delete_sum_comm by unfold_locales auto
-    have x_in_X: "x \<in> X" using insert by auto
-    obtain intermediate_map where intermediate_map_def: "SumAux intermediate_map = delete_maggaux args F (SumAux m)" by auto
-    then have intermediate_map_def': "intermediate_map = Finite_Set.fold (delete_sum args) m F" by auto
-    have F_subs: "F \<subseteq> X" using insert(4) by auto
-    moreover have "valid_maggaux args (SumAux m) X" using valid_before by (auto simp:args_def)
-    ultimately have valid_int: "valid_maggaux args (SumAux intermediate_map) (X - F)" using insert(3) by(simp only:intermediate_map_def args_def)
-    moreover have "x \<in> X - F" using insert(2) insert.prems(1) by auto
-    moreover have type_x: "type_restr args {x}" using valid_before x_in_X apply (cases "fst \<omega>") apply(auto simp: args_def type_restr_def) by blast blast
-    ultimately have valid_a: "valid_maggaux args (SumAux (delete_sum args x intermediate_map)) (X - F - {x})" 
-      using valid_delete_sum_unfolded using args_def by blast
-    have y0_int: "snd (aggargs_\<omega> args) \<in> range EInt" using valid_before SumAux.prems(1) by (auto simp: type_restr_def args_def)
-    have aux1: "(\<And>a b. a \<in> (Set.insert x F) \<Longrightarrow> b \<in> valid_sumaux_maps \<Longrightarrow> delete_sum args a b = delete_sum_comm args a b)" 
-    proof -
-      fix a b
-      assume a_def: "a \<in> (Set.insert x F)" and b_def: "b \<in> valid_sumaux_maps"
-      have "meval_trm (aggargs_f args) a \<in> range EInt" using valid_before a_def SumAux.prems(1) x_in_X insert(4) F_subs
-        apply(auto simp: type_restr_def  args_def split:option.splits) apply(auto) by blast blast
-      then show "delete_sum args a b = delete_sum_comm args a b" using y0_int b_def delete_sum_equiv[of args a b] by auto
-    qed
-    moreover have aux2: "(\<And>a b. a \<in> (Set.insert x F) \<Longrightarrow> b \<in> valid_sumaux_maps \<Longrightarrow> delete_sum_comm args a b \<in> valid_sumaux_maps)"
-    proof -
-      fix a b
-      assume "a \<in> (Set.insert x F)" and "b \<in> valid_sumaux_maps"
-      then show "delete_sum_comm args a b \<in> valid_sumaux_maps"
-        using y0_int 
-        apply(auto simp: valid_sumaux_maps_def lookup_update' split:option.splits) 
-        apply (metis Diff_iff insert_iff is_none_simps(2) keys_delete keys_is_none_rep lookup_update' update_delete)
-        using minus'.simps(1) apply blast
-        apply (metis Diff_iff insertI1 is_none_simps(2) keys_delete keys_is_none_rep lookup_update' update_delete)
-        using minus'.simps(1) by blast
-    qed
-    moreover have valid_m: "m \<in> valid_sumaux_maps" using valid_maggaux_valid_map SumAux(1) by blast
-    ultimately have "Finite_Set.fold (delete_sum args) m (Set.insert x F) = Finite_Set.fold (delete_sum_comm args) m (Set.insert x F)"
-      using sumaux_finite_set_fold_eq[of "(Set.insert x F)" "delete_sum args" "delete_sum_comm args" m] insert by auto
-    moreover have "Finite_Set.fold (delete_sum args) m F = Finite_Set.fold (delete_sum_comm args) m F"
-      using sumaux_finite_set_fold_eq[of F "delete_sum args" "delete_sum_comm args" m] using insert aux1 aux2 valid_m by auto
-    moreover have "Finite_Set.fold (delete_sum_comm args) m (Set.insert x F) = delete_sum_comm args x (Finite_Set.fold (delete_sum_comm args) m F)"
-      using  Finite_Set.comp_fun_commute.fold_insert[of "delete_sum_comm args" F x m] insert by auto
-    moreover have "Finite_Set.fold (delete_sum args) m F \<in> valid_sumaux_maps" 
-      using valid_maggaux_valid_map[of cols n g0 y \<omega> b f intermediate_map "X - F"] intermediate_map_def' valid_int by(simp only:args_def)
-    moreover have "meval_trm (aggargs_f args) x \<in> range EInt" 
-      using type_x SumAux.prems(1) by(auto simp: type_restr_def args_def split:option.splits)
-    ultimately have "Finite_Set.fold (delete_sum args) m (Set.insert x F) = delete_sum args x (Finite_Set.fold (delete_sum args) m F)"
-      using insert_sum_equiv[of args x "Finite_Set.fold (delete_sum args) m F"] y0_int delete_sum_equiv by auto
-    then have "delete_maggaux args (Set.insert x F) (SumAux m) = SumAux (delete_sum args x intermediate_map)"
-      using intermediate_map_def' by auto
-    then have "valid_maggaux args (delete_maggaux args (Set.insert x F) (SumAux m)) (X - Set.insert x F)"
-      using valid_a by (metis Diff_insert)
-    then show ?case by (simp only: args_def)
-  qed
-next
-  case (RankAux x)
-  then show ?case sorry
+  case False
+  then show ?thesis by auto
 qed
 
 lemma valid_delete_maggaux': "valid_maggaux args aux X \<Longrightarrow>
     table (aggargs_b args + aggargs_n args) (aggargs_cols args) Y \<Longrightarrow> Y \<subseteq> X \<Longrightarrow>
     valid_maggaux args (delete_maggaux args Y aux) (X - Y)"
-  using valid_delete_maggaux_unfolded by (cases args) blast
+  using valid_delete_maggaux_unfolded apply (cases args) by(cases aux) auto
 
 lemma valid_aggmap_empty_data: "valid_aggmap g b f m X \<Longrightarrow> X = {} \<longleftrightarrow> Mapping.keys m = {}"
   by auto
@@ -1662,179 +1743,802 @@ proof -
   then show ?thesis 
     using finite_m n_def by (simp add:flatten_multiset_def csorted_list_of_set_def c_def) force
 qed
-  
-lemma valid_result_maggaux_unfolded: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> aux X
-                                  \<Longrightarrow> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> aux
-                                    = eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-proof(induction aux)
-  case(SumAux m)
-  then show ?case
-  proof (cases "g0 \<and> X = {}")
-    case True
-    then show ?thesis unfolding eval_aggargs_def eval_agg_def using SumAux
-      by auto
+
+lemma mset_prop_unfold:
+  assumes "ID ccompare = Some (c :: (event_data \<times> enat) comparator)"
+  and "\<forall>t m. (t, m) \<in> F \<longrightarrow> (\<exists>k. f t = Some k)"
+  and "valid_finite_mset F"
+  shows "\<forall>t. t \<in> set (flatten_multiset F) \<longrightarrow> (\<exists>k. f t = Some k)"
+proof (rule allI, rule impI)
+  interpret linorder "le_of_comp c" "lt_of_comp c"
+    using ID_ccompare[OF assms(1)] by simp
+  fix t
+  assume "t \<in> set (flatten_multiset F)"
+  moreover have "finite F" using assms(3) by(simp add:valid_finite_mset_def)
+  ultimately obtain t' m where "(t', m) \<in> F" "t = t'" 
+    by(simp add:flatten_multiset_def csorted_list_of_set_def assms(1)) blast
+  then show "\<exists>k. f t = Some k" using assms(2) by auto
+qed
+
+lemma mset_multi_prop_unfold:
+  assumes "ID ccompare = Some (c :: (event_data \<times> enat) comparator)"
+  and "ID ccompare = Some (c' :: event_data comparator)"
+  and "\<forall>t1 m1 t2 m2. (t1, m1) \<in> F \<and> (t2, m2) \<in> F \<longrightarrow> c' t1 t2 = comp_of_ords (\<le>) (<) (the (f t1)) (the (f t2))"
+  and "valid_finite_mset F"
+  shows "\<forall>e1 e2. e1 \<in> set (flatten_multiset F) \<and> e2 \<in> set (flatten_multiset F) \<longrightarrow> c' e1 e2 = comp_of_ords (\<le>) (<) (the (f e1)) (the (f e2))"
+proof (rule allI, rule allI, rule impI)
+  interpret linorder "le_of_comp c" "lt_of_comp c"
+    using ID_ccompare[OF assms(1)] by simp
+  fix e1 e2
+  assume "e1 \<in> set (flatten_multiset F) \<and> e2 \<in> set (flatten_multiset F)" 
+  moreover have "finite F" using assms(4) by(simp add:valid_finite_mset_def)
+  ultimately obtain t1 m1 t2 m2 where "(t1, m1) \<in> F" "(t2, m2) \<in> F" "t1 = e1" "t2 = e2" 
+    by(simp add:flatten_multiset_def csorted_list_of_set_def assms(1)) blast
+  then show "c' e1 e2 = comp_of_ords (\<le>) (<) (the (f e1)) (the (f e2))" using assms(3) by blast
+qed
+
+lemma valid_list_aux_remove:
+  assumes "valid_list_aux' l s"
+  shows "valid_list_aux' (((List.remove1 t) ^^ n) l) (s - replicate_mset n t)"
+  using assms by (induction n) (simp add: valid_list_aux'_def)+
+
+lemma sort_remove_eq:
+  shows "sort (remove1 t l) = remove1 t (sort l)"
+  apply (induction l) by auto (metis in_set_remove1 insort_left_comm insort_remove1 remove1_idem remove1_insort sorted_sort)
+
+lemma insort_remove_comm:
+  assumes "t \<in> set l"
+  and "sorted l"
+  shows "(Sorting.insort t ^^ i) (remove1 t l) = remove1 t ((Sorting.insort t ^^ i) l)"
+  using assms
+proof(induction l)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a l)
+  then show ?case 
+    using Cons funpow_swap1 insort_eq insort_remove1 remove1.simps(2) remove1_insort sorted.simps(2) sorted_sorted_wrt
+    by smt+
+qed
+
+lemma bulk_remove_in_set:
+  assumes "(count \<circ> mset) l t \<ge> i + 1"
+  shows "t \<in> set ((remove1 t ^^ i) l)"
+  using assms by(induction i arbitrary:l) (auto simp: funpow_swap1)
+
+lemma bulk_insert_in_set:
+  assumes "t \<in> set l"
+  shows "t \<in> set ((insort t ^^ i) l)"
+  using assms by(induction i) (simp add: insort_eq set_insort_key)+
+
+lemma sorted_bulk_insort:
+  assumes "sorted l"
+  shows "sorted ((insort t ^^ i) l)"
+  using assms by(induction i) (simp add: sorted_wrt_sorted_insort)+
+
+lemma sort_insert_remove:
+  assumes "(count \<circ> mset) l t \<ge> i"
+  shows "sort l = (insort t ^^ i) (sort ((remove1 t ^^ i) l))" 
+  using assms
+proof(induction i)
+  case 0
+  then show ?case by auto
+next
+  case (Suc i)
+  let ?removed = "sort ((remove1 t ^^ i) l)"
+  have "(remove1 t ^^ i) [] = []" by (induction i) auto
+  then have simp1: "sort (remove1 t ((remove1 t ^^ i) l)) = remove1 t (sort ((remove1 t ^^ i) l))" 
+    using sort_remove_eq by(induction l) auto
+  have in_set: "t \<in> set ?removed" using Suc(2) bulk_remove_in_set by auto
+  have sorted: "sorted ?removed" by(simp add: sorted_sorted_wrt[symmetric])
+  have "t \<in> set ((insort t ^^ i) ?removed)" using bulk_insert_in_set[of t] in_set by auto
+  moreover have "sorted ((insort t ^^ i) ?removed)" using sorted_bulk_insort sorted by auto
+  ultimately show ?case using Suc simp1 insort_remove_comm[OF in_set, OF sorted] 
+    by auto (simp add: insort_eq insort_remove1 sorted_sorted_wrt)
+qed
+
+lemma unpack_insort:
+  assumes "ID ccompare = Some (c :: event_data comparator)" 
+  and "\<forall>t. (t \<in> set xs \<longrightarrow> (\<exists>k. f t = Some k))"
+  and "\<forall>e. e \<in> set xs \<longrightarrow> c t e = comp_of_ords (\<le>) (<) (the (f t)) (the (f e))"
+  shows "map (\<lambda>a. the (f a)) (linorder.insort (le_of_comp c) t xs) = insort (the (f t)) (map (\<lambda>a. the (f a)) xs)"
+proof -
+  interpret linorder "le_of_comp c" "lt_of_comp c"
+    using ID_ccompare[OF assms(1)] by auto
+  show ?thesis using assms(2-3)
+  proof(induction xs)
+    case Nil
+    then show ?case using insort_key_def by auto
   next
-    case False
-    then have assm_map: "\<not>(g0 \<and> Mapping.keys m = {})" using valid_aggmap_empty_data[of _ b f m X] SumAux by fastforce
-    have assm_reg: "\<not>(g0 \<and> X = {})" using False by auto
-    show ?thesis
-    proof (cases "fst \<omega> = Formula.Agg_Sum")
+    case (Cons a xs)
+    then obtain k where a_def: "f a = Some k" by auto
+    let ?t = "(the \<circ> f) t"
+    have *: "\<forall>t. (t \<in> set xs \<longrightarrow> (\<exists>k. f t = Some k))" using Cons by auto
+    show ?case 
+    proof(cases "(le_of_comp c) t a")
       case True
-      show ?thesis
-      proof (rule set_eqI, rule iffI)
-      fix result
-      assume "result \<in> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m)"
-      then obtain k where k_assm: "k \<in> Mapping.keys m \<and> result = (case Mapping.lookup m k of 
-                                                      Some (_, agg_sum) \<Rightarrow> k[y:=Some agg_sum]
-                                                    | None \<Rightarrow> k)" using assm_map True by auto
-      define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) X"
-      define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-      have "Mapping.lookup m k = Some (length (flatten_multiset M), foldl plus (snd \<omega>) (flatten_multiset M))" 
-        using SumAux k_assm True by (simp add: lookup_default_def)
-      then have "result = k[y:= Some (eval_agg_op \<omega> M)]" 
-        using k_assm True by auto (metis (no_types, lifting) eval_agg_op.simps(4) prod.exhaust_sel)
-      then show "result \<in> eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-        using k_assm SumAux by (auto simp add: eval_agg_def eval_aggargs_def)
-    next
-      fix result
-      assume "result \<in> eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-      then obtain k where k_assm: "(k \<in> (drop b) ` X \<and> result = (let group = Set.filter (\<lambda>x. drop b x = k) X;
-                                                                   M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-                                                                 in k[y:=Some (eval_agg_op \<omega> M)]))" 
-        unfolding eval_aggargs_def eval_agg_def empty_table_def using False by auto
-      define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) X"
-      define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-      have key_in_map: "k \<in> Mapping.keys m"
-        using SumAux apply(auto) using k_assm by presburger+
-      then have "Mapping.lookup m k = Some (length (flatten_multiset M), foldl plus (snd \<omega>) (flatten_multiset M))"
-        using SumAux True by (simp add: lookup_default_def)
-      then have "result = (case Mapping.lookup m k of 
-                            Some (_, agg_sum) \<Rightarrow> k[y:=Some agg_sum]
-                          | None \<Rightarrow> k)"
-        using True k_assm unfolding M_def group_def by auto (metis (no_types, lifting) eval_agg_op.simps(4) prod.exhaust_sel)
-      then show  "result \<in> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m)"
-        using key_in_map True by auto
-    qed
+      then have "?t \<le> k" using Cons(3) a_def 
+        by (metis comp_of_ords_def insertI1 le_of_comp_def linorder_class.le_cases list.set(2) o_apply option.sel order.simps(9) order_class.leD)
+      then show ?thesis using True by(simp add:a_def) 
     next
       case False
-      then have agg_type: "fst \<omega> = Formula.Agg_Avg" using SumAux by auto
-      obtain aux where aux_def: "\<omega> = (Formula.Agg_Avg, aux)" using agg_type 
-        by (simp add: prod_eq_iff)
-      show ?thesis 
-      proof (rule set_eqI, rule iffI)
-      fix result
-      assume "result \<in> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m)"
-      then obtain k where k_assm: "k \<in> Mapping.keys m \<and> result = (case Mapping.lookup m k of 
-                                                      Some (cnt, agg_sum) \<Rightarrow> k[y:=Some (EFloat ((double_of_event_data agg_sum) / (double_of_int cnt)))]
-                                                    | None \<Rightarrow> k)" using assm_map agg_type by auto
-      define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) X"
-      define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-      have not_empty: "flatten_multiset M \<noteq> []" 
-        using flatten_multiset_not_empty[of _ b f m X k] SumAux k_assm False 
-        by auto
-      have "Mapping.lookup m k = Some (length (flatten_multiset M), foldl plus (EInt 0) (flatten_multiset M))" 
-        using SumAux k_assm agg_type by (simp add: lookup_default_def)
-      then have "result = k[y:= Some (eval_agg_op \<omega> M)]" 
-        using k_assm agg_type not_empty SumAux aux_def
-        by(auto split:list.splits)
-      then show "result \<in> eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-        using k_assm SumAux by (auto simp add: eval_agg_def eval_aggargs_def)
-    next
-      fix result
-      assume "result \<in> eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-      then obtain k where k_assm: "(k \<in> (drop b) ` X \<and> result = (let group = Set.filter (\<lambda>x. drop b x = k) X;
-                                                                   M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-                                                                 in k[y:=Some (eval_agg_op \<omega> M)]))" 
-        unfolding eval_aggargs_def eval_agg_def empty_table_def using assm_reg by auto
-      define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) X"
-      define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-      have "k \<in> Mapping.keys m" using k_assm SumAux by auto
-      then have not_empty: "flatten_multiset M \<noteq> []" 
-        using flatten_multiset_not_empty[of _ b f m X k] SumAux k_assm False 
-        unfolding group_multiset_def Let_def M_def group_def by fastforce
-      have key_in_map: "k \<in> Mapping.keys m"
-        using SumAux \<open>k \<in> Mapping.keys m\<close> by force
-      then have "Mapping.lookup m k = Some (length (flatten_multiset M), foldl plus (EInt 0) (flatten_multiset M))"
-        using SumAux False by (simp add: lookup_default_def)
-      then have "result = (case Mapping.lookup m k of 
-                             Some (cnt, agg_sum) \<Rightarrow> k[y:=Some (EFloat ((double_of_event_data agg_sum) / (double_of_int cnt)))]
-                          | None \<Rightarrow> k)"
-        using False k_assm not_empty aux_def unfolding M_def group_def 
-        by(auto split:list.splits)
-      then show  "result \<in> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (SumAux m)"
-        using key_in_map False by auto
+      then have "?t > k" using Cons(3) a_def
+        by (metis a_def comp_eq_dest_lhs comp_of_ords_def comp_of_ords_def comp_of_ords_of_le_lt linorder_class.not_le list.set_intros(1) local.less_imp_le option.sel order.case(1) order.simps(6) order.simps(9))
+      then show ?thesis using False Cons(1)[OF *] Cons order_class.leD by(simp add:a_def) force
     qed
   qed
 qed
-next 
-  case(RankAux m)
-  then show ?case sorry
+
+lemma bulk_unpack_insort:
+  assumes "ID ccompare = Some (c :: event_data comparator)" 
+  and "\<forall>e. (e \<in> (set xs) \<union> {t} \<longrightarrow> (\<exists>k. f e = Some k))"
+  and "\<forall>e. e \<in> (set xs) \<union> {t} \<longrightarrow> c t e = comp_of_ords (\<le>) (<) (the (f t)) (the (f e))"
+  shows "map (\<lambda>a. the (f a)) ((linorder.insort (le_of_comp c) t ^^ n) xs)
+         = (insort ((the \<circ> f) t) ^^ n) (map (the \<circ> f) xs)"
+  using assms(2-3)
+proof(induction n arbitrary:xs)
+  case 0
+  then show ?case by auto
 next
-  case(CntAux m)
-  have agg_type: "fst \<omega> = Formula.Agg_Cnt" using CntAux by auto
-  then show ?case
-  proof (cases "g0 \<and> X = {}")
-    case(True)
-    then show ?thesis 
-      unfolding eval_aggargs_def eval_agg_def
-      using CntAux by auto
+  case (Suc n)
+  interpret linorder "le_of_comp c" "lt_of_comp c"
+    using ID_ccompare[OF assms(1)] by auto
+  have *: "\<forall>x. (x \<in> set ((linorder.insort (le_of_comp c) t ^^ n) xs) \<longrightarrow> (\<exists>k. f x = Some k))"
+    using Suc(2) assms(3) set_insort_key[of _ t] by(induction n) auto
+  have **: "\<forall>e. e \<in> set ((local.insort t ^^ n) xs) \<longrightarrow> c t e = comp_of_ords (\<le>) (<) (the (f t)) (the (f e))"
+    using Suc(3) set_insort_key[of _ t] by(induction n) (auto) 
+  show ?case using unpack_insort[OF assms(1), OF *, OF **] Suc by auto
+qed
+
+lemma sort_flatten_mset_eq:
+  assumes "ID ccompare = Some (c' :: event_data comparator)" 
+  and "valid_list_aux' l (mset_conv f s)"
+  and "valid_finite_mset s"
+  and "\<forall>t m. ((t, m) \<in> s \<longrightarrow> (\<exists>k. f t = Some k))"
+  and "\<forall>t1 m1 t2 m2. ((t1, m1) \<in> s \<and> (t2, m2) \<in> s \<longrightarrow>  c' t1 t2 = comp_of_ords (\<le>) (<) (the (f t1)) (the (f t2)))"
+  shows  "sort l = map (\<lambda>a. the (f a)) (flatten_multiset s)"
+proof -
+  obtain c where c_def: "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
+    by (simp add: ID_def ccompare_prod_def ccompare_event_data_def ccompare_enat_def split:if_splits option.splits)
+  note c_class = comparator.linorder[OF ID_ccompare'[OF c_def]]
+  note c'_class = comparator.linorder[OF ID_ccompare'[OF assms(1)]]
+  have "finite s" using assms(3) by (auto simp:valid_finite_mset_def)
+  then show ?thesis using assms(2-5)
+  proof(induction s arbitrary:l)
+    case empty
+    then have "l = []" by (auto simp:valid_list_aux'_def mset_conv_def)
+    then show ?case 
+       using linorder.sorted_list_of_set_empty[OF c_class] by (auto simp:flatten_multiset_def csorted_list_of_set_def c_def)
   next
-    case(False)
-    then have assm_map: "\<not>(g0 \<and> Mapping.keys m = {})" using CntAux by auto
-    show ?thesis
-    proof (rule set_eqI, rule iffI)
-      fix result
-      assume "result \<in> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (CntAux m)"
-      then have "\<exists>k. k \<in> Mapping.keys m \<and> result = (case Mapping.lookup m k of
-                                                      Some i \<Rightarrow> k[y:=Some (EInt (integer_of_int i))]
-                                                    | None \<Rightarrow> k)" 
-        using assm_map by auto
-      then obtain k where k_assm: "k \<in> Mapping.keys m \<and> result = (case Mapping.lookup m k of
-                                                      Some i \<Rightarrow> k[y:=Some (EInt (integer_of_int i))]
-                                                    | None \<Rightarrow> k)" by blast
-      define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) X"
-      define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-      have "Mapping.lookup m k = Some (length (flatten_multiset M))" 
-        using CntAux k_assm 
-        by (simp add: lookup_default_def)
-      then have "result = k[y:= Some (eval_agg_op \<omega> M)]" 
-        using k_assm agg_type 
-        by (metis eval_agg_op.simps(1) option.simps(5) prod.collapse)
-      then show "result \<in> eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-        using k_assm CntAux
-        by (auto simp add: eval_agg_def eval_aggargs_def)
+    case (insert x F)
+    obtain t i where x_def: "x = (t, enat i)" 
+      using insert(5) by(simp add:valid_finite_mset_def) (metis surj_pair)
+    let ?t = "(the \<circ> f) t"
+    let ?l_removed = "((List.remove1 ?t) ^^ i) l"
+    have valid: "valid_finite_mset (Set.insert (t, enat i) F)" using x_def insert(5) by auto
+    have notin: "(t, enat i) \<notin> F" using x_def insert(2) by auto
+    have "mset_conv f F = mset_conv f (Set.insert x F) - replicate_mset i ?t"
+      using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of f] insert(1) insert(2)] insert(6) x_def
+      by (auto simp:mset_conv_def) fastforce
+    then have "valid_list_aux' ?l_removed (mset_conv f F)" 
+      using valid_list_aux_remove[OF insert(4)] by simp
+    moreover have valid_f: "valid_finite_mset F" using insert(5)
+      unfolding valid_finite_mset_def using insert.hyps(1) by blast
+    ultimately have IH: "sort ?l_removed = map (the \<circ> f) (flatten_multiset F)" using insert
+      by fastforce
+    have *: "\<forall>t. t \<in> set (flatten_multiset F) \<longrightarrow> (\<exists>k. f t = Some k)" "\<exists>k. f t = Some k" 
+      using mset_prop_unfold[OF c_def, of F f] valid_f insert.prems(3) x_def by blast+
+    have **: "\<forall>e. e \<in> (set (flatten_multiset F)) \<union> {t} \<longrightarrow> c' t e = comp_of_ords (\<le>) (<) (the (f t)) (the (f e))"
+      using mset_multi_prop_unfold[OF c_def assms(1) insert(7) insert(5)] x_def
+            set_insert_flatten_mset[OF c_def valid notin] by(simp) 
+    have "flatten_multiset (Set.insert x F) = ((linorder.insort (le_of_comp c') t) ^^ i) (flatten_multiset F)"
+      using insort_mset_bulk_insort[OF c_def, OF assms(1)] insert x_def linorder.sorted_list_of_set_insert[OF c_class]
+      by (simp add: c_def csorted_list_of_set_def flatten_multiset_def)
+    then have simp1: "map (\<lambda>a. the (f a)) (flatten_multiset (Set.insert x F)) = (insort ((the \<circ> f) t) ^^ i) (map (the \<circ> f) (flatten_multiset F))"
+       using bulk_unpack_insort[OF assms(1) _ **] * by simp
+    have "(count \<circ> mset) l ?t \<ge> i" using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of f] insert(1) insert(2)]
+       insert(4) insert(6) by(auto simp:x_def valid_list_aux'_def mset_conv_def) fastforce
+    then have simp2:"sort l = ((insort ?t) ^^ i) (map (the \<circ> f) (flatten_multiset F))" using IH sort_insert_remove[of i l ?t] by auto
+    show ?case by(simp only:simp1) (simp add:simp2) 
+  qed
+qed
+
+lemma int_cmp_eq:
+  assumes "ID ccompare = Some (c :: event_data comparator)"
+  and "t1 \<in> range EInt"
+  and "t2 \<in> range EInt"
+  shows "c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_int t1)) (the (unpack_int t2))"
+proof -
+  have "c = comparator_event_data" using assms(1) option.sel by (simp add: ID_code ccompare_event_data_def)
+  moreover have *: "comparator_of = comp_of_ords (\<le>) (<)" using comp_of_ords_of_le_lt le_lt_comparator_of by metis
+  ultimately show ?thesis using assms(2-3) by(auto simp:unpack_int_def *) 
+qed
+
+lemma str_cmp_eq:
+  assumes "ID ccompare = Some (c :: event_data comparator)"
+  and "t1 \<in> range EString"
+  and "t2 \<in> range EString"
+  shows "c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_string t1)) (the (unpack_string t2))"
+proof -
+  have "c = comparator_event_data" using assms(1) option.sel by (simp add: ID_code ccompare_event_data_def)
+  moreover have *: "comparator_of = comp_of_ords (\<le>) (<)" using comp_of_ords_of_le_lt le_lt_comparator_of by metis
+  ultimately show ?thesis using assms(2-3) by(auto simp:unpack_string_def *) 
+qed
+
+fun plus' :: "event_data \<Rightarrow> event_data \<Rightarrow> event_data" where
+  "plus' (EInt x) (EInt y) = EInt (x + y)"
+| "plus' (_::event_data)  _ = EFloat nan"
+
+lemma plus_plus'_equiv:
+  assumes "x \<in> range EInt" and "y \<in> range EInt"
+  shows "plus x y = plus' x y"
+  using assms by auto
+
+lemma plus'_aux: "(plus' x \<circ> plus' y) z = (plus' y \<circ> plus' x) z"
+  by(cases x, cases y, cases z) auto
+
+lemma comp_fun_commute_plus': "comp_fun_commute plus'"
+  using plus'_aux by unfold_locales auto
+
+lemma comm_plus': "plus' x y = plus' y x"
+  by(cases x, cases y) auto
+
+lemma foldl_eint_equival: 
+  assumes "set X \<subseteq> range EInt"
+  and "y0 \<in> range EInt"
+  shows "foldl (+) y0 X = foldl (plus') y0 X"
+  using assms
+proof(induction X arbitrary: y0)
+case Nil
+  then show ?case by auto
+next
+  case (Cons a X)
+  then show ?case using Cons by auto
+qed
+
+lemma foldl_int_eq':
+  assumes "\<forall>t m. ((t, m) \<in> s \<longrightarrow> t \<in> range EInt)"
+  and "valid_finite_mset s"
+  shows "EInt (fold_mset (+) 0 (int_mset_conv s)) = foldl (+) (EInt 0) (flatten_multiset s)"
+proof -
+  have int_comm: "comp_fun_commute ((+)::integer \<Rightarrow> integer \<Rightarrow> integer)"
+    by unfold_locales auto
+  have finite: "finite s" using assms(2) by (simp add:valid_finite_mset_def)
+  have int: "set (flatten_multiset s) \<subseteq> range EInt" using flatten_multiset_range[of s EInt] assms(1) 
+      finite by auto
+  have aux: "comp_fun_commute (\<lambda>(t, m). plus' t ^^ the_enat m)" using cmp_comm[OF comp_fun_commute_plus']
+    by unfold_locales auto
+  show ?thesis using finite assms(1-2) int
+  proof(induction s)
+    case empty
+    then show ?case using finite foldl_eint_equival[OF empty(3)]
+      foldl_flatten_multiset[OF _ comp_fun_commute_plus' comm_plus'] 
+      by(simp add:int_mset_conv_def mset_conv_def)
+  next
+    case (insert x F)
+    have *: "valid_finite_mset F" by (metis insert.hyps(1) insert.prems(2) insert_iff valid_finite_mset_def)
+    have **: "\<forall>t m. (t, m) \<in> F \<longrightarrow> t \<in> range EInt" using insert(4) by auto
+    then have ***: "set (flatten_multiset F) \<subseteq> range EInt" using flatten_multiset_range[OF _ insert(1), of EInt] by auto 
+    obtain i n where x_def: "x = (EInt i, enat n)" "n > 0" using insert(4-5) by (metis enat_ord_simps(4) insertI1 less_infinityE rangeE surj_pair valid_finite_mset_def zero_enat_def zero_less_iff_neq_zero)
+    have "EInt (fold_mset (+) 0 (replicate_mset n i + int_mset_conv F)) = (plus' (EInt i) ^^ n) (EInt (fold_mset (+) 0 (int_mset_conv F)))"
+    proof(induction n)
+      case 0
+      then show ?case by auto
     next
-      fix result
-      assume "result \<in> eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
-      then have "\<exists>k. (k \<in> (drop b) ` X \<and> result = (let group = Set.filter (\<lambda>x. drop b x = k) X;
-                                                     M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-                                                   in k[y:=Some (eval_agg_op \<omega> M)]))" 
-        unfolding eval_aggargs_def eval_agg_def empty_table_def
-        using False by auto
-      then obtain k where k_assm: "(k \<in> (drop b) ` X \<and> result = (let group = Set.filter (\<lambda>x. drop b x = k) X;
-                                                                   M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group
-                                                                 in k[y:=Some (eval_agg_op \<omega> M)]))" by blast
-      define group where [simp]: "group = Set.filter (\<lambda>x. drop b x = k) X"
-      define M where [simp]: "M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group"
-      have "Mapping.lookup m k = Some (length (flatten_multiset M))"
-        using CntAux k_assm
-        by (simp add: lookup_default_def)
-      then have "result = (case Mapping.lookup m k of
-                             Some i \<Rightarrow> k[y:=Some (EInt (integer_of_int i))]
-                           | None \<Rightarrow> k)"
-        using agg_type k_assm
-        unfolding M_def group_def
-        by (metis (no_types, lifting) eval_agg_op.simps(1) option.simps(5) prod.collapse)
-      then show  "result \<in> result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (CntAux m)"
-        using CntAux k_assm by auto
+      case (Suc n)
+      have *: "EInt (i + fold_mset (+) 0 (replicate_mset n i + int_mset_conv F)) = plus' (EInt i) (EInt (fold_mset (+) 0 (replicate_mset n i + int_mset_conv F)))"
+        by auto
+      then show ?case using comp_fun_commute.fold_mset_add_mset[OF int_comm] Suc by auto
+    qed
+    then show ?case using foldl_eint_equival[OF insert(6)] insert(1) x_def
+      foldl_eint_equival[OF ***]
+      foldl_flatten_multiset[OF _ comp_fun_commute_plus' comm_plus'] 
+      Finite_Set.comp_fun_commute.fold_insert[OF aux insert(1-2)] insert.IH[OF ** * ***, symmetric]
+      Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] insert(1-2)]
+      by(simp add:int_mset_conv_def mset_conv_def unpack_int_def)
+  qed
+qed
+
+lemma foldl_int_eq:
+  assumes "\<forall>t m. ((t, m) \<in> s \<longrightarrow> t \<in> range EInt)"
+  and "valid_finite_mset s"
+  and "flatten_multiset s = x # xs"
+  shows "EInt (fold_mset (+) 0 (int_mset_conv s)) = foldl (+) x xs"
+proof -
+  have "EInt (fold_mset (+) 0 (int_mset_conv s)) = foldl (+) (EInt 0) (flatten_multiset s)" 
+    using foldl_int_eq'[OF assms(1-2)] by auto
+  moreover obtain i where "x = EInt i" using flatten_multiset_range[of s EInt] assms
+    by(simp add:valid_finite_mset_def) (meson rangeE)
+  ultimately show ?thesis using assms(3) by simp
+qed
+
+lemma valid_get_edata_list:
+  assumes "valid_list_aux l s"
+  and "valid_finite_mset s"
+  and "n \<ge> 0" and "n < get_length l"
+  shows "get_edata_list l n = flatten_multiset s ! n"
+proof -
+  obtain c where c_def: "ID ccompare = Some (c :: event_data comparator)" 
+    by (simp add: ID_def ccompare_event_data_def split:if_splits option.splits)
+  have finite: "finite s" using assms(2) valid_finite_mset_def by auto
+  then show ?thesis 
+  proof(cases l)
+    case (LInt x1)
+    then have valid: "valid_list_aux' x1 (mset_conv unpack_int s)" 
+      using assms(1) by(auto simp:int_mset_conv_def valid_list_aux_def)
+    have surj: "\<forall>t m. (t, m) \<in> s \<longrightarrow> (\<exists>k. unpack_int t = Some k)"
+      using assms(1) LInt by(auto simp:int_mset_conv_def valid_list_aux_def type_restr_mset_def unpack_int_def)
+    have ord_preserve: " \<forall>t1 m1 t2 m2. (t1, m1) \<in> s \<and> (t2, m2) \<in> s \<longrightarrow> c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_int t1)) (the (unpack_int t2))"
+      using assms(1) LInt int_cmp_eq[OF c_def] by(auto simp:valid_list_aux_def type_restr_mset_def) meson
+    note sort_eq = sort_flatten_mset_eq[OF c_def valid assms(2) surj ord_preserve]
+    have "n < length (flatten_multiset s)" 
+      using assms(4) LInt sort_eq by (metis get_length_def length_map length_sort list_aux.simps(5))
+    moreover have "flatten_multiset s ! n \<in> range EInt" 
+      using flatten_multiset_range[OF _ finite, of EInt] nth_mem[OF calculation(1)] assms(1) LInt
+      by(auto simp:valid_list_aux_def valid_list_aux'_def type_restr_mset_def)
+    ultimately show ?thesis using  LInt assms(4) sort_eq by(auto simp:get_length_def unpack_int_def) 
+  next
+    case (LString x2)
+    then have valid: "valid_list_aux' x2 (mset_conv unpack_string s)" 
+      using assms(1) by(auto simp:str_mset_conv_def valid_list_aux_def)
+    have surj: "\<forall>t m. (t, m) \<in> s \<longrightarrow> (\<exists>k. unpack_string t = Some k)"
+      using assms(1) LString by(auto simp:str_mset_conv_def valid_list_aux_def type_restr_mset_def unpack_string_def)
+    have ord_preserve: " \<forall>t1 m1 t2 m2. (t1, m1) \<in> s \<and> (t2, m2) \<in> s \<longrightarrow> c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_string t1)) (the (unpack_string t2))"
+      using assms(1) LString str_cmp_eq[OF c_def] by(auto simp:valid_list_aux_def type_restr_mset_def) meson
+    note sort_eq = sort_flatten_mset_eq[OF c_def valid assms(2) surj ord_preserve]
+    have "n < length (flatten_multiset s)" 
+      using assms(4) LString sort_eq by(simp add:get_length_def) (metis length_map length_sort)
+    moreover have "flatten_multiset s ! n \<in> range EString" 
+      using flatten_multiset_range[OF _ finite, of EString] nth_mem[OF calculation(1)] assms(1) LString
+      by(auto simp:valid_list_aux_def valid_list_aux'_def type_restr_mset_def)
+    ultimately show ?thesis using LString assms(4) sort_eq by(auto simp:get_length_def unpack_string_def) 
+  qed
+qed
+
+lemma valid_rank_aux_lookup:
+  assumes "valid_maggaux args (True, RankAux m) X"
+  shows "\<forall>k. (k \<in> Mapping.keys m \<longrightarrow> (\<exists>l. Mapping.lookup m k = Some l))"
+  by (simp add: domD keys_dom_lookup)
+
+lemma valid_list_aux_length_eq:
+  assumes "valid_list_aux l (group_multiset k b f X)"
+  and "finite X"
+  shows "get_length l = length (flatten_multiset (group_multiset k b f X))"
+proof(cases l)
+  case (LInt x1)
+  then have "(\<And>t m. (t, m) \<in> group_multiset k b f X \<Longrightarrow> unpack_int t \<in> range Some)"
+    using assms by(auto simp:unpack_int_def valid_list_aux_def valid_list_aux'_def type_restr_mset_def) (smt (verit, del_insts) Set.member_filter event_data.simps(10) image_iff)
+  then have "size (mset_conv unpack_int (group_multiset k b f X)) = length (flatten_multiset (group_multiset k b f X))"
+    using length_mset_eq[OF _ valid_finite_group_mset[OF assms(2), of k b f], of unpack_int] by auto
+  then show ?thesis using assms LInt
+    by(auto simp:get_length_def valid_list_aux_def valid_list_aux'_def) (metis int_mset_conv_def size_mset)
+next
+  case (LString x2)
+  then have "(\<And>t m. (t, m) \<in> group_multiset k b f X \<Longrightarrow> unpack_string t \<in> range Some)"
+    using assms by(auto simp:unpack_string_def valid_list_aux_def valid_list_aux'_def type_restr_mset_def) (smt (verit, del_insts) Set.member_filter event_data.simps image_iff)
+  then have "size (mset_conv unpack_string (group_multiset k b f X)) = length (flatten_multiset (group_multiset k b f X))"
+    using length_mset_eq[OF _ valid_finite_group_mset[OF assms(2), of k b f], of unpack_string] by auto
+  then show ?thesis using assms LString
+    by(auto simp:get_length_def valid_list_aux_def valid_list_aux'_def) (metis str_mset_conv_def size_mset)
+qed
+
+lemma unpack_foldl_min_eq_int:
+  assumes "x \<in> range EInt"
+  and "set xs \<subseteq> range EInt"
+  shows "EInt (foldl min (the (unpack_int x)) (map (\<lambda>a. the (unpack_int a)) xs)) = foldl min x xs"
+  using assms apply(induction xs arbitrary:x) by (auto simp: unpack_int_def) (metis (no_types, lifting) event_data.simps(10) less_eq_event_data.simps(1) min_def option.sel rangeI)
+
+lemma unpack_foldl_min_eq_str:
+  assumes "x \<in> range EString"
+  and "set xs \<subseteq> range EString"
+  shows "EString (foldl min (the (unpack_string x)) (map (\<lambda>a. the (unpack_string a)) xs)) = foldl min x xs"
+  using assms apply(induction xs arbitrary:x) by(auto simp: unpack_string_def) (metis (no_types, lifting) event_data.simps(12) less_eq_event_data.simps(7) min_def option.sel rangeI)
+
+lemma unpack_foldl_max_eq_int:
+  assumes "x \<in> range EInt"
+  and "set xs \<subseteq> range EInt"
+  shows "EInt (foldl max (the (unpack_int x)) (map (\<lambda>a. the (unpack_int a)) xs)) = foldl max x xs"
+  using assms apply(induction xs arbitrary:x) by(auto simp: unpack_int_def) (metis (no_types, lifting) event_data.simps(10) less_eq_event_data.simps(1) max_def option.sel rangeI)
+
+lemma unpack_foldl_max_eq_str:
+  assumes "x \<in> range EString"
+  and "set xs \<subseteq> range EString"
+  shows "EString (foldl max (the (unpack_string x)) (map (\<lambda>a. the (unpack_string a)) xs)) = foldl max x xs"
+  using assms apply(induction xs arbitrary:x) by(auto simp: unpack_string_def) (metis (no_types, lifting) event_data.simps(12) less_eq_event_data.simps(7) max_def option.sel rangeI)
+
+lemma valid_list_aux_min:
+  assumes "valid_list_aux l (group_multiset k b f X)"
+  and "finite X"
+  and "flatten_multiset (group_multiset k b f X) = x # xs"
+shows "get_edata_list l 0 = foldl min x xs"
+proof -
+  let ?s = "group_multiset k b f X"
+  obtain c where c_def: "ID ccompare = Some (c :: event_data comparator)" 
+    by (simp add: ID_def ccompare_event_data_def split:if_splits option.splits)
+  show ?thesis
+proof(cases l)
+  case (LInt x1)
+  then have valid: "valid_list_aux' x1 (mset_conv unpack_int ?s)" 
+    using assms(1) by(auto simp:int_mset_conv_def valid_list_aux_def)
+  have surj: "\<forall>t m. (t, m) \<in> ?s \<longrightarrow> (\<exists>k. unpack_int t = Some k)"
+    using assms(1) LInt by(auto simp:int_mset_conv_def valid_list_aux_def type_restr_mset_def unpack_int_def split:event_data.splits)
+  have ord_preserve: " \<forall>t1 m1 t2 m2. (t1, m1) \<in> ?s \<and> (t2, m2) \<in> ?s \<longrightarrow> c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_int t1)) (the (unpack_int t2))"
+    using assms(1) LInt int_cmp_eq[OF c_def] by(auto simp:valid_list_aux_def type_restr_mset_def) (metis (mono_tags, lifting) Set.member_filter imageI)
+  note sort_eq = sort_flatten_mset_eq[OF c_def valid valid_finite_group_mset[OF assms(2)] surj ord_preserve]
+  have type_restr: "set (x # xs) \<subseteq> range EInt" using assms(1) assms(3) LInt flatten_multiset_range 
+    by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
+  have "sorted (sort x1)" by (metis sorted_sort sorted_sorted_wrt)
+  moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_int a)) (x # xs) = x' # xs'" "x' = the (unpack_int x)" "xs' = map (\<lambda>a. the (unpack_int a)) xs" by force
+  ultimately have *: "sorted (x' # xs')" using sort_eq assms(3) by auto
+  show ?thesis using LInt assms(3) sort_eq sorted_foldl_min[OF *, symmetric] unpack_def unpack_foldl_min_eq_int type_restr
+    by(simp only:get_edata_list.simps) (metis insert_subset list.simps(15))
+next
+  case (LString x2)
+  then have valid: "valid_list_aux' x2 (mset_conv unpack_string ?s)" 
+    using assms(1) by(auto simp:str_mset_conv_def valid_list_aux_def)
+  have surj: "\<forall>t m. (t, m) \<in> ?s \<longrightarrow> (\<exists>k. unpack_string t = Some k)"
+    using assms(1) LString by(auto simp:str_mset_conv_def valid_list_aux_def type_restr_mset_def unpack_string_def split:event_data.splits)
+  have ord_preserve: " \<forall>t1 m1 t2 m2. (t1, m1) \<in> ?s \<and> (t2, m2) \<in> ?s \<longrightarrow> c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_string t1)) (the (unpack_string t2))"
+    using assms(1) LString str_cmp_eq[OF c_def] by(auto simp:valid_list_aux_def type_restr_mset_def) (metis (mono_tags, lifting) Set.member_filter imageI)
+  note sort_eq = sort_flatten_mset_eq[OF c_def valid valid_finite_group_mset[OF assms(2)] surj ord_preserve]
+  have type_restr: "set (x # xs) \<subseteq> range EString" using assms(1) assms(3) LString flatten_multiset_range 
+    by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
+  have "sorted (sort x2)" by (metis sorted_sort sorted_sorted_wrt)
+  moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_string a)) (x # xs) = x' # xs'" "x' = the (unpack_string x)" "xs' = map (\<lambda>a. the (unpack_string a)) xs" by force
+  ultimately have *: "sorted (x' # xs')" using sort_eq assms(3) by auto
+  show ?thesis using LString assms(3) sort_eq sorted_foldl_min[OF *, symmetric] unpack_def unpack_foldl_min_eq_str type_restr
+    by(simp only:get_edata_list.simps) (metis insert_subset list.simps(15))
+qed
+qed
+
+lemma valid_list_aux_max:
+  assumes "valid_list_aux l (group_multiset k b f X)"
+  and "finite X"
+  and "flatten_multiset (group_multiset k b f X) = x # xs"
+shows "get_edata_list l (size (x # xs) - 1) = foldl max x xs"
+proof -
+  let ?s = "group_multiset k b f X"
+  obtain c where c_def: "ID ccompare = Some (c :: event_data comparator)" 
+    by (simp add: ID_def ccompare_event_data_def split:if_splits option.splits)
+  show ?thesis
+proof(cases l)
+  case (LInt x1)
+  then have valid: "valid_list_aux' x1 (mset_conv unpack_int ?s)" 
+    using assms(1) by(auto simp:int_mset_conv_def valid_list_aux_def)
+  have surj: "\<forall>t m. (t, m) \<in> ?s \<longrightarrow> (\<exists>k. unpack_int t = Some k)"
+    using assms(1) LInt by(auto simp:int_mset_conv_def valid_list_aux_def type_restr_mset_def unpack_int_def split:event_data.splits)
+  have ord_preserve: " \<forall>t1 m1 t2 m2. (t1, m1) \<in> ?s \<and> (t2, m2) \<in> ?s \<longrightarrow> c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_int t1)) (the (unpack_int t2))"
+    using assms(1) LInt int_cmp_eq[OF c_def] by(auto simp:valid_list_aux_def type_restr_mset_def) (metis (mono_tags, lifting) Set.member_filter imageI)
+  note sort_eq = sort_flatten_mset_eq[OF c_def valid valid_finite_group_mset[OF assms(2)] surj ord_preserve]
+  have type_restr: "set (x # xs) \<subseteq> range EInt" using assms(1) assms(3) LInt flatten_multiset_range 
+    by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
+  have "sorted (sort x1)" by (metis sorted_sort sorted_sorted_wrt)
+  moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_int a)) (x # xs) = x' # xs'" "x' = the (unpack_int x)" "xs' = map (\<lambda>a. the (unpack_int a)) xs" by force
+  ultimately have *: "sorted (x' # xs')" using sort_eq assms(3) by auto
+  show ?thesis using LInt assms(3) sort_eq sorted_foldl_max[OF *, symmetric] unpack_def unpack_foldl_max_eq_int type_restr
+    by simp
+next
+  case (LString x2)
+  then have valid: "valid_list_aux' x2 (mset_conv unpack_string ?s)" 
+    using assms(1) by(auto simp:str_mset_conv_def valid_list_aux_def)
+  have surj: "\<forall>t m. (t, m) \<in> ?s \<longrightarrow> (\<exists>k. unpack_string t = Some k)"
+    using assms(1) LString by(auto simp:str_mset_conv_def valid_list_aux_def type_restr_mset_def unpack_string_def split:event_data.splits)
+  have ord_preserve: " \<forall>t1 m1 t2 m2. (t1, m1) \<in> ?s \<and> (t2, m2) \<in> ?s \<longrightarrow> c t1 t2 = comp_of_ords (\<le>) (<) (the (unpack_string t1)) (the (unpack_string t2))"
+    using assms(1) LString str_cmp_eq[OF c_def] by(auto simp:valid_list_aux_def type_restr_mset_def) (metis (mono_tags, lifting) Set.member_filter imageI)
+  note sort_eq = sort_flatten_mset_eq[OF c_def valid valid_finite_group_mset[OF assms(2)] surj ord_preserve]
+  have type_restr: "set (x # xs) \<subseteq> range EString" using assms(1) assms(3) LString flatten_multiset_range 
+    by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
+  have "sorted (sort x2)" by (metis sorted_sort sorted_sorted_wrt)
+  moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_string a)) (x # xs) = x' # xs'" "x' = the (unpack_string x)" "xs' = map (\<lambda>a. the (unpack_string a)) xs" by force
+  ultimately have *: "sorted (x' # xs')" using sort_eq assms(3) by auto
+  show ?thesis using LString assms(3) sort_eq sorted_foldl_max[OF *, symmetric] unpack_def unpack_foldl_max_eq_str type_restr
+    by simp
+qed
+qed
+
+lemma valid_result_maggaux_unfolded: 
+  assumes valid_before: "valid_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, aux) X"
+  and valid_input: "valid_input (v, aux)"
+  shows "result_maggaux \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> (v, aux)
+       = eval_aggargs \<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr> X"
+proof (cases "g0 \<and> X = {}")
+  case True
+  then show ?thesis using valid_before valid_input
+    by (cases aux) (simp add:empty_table_def eval_aggargs_def eval_agg_def)+
+next
+  case False
+  then have not_singleton: "\<not>(g0 \<and> X = {})" by auto
+  let ?args = "\<lparr>aggargs_cols = cols, aggargs_n = n, aggargs_g0 = g0, aggargs_y = y, aggargs_\<omega> = \<omega>, aggargs_b = b, aggargs_f = f\<rparr>"
+  have finite_X: "finite X" using valid_before valid_input by auto
+  have g0: "aggargs_g0 ?args = g0" by auto
+  show ?thesis using valid_before valid_input
+  proof(induction aux)
+    case (CntAux m)
+    then obtain y0 where agg_type: "\<omega> = (Formula.Agg_Cnt, y0)" using CntAux by auto (metis prod.collapse)
+    have not_singleton_map: "(g0 \<and> Mapping.keys m = {}) = False" using not_singleton CntAux by auto
+    show ?case
+    proof (rule set_eqI, rule iffI)
+      fix x
+      assume "x \<in> result_maggaux ?args (v, CntAux m)"
+      then obtain k n where x_def: "Mapping.lookup m k = Some n" "x = k[y:= Some(EInt (of_nat n))]"
+        using not_singleton_map CntAux by(simp add:agg_type get_map_result_def) blast
+      let ?list = "flatten_multiset (group_multiset k b f X)"
+      have k_in: "k \<in> (drop b) ` X" using CntAux x_def by (simp add: keys_is_none_rep) 
+      moreover have "?list \<noteq> []"
+        using flatten_multiset_not_empty[of _ b f m X k] CntAux finite using calculation by simp blast
+      moreover have "n = length ?list" 
+        using length_mset_eq[OF _ valid_finite_group_mset[OF finite_X], of k b f Some, symmetric]
+        x_def CntAux k_in by auto
+      ultimately have "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" using agg_type x_def
+        by(cases ?list) (auto) 
+      then show "x \<in> eval_aggargs ?args X" 
+        using k_in by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def)
+    next
+      fix x
+      assume "x \<in> eval_aggargs ?args X"
+      then obtain k where x_def: "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" "k \<in> drop b ` X"
+        by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def) blast
+      let ?list = "flatten_multiset (group_multiset k b f X)"
+      have lookup: "Mapping.lookup m k = Some (length ?list)" 
+        using x_def CntAux agg_type length_mset_eq[OF _ valid_finite_group_mset[OF finite_X], of k b f Some, symmetric] by(auto)
+      moreover have k_in: "k \<in> Mapping.keys m" using x_def(2) CntAux by auto
+      moreover have "?list \<noteq> []"
+        using flatten_multiset_not_empty[of _ b f m X k] CntAux finite x_def by simp blast
+      ultimately have "x = (case Mapping.lookup m k of None \<Rightarrow> k | 
+                                                         Some n \<Rightarrow> k[y := Some (EInt (of_nat n))])"
+        using CntAux agg_type x_def(1) by(cases ?list) (simp)+
+      then show "x \<in> result_maggaux ?args (v, CntAux m)" using k_in
+        by(simp add:not_singleton_map x_def(1) agg_type get_map_result_def lookup rev_image_eqI) 
+    qed
+  next
+    case (RankAux m)
+    have not_singleton_map: "(g0 \<and> Mapping.keys m = {}) = False" using not_singleton RankAux by auto
+    then show ?case 
+    proof (cases "fst \<omega> = Formula.Agg_Med")
+      case True
+      then obtain y0 where agg_type: "\<omega> = (Formula.Agg_Med, y0)" using RankAux by auto (metis prod.collapse)
+      show ?thesis
+      proof (rule set_eqI, rule iffI)
+        fix x
+        assume "x \<in> result_maggaux ?args (v, RankAux m)"
+        then obtain k l where x_def: "Mapping.lookup m k = Some l" 
+          "x = k[y:= Some(let u = get_length l;
+                              u' = u div 2;
+                              aggval = (if even u then (double_of_event_data (get_edata_list l (u' - 1)) + double_of_event_data (get_edata_list l u') / double_of_int 2)
+                                        else double_of_event_data (get_edata_list l u')) in
+                              EFloat aggval)]"
+          using valid_rank_aux_lookup RankAux not_singleton_map by(simp add:agg_type get_map_result_def) (smt (verit, best) RankAux.prems(1) imageE option.simps(5))
+        let ?list = "flatten_multiset (group_multiset k b f X)"
+        have valid_list_aux: "valid_list_aux l (group_multiset k b f X)" using x_def RankAux by(auto simp:keys_is_none_rep split:option.splits) 
+        have k_in: "k \<in> (drop b) ` X" using RankAux x_def by (simp add: keys_is_none_rep) 
+        have not_empty: "?list \<noteq> []"
+          using flatten_multiset_not_empty[of _ b f m X k] RankAux finite using k_in by simp blast
+        then have "get_length l \<noteq> 0" using valid_list_aux_length_eq[OF valid_list_aux finite_X] by auto
+        then have *: "get_length l div 2 < get_length l" by auto
+        then have "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" 
+          using not_empty agg_type x_def not_empty valid_get_edata_list[OF valid_list_aux valid_finite_group_mset[OF finite_X, of k b f]] valid_list_aux_length_eq[OF valid_list_aux finite_X]
+          apply(cases ?list) apply(auto split:list_aux.splits) using * by auto
+        then show "x \<in> eval_aggargs ?args X" 
+          using k_in by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def)
+      next
+        fix x
+        assume "x \<in> eval_aggargs ?args X"
+        then obtain k where x_def: "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" "k \<in> drop b ` X"
+          by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def) blast
+        then have k_in: "k \<in> Mapping.keys m" using RankAux by auto
+        have *: "valid_maggaux ?args (True, RankAux m) X" using RankAux by auto
+        obtain l where lookup: "Mapping.lookup m k = Some l" using
+          k_in valid_rank_aux_lookup[OF *] by auto
+        then have valid_list_aux: "valid_list_aux l (group_multiset k b f X)" using RankAux k_in by auto
+        let ?list = "flatten_multiset (group_multiset k b f X)"
+        have not_empty: "?list \<noteq> []"
+          using flatten_multiset_not_empty[of _ b f m X k] RankAux finite x_def by simp blast
+        then have "get_length l \<noteq> 0" using valid_list_aux_length_eq[OF valid_list_aux finite_X] by auto
+        then have *: "get_length l div 2 < get_length l" by auto
+        then have "x = k[y:= Some(let u = get_length l;
+                              u' = u div 2;
+                              aggval = (if even u then (double_of_event_data (get_edata_list l (u' - 1)) + double_of_event_data (get_edata_list l u') / double_of_int 2)
+                                        else double_of_event_data (get_edata_list l u')) in
+                              EFloat aggval)]"
+          using RankAux agg_type x_def(1) not_empty 
+          valid_get_edata_list[OF valid_list_aux valid_finite_group_mset[OF finite_X, of k b f]] valid_list_aux_length_eq[OF valid_list_aux finite_X]
+          apply(cases ?list) apply(auto split:list_aux.splits) using * by auto
+        then show "x \<in> result_maggaux ?args (v, RankAux m)" using k_in lookup
+          by(simp add:not_singleton_map x_def(1) agg_type get_map_result_def lookup rev_image_eqI) 
+      qed 
+    next
+      case False
+      then have not_med: "fst \<omega> \<noteq> Formula.Agg_Med" by auto
+      then show ?thesis
+      proof(cases "fst \<omega> = Formula.Agg_Min")
+        case True
+        then obtain y0 where agg_type: "\<omega> = (Formula.Agg_Min, y0)" using RankAux by auto (metis prod.collapse)
+        show ?thesis
+        proof (rule set_eqI, rule iffI)
+          fix x
+          assume "x \<in> result_maggaux ?args (v, RankAux m)"
+          then obtain k l where x_def: "Mapping.lookup m k = Some l" 
+            "x = k[y:= Some(get_edata_list l 0)]"
+            using valid_rank_aux_lookup RankAux not_singleton_map by(simp add:agg_type get_map_result_def) (smt (verit, best) RankAux.prems(1) imageE option.simps(5))
+          let ?list = "flatten_multiset (group_multiset k b f X)"
+          have valid_list_aux: "valid_list_aux l (group_multiset k b f X)" using x_def RankAux by(auto simp:keys_is_none_rep split:option.splits) 
+          have k_in: "k \<in> (drop b) ` X" using RankAux x_def by (simp add: keys_is_none_rep) 
+          have not_empty: "?list \<noteq> []"
+            using flatten_multiset_not_empty[of _ b f m X k] RankAux finite using k_in by simp blast
+          then obtain x' xs' where split: "?list = x' # xs'" by (meson list.exhaust)
+          have "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" 
+            using valid_list_aux_min[OF valid_list_aux finite_X split] agg_type x_def split
+            by(cases ?list) (auto split:list_aux.splits) 
+          then show "x \<in> eval_aggargs ?args X" 
+            using k_in by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def)
+        next
+          fix x
+          assume "x \<in> eval_aggargs ?args X"
+          then obtain k where x_def: "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" "k \<in> drop b ` X"
+            by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def) blast
+          then have k_in: "k \<in> Mapping.keys m" using RankAux by auto
+          have *: "valid_maggaux ?args (True, RankAux m) X" using RankAux by auto
+          obtain l where lookup: "Mapping.lookup m k = Some l" using
+            k_in valid_rank_aux_lookup[OF *] by auto
+          then have valid_list_aux: "valid_list_aux l (group_multiset k b f X)" using RankAux k_in by auto
+          let ?list = "flatten_multiset (group_multiset k b f X)"
+          have not_empty: "?list \<noteq> []"
+            using flatten_multiset_not_empty[of _ b f m X k] RankAux finite x_def by simp blast
+          then obtain x' xs' where split: "?list = x' # xs'" by (meson list.exhaust)
+          then have "x = k[y:= Some(get_edata_list l 0)]"
+            using RankAux agg_type x_def(1) not_empty 
+            valid_list_aux_min[OF valid_list_aux finite_X split]
+            by(cases ?list) (auto split:list_aux.splits) 
+          then show "x \<in> result_maggaux ?args (v, RankAux m)" using k_in lookup
+            by(simp add:not_singleton_map x_def(1) agg_type get_map_result_def lookup rev_image_eqI) 
+        qed 
+      next
+        case False
+        then obtain y0 where agg_type: "\<omega> = (Formula.Agg_Max, y0)" using not_med RankAux by (smt (z3) aggaux'.simps(12) prod.collapse valid_input.simps valid_maggaux.simps)
+        show ?thesis
+        proof (rule set_eqI, rule iffI)
+          fix x
+          assume "x \<in> result_maggaux ?args (v, RankAux m)"
+          then obtain k l where x_def: "Mapping.lookup m k = Some l" 
+            "x = k[y:= Some(get_edata_list l (get_length l - 1))]"
+            using valid_rank_aux_lookup RankAux not_singleton_map by(simp add:agg_type get_map_result_def) (smt (verit, best) RankAux.prems(1) imageE option.simps(5))
+          let ?list = "flatten_multiset (group_multiset k b f X)"
+          have valid_list_aux: "valid_list_aux l (group_multiset k b f X)" using x_def RankAux by(auto simp:keys_is_none_rep split:option.splits) 
+          have k_in: "k \<in> (drop b) ` X" using RankAux x_def by (simp add: keys_is_none_rep) 
+          have not_empty: "?list \<noteq> []"
+            using flatten_multiset_not_empty[of _ b f m X k] RankAux finite using k_in by simp blast
+          then obtain x' xs' where split: "?list = x' # xs'" by (meson list.exhaust)
+          have "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" 
+            using valid_list_aux_max[OF valid_list_aux finite_X split] agg_type x_def split
+                  valid_list_aux_length_eq[OF valid_list_aux finite_X]
+            by(cases ?list) (auto  split:list_aux.splits)
+          then show "x \<in> eval_aggargs ?args X" 
+            using k_in by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def)
+        next
+          fix x
+          assume "x \<in> eval_aggargs ?args X"
+          then obtain k where x_def: "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" "k \<in> drop b ` X"
+            by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def) blast
+          then have k_in: "k \<in> Mapping.keys m" using RankAux by auto
+          have *: "valid_maggaux ?args (True, RankAux m) X" using RankAux by auto
+          obtain l where lookup: "Mapping.lookup m k = Some l" using
+            k_in valid_rank_aux_lookup[OF *] by auto
+          then have valid_list_aux: "valid_list_aux l (group_multiset k b f X)" using RankAux k_in by auto
+          let ?list = "flatten_multiset (group_multiset k b f X)"
+          have not_empty: "?list \<noteq> []"
+            using flatten_multiset_not_empty[of _ b f m X k] RankAux finite x_def by simp blast
+          then obtain x' xs' where split: "?list = x' # xs'" by (meson list.exhaust)
+          then have "x = k[y:= Some(get_edata_list l (get_length l - 1))]"
+            using RankAux agg_type x_def(1) not_empty 
+            valid_list_aux_max[OF valid_list_aux finite_X split] valid_list_aux_length_eq[OF valid_list_aux finite_X]
+            by(cases ?list) (auto split:list_aux.splits) 
+          then show "x \<in> result_maggaux ?args (v, RankAux m)" using k_in lookup
+            by(simp add:not_singleton_map x_def(1) agg_type get_map_result_def lookup rev_image_eqI) 
+        qed 
+      qed
+    qed
+  next
+    case (SumAux m)
+    then show ?case
+    proof (cases "fst \<omega> = Formula.Agg_Sum")
+      case True
+      then obtain y0 where agg_type: "\<omega> = (Formula.Agg_Sum, y0)" using SumAux by auto (metis prod.collapse)
+      have not_singleton_map: "(g0 \<and> Mapping.keys m = {}) = False" using not_singleton SumAux by auto
+      show ?thesis
+      proof (rule set_eqI, rule iffI)
+        fix x
+        assume "x \<in> result_maggaux ?args (v, SumAux m)"
+        then obtain k s n where x_def: "Mapping.lookup m k = Some(n, s)" "x = k[y:= Some(EInt s)]"
+          using not_singleton_map SumAux by(simp add:agg_type get_map_result_def) blast
+        let ?list = "flatten_multiset (group_multiset k b f X)"
+        have type_restr: "\<forall>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> t \<in> range EInt" using SumAux agg_type by(auto simp:type_restr_def)
+        have k_in: "k \<in> (drop b) ` X" using SumAux x_def by (simp add: keys_is_none_rep) 
+        have not_empty: "?list \<noteq> []"
+          using flatten_multiset_not_empty[of _ b f m X k] SumAux finite using k_in by simp blast
+        then obtain x' xs' where list_split: "?list = x' # xs'" using min_list.cases by blast
+        then have "EInt s = foldl (+) x' xs'"  
+          using x_def k_in SumAux False foldl_int_eq[OF type_restr valid_finite_group_mset[OF finite_X, of k b f], of x' xs'] by simp
+        then have "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" using agg_type x_def not_empty list_split
+          by(cases ?list) auto
+        then show "x \<in> eval_aggargs ?args X" 
+          using k_in by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def)
+      next
+        fix x
+        assume "x \<in> eval_aggargs ?args X"
+        then obtain k where x_def: "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" "k \<in> drop b ` X"
+          by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def) blast
+        let ?list = "flatten_multiset (group_multiset k b f X)"
+        have type_restr: "\<forall>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> t \<in> range EInt" using SumAux agg_type by(auto simp:type_restr_def)
+        then have "(\<And>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> unpack_int t \<in> range Some)" by(auto simp:unpack_int_def split:event_data.splits)
+        then have lookup: "Mapping.lookup m k = Some (length ?list, fold_mset (+) 0 (int_mset_conv (group_multiset k b f X)))" 
+          using x_def SumAux agg_type length_mset_eq[OF _ valid_finite_group_mset[OF finite_X], of k b f unpack_int, symmetric] 
+          by(auto simp:int_mset_conv_def)
+        have k_in: "k \<in> Mapping.keys m" using x_def(2) SumAux by auto
+        have not_empty: "?list \<noteq> []"
+          using flatten_multiset_not_empty[of _ b f m X k] SumAux finite x_def by simp blast
+        then obtain x' xs' where list_split: "?list = x' # xs'" using min_list.cases by blast
+        then have "x = (case Mapping.lookup m k of None \<Rightarrow> k | 
+                                                         Some (n, s) \<Rightarrow> k[y := Some (EInt s)])"
+          using SumAux agg_type x_def(1) not_empty lookup 
+          foldl_int_eq[OF type_restr valid_finite_group_mset[OF finite_X, of k b f], of x' xs'] by(cases ?list) (simp)+
+        then show "x \<in> result_maggaux ?args (v, SumAux m)" using k_in
+          by(simp add:not_singleton_map x_def(1) agg_type get_map_result_def lookup rev_image_eqI) 
+      qed 
+    next
+      case False
+      then obtain y0 where agg_type: "\<omega> = (Formula.Agg_Avg, y0)" using SumAux by auto (metis prod.collapse)
+      have not_singleton_map: "(g0 \<and> Mapping.keys m = {}) = False" using not_singleton SumAux by auto
+      show ?thesis
+      proof (rule set_eqI, rule iffI)
+        fix x
+        assume "x \<in> result_maggaux ?args (v, SumAux m)"
+        then obtain k s n where x_def: "Mapping.lookup m k = Some(n, s)" "x = k[y:= Some(EFloat(double_of_integer s / double_of_int n))]"
+          using not_singleton_map SumAux by(simp add:agg_type get_map_result_def) blast
+        let ?list = "flatten_multiset (group_multiset k b f X)"
+        have type_restr: "\<forall>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> t \<in> range EInt" using SumAux agg_type by(auto simp:type_restr_def)
+        then have *: "(\<And>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> unpack_int t \<in> range Some)" by(auto simp:unpack_int_def split:event_data.splits)
+        have k_in: "k \<in> (drop b) ` X" using SumAux x_def by (simp add: keys_is_none_rep) 
+        have n_len: "n = length ?list" 
+        using length_mset_eq[OF _ valid_finite_group_mset[OF finite_X], of k b f unpack_int, symmetric] *
+        x_def SumAux k_in by (auto simp:int_mset_conv_def)
+        have not_empty: "?list \<noteq> []"
+          using flatten_multiset_not_empty[of _ b f m X k] SumAux finite using k_in by simp blast
+        then obtain x' xs' where list_split: "?list = x' # xs'" using min_list.cases by blast
+        then have "foldl (+) x' xs' = EInt s"  
+          using x_def k_in SumAux False foldl_int_eq[OF type_restr valid_finite_group_mset[OF finite_X, of k b f], of x' xs'] by simp
+        then have "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" using agg_type x_def not_empty list_split n_len
+          by(cases ?list) auto
+        then show "x \<in> eval_aggargs ?args X" 
+          using k_in by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def)
+      next
+        fix x
+        assume "x \<in> eval_aggargs ?args X"
+        then obtain k where x_def: "x = k[y:= Some (eval_agg_op \<omega> (group_multiset k b f X))]" "k \<in> drop b ` X"
+          by(simp add:eval_aggargs_def eval_agg_def not_singleton empty_table_def) blast
+        let ?list = "flatten_multiset (group_multiset k b f X)"
+        have type_restr: "\<forall>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> t \<in> range EInt" using SumAux agg_type by(auto simp:type_restr_def)
+        then have "(\<And>t m. (t, m) \<in> group_multiset k b f X \<longrightarrow> unpack_int t \<in> range Some)" by(auto simp:unpack_int_def split:event_data.splits)
+        then have lookup: "Mapping.lookup m k = Some (length ?list, fold_mset (+) 0 (int_mset_conv (group_multiset k b f X)))" 
+          using x_def SumAux agg_type length_mset_eq[OF _ valid_finite_group_mset[OF finite_X], of k b f unpack_int, symmetric] 
+          by(auto simp:int_mset_conv_def)
+        have k_in: "k \<in> Mapping.keys m" using x_def(2) SumAux by auto
+        have not_empty: "?list \<noteq> []"
+          using flatten_multiset_not_empty[of _ b f m X k] SumAux finite x_def by simp blast
+        then obtain x' xs' where list_split: "?list = x' # xs'" using min_list.cases by blast
+        then have "x = (case Mapping.lookup m k of None \<Rightarrow> k | 
+                                                         Some (n, s) \<Rightarrow> k[y := Some (EFloat (double_of_event_data (EInt s) / double_of_int n))])"
+          using SumAux agg_type x_def(1) not_empty lookup 
+          foldl_int_eq[OF type_restr valid_finite_group_mset[OF finite_X, of k b f], of x' xs'] by(cases ?list) (simp del:double_of_event_data.simps)+
+        then show "x \<in> result_maggaux ?args (v, SumAux m)" using k_in
+          by(simp add:not_singleton_map x_def(1) agg_type get_map_result_def lookup rev_image_eqI) 
+      qed 
     qed
   qed
 qed
 
-lemma valid_result_maggaux': "valid_maggaux args aux X \<Longrightarrow> result_maggaux args aux = eval_aggargs args X"
-  using valid_result_maggaux_unfolded by (cases args) fast
+lemma valid_result_maggaux': "valid_maggaux args aux X \<Longrightarrow> valid_input aux \<Longrightarrow> result_maggaux args aux = eval_aggargs args X"
+  using valid_result_maggaux_unfolded by (cases args, cases aux) fast 
 
-interpretation maggaux valid_maggaux init_maggaux insert_maggaux delete_maggaux result_maggaux
+interpretation maggaux valid_maggaux valid_input init_maggaux insert_maggaux delete_maggaux result_maggaux
   using valid_init_maggaux' valid_insert_maggaux' valid_delete_maggaux' valid_result_maggaux' by unfold_locales auto
-
 end

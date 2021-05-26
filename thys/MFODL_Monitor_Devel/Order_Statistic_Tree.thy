@@ -7,8 +7,9 @@ theorem. Instead we provide a short parameterized theory that, when
 interpreted with valid parameters, will prove perservation of the invariant
 for these parameters.\<close>
 
-theory Ordered_Statistics_Tree
+theory Order_Statistic_Tree
   imports
+  Deriving.Comparator
   "Sorted_Less_Eq"
   "HOL-Data_Structures.Isin2"
   "HOL-Data_Structures.Sorting"
@@ -677,6 +678,89 @@ inductive valid_wbt_mset :: "'a::linorder wbt \<Rightarrow> 'a multiset \<Righta
   "valid_wbt_mset (insert a t) (s + {#a#})" if "valid_wbt_mset t s" for t s |
   "valid_wbt_mset (delete a t) (s - {#a#})" if "valid_wbt_mset t s" for t s
 
+lemma valid_wbt_mset_bulk_insert:
+  assumes "valid_wbt_mset t s"
+  shows "valid_wbt_mset (((insert a) ^^ n) t) (s + replicate_mset n a)"
+  using assms valid_wbt_mset.intros(2) by(induction n) (auto)
+
+lemma valid_wbt_mset_bulk_remove:
+  assumes "valid_wbt_mset t s"
+  shows "valid_wbt_mset (((delete a) ^^ n) t) (s - replicate_mset n a)"
+  using assms valid_wbt_mset.intros(3) by(induction n) (fastforce)+
+
+lemma inorder_insert_split:
+  shows "\<exists>xs ys. inorder (insert a t) = xs @ a # ys \<and> inorder t = xs @ ys"
+proof(induction t)
+  case Leaf
+  then show ?case by(auto)
+next
+  case (Node t1 x2 t2)
+  then obtain a' n where [simp]: "x2 = (a', n)" by (meson surj_pair)
+  obtain xs1 ys1 where t1_split: "inorder (insert a t1) = xs1 @ a # ys1 \<and> inorder t1 = xs1 @ ys1" using Node by blast
+  obtain xs2 ys2 where t2_split: "inorder (insert a t2) = xs2 @ a # ys2 \<and> inorder t2 = xs2 @ ys2" using Node by blast
+  then show ?case 
+  proof(cases "cmp a a'")
+    case LT
+    then have *: "insert a \<langle>t1, x2, t2\<rangle> = balanceR (insert a t1) a' t2" by(auto)
+    then show ?thesis
+    proof (cases "balanced1 t2 (insert a t1)")
+      case True
+      then show ?thesis using * t1_split by simp blast
+    next
+      case False
+      have "insert a t1 \<noteq> \<langle>\<rangle>" using False not_Leaf_if_not_balanced1 by blast
+      then show ?thesis using * inorder_rotateR[of "insert a t1" a' t2] t1_split by(auto)
+    qed
+  next
+    case EQ
+    then have *: "insert a \<langle>t1, x2, t2\<rangle> = balanceR (insert a t1) a' t2" by(auto)
+    then show ?thesis
+    proof (cases "balanced1 t2 (insert a t1)")
+      case True
+      then show ?thesis using * t1_split by simp blast
+    next
+      case False
+      have "insert a t1 \<noteq> \<langle>\<rangle>" using False not_Leaf_if_not_balanced1 by blast
+      then show ?thesis using * inorder_rotateR[of "insert a t1" a' t2] t1_split by(auto)
+    qed
+  next
+    case GT
+    then have *: "insert a \<langle>t1, x2, t2\<rangle> = balanceL t1 a' (insert a t2)" by(auto)
+    then show ?thesis
+    proof (cases "balanced1 t1 (insert a t2)")
+      case True
+      then show ?thesis using * t2_split by(simp) (metis Cons_eq_appendI append.assoc)
+    next
+      case False
+      have "insert a t2 \<noteq> \<langle>\<rangle>" using False not_Leaf_if_not_balanced1 by blast
+      then show ?thesis using * inorder_rotateL[of "insert a t2" t1 a'] t2_split by auto (metis Cons_eq_appendI append.assoc)
+    qed
+  qed
+qed
+
+lemma sorted_insort_rev:
+  assumes "sorted (inorder (insert a t))"
+  shows "sorted (inorder t)"
+proof -
+  obtain xs ys where "inorder (insert a t) = xs @ a # ys \<and> inorder t = xs @ ys" using inorder_insert_split by blast
+  then show ?thesis using assms by (simp add: sorted_wrt_append)
+qed
+
+lemma bulk_insert_insort:
+  assumes "sorted (inorder (((insert a) ^^ n) t))"
+  shows "inorder (((insert a) ^^ n) t) = (insort a ^^ n) (inorder t)"
+  using assms
+proof(induction n)
+  case 0
+  then show ?case by auto
+next
+  case (Suc n)
+  have "sorted (inorder ((insert a ^^ n) t))" using sorted_insort_rev Suc(2) by auto
+  then have "inorder (insert a ((insert a ^^ n) t)) = insort a ((Sorting.insort a ^^ n) (Tree2.inorder t))"
+    using Suc.IH inorder_insert by fastforce
+  then show ?case using inorder_insert by(auto)
+qed
+
 lemma sorted_wrt_sorted_insort:
   assumes "sorted xs"
   shows "sorted (insort a (xs))"
@@ -776,6 +860,31 @@ next
   case (3 t s a)
   have "sorted (inorder t)" using valid_wbt_mset_sorted 3(1) by auto
   then show ?case using inorder_delete[of t a] 3 del_list_multiset[of s] by simp
+qed
+
+lemma valid_wbt_mset_size_eq:
+  assumes "valid_wbt_mset t s"
+  shows "size t = size s"
+proof -
+  have "length (sorted_list_of_multiset s) = size s" by (metis mset_sorted_list_of_multiset size_mset)
+  then show ?thesis using size_length[of t] inorder_mset_eq[of t s] by (simp add: assms)
+qed
+
+lemma valid_wbt_empty_mset_leaf:
+  assumes "valid_wbt_mset t {#}"
+  shows "t = Leaf"
+  using valid_wbt_mset_size_eq assms by fastforce
+
+lemma inorder_bulk_insert_remove:
+  assumes "valid_wbt_mset t (s + replicate_mset n a)"
+  shows "inorder t = inorder (((insert a) ^^ n) (((delete a) ^^ n) t))"
+proof -
+  have valid_del: "valid_wbt_mset ((delete a ^^ n) t) s"
+    using valid_wbt_mset_bulk_remove[OF assms, of n a] by auto
+  have *: "valid_wbt_mset (((insert a) ^^ n) ((delete a ^^ n) t)) (s + replicate_mset n a)"
+    using valid_wbt_mset_bulk_insert[OF valid_del, of n a] by auto
+  show ?thesis
+    using inorder_mset_eq[OF *] inorder_mset_eq[OF assms] by(auto)
 qed
 
 lemma valid_select_mset_list:
