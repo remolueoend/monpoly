@@ -1628,7 +1628,7 @@ lemma Mapping_lookup_update: "Mapping.lookup (Mapping.update k v m) k' =
   by transfer auto
 
 lemma hd_le_set: "sorted xs \<Longrightarrow> xs \<noteq> [] \<Longrightarrow> x \<in> set xs \<Longrightarrow> hd xs \<le> x"
-  by (metis eq_iff list.sel(1) set_ConsD sorted.elims(2))
+  by (metis dual_order.eq_iff list.inject list.sel(1) list.set_cases sorted_wrt.elims(2))
 
 lemma Mapping_lookup_combineE: "Mapping.lookup (Mapping.combine f m m') k = Some v \<Longrightarrow>
   (Mapping.lookup m k = Some v \<Longrightarrow> P) \<Longrightarrow>
