@@ -477,6 +477,47 @@ declare regex.pred_set[THEN fun_cong, symmetric, code_unfold]
 lemma Bex_pred_regex[code_unfold]: "Bex (regex.atms x) P \<longleftrightarrow> \<not> regex.pred_regex (Not o P) x"
   by (induct x) auto
 
+
+derive (eq) ceq rec_safety
+derive ccompare rec_safety
+derive (dlist) set_impl rec_safety
+
+declare [[code drop: safe_letprev]]
+lemma safe_letprev_code[code]:
+  "safe_letprev p (Formula.Eq t1 t2) = Unused"
+  "safe_letprev p (Formula.Less t1 t2) = Unused"        
+  "safe_letprev p (Formula.LessEq t1 t2) = Unused"
+  "safe_letprev p (Formula.Pred e ts) = (if p = (e, length ts) then NonFutuRec else Unused)"
+  "safe_letprev p (Formula.Let e \<phi> \<psi>) =
+      (safe_letprev (e, Formula.nfv \<phi>) \<psi> * safe_letprev p \<phi>) \<squnion>
+      (if p = (e, Formula.nfv \<phi>) then Unused else safe_letprev p \<psi>)"
+  "safe_letprev p (Formula.LetPrev e \<phi> \<psi>) =
+      (if p = (e, Formula.nfv \<phi>) then Unused else
+        (safe_letprev (e, Formula.nfv \<phi>) \<psi> * safe_letprev p \<phi>) \<squnion> safe_letprev p \<psi>)"
+  "safe_letprev p (Formula.Neg \<phi>) = safe_letprev p \<phi>"
+  "safe_letprev p (Formula.Or \<phi> \<psi>) = (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
+  "safe_letprev p (Formula.And \<phi> \<psi>) = (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
+  "safe_letprev p (Formula.Ands l) = \<Squnion> set (map (safe_letprev p) l)"
+  "safe_letprev p (Formula.Exists \<phi>) = safe_letprev p \<phi>"
+  "safe_letprev p (Formula.Agg y \<omega> b' f \<phi>) = safe_letprev p \<phi>"
+  "safe_letprev p (Formula.Prev I \<phi>) = PastRec * safe_letprev p \<phi>"
+  "safe_letprev p (Formula.Next I \<phi>) = AnyRec * safe_letprev p \<phi>"
+  "safe_letprev p (Formula.Since \<phi> I \<psi>) = safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>"
+  "safe_letprev p (Formula.Until \<phi> I \<psi>) = AnyRec * (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
+  "safe_letprev p (Formula.MatchP I r) = \<Squnion> Regex.atms (Regex.map_regex (safe_letprev p) r)"
+  "safe_letprev p (Formula.MatchF I r) =  AnyRec * \<Squnion> Regex.atms (Regex.map_regex (safe_letprev p) r)"
+  by (auto simp add: regex.set_map)
+
+lemma Sup_rec_safety_set[code_unfold]:
+  "\<Squnion> (set l :: rec_safety set) = fold (\<squnion>) l Unused"
+  by (simp add: Sup_rec_safety_def comp_fun_idem.fold_set_fold comp_fun_idem_sup)
+
+lemma Sup_rec_safety_atms[code_unfold]:
+  "\<Squnion> (Regex.atms r :: rec_safety set) = fold (\<squnion>) (csorted_list_of_set (Regex.atms r)) Unused"
+  by (simp add: Sup_rec_safety_def comp_fun_idem_sup csorted_list_of_set_def ccompare_rec_safety_def ID_def
+      linorder.set_sorted_list_of_set[OF comparator.linorder] comparator_rec_safety
+      flip: comp_fun_idem.fold_set_fold)
+
 (*<*)
 end
 (*>*)
