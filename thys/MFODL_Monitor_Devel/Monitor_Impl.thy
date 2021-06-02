@@ -1,6 +1,8 @@
 (*<*)
 theory Monitor_Impl
   imports Monitor
+    Optimized_Agg_Temporal
+    Optimized_Agg
     Optimized_MTL
     "HOL-Library.Code_Target_Nat"
     Containers.Containers
@@ -100,19 +102,19 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
     length_vmuaux_def eval_vmuaux_def
   by unfold_locales auto
 
-global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> event_data mmsaux" add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux'
+global_interpretation default_maux: maux valid_mmasaux "init_mmasaux :: _ \<Rightarrow> mmasaux" add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux
   valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux length_mmuaux eval_mmuaux'
-  defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
-  and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  defines minit0 = "maux.minit0 (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
+  and minit = "maux.minit (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
   and minit_since = "default_maux.init_since"
   and minit_until = "default_maux.init_until"
-  and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
-  and mupdate_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux'"
-  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux' add_new_mmuaux eval_mmuaux'"
-  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux' add_new_mmuaux eval_mmuaux'"
-  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux' add_new_mmuaux eval_mmuaux'"
-  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux' add_new_mmuaux eval_mmuaux'"
-  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux' init_mmuaux add_new_mmuaux eval_mmuaux'"
+  and minit_safe = "maux.minit_safe (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  and mupdate_since = "maux.update_since add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux"
+  and meval = "maux.meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
+  and mstep = "maux.mstep add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
+  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
+  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
+  and monitor = "maux.monitor init_mmasaux add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux init_mmuaux add_new_mmuaux eval_mmuaux'"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -140,7 +142,7 @@ definition rbt_insert :: "_ \<Rightarrow> _ \<Rightarrow> event_data list set_rb
   "rbt_insert = RBT_Set2.insert"
 
 lemma saturate_commute:
-  assumes "\<And>s. r \<in> g s" "\<And>s. g (insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
+  assumes "\<And>s. r \<in> g s" "\<And>s. g (Set.insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
   and terminates: "mono g" "\<And>X. X \<subseteq> C \<Longrightarrow> g X \<subseteq> C" "finite C"
 shows "saturate g {} = saturate h {r}"
 proof (cases "g {} = {r}")
@@ -153,7 +155,7 @@ next
   then show ?thesis
     unfolding saturate_def while_def
     using while_option_finite_subset_Some[OF terminates] assms(1-3)
-    by (subst while_option_commute_invariant[of "\<lambda>S. S = {} \<or> r \<in> S" "\<lambda>S. g S \<noteq> S" g "\<lambda>S. h S \<noteq> S" "insert r" h "{}", symmetric])
+    by (subst while_option_commute_invariant[of "\<lambda>S. S = {} \<or> r \<in> S" "\<lambda>S. g S \<noteq> S" g "\<lambda>S. h S \<noteq> S" "Set.insert r" h "{}", symmetric])
       (auto 4 4 dest: while_option_stop[of "\<lambda>S. g S \<noteq> S" g "{}"])
 qed
 
@@ -214,7 +216,7 @@ lemma combine_Mapping[code]:
 lemma upd_set_empty[simp]: "upd_set m f {} = m"
   by transfer auto
 
-lemma upd_set_insert[simp]: "upd_set m f (insert x A) = Mapping.update x (f x) (upd_set m f A)"
+lemma upd_set_insert[simp]: "upd_set m f (Set.insert x A) = Mapping.update x (f x) (upd_set m f A)"
   by (rule mapping_eqI) (auto simp: Mapping_lookup_upd_set Mapping.lookup_update')
 
 lemma upd_set_fold:
@@ -248,7 +250,7 @@ declare shift_end.simps[folded filter_set_def, code]
 lemma upd_set'_empty[simp]: "upd_set' m d f {} = m"
   by (rule mapping_eqI) (auto simp add: upd_set'_lookup)
 
-lemma upd_set'_insert: "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Longrightarrow> upd_set' m d f (insert x A) =
+lemma upd_set'_insert: "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Longrightarrow> upd_set' m d f (Set.insert x A) =
   (let m' = (upd_set' m d f A) in case Mapping.lookup m' x of None \<Rightarrow> Mapping.update x d m'
   | Some v \<Rightarrow> Mapping.update x (f v) m')"
   by (rule mapping_eqI) (auto simp: upd_set'_lookup Mapping.lookup_update' split: option.splits)
@@ -282,7 +284,7 @@ definition upd_nested_step :: "'c \<Rightarrow> ('c \<Rightarrow> 'c) \<Rightarr
     | None \<Rightarrow> Mapping.update k (Mapping.update k' d Mapping.empty) m))"
 
 lemma upd_nested_insert:
-  "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Longrightarrow> upd_nested m d f (insert x A) =
+  "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Longrightarrow> upd_nested m d f (Set.insert x A) =
   upd_nested_step d f x (upd_nested m d f A)"
   unfolding upd_nested_step_def
   using upd_set'_aux1[of d f _ _ A] upd_set'_aux2[of _ _ d f _ A] upd_set'_aux3[of _ _ _ d f _ A]
@@ -328,7 +330,7 @@ lemma filter_set_empty[simp]: "filter_set m {} t = m"
   unfolding filter_set_def
   by transfer (auto simp: fun_eq_iff split: option.splits)
 
-lemma filter_set_insert[simp]: "filter_set m (insert x A) t = (let m' = filter_set m A t in
+lemma filter_set_insert[simp]: "filter_set m (Set.insert x A) t = (let m' = filter_set m A t in
   case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then Mapping.delete x m' else m' | _ \<Rightarrow> m')"
   unfolding filter_set_def
   by transfer (auto simp: fun_eq_iff Let_def Map_To_Mapping.map_apply_def split: option.splits)
@@ -372,12 +374,12 @@ lemma filter_join_False_empty: "filter_join False {} m = m"
   unfolding filter_join_def
   by transfer (auto split: option.splits)
 
-lemma filter_join_False_insert: "filter_join False (insert a A) m =
+lemma filter_join_False_insert: "filter_join False (Set.insert a A) m =
   filter_join False A (Mapping.delete a m)"
 proof -
   {
     fix x
-    have "Mapping.lookup (filter_join False (insert a A) m) x =
+    have "Mapping.lookup (filter_join False (Set.insert a A) m) x =
       Mapping.lookup (filter_join False A (Mapping.delete a m)) x"
       by (auto simp add: filter_join_def Mapping.lookup_filter Mapping_lookup_delete
           split: option.splits)
@@ -481,6 +483,42 @@ lemma mk_db_code[code]:
 declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]]
 declare New_max.genericJoin_code[folded remove_Union_def, code]
 declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
+
+lift_definition delete_cnt_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> nat agg_map)) comp_fun_commute" is
+  "\<lambda>args. delete_cnt args" using delete_cnt_comm by unfold_locales auto
+
+lemma [code_unfold]: "Finite_Set.fold (delete_cnt args) (v, m) data = set_fold_cfc (delete_cnt_cfc args) (v, m) data"
+  by(transfer) auto
+
+lift_definition delete_sum_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> ((nat \<times> integer) agg_map))) comp_fun_commute" is
+  "\<lambda>args. delete_sum args" using delete_sum_comm by unfold_locales auto
+
+lemma [code_unfold]: "Finite_Set.fold (delete_sum args) (v, m) data = set_fold_cfc (delete_sum_cfc args) (v, m) data"
+  by(transfer) auto
+
+lift_definition delete_rank_cfc::"aggargs \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
+  "\<lambda>args. delete_rank args" using delete_rank_comm by unfold_locales auto
+
+lemma [code_unfold]: "Finite_Set.fold (delete_rank args) (v, m) data = set_fold_cfc (delete_rank_cfc args) (v, m) data"
+  by(transfer) auto
+
+lift_definition insert_cnt_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> nat agg_map)) comp_fun_commute" is
+  "\<lambda>args. insert_cnt args" using insert_cnt_comm by unfold_locales auto
+
+lemma [code_unfold]: "Finite_Set.fold (insert_cnt args) (v, m) data = set_fold_cfc (insert_cnt_cfc args) (v, m) data"
+  by(transfer) auto
+
+lift_definition insert_sum_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> ((nat \<times> integer) agg_map))) comp_fun_commute" is
+  "\<lambda>args. insert_sum args" using insert_sum_comm by unfold_locales auto
+
+lemma [code_unfold]: "Finite_Set.fold (insert_sum args) (v, m) data = set_fold_cfc (insert_sum_cfc args) (v, m) data"
+  by(transfer) auto
+
+lift_definition insert_rank_cfc::"aggargs \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
+  "\<lambda>args. insert_rank args" using insert_rank_comm by unfold_locales auto
+
+lemma [code_unfold]: "Finite_Set.fold (insert_rank args) (v, m) data = set_fold_cfc (insert_rank_cfc args) (v, m) data"
+  by(transfer) auto
 
 (*<*)
 end

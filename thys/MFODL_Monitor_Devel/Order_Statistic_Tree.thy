@@ -10,7 +10,6 @@ for these parameters.\<close>
 theory Order_Statistic_Tree
   imports
   Deriving.Comparator
-  "Sorted_Less_Eq"
   "HOL-Data_Structures.Isin2"
   "HOL-Data_Structures.Sorting"
 begin
@@ -781,6 +780,9 @@ qed
 
 lemma insort_eq: "Sorting.insort a xs = linorder_class.insort a xs"
   by(induction xs) auto
+
+lemma insort_eq2: "Sorting.insort a = linorder_class.insort a"
+  using insort_eq by auto
 
 lemma valid_wbt_mset_sorted:
   assumes "valid_wbt_mset t m"
