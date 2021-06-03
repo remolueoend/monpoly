@@ -139,14 +139,14 @@ instance ..
 end
 
 primrec integer_of_event_data :: "event_data \<Rightarrow> integer" where
-  "integer_of_event_data (EInt x) = x"
+  "integer_of_event_data (EInt _) = undefined"
 | "integer_of_event_data (EFloat x) = integer_of_double x"
-| "integer_of_event_data (EString _) = 0"
+| "integer_of_event_data (EString _) = undefined"
 
 primrec double_of_event_data :: "event_data \<Rightarrow> double" where
   "double_of_event_data (EInt x) = double_of_integer x"
-| "double_of_event_data (EFloat x) = x"
-| "double_of_event_data (EString _) = nan"
+| "double_of_event_data (EFloat _) = undefined"
+| "double_of_event_data (EString _) = undefined"
 
 (*<*)
 end

@@ -17,7 +17,6 @@ fun ty_of :: "event_data \<Rightarrow> ty" where
 
 definition "numeric_ty = {TInt, TFloat}"
 
-
 subsection \<open>Terms\<close>
 
 type_synonym tyenv = "nat \<Rightarrow> ty"
@@ -57,6 +56,18 @@ lemma ty_of_eval_trm: "E \<turnstile> x :: t \<Longrightarrow> \<forall>y\<in>fv
 ty_of (Formula.eval_trm v x) = t"
   by (induction pred: wty_trm) (simp_all add: ty_of_plus ty_of_minus ty_of_uminus 
       ty_of_mult ty_of_div ty_of_mod)
+
+lemma  value_of_eval_trm: "E \<turnstile> x :: TInt \<Longrightarrow> \<forall>y\<in>fv_trm x. ty_of (v ! y) = E y \<Longrightarrow> 
+\<exists> z .(Formula.eval_trm v x) = EInt z"
+"E \<turnstile> x :: TFloat \<Longrightarrow> \<forall>y\<in>fv_trm x. ty_of (v ! y) = E y \<Longrightarrow> 
+\<exists> z .(Formula.eval_trm v x) = EFloat z"
+"E \<turnstile> x :: TString \<Longrightarrow> \<forall>y\<in>fv_trm x. ty_of (v ! y) = E y \<Longrightarrow> 
+\<exists> z .(Formula.eval_trm v x) = EString z"
+  subgoal using ty_of_eval_trm by (cases "Formula.eval_trm v x") fastforce+
+  subgoal using ty_of_eval_trm by (cases "Formula.eval_trm v x") fastforce+
+  subgoal using ty_of_eval_trm by (cases "Formula.eval_trm v x") fastforce+
+  done
+
 
 lemma wty_trm_fv_cong:
   assumes "\<And>y. y \<in> fv_trm x \<Longrightarrow> E y = E' y"
@@ -274,69 +285,8 @@ lemma match_sat_fv: assumes "safe_regex temp Strict r"
   ultimately show ?case by auto
 next
   case (Times r1 r2)
-  then show ?case  using Times.prems match_le Times.IH  apply (cases temp)
-      apply auto by blast+
+  then show ?case  using Times.prems match_le Times.IH  by (cases temp) fastforce+
 qed  auto
-
-(*
-definition finite_formula_map :: "'t Formula.formula \<Rightarrow> event_data list \<Rightarrow> nat \<Rightarrow> event_data list \<Rightarrow> event_data option list" where
-  "finite_formula_map \<phi> v n zs = map (\<lambda>(i,z). if i \<in> fv \<phi> then Some z else None) (zip [0..<n+ length v] (zs@v))"
-
-lemma finite_formula_map_fv:
-  assumes "i \<in> fv \<phi>" "length x = n" " i< length (x@v)"
-  shows  "(finite_formula_map \<phi> v n x) !i = Some ((x@v) !i)" 
-  using  nth_map[of i " (zip [0..<n+ length v] (x@v))" "(\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None)" ]apply (auto simp add: finite_formula_map_def)
-  apply (cases "zip [0..<n + length v] (x @ v) ! i")
-       subgoal for a b apply (cases "a \<in> fv \<phi>") using  assms by (auto simp add: nth_append) done
-
-lemma finite_formula_inj: 
-  assumes "{0..<n} \<subseteq> Formula.fv \<phi>"
-  shows "inj_on (finite_formula_map \<phi> v n)  {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}"
-proof -
-  have inj_th: "x = y" if inj_assms: "Formula.sat \<sigma> V (x @ v) i \<phi>" "n = length x"    "  length y = length x" "Formula.sat \<sigma> V (y @ v) i \<phi>" 
- " map (\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None) (zip [0..<length x + length v] (x @ v))  =
-           map (\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None) (zip [0..<length x + length v] (y @ v))"  for x y
-  proof (rule ccontr)
-    assume noteq: "x \<noteq> y"
-    from noteq inj_assms(2,3) obtain i where i_def: "i< n \<and> x!i \<noteq> y!i" by (metis  nth_equalityI)
-     from this have xi: " map2 (\<lambda>x y. if x \<in> fv \<phi> then Some y else None) [0..<length x + length v] (x @ v)!i = Some (x!i)"
-       using  nth_map[of i " (zip [0..<n+ length v] (x@v))" "(\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None)" ] apply (cases "zip [0..<n + length v] (x @ v) ! i")
-       subgoal for a b apply (cases "a \<in> fv \<phi>") using inj_assms(2) assms by (auto simp add: nth_append) done
-     from i_def have yi: " map2 (\<lambda>x y. if x \<in> fv \<phi> then Some y else None) [0..<length y + length v] (y @ v)!i = Some (y!i)"
-       using  nth_map[of i " (zip [0..<n+ length v] (y@v))" "(\<lambda>(x, y). if x \<in> fv \<phi> then Some y else None)" ] apply (cases "zip [0..<n + length v] (y @ v) ! i")
-       subgoal for a b apply (cases "a \<in> fv \<phi>") using inj_assms(2,3) assms by (auto simp add: nth_append) done
-         (*TODO: clean this up: use finite_formula_map_fv*)
-    show "False" using noteq inj_assms(5) assms i_def inj_assms(3) xi yi by auto
-  qed
-  thus ?thesis using assms by (auto simp add: inj_on_def finite_formula_map_def) 
-
-qed
-lemma safe_formula_finite_subset: 
-  assumes "Formula.nfv \<phi> \<le> n + length v"
-  shows "(finite_formula_map \<phi> v n) ` {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>} \<subseteq> {v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}"
-proof -
-  have fv_inj: "\<forall>x\<in>fv \<phi>. (xa @ v) ! x = map (the \<circ> (\<lambda>(i, z). if i \<in> fv \<phi> then Some z else None)) (zip [0..<length xa + length v] (xa @ v)) ! x"
-    if "length xa = n"
-    for xa apply auto  subgoal for x  using  nth_map assms that by (auto simp add: finite_formula_map_def comp_def Formula.nfv_def) done
-  show "(finite_formula_map \<phi> v n) ` {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>} \<subseteq> {v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}"
-      apply (auto simp add: wf_tuple_def finite_formula_map_def)
-    subgoal for xa  using sat_fv_cong[of \<phi> "xa@v" "(map the (finite_formula_map \<phi> v n xa))" \<sigma> V i] fv_inj by ( auto simp add: finite_formula_map_def) done
-qed
-
-lemma safe_formula_finite':
-  assumes "Formula.safe_formula \<phi>" "{0..<n} \<subseteq> Formula.fv \<phi>" "Formula.nfv \<phi> \<le> n + length v"
-  shows "finite {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}"
-proof -
-  from assms(1) have  "Formula.future_bounded \<phi> \<and> (\<forall>i. finite (\<Gamma> \<sigma> i)) \<and>  (\<forall>pn\<in>dom V. \<forall>i. finite (the (V pn) i))"
-  apply  (induction \<phi> arbitrary: i v V \<sigma> rule: safe_formula_induct)  sorry
-  from  this have finite': "finite {v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}"
-    using assms safe_formula_finite[of \<phi> "n +length v" \<sigma> V i]  by auto
-  from assms(2) have inj: "inj_on (finite_formula_map \<phi> v n ) {zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" using finite_formula_inj by blast
-  show ?thesis using  inj_on_finite[of "finite_formula_map \<phi> v n" 
-  "{zs. length zs = n \<and> Formula.sat \<sigma> V (zs @ v) i \<phi>}" "{v1. wf_tuple (n+length v) (fv \<phi>) v1 \<and> Formula.sat \<sigma> V (map the v1) i \<phi>}" ] 
- inj finite' assms(3) safe_formula_finite_subset[of \<phi> n v \<sigma> V i] by auto 
-qed
-*) 
 
 lemma finite_fst: assumes "finite  {(x,f x) | x. P x}" shows "finite {x . P x}"
 proof -
