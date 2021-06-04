@@ -12,27 +12,27 @@ undef_double_of_event_data :: "event_data \<Rightarrow> double" and
 undef_integer_of_event_data :: "event_data \<Rightarrow> integer" and
 undef_less_eq :: "event_data \<Rightarrow> event_data \<Rightarrow> bool" and
 undef_eq :: "event_data \<Rightarrow> event_data \<Rightarrow> bool"
-assumes undef_plus_sound:  "\<And>x y. EInt x + EInt y = undef_plus (EInt x) (EInt y)" 
-    "\<And> x y . EFloat x + EFloat y = undef_plus (EFloat x) (EFloat y)"
-assumes undef_minus_sound:  "\<And>x y. EInt x - EInt y = undef_minus (EInt x) (EInt y)" 
-    "\<And> x y . EFloat x - EFloat y = undef_minus (EFloat x) (EFloat y)"
-assumes undef_uminus_sound:  "\<And>x . - EInt x = undef_uminus (EInt x)"
-   "\<And> x. - EFloat x = undef_uminus (EFloat x)"
-assumes undef_times_sound:  "\<And>x y. EInt x * EInt y = undef_times (EInt x) (EInt y)" 
-    "\<And> x y . EFloat x * EFloat y = undef_times (EFloat x) (EFloat y)"
-assumes undef_divide_sound:  "\<And>x y. EInt x div EInt y = undef_divide (EInt x) (EInt y)" 
-    "\<And> x y . EFloat x div EFloat y = undef_divide (EFloat x) (EFloat y)"
-assumes undef_modulo_sound:  "\<And>x y. EInt x mod EInt y = undef_modulo (EInt x) (EInt y)"  
-assumes undef_eq_sound: "\<And>x y. EInt x = EInt y \<longleftrightarrow> undef_eq (EInt x) (EInt y)"
- "\<And>x y. EFloat x = EFloat y \<longleftrightarrow> undef_eq (EFloat x) (EFloat y)"
- "\<And> x y. EString x = EString y \<longleftrightarrow> undef_eq (EString x) (EString y)"
+assumes undef_plus_sound:  "\<And>x y. undef_plus (EInt x) (EInt y) = EInt x + EInt y" 
+    "\<And> x y . undef_plus (EFloat x) (EFloat y) = EFloat x + EFloat y"
+assumes undef_minus_sound:  "\<And>x y. undef_minus (EInt x) (EInt y) = EInt x - EInt y" 
+    "\<And> x y . undef_minus (EFloat x) (EFloat y) = EFloat x - EFloat y"
+assumes undef_uminus_sound:  "\<And>x . undef_uminus (EInt x) = - EInt x"
+   "\<And> x. undef_uminus (EFloat x) = - EFloat x "
+assumes undef_times_sound:  "\<And>x y.  undef_times (EInt x) (EInt y) = EInt x * EInt y" 
+    "\<And> x y . undef_times (EFloat x) (EFloat y) = EFloat x * EFloat y"
+assumes undef_divide_sound:  "\<And>x y. undef_divide (EInt x) (EInt y) = EInt x div EInt y" 
+    "\<And> x y .  undef_divide (EFloat x) (EFloat y) = EFloat x div EFloat y"
+assumes undef_modulo_sound:  "\<And>x y.  undef_modulo (EInt x) (EInt y) = EInt x mod EInt y"  
+assumes undef_eq_sound: "\<And>x y.  undef_eq (EInt x) (EInt y) \<longleftrightarrow> EInt x = EInt y"
+ "\<And>x y.  undef_eq (EFloat x) (EFloat y) \<longleftrightarrow> EFloat x = EFloat y"
+ "\<And> x y. undef_eq (EString x) (EString y) \<longleftrightarrow> EString x = EString y"
 
-assumes undef_double_of_event_data_sound: "\<And>x. double_of_event_data (EInt x) = undef_double_of_event_data (EInt x)"
-assumes undef_integer_of_event_data_sound: "\<And>x. integer_of_event_data (EFloat x) = undef_integer_of_event_data (EFloat x)"
+assumes undef_double_of_event_data_sound: "\<And>x.  undef_double_of_event_data (EInt x) = double_of_event_data (EInt x)"
+assumes undef_integer_of_event_data_sound: "\<And>x. undef_integer_of_event_data (EFloat x) = integer_of_event_data (EFloat x)"
 
-assumes undef_less_eq_sound: "\<And>x y. EInt x \<le> EInt y \<longleftrightarrow> undef_less_eq (EInt x) (EInt y)"
- "\<And>x y. EFloat x \<le> EFloat y \<longleftrightarrow> undef_less_eq (EFloat x) (EFloat y)"
- "\<And> x y. EString x \<le> EString y \<longleftrightarrow> undef_less_eq (EString x) (EString y)"
+assumes undef_less_eq_sound: "\<And>x y. undef_less_eq (EInt x) (EInt y) \<longleftrightarrow> EInt x \<le> EInt y"
+ "\<And>x y. undef_less_eq (EFloat x) (EFloat y) \<longleftrightarrow> EFloat x \<le> EFloat y"
+ "\<And> x y. undef_less_eq (EString x) (EString y) \<longleftrightarrow> EString x \<le> EString y"
 
 begin
 
@@ -123,38 +123,39 @@ case (Pred x1 x2)
   then show ?case sorry
 next
   case (Eq E x1 t x2)
-  from this have fv_x1: " \<forall>y\<in>fv_trm x1. ty_of (v ! y) = E y " by auto
-  from Eq have fv_x2: " \<forall>y\<in>fv_trm x2. ty_of (v ! y) = E y " by auto
-  from Eq fv_x2 show ?case using eval_trm_sound  ty_of_eval_trm  apply (cases t)
-    using value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
-    undef_eq_sound apply auto 
-    by blast+
-
+  from Eq show ?case using eval_trm_sound  ty_of_eval_trm  value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
+    by (cases t) (auto simp add: undef_eq_sound) 
 next
   case (Less E x1 t x2)
-  sorry
+  then show ?case using eval_trm_sound  ty_of_eval_trm value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ] 
+    by (cases t) (auto simp add: undef_less_def undef_less_eq_sound less_event_data_def)
 next
   case (LessEq E x1 t x2)
-  sorry
+  then show ?case using eval_trm_sound  ty_of_eval_trm value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
+    by (cases t) (auto simp add: undef_less_eq_sound) 
+
+
+next 
+  case (Let S E \<phi> p E' \<psi>)
+  from this have "\<forall>y\<in>fv \<psi>. ty_of (v ! y) = E' y" by auto
+  then show ?case using Let apply auto sorry
 next
   case (Agg x1 x2 x3 x4 \<phi>)
   then show ?case sorry
 next
-  find_theorems Regex.pred_regex regex.atms
-  case (MatchF S E x2 x1) 
-  from this have "Ball (regex.atms x2) ( \<lambda>\<phi> . S, E \<turnstile> \<phi> \<and> (\<forall>x. (\<forall>ya\<in>fv \<phi>. ty_of (x ! ya) = E ya) \<longrightarrow> (\<forall>xa xb. Formula.sat \<sigma> xa x xb \<phi> = local.sat' \<sigma> xa x xb \<phi>)))"
-    by (simp add: regex.pred_set)
-  from MatchF have "\<And> \<phi> . \<phi> \<in>  regex.atms x2 \<Longrightarrow> \<forall>ya\<in>fv \<phi>. ty_of (v ! ya) = E ya" apply (auto simp add: regex.pred_set)
-  from this have r: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v5 i5 \<phi> = local.sat' \<sigma> V5 v5 i5 \<phi>" for \<phi> V5 v5 i5
-    using regex.pred_set apply auto sledgehammer sorry
-  then show ?case  using match_cong[OF refl r, where ?r=x2] by auto 
-(*   ?x2a5 \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> ?V5 ?v5 ?i5 ?x2a5 = local.sat' \<sigma> ?V5 ?v5 ?i5 ?x2a5
-  then show ?case  using match_cong[OF refl MatchF, where ?r=x2 and ?x2a6="\<lambda>i j. j"] by auto *)
+  case (Exists S t E \<phi> )
+  then show ?case apply (auto split: nat.splits) sorry
 next
-  case (MatchP x1 x2) then show ?case sorry
-  (*then show ?case  using match_cong[OF refl MatchP, where ?r=x2 and ?x2a6="\<lambda>i j. j"] by auto *)
-
-qed (auto split: nat.splits)
+  case (MatchF S E x2 x1) 
+  from this have  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
+    by (auto simp add: regex.pred_set fv_regex_alt)
+  then show ?case  using match_cong[OF refl other_IH, where ?r=x2] by auto 
+next
+  case (MatchP S E x2 x1)
+    from this have  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
+    by (auto simp add: regex.pred_set fv_regex_alt)
+  then show ?case  using match_cong[OF refl other_IH, where ?r=x2] by auto 
+qed  (auto split: nat.splits) 
 
 end
 end
