@@ -111,19 +111,22 @@ fun sat' :: "Formula.trace \<Rightarrow> (Formula.name \<rightharpoonup> nat \<R
 | "sat' \<sigma> V v i (Formula.MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat' \<sigma> V v) r j i)"
 | "sat' \<sigma> V v i (Formula.MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat' \<sigma> V v) r i j)"
 
+
+
 lemma eval_trm_sound: 
   assumes "E \<turnstile> f :: t"  "\<forall>y\<in>fv_trm f. ty_of (v ! y) = E y"
   shows "Formula.eval_trm v f = eval_trm' v f"
   sorry
 lemma soundness:
-  assumes "S,E \<turnstile> \<phi>"  "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y"
+  assumes  "S,E \<turnstile> \<phi>" "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y" 
   shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
- using assms  proof (induction \<phi> arbitrary: v V i S )
+ using assms  proof (induction S E \<phi>  arbitrary: v V i rule: wty_formula.induct)
+  
 case (Pred x1 x2)
   then show ?case sorry
 next
   case (Eq E x1 t x2)
-  from Eq show ?case using eval_trm_sound  ty_of_eval_trm  value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
+   from Eq show ?case using eval_trm_sound  ty_of_eval_trm  value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
     by (cases t) (auto simp add: undef_eq_sound) 
 next
   case (Less E x1 t x2)
@@ -133,26 +136,24 @@ next
   case (LessEq E x1 t x2)
   then show ?case using eval_trm_sound  ty_of_eval_trm value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
     by (cases t) (auto simp add: undef_less_eq_sound) 
-
-
 next 
   case (Let S E \<phi> p E' \<psi>)
   from this have "\<forall>y\<in>fv \<psi>. ty_of (v ! y) = E' y" by auto
   then show ?case using Let apply auto sorry
 next
   case (Agg x1 x2 x3 x4 \<phi>)
-  then show ?case sorry
+  then show ?case apply auto sorry
 next
   case (Exists S t E \<phi> )
   then show ?case apply (auto split: nat.splits) sorry
 next
   case (MatchF S E x2 x1) 
-  from this have  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
-    by (auto simp add: regex.pred_set fv_regex_alt)
+  from this  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
+    by (auto simp add: regex.pred_set fv_regex_alt) 
   then show ?case  using match_cong[OF refl other_IH, where ?r=x2] by auto 
 next
   case (MatchP S E x2 x1)
-    from this have  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
+    from this  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
     by (auto simp add: regex.pred_set fv_regex_alt)
   then show ?case  using match_cong[OF refl other_IH, where ?r=x2] by auto 
 qed  (auto split: nat.splits) 
