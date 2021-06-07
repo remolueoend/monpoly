@@ -76,7 +76,7 @@ type formula =
   | LessEq of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
-  | LetPrev of (predicate * formula * formula)
+  | LetPast of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)

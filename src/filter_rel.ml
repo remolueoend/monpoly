@@ -81,7 +81,7 @@ let get_predicates f =
     | Let (p,f1,f2) ->
         let bound2 = Predicate.get_name p :: bound in
         get_preds bound2 (get_preds bound preds f1) f2
-    | LetPrev (p,f1,f2) ->
+    | LetPast (p,f1,f2) ->
         let bound2 = Predicate.get_name p :: bound in
         get_preds bound2 (get_preds bound preds f1) f2
   and get_re_preds bound preds = function
@@ -163,7 +163,7 @@ let get_tuple_filter f =
     | Let (p,f1,f2) ->
         let bound2 = Predicate.get_name p :: bound in
         get_tuples bound2 (get_tuples bound tuples f1) f2
-    | LetPrev (p,f1,f2) ->
+    | LetPast (p,f1,f2) ->
         let bound2 = Predicate.get_name p :: bound in
         get_tuples bound2 (get_tuples bound tuples f1) f2
   and get_re_tuples bound tuples = function (* regex *)

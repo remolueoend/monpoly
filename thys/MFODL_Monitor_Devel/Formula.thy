@@ -201,7 +201,7 @@ fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Righta
 
 qualified datatype (discs_sels) formula = Pred name "trm list"
   | Let name formula formula
-  | LetPrev name formula formula
+  | LetPast name formula formula
   | Eq trm trm | Less trm trm | LessEq trm trm
   | Neg formula | Or formula formula | And formula formula | Ands "formula list" | Exists formula
   | Agg nat agg_op nat trm formula
@@ -215,7 +215,7 @@ qualified definition "TT \<equiv> Neg FF"
 qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
   "fvi b (Pred r ts) = (\<Union>t\<in>set ts. fvi_trm b t)"
 | "fvi b (Let p \<phi> \<psi>) = fvi b \<psi>"
-| "fvi b (LetPrev p \<phi> \<psi>) = fvi b \<psi>"
+| "fvi b (LetPast p \<phi> \<psi>) = fvi b \<psi>"
 | "fvi b (Eq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
 | "fvi b (Less t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
 | "fvi b (LessEq t1 t2) = fvi_trm b t1 \<union> fvi_trm b t2"
@@ -303,7 +303,7 @@ qualified definition envs :: "formula \<Rightarrow> env set" where
 
 lemma nfv_simps[simp]:
   "nfv (Let p \<phi> \<psi>) = nfv \<psi>"
-  "nfv (LetPrev p \<phi> \<psi>) = nfv \<psi>"
+  "nfv (LetPast p \<phi> \<psi>) = nfv \<psi>"
   "nfv (Neg \<phi>) = nfv \<phi>"
   "nfv (Or \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
   "nfv (And \<phi> \<psi>) = max (nfv \<phi>) (nfv \<psi>)"
@@ -350,7 +350,7 @@ fun contains_pred :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> bool
 |  "contains_pred p (LessEq t1 t2) = False"
 |  "contains_pred p (Pred e ts) = (p = (e, length ts))"
 |  "contains_pred p (Let e \<phi> \<psi>) = ((contains_pred p \<phi> \<and> contains_pred (e, nfv \<phi>) \<psi>) \<or> (p \<noteq> (e, nfv \<phi>) \<and> contains_pred p \<psi>))"
-|  "contains_pred p (LetPrev e \<phi> \<psi>) =  (p \<noteq> (e, nfv \<phi>) \<and> ((contains_pred p \<phi> \<and> contains_pred (e, nfv \<phi>) \<psi>) \<or> contains_pred p \<psi>))"
+|  "contains_pred p (LetPast e \<phi> \<psi>) =  (p \<noteq> (e, nfv \<phi>) \<and> ((contains_pred p \<phi> \<and> contains_pred (e, nfv \<phi>) \<psi>) \<or> contains_pred p \<psi>))"
 |  "contains_pred p (Neg \<phi>) = contains_pred p \<phi>"
 |  "contains_pred p (Or \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
 |  "contains_pred p (And \<phi> \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
@@ -364,34 +364,34 @@ fun contains_pred :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> bool
 |  "contains_pred p (MatchP I r) = (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
 |  "contains_pred p (MatchF I r) =  (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
 
-fun safe_letprev :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> rec_safety" where
-   "safe_letprev p (Eq t1 t2) = Unused"
-|  "safe_letprev p (Less t1 t2) = Unused"        
-|  "safe_letprev p (LessEq t1 t2) = Unused"
-|  "safe_letprev p (Pred e ts) = (if p = (e, length ts) then NonFutuRec else Unused)"
-|  "safe_letprev p (Let e \<phi> \<psi>) =
-      (safe_letprev (e, nfv \<phi>) \<psi> * safe_letprev p \<phi>) \<squnion>
-      (if p = (e, nfv \<phi>) then Unused else safe_letprev p \<psi>)"
-|  "safe_letprev p (LetPrev e \<phi> \<psi>) =
+fun safe_letpast :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> rec_safety" where
+   "safe_letpast p (Eq t1 t2) = Unused"
+|  "safe_letpast p (Less t1 t2) = Unused"        
+|  "safe_letpast p (LessEq t1 t2) = Unused"
+|  "safe_letpast p (Pred e ts) = (if p = (e, length ts) then NonFutuRec else Unused)"
+|  "safe_letpast p (Let e \<phi> \<psi>) =
+      (safe_letpast (e, nfv \<phi>) \<psi> * safe_letpast p \<phi>) \<squnion>
+      (if p = (e, nfv \<phi>) then Unused else safe_letpast p \<psi>)"
+|  "safe_letpast p (LetPast e \<phi> \<psi>) =
       (if p = (e, nfv \<phi>) then Unused else
-        (safe_letprev (e, nfv \<phi>) \<psi> * safe_letprev p \<phi>) \<squnion> safe_letprev p \<psi>)"
-|  "safe_letprev p (Neg \<phi>) = safe_letprev p \<phi>"
-|  "safe_letprev p (Or \<phi> \<psi>) = (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
-|  "safe_letprev p (And \<phi> \<psi>) = (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
-|  "safe_letprev p (Ands l) = \<Squnion>(safe_letprev p ` set l)"
-|  "safe_letprev p (Exists \<phi>) = safe_letprev p \<phi>"
-|  "safe_letprev p (Agg y \<omega> b' f \<phi>) = safe_letprev p \<phi>"
-|  "safe_letprev p (Prev I \<phi>) = PastRec * safe_letprev p \<phi>"
-|  "safe_letprev p (Next I \<phi>) = AnyRec * safe_letprev p \<phi>"
-|  "safe_letprev p (Since \<phi> I \<psi>) = safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>"
-|  "safe_letprev p (Until \<phi> I \<psi>) = AnyRec * (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
-|  "safe_letprev p (MatchP I r) = \<Squnion>(safe_letprev p ` Regex.atms r)"
-|  "safe_letprev p (MatchF I r) =  AnyRec * \<Squnion>(safe_letprev p ` Regex.atms r)"
+        (safe_letpast (e, nfv \<phi>) \<psi> * safe_letpast p \<phi>) \<squnion> safe_letpast p \<psi>)"
+|  "safe_letpast p (Neg \<phi>) = safe_letpast p \<phi>"
+|  "safe_letpast p (Or \<phi> \<psi>) = (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
+|  "safe_letpast p (And \<phi> \<psi>) = (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
+|  "safe_letpast p (Ands l) = \<Squnion>(safe_letpast p ` set l)"
+|  "safe_letpast p (Exists \<phi>) = safe_letpast p \<phi>"
+|  "safe_letpast p (Agg y \<omega> b' f \<phi>) = safe_letpast p \<phi>"
+|  "safe_letpast p (Prev I \<phi>) = PastRec * safe_letpast p \<phi>"
+|  "safe_letpast p (Next I \<phi>) = AnyRec * safe_letpast p \<phi>"
+|  "safe_letpast p (Since \<phi> I \<psi>) = safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>"
+|  "safe_letpast p (Until \<phi> I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
+|  "safe_letpast p (MatchP I r) = \<Squnion>(safe_letpast p ` Regex.atms r)"
+|  "safe_letpast p (MatchF I r) =  AnyRec * \<Squnion>(safe_letpast p ` Regex.atms r)"
 
 qualified fun future_bounded :: "formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
 | "future_bounded (Let p \<phi> \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi>)"
-| "future_bounded (LetPrev p \<phi> \<psi>) = (safe_letprev (p, nfv \<phi>) \<phi> \<le> PastRec \<and> future_bounded \<phi> \<and> future_bounded \<psi>)"
+| "future_bounded (LetPast p \<phi> \<psi>) = (safe_letpast (p, nfv \<phi>) \<phi> \<le> PastRec \<and> future_bounded \<phi> \<and> future_bounded \<psi>)"
 | "future_bounded (Eq _ _) = True"
 | "future_bounded (Less _ _) = True"
 | "future_bounded (LessEq _ _) = True"
@@ -414,18 +414,18 @@ subsubsection \<open>Semantics\<close>
 definition "ecard A = (if finite A then card A else \<infinity>)"
 
 declare conj_cong[fundef_cong]
-fun letprev_sat where
-  "letprev_sat sat v (i::nat) = sat (\<lambda>w j. j < i \<and> letprev_sat sat w j) v i"
-declare letprev_sat.simps[simp del]
+fun letpast_sat where
+  "letpast_sat sat v (i::nat) = sat (\<lambda>w j. j < i \<and> letpast_sat sat w j) v i"
+declare letpast_sat.simps[simp del]
 
 qualified fun sat :: "trace \<Rightarrow> (name \<times> nat \<rightharpoonup> env \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> formula \<Rightarrow> bool" where
   "sat \<sigma> V v i (Pred r ts) = (case V (r, length ts) of
        None \<Rightarrow> (r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i
      | Some X \<Rightarrow> X (map (eval_trm v) ts) i)"
 | "sat \<sigma> V v i (Let p \<phi> \<psi>) = sat \<sigma> (V((p, nfv \<phi>) \<mapsto> \<lambda>w j. sat \<sigma> V w j \<phi>)) v i \<psi>"
-| "sat \<sigma> V v i (LetPrev p \<phi> \<psi>) =
+| "sat \<sigma> V v i (LetPast p \<phi> \<psi>) =
     (let pn = (p, nfv \<phi>) in
-    sat \<sigma> (V(pn \<mapsto> letprev_sat (\<lambda>X u k. sat \<sigma> (V(pn \<mapsto> X)) u k \<phi>))) v i \<psi>)"
+    sat \<sigma> (V(pn \<mapsto> letpast_sat (\<lambda>X u k. sat \<sigma> (V(pn \<mapsto> X)) u k \<phi>))) v i \<psi>)"
 | "sat \<sigma> V v i (Eq t1 t2) = (eval_trm v t1 = eval_trm v t2)"
 | "sat \<sigma> V v i (Less t1 t2) = (eval_trm v t1 < eval_trm v t2)"
 | "sat \<sigma> V v i (LessEq t1 t2) = (eval_trm v t1 \<le> eval_trm v t2)"
@@ -657,7 +657,7 @@ fun past_only :: "formula \<Rightarrow> bool" where
 | "past_only (Less _ _) = True"
 | "past_only (LessEq _ _) = True"
 | "past_only (Let _ \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
-| "past_only (LetPrev _ \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
+| "past_only (LetPast _ \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (Neg \<psi>) = past_only \<psi>"
 | "past_only (Or \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
 | "past_only (And \<alpha> \<beta>) = (past_only \<alpha> \<and> past_only \<beta>)"
@@ -712,13 +712,13 @@ next
     qed
   qed
 next
-  case (LetPrev p \<phi> \<psi>)
+  case (LetPast p \<phi> \<psi>)
   let ?pn = "(p, nfv \<phi>)"
-  let ?V = "\<lambda>V \<sigma>. V(?pn \<mapsto> letprev_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>))"
-  show ?case unfolding sat.simps Let_def proof (rule LetPrev.IH(2))
+  let ?V = "\<lambda>V \<sigma>. V(?pn \<mapsto> letpast_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>))"
+  show ?case unfolding sat.simps Let_def proof (rule LetPast.IH(2))
     show "i < plen \<pi>" by fact
-    from LetPrev.prems show "past_only \<psi>" by simp
-    from LetPrev.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
+    from LetPast.prems show "past_only \<psi>" by simp
+    from LetPast.prems show "dom (?V V \<sigma>) = dom (?V V' \<sigma>')"
       by (simp del: fun_upd_apply)
   next
     fix p' v i'
@@ -727,33 +727,33 @@ next
     proof (cases "p' = ?pn")
       case True
       then have "?pn \<in> dom (?V V \<sigma>)" by simp
-      then have "letprev_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) v j =
-            letprev_sat (\<lambda>X u k. sat \<sigma>' (V'(?pn \<mapsto> X)) u k \<phi>) v j"
+      then have "letpast_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) v j =
+            letpast_sat (\<lambda>X u k. sat \<sigma>' (V'(?pn \<mapsto> X)) u k \<phi>) v j"
         if "j < plen \<pi>" for j
         using that
-      proof (induct "\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>" v j rule: letprev_sat.induct)
+      proof (induct "\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>" v j rule: letpast_sat.induct)
         case (1 v j)
         show ?case
-        proof (subst (1 2) letprev_sat.simps, rule LetPrev.IH(1), goal_cases plen dom eq past_only)
+        proof (subst (1 2) letpast_sat.simps, rule LetPast.IH(1), goal_cases plen dom eq past_only)
           case plen
           from "1" show ?case by simp
         next
           case dom
-          from LetPrev.prems show ?case by (auto simp add: dom_def)
+          from LetPast.prems show ?case by (auto simp add: dom_def)
         next
           case (eq p'' v' j')
-          with "1" LetPrev.prems(3)[of p'' j' v'] show ?case
+          with "1" LetPast.prems(3)[of p'' j' v'] show ?case
             by (cases "p'' = ?pn") fastforce+
         next
           case past_only
-          from LetPrev.prems show ?case by simp
+          from LetPast.prems show ?case by simp
         qed
       qed
       with True \<open>i' < plen \<pi>\<close>
       show ?thesis by simp
     next
       case False
-      with * show ?thesis by (auto intro!: LetPrev.prems(3))
+      with * show ?thesis by (auto intro!: LetPast.prems(3))
     qed
   qed
 next
@@ -813,7 +813,7 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
 | "safe_formula (LessEq t1 t2) = False"
 | "safe_formula (Pred e ts) = (\<forall>t\<in>set ts. is_Var t \<or> is_Const t)"
 | "safe_formula (Let p \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
-| "safe_formula (LetPrev p \<phi> \<psi>) = (safe_letprev (p, nfv \<phi>) \<phi> \<le> PastRec \<and> {0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
+| "safe_formula (LetPast p \<phi> \<psi>) = (safe_letpast (p, nfv \<phi>) \<phi> \<le> PastRec \<and> {0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (Neg \<phi>) = (fv \<phi> = {} \<and> safe_formula \<phi>)"
 | "safe_formula (Or \<phi> \<psi>) = (fv \<psi> = fv \<phi> \<and> safe_formula \<phi> \<and> safe_formula \<psi>)"
 | "safe_formula (And \<phi> \<psi>) = (safe_formula \<phi> \<and>
@@ -866,7 +866,7 @@ lemma finite_atms[simp]: "finite (atms r)"
 lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
   by blast
 
-lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let LetPrev
+lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let LetPast
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
     Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
   assumes "safe_formula \<phi>"
@@ -876,7 +876,7 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
     and neq_Var: "\<And>x. P (Neg (Eq (Var x) (Var x)))"
     and Pred: "\<And>e ts. \<forall>t\<in>set ts. is_Var t \<or> is_Const t \<Longrightarrow> P (Pred e ts)"
     and Let: "\<And>p \<phi> \<psi>. {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Let p \<phi> \<psi>)"
-    and LetPrev: "\<And>p \<phi> \<psi>. safe_letprev (p, nfv \<phi>) \<phi> \<le> PastRec \<Longrightarrow> {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (LetPrev p \<phi> \<psi>)"
+    and LetPast: "\<And>p \<phi> \<psi>. safe_letpast (p, nfv \<phi>) \<phi> \<le> PastRec \<Longrightarrow> {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (LetPast p \<phi> \<psi>)"
     and And_assign: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (And \<phi> \<psi>)"
     and And_safe: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> \<not> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow>
       P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (And \<phi> \<psi>)"
@@ -979,7 +979,7 @@ qualified fun matches ::
 | "matches v (Let p \<phi> \<psi>) e =
     ((\<exists>v'. matches v' \<phi> e \<and> matches v \<psi> (p, v')) \<or>
     (fst e \<noteq> p \<or> length (snd e) \<noteq> nfv \<phi>) \<and> matches v \<psi> e)"
-| "matches v (LetPrev p \<phi> \<psi>) e =
+| "matches v (LetPast p \<phi> \<psi>) e =
     ((fst e \<noteq> p \<or> length (snd e) \<noteq> nfv \<phi>) \<and>
       (\<exists>e'. (\<lambda>e' e. matches (snd e') \<phi> e \<and> fst e' = p)\<^sup>*\<^sup>* e' e \<and> matches v \<psi> e'))"
 | "matches v (Eq _ _) e = False"
@@ -1009,7 +1009,7 @@ next
   then show ?case
     by (cases e) (auto 11 0)
 next
-  case (LetPrev p \<phi> \<psi>)
+  case (LetPast p \<phi> \<psi>)
   then show ?case
     by (cases e) (auto 11 0)
 next
@@ -1088,9 +1088,9 @@ next
     qed
   qed (auto simp: dom_def)
 next
-  case (LetPrev p \<phi> \<psi>)
+  case (LetPast p \<phi> \<psi>)
   show ?case unfolding sat.simps Let_def
-  proof (intro LetPrev.IH(2)[of "S"], goal_cases relevant v dom V)
+  proof (intro LetPast.IH(2)[of "S"], goal_cases relevant v dom V)
     case (V p' n v' i')
     show ?case
     proof (cases "(p', n) = (p, nfv \<phi>)")
@@ -1101,38 +1101,38 @@ next
         ?R (p, v') (p'', u)" for p'' u
         by (auto intro: rtranclp.rtrancl_into_rtrancl)
 
-      have "letprev_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w j =
-          letprev_sat (\<lambda>X u k. sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (V'(?pn \<mapsto> X)) u k \<phi>) w j"
+      have "letpast_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w j =
+          letpast_sat (\<lambda>X u k. sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (V'(?pn \<mapsto> X)) u k \<phi>) w j"
         if "?R (p, v') (p, w)" "j \<le> i'" for w j
         using that
-      proof (induct "\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>" w j rule: letprev_sat.induct)
+      proof (induct "\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>" w j rule: letpast_sat.induct)
         case (1 w j)
         show ?case
-        proof (subst (1 2) letprev_sat.simps,
-            rule LetPrev.IH(1)[where S="{w. ?R (p, v') (p, w)}"],
+        proof (subst (1 2) letpast_sat.simps,
+            rule LetPast.IH(1)[where S="{w. ?R (p, v') (p, w)}"],
             goal_cases relevant R dom eq)
           case relevant
           have "relevant_events \<phi> {w. ?R (p, v') (p, w)} - {e. (fst e, length (snd e)) \<in> insert ?pn (dom V)}
-          \<subseteq> relevant_events (LetPrev p \<phi> \<psi>) S - {e. (fst e, length (snd e)) \<in> dom V}"
+          \<subseteq> relevant_events (LetPast p \<phi> \<psi>) S - {e. (fst e, length (snd e)) \<in> dom V}"
             using V(2) True 
             by (fastforce dest!: inter_matches_imp_R)
-          also have "insert ?pn (dom V) = dom (V(?pn \<mapsto> \<lambda>w j'. j' < j \<and> letprev_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w j'))"
+          also have "insert ?pn (dom V) = dom (V(?pn \<mapsto> \<lambda>w j'. j' < j \<and> letpast_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w j'))"
             by simp
           finally show ?case
-            using LetPrev.prems(1) by (rule subset_trans)
+            using LetPast.prems(1) by (rule subset_trans)
         next
           case R
           with 1 show ?case by simp
         next
           case dom
           then show ?case
-            using LetPrev.prems(3) by (auto simp add: dom_def)
+            using LetPast.prems(3) by (auto simp add: dom_def)
         next
           case (eq p'' n' w' j')
           show ?case proof (cases "(p'', n') = ?pn")
             case True
-            moreover have "letprev_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w' j' =
-            letprev_sat (\<lambda>X u k. sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (V'(?pn \<mapsto> X)) u k \<phi>) w' j'"
+            moreover have "letpast_sat (\<lambda>X u k. sat \<sigma> (V(?pn \<mapsto> X)) u k \<phi>) w' j' =
+            letpast_sat (\<lambda>X u k. sat (map_\<Gamma> (\<lambda>D. D \<inter> E) \<sigma>) (V'(?pn \<mapsto> X)) u k \<phi>) w' j'"
               if "j' < j"
               using that eq "1" True
               by (auto split: if_splits dest!: inter_matches_imp_R)
@@ -1141,7 +1141,7 @@ next
           next
             case False
             then show ?thesis
-              using eq V(2) LetPrev.prems(4)[of p'' n' w' j'] True
+              using eq V(2) LetPast.prems(4)[of p'' n' w' j'] True
               by (fastforce simp add: dom_def dest!: inter_matches_imp_R)
           qed
         qed
@@ -1151,10 +1151,10 @@ next
     next
       case False
       then show ?thesis
-        using V LetPrev.prems(4)[of p' n v' i']
+        using V LetPast.prems(4)[of p' n v' i']
         by (fastforce simp: dom_def)
     qed
-  qed (use LetPrev.prems in \<open>auto simp: dom_def\<close>)
+  qed (use LetPast.prems in \<open>auto simp: dom_def\<close>)
 next
   case (Or \<phi> \<psi>)
   show ?case using Or.IH[of S V v V'] Or.prems
@@ -1243,7 +1243,7 @@ lemma safe_get_and: "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (ge
 lemma sat_get_and: "sat \<sigma> V v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> V v i) (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
 
-lemma safe_letprev_get_and: "\<Squnion>(safe_letprev p ` set (get_and_list \<phi>)) = safe_letprev p \<phi>"
+lemma safe_letpast_get_and: "\<Squnion>(safe_letpast p ` set (get_and_list \<phi>)) = safe_letpast p \<phi>"
   by (induction \<phi> rule: get_and_list.induct) (simp_all flip: bot_rec_safety_def)
 
 lemma not_contains_pred_get_and: "\<And>x.\<not>contains_pred p \<phi> \<Longrightarrow> x \<in> set (get_and_list \<phi>) \<Longrightarrow> \<not> contains_pred p x"
@@ -1268,7 +1268,7 @@ fun convert_multiway :: "formula \<Rightarrow> formula" where
 | "convert_multiway (MatchP I r) = MatchP I (Regex.map_regex convert_multiway r)"
 | "convert_multiway (MatchF I r) = MatchF I (Regex.map_regex convert_multiway r)"
 | "convert_multiway (Let p \<phi> \<psi>) = Let p (convert_multiway \<phi>) (convert_multiway \<psi>)"
-| "convert_multiway (LetPrev p \<phi> \<psi>) = LetPrev p (convert_multiway \<phi>) (convert_multiway \<psi>)"
+| "convert_multiway (LetPast p \<phi> \<psi>) = LetPast p (convert_multiway \<phi>) (convert_multiway \<psi>)"
 | "convert_multiway \<phi> = \<phi>"
 
 abbreviation "convert_multiway_regex \<equiv> Regex.map_regex convert_multiway"
@@ -1329,8 +1329,8 @@ next
   then show ?case by (auto simp add: regex.set_map)
 qed(auto simp: nfv_convert_multiway)
 
-lemma safe_letprev_convert_multiway: "safe_letprev p (convert_multiway \<phi>) = safe_letprev p \<phi>"
-proof (induction p \<phi> rule: safe_letprev.induct)
+lemma safe_letpast_convert_multiway: "safe_letpast p (convert_multiway \<phi>) = safe_letpast p \<phi>"
+proof (induction p \<phi> rule: safe_letpast.induct)
   case (5 p e \<phi> \<psi>)
   then show?case by (auto simp add: contains_pred_convert_multiway nfv_convert_multiway)
 next
@@ -1339,7 +1339,7 @@ next
 next
   case(9 p \<phi> \<psi>)
   then show ?case
-    by (simp add: image_Un Sup_rec_safety_union safe_letprev_get_and sup_commute)
+    by (simp add: image_Un Sup_rec_safety_union safe_letpast_get_and sup_commute)
 next
   case(17 p I r)
   then show ?case
@@ -1492,9 +1492,9 @@ next
       elim!: disjE_Not2 case_NegE
       dest: safe_regex_safe_formula split: if_splits)
 next
-  case (LetPrev p \<phi> \<psi>)
+  case (LetPast p \<phi> \<psi>)
   then show ?case
-    by (auto simp: safe_letprev_convert_multiway nfv_convert_multiway fv_convert_multiway)
+    by (auto simp: safe_letpast_convert_multiway nfv_convert_multiway fv_convert_multiway)
 qed (auto simp: fv_convert_multiway nfv_convert_multiway)
 
 lemma future_bounded_convert_multiway: "safe_formula \<phi> \<Longrightarrow> future_bounded (convert_multiway \<phi>) = future_bounded \<phi>"
@@ -1541,8 +1541,8 @@ next
     by (fastforce simp: atms_def regex.pred_set regex.set_map ball_Un
         elim: safe_regex_safe_formula[THEN disjE_Not2])
 next
-  case (LetPrev p \<phi> \<psi>)
-  then show ?case by (auto simp: safe_letprev_convert_multiway nfv_convert_multiway)
+  case (LetPast p \<phi> \<psi>)
+  then show ?case by (auto simp: safe_letpast_convert_multiway nfv_convert_multiway)
 qed auto
 
 lemma sat_convert_multiway: "safe_formula \<phi> \<Longrightarrow> sat \<sigma> V v i (convert_multiway \<phi>) \<longleftrightarrow> sat \<sigma> V v i \<phi>"
@@ -1592,7 +1592,7 @@ next
   then show ?case
     by (auto simp add: nfv_convert_multiway fun_upd_def)
 next
-  case (LetPrev p \<phi> \<psi>)
+  case (LetPast p \<phi> \<psi>)
   then show ?case
     by (auto simp add: nfv_convert_multiway fun_upd_def)
 qed (auto cong: nat.case_cong)
@@ -1699,21 +1699,21 @@ next
     by (smt (z3) in_set_simps(2) list.inject list_all2_Cons2 list_all2_Nil2 nth_equalityI nth_restrict)
 qed
 
-lemma finite_letprev:
+lemma finite_letpast:
   assumes fv: "{0..<nfv \<phi>} \<subseteq> fv \<phi>"
   assumes V: "\<forall>pn\<in>dom V. \<forall>i. finite {v. length v = snd pn \<and> the (V pn) v i}"
   assumes IH: "\<And>V i.
     \<forall>pn\<in>dom V. \<forall>i. finite {v. length v = snd pn \<and> the (V pn) v i} \<Longrightarrow>
     finite {v. wf_tuple (nfv \<phi>) (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
   shows "finite {v. length v = nfv \<phi> \<and>
-    letprev_sat (\<lambda>X u k. sat \<sigma> (V((p, nfv \<phi>) \<mapsto> X)) u k \<phi>) v i}"
+    letpast_sat (\<lambda>X u k. sat \<sigma> (V((p, nfv \<phi>) \<mapsto> X)) u k \<phi>) v i}"
 proof (induction i rule: less_induct)
   case (less i)
   note fun_upd_apply[simp del]
   show ?case
     apply (rule finite_surj[where f="map the"])
      apply (rule IH[where i=i and V="(V((p, nfv \<phi>) \<mapsto>
-          \<lambda>w j. j < i \<and> letprev_sat (\<lambda>X u k. sat \<sigma> (V((p, nfv \<phi>) \<mapsto> X)) u k \<phi>) w j))"])
+          \<lambda>w j. j < i \<and> letpast_sat (\<lambda>X u k. sat \<sigma> (V((p, nfv \<phi>) \<mapsto> X)) u k \<phi>) w j))"])
      apply (intro ballI)
      apply clarsimp
     subgoal for p' n k
@@ -1732,7 +1732,7 @@ proof (induction i rule: less_induct)
     subgoal for v
       apply (rule image_eqI[where x="map Some v"])
        apply simp
-      apply (subst (asm) letprev_sat.simps)
+      apply (subst (asm) letpast_sat.simps)
       using fv by (auto simp: wf_tuple_def)
     done
 qed
@@ -1832,19 +1832,19 @@ next
     apply(elim finite_subset[rotated])
     by(auto)
 next
-  case (LetPrev p \<phi> \<psi>)
+  case (LetPast p \<phi> \<psi>)
   show ?case
     unfolding sat.simps fvi.simps Let_def
-    apply (rule LetPrev.hyps(6))
-    using LetPrev apply auto[3]
+    apply (rule LetPast.hyps(6))
+    using LetPast apply auto[3]
     apply (intro ballI allI)
     subgoal for pn i
       apply (cases "pn = (p, nfv \<phi>)")
        apply (simp add: dom_def)
-       apply (rule finite_letprev)
-      using LetPrev apply auto[2]
-      apply (rule LetPrev.hyps(5))
-      using LetPrev by auto
+       apply (rule finite_letpast)
+      using LetPast apply auto[2]
+      apply (rule LetPast.hyps(5))
+      using LetPast by auto
     done
 next
   case (And_assign \<phi> \<psi>)

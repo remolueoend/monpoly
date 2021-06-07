@@ -98,7 +98,7 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   and vminit_safe = "maux.minit_safe (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: Formula.formula \<Rightarrow> _"
   and vmupdate_since = "maux.update_since add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> event_data table)"
   and vmeval = "maux.meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
-  and letprev_vmeval = "maux.letprev_meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
+  and letpast_vmeval = "maux.letpast_meval add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmstep = "maux.mstep add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmsteps0_stateless = "maux.msteps0_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmsteps_stateless = "maux.msteps_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
@@ -115,7 +115,7 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
   and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
   and mupdate_since = "maux.update_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)"
   and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and letprev_meval = "maux.letprev_meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and letpast_meval = "maux.letpast_meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
@@ -482,30 +482,30 @@ derive (eq) ceq rec_safety
 derive ccompare rec_safety
 derive (dlist) set_impl rec_safety
 
-declare [[code drop: safe_letprev]]
-lemma safe_letprev_code[code]:
-  "safe_letprev p (Formula.Eq t1 t2) = Unused"
-  "safe_letprev p (Formula.Less t1 t2) = Unused"        
-  "safe_letprev p (Formula.LessEq t1 t2) = Unused"
-  "safe_letprev p (Formula.Pred e ts) = (if p = (e, length ts) then NonFutuRec else Unused)"
-  "safe_letprev p (Formula.Let e \<phi> \<psi>) =
-      (safe_letprev (e, Formula.nfv \<phi>) \<psi> * safe_letprev p \<phi>) \<squnion>
-      (if p = (e, Formula.nfv \<phi>) then Unused else safe_letprev p \<psi>)"
-  "safe_letprev p (Formula.LetPrev e \<phi> \<psi>) =
+declare [[code drop: safe_letpast]]
+lemma safe_letpast_code[code]:
+  "safe_letpast p (Formula.Eq t1 t2) = Unused"
+  "safe_letpast p (Formula.Less t1 t2) = Unused"        
+  "safe_letpast p (Formula.LessEq t1 t2) = Unused"
+  "safe_letpast p (Formula.Pred e ts) = (if p = (e, length ts) then NonFutuRec else Unused)"
+  "safe_letpast p (Formula.Let e \<phi> \<psi>) =
+      (safe_letpast (e, Formula.nfv \<phi>) \<psi> * safe_letpast p \<phi>) \<squnion>
+      (if p = (e, Formula.nfv \<phi>) then Unused else safe_letpast p \<psi>)"
+  "safe_letpast p (Formula.LetPast e \<phi> \<psi>) =
       (if p = (e, Formula.nfv \<phi>) then Unused else
-        (safe_letprev (e, Formula.nfv \<phi>) \<psi> * safe_letprev p \<phi>) \<squnion> safe_letprev p \<psi>)"
-  "safe_letprev p (Formula.Neg \<phi>) = safe_letprev p \<phi>"
-  "safe_letprev p (Formula.Or \<phi> \<psi>) = (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
-  "safe_letprev p (Formula.And \<phi> \<psi>) = (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
-  "safe_letprev p (Formula.Ands l) = \<Squnion> set (map (safe_letprev p) l)"
-  "safe_letprev p (Formula.Exists \<phi>) = safe_letprev p \<phi>"
-  "safe_letprev p (Formula.Agg y \<omega> b' f \<phi>) = safe_letprev p \<phi>"
-  "safe_letprev p (Formula.Prev I \<phi>) = PastRec * safe_letprev p \<phi>"
-  "safe_letprev p (Formula.Next I \<phi>) = AnyRec * safe_letprev p \<phi>"
-  "safe_letprev p (Formula.Since \<phi> I \<psi>) = safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>"
-  "safe_letprev p (Formula.Until \<phi> I \<psi>) = AnyRec * (safe_letprev p \<phi> \<squnion> safe_letprev p \<psi>)"
-  "safe_letprev p (Formula.MatchP I r) = \<Squnion> Regex.atms (Regex.map_regex (safe_letprev p) r)"
-  "safe_letprev p (Formula.MatchF I r) =  AnyRec * \<Squnion> Regex.atms (Regex.map_regex (safe_letprev p) r)"
+        (safe_letpast (e, Formula.nfv \<phi>) \<psi> * safe_letpast p \<phi>) \<squnion> safe_letpast p \<psi>)"
+  "safe_letpast p (Formula.Neg \<phi>) = safe_letpast p \<phi>"
+  "safe_letpast p (Formula.Or \<phi> \<psi>) = (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
+  "safe_letpast p (Formula.And \<phi> \<psi>) = (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
+  "safe_letpast p (Formula.Ands l) = \<Squnion> set (map (safe_letpast p) l)"
+  "safe_letpast p (Formula.Exists \<phi>) = safe_letpast p \<phi>"
+  "safe_letpast p (Formula.Agg y \<omega> b' f \<phi>) = safe_letpast p \<phi>"
+  "safe_letpast p (Formula.Prev I \<phi>) = PastRec * safe_letpast p \<phi>"
+  "safe_letpast p (Formula.Next I \<phi>) = AnyRec * safe_letpast p \<phi>"
+  "safe_letpast p (Formula.Since \<phi> I \<psi>) = safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>"
+  "safe_letpast p (Formula.Until \<phi> I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
+  "safe_letpast p (Formula.MatchP I r) = \<Squnion> Regex.atms (Regex.map_regex (safe_letpast p) r)"
+  "safe_letpast p (Formula.MatchF I r) =  AnyRec * \<Squnion> Regex.atms (Regex.map_regex (safe_letpast p) r)"
   by (auto simp add: regex.set_map)
 
 lemma Sup_rec_safety_set[code_unfold]:
