@@ -139,16 +139,16 @@ declare [[code drop: meval vmeval]]
 lemmas meval_code[code] = default_maux.meval_simps(1) meval_MPred default_maux.meval_simps(3-)
 lemmas vmeval_code[code] = verimon_maux.meval_simps(1) vmeval_MPred verimon_maux.meval_simps(3-)
 
-definition mk_db :: "((Formula.name \<times> nat) \<times> event_data list set) list \<Rightarrow> database" where
+definition mk_db :: "((Formula.name \<times> nat) \<times> event_data option list set) list \<Rightarrow> database" where
   "mk_db m = Mapping.of_alist (map (\<lambda>(p, X). (p, [X])) m)"
 
 definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"
 
-definition rbt_empty :: "event_data list set_rbt" where
+definition rbt_empty :: "event_data option list set_rbt" where
   "rbt_empty = RBT_Set2.empty"
 
-definition rbt_insert :: "_ \<Rightarrow> _ \<Rightarrow> event_data list set_rbt" where
+definition rbt_insert :: "_ \<Rightarrow> _ \<Rightarrow> event_data option list set_rbt" where
   "rbt_insert = RBT_Set2.insert"
 
 lemma saturate_commute:

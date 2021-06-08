@@ -109,10 +109,10 @@ module Monitor : sig
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
   val mk_db :
-    ((string * nat) * (event_data list) set) list ->
-      ((string * nat), ((event_data list) set list)) mapping
+    ((string * nat) * ((event_data option) list) set) list ->
+      ((string * nat), (((event_data option) list) set list)) mapping
   val mstep :
-    ((string * nat), ((event_data list) set list)) mapping * nat ->
+    ((string * nat), (((event_data option) list) set list)) mapping * nat ->
       ((nat *
          (nat *
            (bool list *
@@ -154,7 +154,7 @@ module Monitor : sig
             unit)
             mstate_ext
   val vmstep :
-    ((string * nat), ((event_data list) set list)) mapping * nat ->
+    ((string * nat), (((event_data option) list) set list)) mapping * nat ->
       ((nat * (nat * ((event_data option) list) set) list),
         (nat *
           (nat *
@@ -173,7 +173,7 @@ module Monitor : sig
   val rbt_fold :
     ((event_data option) list -> 'a -> 'a) ->
       (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
-  val rbt_empty : ((event_data list), unit) mapping_rbt
+  val rbt_empty : (((event_data option) list), unit) mapping_rbt
   val mmonitorable_exec : formula -> bool
   val minit_safe :
     formula ->
@@ -197,9 +197,9 @@ module Monitor : sig
         unit)
         mstate_ext
   val rbt_insert :
-    event_data list ->
-      ((event_data list), unit) mapping_rbt ->
-        ((event_data list), unit) mapping_rbt
+    (event_data option) list ->
+      (((event_data option) list), unit) mapping_rbt ->
+        (((event_data option) list), unit) mapping_rbt
   val convert_multiway : formula -> formula
   val vminit_safe :
     formula ->
@@ -4158,15 +4158,16 @@ let rec mapping_empty _A = function Mapping_RBT -> RBT_Mapping (emptyc _A)
 let rec emptya (_A1, _A2) = mapping_empty _A1 (of_phantom (mapping_impl _A2));;
 
 let rec matcha
-  x0 uv = match x0, uv with [], [] -> Some (fun _ -> None)
-    | Const x :: ts, y :: ys ->
+  uu uv = match uu, uv with [], [] -> Some (fun _ -> None)
+    | Const x :: ts, Some y :: ys ->
         (if equal_event_dataa x y then matcha ts ys else None)
-    | Var x :: ts, y :: ys ->
+    | Var x :: ts, Some y :: ys ->
         (match matcha ts ys with None -> None
           | Some f ->
             (match f x with None -> Some (fun_upd equal_nat f x (Some y))
               | Some z -> (if equal_event_dataa y z then Some f else None)))
     | Var vb :: va, [] -> None
+    | Var vb :: va, None :: vc -> None
     | Plus (vb, vc) :: va, uv -> None
     | Minus (vb, vc) :: va, uv -> None
     | UMinus vb :: va, uv -> None
@@ -4176,7 +4177,9 @@ let rec matcha
     | F2i vb :: va, uv -> None
     | I2f vb :: va, uv -> None
     | v :: va, [] -> None
-    | [], v :: va -> None;;
+    | v :: va, None :: vc -> None
+    | [], v :: va -> None
+    | uu, None :: va -> None;;
 
 let rec enumerate
   n x1 = match n, x1 with n, x :: xs -> (n, x) :: enumerate (suc n) xs
@@ -7717,15 +7720,7 @@ let rec meval
              (updateb
                ((ccompare_prod ccompare_string8 ccompare_nat),
                  (equal_prod equal_string8 equal_nat))
-               (p, m)
-               (mapa (image
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)))
-                       ((ceq_list ceq_event_data),
-                         (ccompare_list ccompare_event_data), set_impl_list)
-                       (mapa the))
-                 xs)
-               db)
+               (p, m) xs db)
              psi
            in
           (ys, MLetPast (p, m, phia, psia, ia)))
@@ -7736,15 +7731,7 @@ let rec meval
              (updateb
                ((ccompare_prod ccompare_string8 ccompare_nat),
                  (equal_prod equal_string8 equal_nat))
-               (p, m)
-               (mapa (image
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)))
-                       ((ceq_list ceq_event_data),
-                         (ccompare_list ccompare_event_data), set_impl_list)
-                       (mapa the))
-                 xs)
-               db)
+               (p, m) xs db)
              psi
            in
           (ys, MLet (p, m, phia, psia)))
@@ -7769,8 +7756,8 @@ let rec meval
                           (ccompare_option ccompare_event_data)),
                         set_impl_list)
                       (image
-                        ((ceq_list ceq_event_data),
-                          (ccompare_list ccompare_event_data))
+                        ((ceq_list (ceq_option ceq_event_data)),
+                          (ccompare_list (ccompare_option ccompare_event_data)))
                         ((ceq_set
                            (cenum_list, (ceq_list (ceq_option ceq_event_data)),
                              (cproper_interval_list
@@ -7802,14 +7789,7 @@ and letpast_meval
          (updateb
            ((ccompare_prod ccompare_string8 ccompare_nat),
              (equal_prod equal_string8 equal_nat))
-           p (mapa (image
-                     ((ceq_list (ceq_option ceq_event_data)),
-                       (ccompare_list (ccompare_option ccompare_event_data)))
-                     ((ceq_list ceq_event_data),
-                       (ccompare_list ccompare_event_data), set_impl_list)
-                     (mapa the))
-               xs)
-           db)
+           p xs db)
          phi
        in
       (if null ysa || less_eq_nat j (plus_nata i (size_list xs))
@@ -8323,15 +8303,7 @@ let rec vmeval
              (updateb
                ((ccompare_prod ccompare_string8 ccompare_nat),
                  (equal_prod equal_string8 equal_nat))
-               (p, m)
-               (mapa (image
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)))
-                       ((ceq_list ceq_event_data),
-                         (ccompare_list ccompare_event_data), set_impl_list)
-                       (mapa the))
-                 xs)
-               db)
+               (p, m) xs db)
              psi
            in
           (ys, MLetPast (p, m, phia, psia, ia)))
@@ -8342,15 +8314,7 @@ let rec vmeval
              (updateb
                ((ccompare_prod ccompare_string8 ccompare_nat),
                  (equal_prod equal_string8 equal_nat))
-               (p, m)
-               (mapa (image
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)))
-                       ((ceq_list ceq_event_data),
-                         (ccompare_list ccompare_event_data), set_impl_list)
-                       (mapa the))
-                 xs)
-               db)
+               (p, m) xs db)
              psi
            in
           (ys, MLet (p, m, phia, psia)))
@@ -8375,8 +8339,8 @@ let rec vmeval
                           (ccompare_option ccompare_event_data)),
                         set_impl_list)
                       (image
-                        ((ceq_list ceq_event_data),
-                          (ccompare_list ccompare_event_data))
+                        ((ceq_list (ceq_option ceq_event_data)),
+                          (ccompare_list (ccompare_option ccompare_event_data)))
                         ((ceq_set
                            (cenum_list, (ceq_list (ceq_option ceq_event_data)),
                              (cproper_interval_list
@@ -8408,14 +8372,7 @@ and letpast_vmeval
          (updateb
            ((ccompare_prod ccompare_string8 ccompare_nat),
              (equal_prod equal_string8 equal_nat))
-           p (mapa (image
-                     ((ceq_list (ceq_option ceq_event_data)),
-                       (ccompare_list (ccompare_option ccompare_event_data)))
-                     ((ceq_list ceq_event_data),
-                       (ccompare_list ccompare_event_data), set_impl_list)
-                     (mapa the))
-               xs)
-           db)
+           p xs db)
          phi
        in
       (if null ysa || less_eq_nat j (plus_nata i (size_list xs))
@@ -8567,8 +8524,8 @@ let rec is_simple_eq
 let rec rbt_fold
   x = foldb (ccompare_list (ccompare_option ccompare_event_data)) x;;
 
-let rbt_empty : ((event_data list), unit) mapping_rbt
-  = emptyc (ccompare_list ccompare_event_data);;
+let rbt_empty : (((event_data option) list), unit) mapping_rbt
+  = emptyc (ccompare_list (ccompare_option ccompare_event_data));;
 
 let rec mmonitorable_exec
   = function Eq (t1, t2) -> is_simple_eq t1 t2
@@ -8858,7 +8815,9 @@ let rec minit_safe
   phi = (if mmonitorable_exec phi then minit phi else failwith "undefined");;
 
 let rec rbt_insert
-  x = (fun k -> insertb (ccompare_list ccompare_event_data) k ()) x;;
+  x = (fun k ->
+        insertb (ccompare_list (ccompare_option ccompare_event_data)) k ())
+        x;;
 
 let rec convert_multiway
   = function Neg phi -> Neg (convert_multiway phi)
