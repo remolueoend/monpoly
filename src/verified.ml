@@ -3349,7 +3349,7 @@ type 'a args_ext = Args_ext of i * nat * nat set * nat set * bool * 'a;;
 type mconstraint = MEq | MLess | MLessEq;;
 
 type ('a, 'b) mformula = MRel of ((event_data option) list) set |
-  MPred of string * trm list |
+  MPred of string * trm list * bool |
   MLet of string * nat * ('a, 'b) mformula * ('a, 'b) mformula |
   MLetPast of string * nat * ('a, 'b) mformula * ('a, 'b) mformula * nat |
   MAnd of
@@ -7515,6 +7515,25 @@ let rec update_matchF
                 (ceq_event_data, ccompare_event_data, equal_event_data) n i mr
                 mrs rels nt));;
 
+let rec simple_match
+  n m x2 ux = match n, m, x2, ux with
+    n, m, [], [] -> replicate (minus_nata n m) None
+    | n, m, Var x :: ts, y :: ys ->
+        (if less_nat m x
+          then None :: simple_match n (suc m) (Var x :: ts) (y :: ys)
+          else y :: simple_match n (suc m) ts ys)
+    | uu, uv, Const vb :: va, ux -> []
+    | uu, uv, Plus (vb, vc) :: va, ux -> []
+    | uu, uv, Minus (vb, vc) :: va, ux -> []
+    | uu, uv, UMinus vb :: va, ux -> []
+    | uu, uv, Mult (vb, vc) :: va, ux -> []
+    | uu, uv, Div (vb, vc) :: va, ux -> []
+    | uu, uv, Mod (vb, vc) :: va, ux -> []
+    | uu, uv, F2i vb :: va, ux -> []
+    | uu, uv, I2f vb :: va, ux -> []
+    | uu, uv, v :: va, [] -> []
+    | uu, uv, [], v :: va -> [];;
+
 let rec lookahead_ts
   ntsa nts ts t =
     (match ntsa
@@ -7735,7 +7754,7 @@ let rec meval
              psi
            in
           (ys, MLet (p, m, phia, psia)))
-    | lookahead, n, ts, db, MPred (e, tms) ->
+    | lookahead, n, ts, db, MPred (e, tms, simple) ->
         ((match
            lookupa
              ((ccompare_prod ccompare_string8 ccompare_nat),
@@ -7747,40 +7766,53 @@ let rec meval
                  ((ceq_list (ceq_option ceq_event_data)),
                    (ccompare_list (ccompare_option ccompare_event_data)))
                  (of_phantom set_impl_lista))
-           | Some a ->
-             mapa (fun x ->
-                    sup_setb
-                      (finite_UNIV_list, cenum_list,
-                        (ceq_list (ceq_option ceq_event_data)),
-                        (cproper_interval_list
-                          (ccompare_option ccompare_event_data)),
-                        set_impl_list)
-                      (image
-                        ((ceq_list (ceq_option ceq_event_data)),
-                          (ccompare_list (ccompare_option ccompare_event_data)))
-                        ((ceq_set
-                           (cenum_list, (ceq_list (ceq_option ceq_event_data)),
-                             (cproper_interval_list
-                               (ccompare_option
-                                 ccompare_event_data)).ccompare_cproper_interval)),
-                          (ccompare_set
-                            (finite_UNIV_list,
-                              (ceq_list (ceq_option ceq_event_data)),
-                              (cproper_interval_list
-                                (ccompare_option ccompare_event_data)),
-                              set_impl_list)),
-                          set_impl_set)
-                        (fun v ->
-                          set_option
-                            ((ceq_list (ceq_option ceq_event_data)),
-                              (ccompare_list
-                                (ccompare_option ccompare_event_data)),
-                              set_impl_list)
-                            (map_option (fun f -> tabulate f zero_nata n)
-                              (matcha tms v)))
-                        x))
-               a),
-          MPred (e, tms))
+           | Some xs ->
+             (if simple
+               then mapa (image
+                           ((ceq_list (ceq_option ceq_event_data)),
+                             (ccompare_list
+                               (ccompare_option ccompare_event_data)))
+                           ((ceq_list (ceq_option ceq_event_data)),
+                             (ccompare_list
+                               (ccompare_option ccompare_event_data)),
+                             set_impl_list)
+                           (simple_match n zero_nata tms))
+                      xs
+               else mapa (fun x ->
+                           sup_setb
+                             (finite_UNIV_list, cenum_list,
+                               (ceq_list (ceq_option ceq_event_data)),
+                               (cproper_interval_list
+                                 (ccompare_option ccompare_event_data)),
+                               set_impl_list)
+                             (image
+                               ((ceq_list (ceq_option ceq_event_data)),
+                                 (ccompare_list
+                                   (ccompare_option ccompare_event_data)))
+                               ((ceq_set
+                                  (cenum_list,
+                                    (ceq_list (ceq_option ceq_event_data)),
+                                    (cproper_interval_list
+                                      (ccompare_option
+ccompare_event_data)).ccompare_cproper_interval)),
+                                 (ccompare_set
+                                   (finite_UNIV_list,
+                                     (ceq_list (ceq_option ceq_event_data)),
+                                     (cproper_interval_list
+                                       (ccompare_option ccompare_event_data)),
+                                     set_impl_list)),
+                                 set_impl_set)
+                               (fun v ->
+                                 set_option
+                                   ((ceq_list (ceq_option ceq_event_data)),
+                                     (ccompare_list
+                                       (ccompare_option ccompare_event_data)),
+                                     set_impl_list)
+                                   (map_option (fun f -> tabulate f zero_nata n)
+                                     (matcha tms v)))
+                               x))
+                      xs)),
+          MPred (e, tms, simple))
     | j, n, ts, db, MRel rel -> (replicate (size_list ts) rel, MRel rel)
 and letpast_meval
   m j i ys xs p ts db phi =
@@ -7835,6 +7867,19 @@ let rec init_mmsaux _A
                    (of_phantom mapping_impl_lista),
                   mapping_empty (ccompare_list (ccompare_option _A))
                     (of_phantom mapping_impl_lista))))))));;
+
+let rec is_simple_pattern
+  x0 uu = match x0, uu with [], uu -> true
+    | Var y :: ts, x -> less_eq_nat x y && is_simple_pattern ts (suc y)
+    | Const vb :: va, uw -> false
+    | Plus (vb, vc) :: va, uw -> false
+    | Minus (vb, vc) :: va, uw -> false
+    | UMinus vb :: va, uw -> false
+    | Mult (vb, vc) :: va, uw -> false
+    | Div (vb, vc) :: va, uw -> false
+    | Mod (vb, vc) :: va, uw -> false
+    | F2i vb :: va, uw -> false
+    | I2f vb :: va, uw -> false;;
 
 let rec split_constraint
   = function Eq (t1, t2) -> (t1, (true, (MEq, t2)))
@@ -7926,7 +7971,7 @@ let rec minit0
                       (ccompare_list (ccompare_option ccompare_event_data)),
                       set_impl_list)))
     | n, Eq (t1, t2) -> MRel (eq_rel n t1 t2)
-    | n, Pred (e, ts) -> MPred (e, ts)
+    | n, Pred (e, ts) -> MPred (e, ts, is_simple_pattern ts zero_nata)
     | n, Let (p, phi, psi) ->
         MLet (p, nfv phi, minit0 (nfv phi) phi, minit0 n psi)
     | n, LetPast (p, phi, psi) ->
@@ -8318,7 +8363,7 @@ let rec vmeval
              psi
            in
           (ys, MLet (p, m, phia, psia)))
-    | lookahead, n, ts, db, MPred (e, tms) ->
+    | lookahead, n, ts, db, MPred (e, tms, simple) ->
         ((match
            lookupa
              ((ccompare_prod ccompare_string8 ccompare_nat),
@@ -8330,40 +8375,53 @@ let rec vmeval
                  ((ceq_list (ceq_option ceq_event_data)),
                    (ccompare_list (ccompare_option ccompare_event_data)))
                  (of_phantom set_impl_lista))
-           | Some a ->
-             mapa (fun x ->
-                    sup_setb
-                      (finite_UNIV_list, cenum_list,
-                        (ceq_list (ceq_option ceq_event_data)),
-                        (cproper_interval_list
-                          (ccompare_option ccompare_event_data)),
-                        set_impl_list)
-                      (image
-                        ((ceq_list (ceq_option ceq_event_data)),
-                          (ccompare_list (ccompare_option ccompare_event_data)))
-                        ((ceq_set
-                           (cenum_list, (ceq_list (ceq_option ceq_event_data)),
-                             (cproper_interval_list
-                               (ccompare_option
-                                 ccompare_event_data)).ccompare_cproper_interval)),
-                          (ccompare_set
-                            (finite_UNIV_list,
-                              (ceq_list (ceq_option ceq_event_data)),
-                              (cproper_interval_list
-                                (ccompare_option ccompare_event_data)),
-                              set_impl_list)),
-                          set_impl_set)
-                        (fun v ->
-                          set_option
-                            ((ceq_list (ceq_option ceq_event_data)),
-                              (ccompare_list
-                                (ccompare_option ccompare_event_data)),
-                              set_impl_list)
-                            (map_option (fun f -> tabulate f zero_nata n)
-                              (matcha tms v)))
-                        x))
-               a),
-          MPred (e, tms))
+           | Some xs ->
+             (if simple
+               then mapa (image
+                           ((ceq_list (ceq_option ceq_event_data)),
+                             (ccompare_list
+                               (ccompare_option ccompare_event_data)))
+                           ((ceq_list (ceq_option ceq_event_data)),
+                             (ccompare_list
+                               (ccompare_option ccompare_event_data)),
+                             set_impl_list)
+                           (simple_match n zero_nata tms))
+                      xs
+               else mapa (fun x ->
+                           sup_setb
+                             (finite_UNIV_list, cenum_list,
+                               (ceq_list (ceq_option ceq_event_data)),
+                               (cproper_interval_list
+                                 (ccompare_option ccompare_event_data)),
+                               set_impl_list)
+                             (image
+                               ((ceq_list (ceq_option ceq_event_data)),
+                                 (ccompare_list
+                                   (ccompare_option ccompare_event_data)))
+                               ((ceq_set
+                                  (cenum_list,
+                                    (ceq_list (ceq_option ceq_event_data)),
+                                    (cproper_interval_list
+                                      (ccompare_option
+ccompare_event_data)).ccompare_cproper_interval)),
+                                 (ccompare_set
+                                   (finite_UNIV_list,
+                                     (ceq_list (ceq_option ceq_event_data)),
+                                     (cproper_interval_list
+                                       (ccompare_option ccompare_event_data)),
+                                     set_impl_list)),
+                                 set_impl_set)
+                               (fun v ->
+                                 set_option
+                                   ((ceq_list (ceq_option ceq_event_data)),
+                                     (ccompare_list
+                                       (ccompare_option ccompare_event_data)),
+                                     set_impl_list)
+                                   (map_option (fun f -> tabulate f zero_nata n)
+                                     (matcha tms v)))
+                               x))
+                      xs)),
+          MPred (e, tms, simple))
     | j, n, ts, db, MRel rel -> (replicate (size_list ts) rel, MRel rel)
 and letpast_vmeval
   m j i ys xs p ts db phi =
@@ -8397,7 +8455,7 @@ let rec vminit0
                       (ccompare_list (ccompare_option ccompare_event_data)),
                       set_impl_list)))
     | n, Eq (t1, t2) -> MRel (eq_rel n t1 t2)
-    | n, Pred (e, ts) -> MPred (e, ts)
+    | n, Pred (e, ts) -> MPred (e, ts, is_simple_pattern ts zero_nata)
     | n, Let (p, phi, psi) ->
         MLet (p, nfv phi, vminit0 (nfv phi) phi, vminit0 n psi)
     | n, LetPast (p, phi, psi) ->

@@ -125,15 +125,28 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
 
-lemma meval_MPred: "meval lookahead n ts db (MPred e tms) =
-  (case Mapping.lookup db (e, length tms) of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
-  (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
+definition "meval_pred_impl n ts db e tms simple =
+  (case Mapping.lookup db (e, length tms) of
+      None \<Rightarrow> replicate (length ts) {}
+    | Some Xs \<Rightarrow> if simple then map (\<lambda>X. simple_match n 0 tms ` X) Xs
+        else map (\<lambda>X. \<Union>v \<in> X. (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs)"
+declare meval_pred_impl_def[code_unfold]
+
+lemma meval_pred_impl_eq: "meval_pred_impl n ts db e tms simple =
+  (case Mapping.lookup db (e, length tms) of
+      None \<Rightarrow> replicate (length ts) {}
+    | Some xs \<Rightarrow> if simple then map (\<lambda>X. simple_match n 0 tms ` X) xs
+        else map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these (match tms ` X)) xs)"
+  unfolding meval_pred_impl_def
   by (force split: option.splits simp: Option.these_def image_iff)
 
-lemma vmeval_MPred: "vmeval lookahead n ts db (MPred e tms) =
-  (case Mapping.lookup db (e, length tms) of None \<Rightarrow> replicate (length ts) {} | Some Xs \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X.
-  (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs, MPred e tms)"
-  by (force split: option.splits simp: Option.these_def image_iff)
+lemma meval_MPred: "meval lookahead n ts db (MPred e tms simple) =
+  (meval_pred_impl n ts db e tms simple, MPred e tms simple)"
+  by (simp add: meval_pred_impl_eq)
+
+lemma vmeval_MPred: "vmeval lookahead n ts db (MPred e tms simple) =
+  (meval_pred_impl n ts db e tms simple, MPred e tms simple)"
+  by (simp add: meval_pred_impl_eq)
 
 declare [[code drop: meval vmeval]]
 lemmas meval_code[code] = default_maux.meval_simps(1) meval_MPred default_maux.meval_simps(3-)
