@@ -125,27 +125,31 @@ global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Righta
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
   by (force simp: in_these_eq Bex_def image_iff map_option_case split: option.splits)
 
-definition "meval_pred_impl n ts db e tms simple =
+definition "meval_pred_impl n ts db e tms mode =
   (case Mapping.lookup db (e, length tms) of
       None \<Rightarrow> replicate (length ts) {}
-    | Some Xs \<Rightarrow> if simple then map (\<lambda>X. simple_match n 0 tms ` X) Xs
-        else map (\<lambda>X. \<Union>v \<in> X. (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs)"
+    | Some Xs \<Rightarrow> (case mode of
+        Copy \<Rightarrow> Xs
+      | Simple \<Rightarrow> map (\<lambda>X. simple_match n 0 tms ` X) Xs
+      | Match \<Rightarrow> map (\<lambda>X. \<Union>v \<in> X. (set_option (map_option (\<lambda>f. Table.tabulate f 0 n) (match tms v)))) Xs))"
 declare meval_pred_impl_def[code_unfold]
 
-lemma meval_pred_impl_eq: "meval_pred_impl n ts db e tms simple =
+lemma meval_pred_impl_eq: "meval_pred_impl n ts db e tms mode =
   (case Mapping.lookup db (e, length tms) of
       None \<Rightarrow> replicate (length ts) {}
-    | Some xs \<Rightarrow> if simple then map (\<lambda>X. simple_match n 0 tms ` X) xs
-        else map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these (match tms ` X)) xs)"
+    | Some xs \<Rightarrow> (case mode of
+        Copy \<Rightarrow> xs
+      | Simple \<Rightarrow> map (\<lambda>X. simple_match n 0 tms ` X) xs
+      | Match \<Rightarrow> map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these (match tms ` X)) xs))"
   unfolding meval_pred_impl_def
-  by (force split: option.splits simp: Option.these_def image_iff)
+  by (force simp: Option.these_def image_iff intro!: option.case_cong pred_mode.case_cong)
 
-lemma meval_MPred: "meval lookahead n ts db (MPred e tms simple) =
-  (meval_pred_impl n ts db e tms simple, MPred e tms simple)"
+lemma meval_MPred: "meval lookahead n ts db (MPred e tms mode) =
+  (meval_pred_impl n ts db e tms mode, MPred e tms mode)"
   by (simp add: meval_pred_impl_eq)
 
-lemma vmeval_MPred: "vmeval lookahead n ts db (MPred e tms simple) =
-  (meval_pred_impl n ts db e tms simple, MPred e tms simple)"
+lemma vmeval_MPred: "vmeval lookahead n ts db (MPred e tms mode) =
+  (meval_pred_impl n ts db e tms mode, MPred e tms mode)"
   by (simp add: meval_pred_impl_eq)
 
 declare [[code drop: meval vmeval]]

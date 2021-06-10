@@ -673,9 +673,11 @@ record args =
   args_R :: "nat set"
   args_pos :: bool
 
+datatype pred_mode = Copy | Simple | Match
+
 datatype (dead 'msaux, dead 'muaux) mformula =
   MRel "event_data table"
-  | MPred Formula.name "Formula.trm list" bool
+  | MPred Formula.name "Formula.trm list" pred_mode
   | MLet Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula"
   | MLetPast Formula.name nat "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" nat
   | MAnd "nat set" "('msaux, 'muaux) mformula" bool "nat set" "('msaux, 'muaux) mformula" "event_data mbuf2"
@@ -841,15 +843,22 @@ fun split_constraint :: "Formula.formula \<Rightarrow> Formula.trm \<times> bool
 | "split_constraint (Formula.Neg (Formula.LessEq t1 t2)) = (t1, False, MLessEq, t2)"
 | "split_constraint _ = undefined"
 
+definition is_copy_pattern :: "nat \<Rightarrow> Formula.trm list \<Rightarrow> bool" where
+  "is_copy_pattern n ts = (ts = map Formula.Var [0..<n])"
+
 fun is_simple_pattern :: "Formula.trm list \<Rightarrow> nat \<Rightarrow> bool" where
   "is_simple_pattern [] _ = True"
 | "is_simple_pattern (Formula.Var y # ts) x = (x \<le> y \<and> is_simple_pattern ts (Suc y))"
 | "is_simple_pattern _ _ = False"
 
+definition pred_mode_of :: "nat \<Rightarrow> Formula.trm list \<Rightarrow> pred_mode" where
+  "pred_mode_of n ts = (if is_copy_pattern n ts then Copy
+    else if is_simple_pattern ts 0 then Simple else Match)"
+
 function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux) mformula" where
   "minit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (minit0 n \<phi>) else MRel empty_table)"
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
-| "minit0 n (Formula.Pred e ts) = MPred e ts (is_simple_pattern ts 0)"
+| "minit0 n (Formula.Pred e ts) = MPred e ts (pred_mode_of n ts)"
 | "minit0 n (Formula.Let p \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
 | "minit0 n (Formula.LetPast p \<phi> \<psi>) = MLetPast p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>) 0"
 | "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
@@ -1145,12 +1154,14 @@ begin
 function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> database \<Rightarrow> ('msaux, 'muaux) mformula \<Rightarrow>
     event_data table list \<times> ('msaux, 'muaux) mformula" where
   "meval n ts db (MRel rel) = (replicate (length ts) rel, MRel rel)"
-| "meval n ts db (MPred e tms simple) =
+| "meval n ts db (MPred e tms mode) =
     ((case Mapping.lookup db (e, length tms) of
         None \<Rightarrow> replicate (length ts) {}
-      | Some xs \<Rightarrow> if simple then map (\<lambda>X. simple_match n 0 tms ` X) xs
-          else map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these (match tms ` X)) xs),
-    MPred e tms simple)"
+      | Some xs \<Rightarrow> (case mode of
+          Copy \<Rightarrow> xs
+        | Simple \<Rightarrow> map (\<lambda>X. simple_match n 0 tms ` X) xs
+        | Match \<Rightarrow> map (\<lambda>X. (\<lambda>f. Table.tabulate f 0 n) ` Option.these (match tms ` X)) xs)),
+    MPred e tms mode)"
 | "meval n ts db (MLet p m \<phi> \<psi>) =
     (let (xs, \<phi>) = meval m ts db \<phi>;
       (ys, \<psi>) = meval n ts (Mapping.update (p, m) xs db) \<psi>
@@ -1248,7 +1259,7 @@ end
 lemma mformula_induct[case_names MRel MPred MLet MLetPast MAnd MAndAssign MAndRel MAnds MOr MNeg
    MExists MAgg MPrev MNext MSince MUntil MMatchP MMatchF]:
   "(\<And>rel. P (MRel rel)) \<Longrightarrow>
-   (\<And>e ts simple. P (MPred e ts simple)) \<Longrightarrow>
+   (\<And>e ts mode. P (MPred e ts mode)) \<Longrightarrow>
    (\<And>p m \<phi> \<psi>. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MLet p m \<phi> \<psi>)) \<Longrightarrow>
    (\<And>p m \<phi> \<psi> i. (\<And>\<phi>'. size \<phi>' = size \<phi> \<Longrightarrow> P \<phi>') \<Longrightarrow> P \<psi> \<Longrightarrow> P (MLetPast p m \<phi> \<psi> i)) \<Longrightarrow>
    (\<And>A_\<phi> \<phi> pos A_\<psi> \<psi> buf. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MAnd A_\<phi> \<phi> pos A_\<psi> \<psi> buf)) \<Longrightarrow>
@@ -3061,7 +3072,7 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_mformula \<sigma> j P V n R (MRel empty_table) (Formula.Neg (Formula.Eq (Formula.Var x) (Formula.Var x)))"
   | Pred: "\<forall>x\<in>Formula.fv (Formula.Pred e ts). x < n \<Longrightarrow>
     \<forall>t\<in>set ts. Formula.is_Var t \<or> Formula.is_Const t \<Longrightarrow>
-    wf_mformula \<sigma> j P V n R (MPred e ts (is_simple_pattern ts 0)) (Formula.Pred e ts)"
+    wf_mformula \<sigma> j P V n R (MPred e ts (pred_mode_of n ts)) (Formula.Pred e ts)"
   | Let: "wf_mformula \<sigma> j P V m UNIV \<phi> \<phi>' \<Longrightarrow>
     wf_mformula \<sigma> j (P((p, m) \<mapsto> progress \<sigma> P \<phi>' j))
       (V((p, m) \<mapsto> \<lambda>w j. Formula.sat \<sigma> V w j \<phi>')) n R \<psi> \<psi>' \<Longrightarrow>
@@ -6371,6 +6382,12 @@ lemma list_all2_replicate[simp]: "list_all2 R (replicate m x) xs \<longleftright
 lemma list_all2_replicate2[simp]: "list_all2 R xs (replicate m x) \<longleftrightarrow> length xs = m \<and> (\<forall>i < m. R (xs ! i) x)"
   by (auto simp: list_all2_conv_all_nth)
 
+lemma pred_mode_of_eq_simps[simp]:
+  "(pred_mode_of n ts = Copy) \<longleftrightarrow> is_copy_pattern n ts"
+  "(pred_mode_of n ts = Simple) \<longleftrightarrow> \<not> is_copy_pattern n ts \<and> is_simple_pattern ts 0"
+  "(pred_mode_of n ts = Match) \<longleftrightarrow> \<not> is_copy_pattern n ts \<and> \<not> is_simple_pattern ts 0"
+  unfolding pred_mode_of_def by simp_all
+
 lemma (in maux) meval:
   assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' V db"
   shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
@@ -6384,7 +6401,7 @@ proof (induction \<phi> arbitrary: db P P' V n R \<phi>' j \<delta> rule: mformu
       (auto simp add: ball_Un intro: wf_mformula.intros table_eq_rel eq_rel_eval_trm
         in_eq_rel qtable_empty qtable_unit_table intro!: qtableI)
 next
-  case (MPred e ts simple)
+  case (MPred e ts mode)
   let ?en = "(e, length ts)"
   from MPred show ?case
   proof (cases "?en \<in> dom P")
@@ -6393,16 +6410,29 @@ next
       "list_all2 (\<lambda>i X. X = map Some ` {v. length v = length ts \<and> the (V ?en) v i}) [the (P ?en)..<the (P'?en)]
          (the (Mapping.lookup db ?en))" unfolding wf_envs_def rel_mapping_alt
       by (auto 0 4 simp add: dom_def dest: bspec[where x="?en"])  (* SLOW *)
-    moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R (MPred e ts (is_simple_pattern ts 0)) (Formula.Pred e ts)"
+    moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R (MPred e ts (pred_mode_of n ts)) (Formula.Pred e ts)"
       using MPred(1)
       by (cases rule: wf_mformula.cases) (auto intro!: wf_mformula.Pred)
     ultimately show ?thesis
       apply -
       using MPred(1) True
       apply (cases rule: wf_mformula.cases)
-      apply (clarsimp simp add: list.rel_map keys_dom_lookup)
+      apply (clarsimp simp add: list.rel_map keys_dom_lookup split: pred_mode.split)
       apply (intro conjI impI)
-       apply simp
+        apply (erule list.rel_mono_strong)
+        apply (simp add: is_copy_pattern_def comp_def)
+        apply (rule qtableI)
+          apply (simp add: table_def wf_tuple_def)
+         apply (clarsimp simp add: map_nth)
+        apply (simp add: image_iff)
+        apply (intro exI conjI)
+          prefer 2
+          apply assumption
+         apply simp
+        apply (simp add: comp_def wf_tuple_def)
+        apply (subst map_cong[where g="(!) _", OF refl])
+         apply simp
+        apply (metis map_nth)
        apply (erule list.rel_mono_strong)
        apply (rule qtableI)
          apply (simp add: table_def wf_tuple_simple_match)
@@ -6413,7 +6443,6 @@ next
          apply assumption
         apply simp
        apply (simp add: simple_match_eval_trm)
-      apply simp
       apply (erule list.rel_mono_strong)
       apply (rule qtableI)
         apply (clarsimp simp add: table_def match_wf_tuple in_these_eq)
@@ -6454,8 +6483,18 @@ next
       apply (cases "Mapping.lookup db ?en")
        apply (simp add: list.rel_map qtable_empty_iff[unfolded empty_table_def])
        apply (metis add_less_cancel_left atLeastLessThan_iff length_map not_add_less1 not_le)
-      apply (simp add: list.rel_map image_image)
+      apply (simp add: list.rel_map image_image split: pred_mode.split)
       apply safe
+        apply (simp add: is_copy_pattern_def comp_def)
+        apply (intro list.rel_refl_strong qtableI)
+          apply (simp add: table_def wf_tuple_def)
+         apply (clarsimp simp add: map_nth)
+        apply (simp add: image_iff)
+        apply (rule exI, erule conjI)
+        apply (simp add: comp_def wf_tuple_def)
+        apply (subst map_cong[where g="(!) _", OF refl])
+         apply simp
+        apply (metis map_nth)
        apply (intro list.rel_refl_strong qtableI)
          apply (simp add: table_def wf_tuple_simple_match)
         apply (clarsimp simp add: eval_trm_simple_match)
