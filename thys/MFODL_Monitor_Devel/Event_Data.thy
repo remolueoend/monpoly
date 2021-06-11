@@ -86,53 +86,41 @@ begin
 
 fun less_eq_event_data where
   "EInt x \<le> EInt y \<longleftrightarrow> x \<le> y"
-| "EInt x \<le> EFloat y \<longleftrightarrow> double_of_integer x \<le> y"
-| "EInt _ \<le> EString _ \<longleftrightarrow> False"
-| "EFloat x \<le> EInt y \<longleftrightarrow> x \<le> double_of_integer y"
 | "EFloat x \<le> EFloat y \<longleftrightarrow> x \<le> y"
-| "EFloat _ \<le> EString _ \<longleftrightarrow> False"
 | "EString x \<le> EString y \<longleftrightarrow> x \<le> y"
-| "EString _ \<le> _ \<longleftrightarrow> False"
+| "(_::event_data) \<le> _ \<longleftrightarrow> undefined"
 
 definition less_event_data :: "event_data \<Rightarrow> event_data \<Rightarrow> bool"  where
   "less_event_data x y \<longleftrightarrow> x \<le> y \<and> \<not> y \<le> x"
 
 fun plus_event_data where
   "EInt x + EInt y = EInt (x + y)"
-| "EInt x + EFloat y = EFloat (double_of_integer x + y)"
-| "EFloat x + EInt y = EFloat (x + double_of_integer y)"
 | "EFloat x + EFloat y = EFloat (x + y)"
-| "(_::event_data) + _ = EFloat nan"
+| "(_::event_data) + _ = undefined"
 
 fun minus_event_data where
   "EInt x - EInt y = EInt (x - y)"
-| "EInt x - EFloat y = EFloat (double_of_integer x - y)"
-| "EFloat x - EInt y = EFloat (x - double_of_integer y)"
 | "EFloat x - EFloat y = EFloat (x - y)"
-| "(_::event_data) - _ = EFloat nan"
+| "(_::event_data) - _ = undefined"
 
 fun uminus_event_data where
   "- EInt x = EInt (- x)"
 | "- EFloat x = EFloat (- x)"
-| "- (_::event_data) = EFloat nan"
+| "- (_::event_data) = undefined"
 
 fun times_event_data where
   "EInt x * EInt y = EInt (x * y)"
-| "EInt x * EFloat y = EFloat (double_of_integer x * y)"
-| "EFloat x * EInt y = EFloat (x * double_of_integer y)"
 | "EFloat x * EFloat y = EFloat (x * y)"
-| "(_::event_data) * _ = EFloat nan"
+| "(_::event_data) * _ = undefined"
 
 fun divide_event_data where
   "EInt x div EInt y = EInt (div_to_zero x y)"
-| "EInt x div EFloat y = EFloat (double_of_integer x div y)"
-| "EFloat x div EInt y = EFloat (x div double_of_integer y)"
 | "EFloat x div EFloat y = EFloat (x div y)"
-| "(_::event_data) div _ = EFloat nan"
+| "(_::event_data) div _ = undefined"
 
 fun modulo_event_data where
   "EInt x mod EInt y = EInt (mod_to_zero x y)"
-| "(_::event_data) mod _ = EFloat nan"
+| "(_::event_data) mod _ = undefined"
 
 instance ..
 

@@ -116,14 +116,43 @@ fun sat' :: "Formula.trace \<Rightarrow> (Formula.name \<rightharpoonup> nat \<R
 lemma eval_trm_sound: 
   assumes "E \<turnstile> f :: t"  "\<forall>y\<in>fv_trm f. ty_of (v ! y) = E y"
   shows "Formula.eval_trm v f = eval_trm' v f"
-  sorry
+  using assms  
+  apply  (induction  rule: wty_trm.induct) apply (auto simp add: numeric_ty_def)
+  subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_plus_sound)
+    subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_plus_sound)
+  subgoal for x y
+    using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_minus_sound) 
+ subgoal for x y
+   using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_minus_sound)
+ subgoal for x 
+   using  value_of_eval_trm[of E x v]  by (auto simp add: undef_uminus_sound)
+ subgoal for x 
+   using  value_of_eval_trm[of E x v]  by (auto simp add: undef_uminus_sound)
+  subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_times_sound)
+  subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_times_sound)
+  subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_divide_sound)
+  subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_divide_sound)
+  subgoal for x y  using  value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] by (auto simp add: undef_modulo_sound)
+  subgoal for x  using  value_of_eval_trm[of E x v] by (auto simp add: undef_integer_of_event_data_sound)
+  subgoal for x  using  value_of_eval_trm[of E x v] by (auto simp add: undef_double_of_event_data_sound)
+  done
+
+lemma "Suc (Formula.nfv (Formula.Exists t \<phi>)) \<ge> Formula.nfv \<phi>"
+ apply (auto simp add: Formula.nfv_def fvi_Suc)
+    by (metis fvi_Suc le0 old.nat.exhaust)
+
+
 lemma soundness:
-  assumes  "S,E \<turnstile> \<phi>" "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y" 
+  assumes  "S,E \<turnstile> \<phi>" "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y" "safe_formula \<phi>" "wty_envs S \<sigma> V"
+   "Formula.nfv \<phi> \<le> length v"
   shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
  using assms  proof (induction S E \<phi>  arbitrary: v V i rule: wty_formula.induct)
   
-case (Pred x1 x2)
-  then show ?case sorry
+  case (Pred S p tys E tms )
+  from  Pred  have tms_wty: "x \<in> set tms \<Longrightarrow> \<exists>t \<in> set tys. E \<turnstile> x :: t " for x by (metis Pred.hyps(2) in_set_conv_nth list_all2_conv_all_nth)
+   have eval_tms_eq: "map (Formula.eval_trm v) tms = map (eval_trm' v) tms" using  tms_wty Pred(3) apply auto
+     subgoal for x using eval_trm_sound[of E x _ v] by auto done
+  then show ?case apply auto by (metis eval_tms_eq )+
 next
   case (Eq E x1 t x2)
    from Eq show ?case using eval_trm_sound  ty_of_eval_trm  value_of_eval_trm[of E x2 v  ] value_of_eval_trm[of E x1 v  ]
@@ -138,14 +167,47 @@ next
     by (cases t) (auto simp add: undef_less_eq_sound) 
 next 
   case (Let S E \<phi> p E' \<psi>)
-  from this have "\<forall>y\<in>fv \<psi>. ty_of (v ! y) = E' y" by auto
-  then show ?case using Let apply auto sorry
+  {
+    fix v' i'
+    assume assm: " Formula.sat \<sigma> V v' i' \<phi>"
+    have "\<forall>y\<in>fv \<phi>. ty_of (v' ! y) = E y" sorry
+    then have "local.sat' \<sigma> V v' i' \<phi>" using Let.IH[of v' V i'] assm by auto
+  }
+ moreover{
+    fix v' i'
+    assume assm: "local.sat' \<sigma> V v' i' \<phi>"
+    have "\<forall>y\<in>fv \<phi>. ty_of (v' ! y) = E y" sorry
+    then have "Formula.sat \<sigma> V v' i' \<phi>" using Let.IH[of v' V i'] assm by auto
+  }
+  ultimately have "length v' = Formula.nfv \<phi> \<Longrightarrow>  Formula.sat \<sigma> V v' i' \<phi> =  local.sat' \<sigma> V v' i' \<phi>" for v' i' by auto
+  from this  have " (\<lambda>a. if a = p then Some (\<lambda>i. {v. length v = Formula.nfv \<phi> \<and> Formula.sat \<sigma> V v i \<phi>}) else V a) 
+  = V(p \<mapsto> \<lambda>i. {v. length v = Formula.nfv \<phi> \<and> local.sat' \<sigma> V v i \<phi>})" by fastforce
+
+  then show ?case using Let by auto
 next
-  case (Agg x1 x2 x3 x4 \<phi>)
-  then show ?case apply auto sorry
+  find_theorems nth length
+  case (Agg E y agg_type t tys f S \<phi> d)
+  then show ?case  apply auto sorry
 next
   case (Exists S t E \<phi> )
-  then show ?case apply (auto split: nat.splits) sorry
+   {
+    fix za
+    assume  assm: "Formula.sat \<sigma> V (za # v) i \<phi>" 
+    from this have "ty_of za = t" using Exists(1,2)  sorry (*safety requied for ty_of_sat_safe?*)
+    then have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using Exists(3)   by (auto simp add:  fvi_Suc split: nat.splits )
+
+    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of "za#v" V i] Exists(3-6) assm
+      apply auto
+  }
+  moreover {
+    fix za
+   assume  assm: "local.sat' \<sigma> V (za # v) i \<phi>" 
+   from this have "ty_of za = t" using Exists(1,2) sorry (*safety requied for ty_of_sat_safe?*)
+    from this have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using Exists(3) assm by (auto simp add: fvi_Suc split: nat.splits )
+
+    from this have " Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of "za#v" V i] assm by auto
+  }
+  ultimately show ?case by auto 
 next
   case (MatchF S E x2 x1) 
   from this  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
