@@ -137,10 +137,9 @@ lemma eval_trm_sound:
   subgoal for x  using  value_of_eval_trm[of E x v] by (auto simp add: undef_double_of_event_data_sound)
   done
 
-lemma "Suc (Formula.nfv (Formula.Exists t \<phi>)) \<ge> Formula.nfv \<phi>"
- apply (auto simp add: Formula.nfv_def fvi_Suc)
-    by (metis fvi_Suc le0 old.nat.exhaust)
-
+lemma nfv_exists: " Formula.nfv \<phi> \<le> Suc (Formula.nfv (Formula.Exists t \<phi>))"
+   apply (auto simp add: Formula.nfv_def fvi_Suc) 
+  by (metis Max.coboundedI finite_fvi finite_imageI finite_insert fvi_Suc imageI insertCI list_decode.cases)
 
 lemma soundness:
   assumes  "S,E \<turnstile> \<phi>" "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y" "safe_formula \<phi>" "wty_envs S \<sigma> V"
@@ -193,25 +192,29 @@ next
    {
     fix za
     assume  assm: "Formula.sat \<sigma> V (za # v) i \<phi>" 
-    from this have "ty_of za = t" using Exists(1,2)  sorry (*safety requied for ty_of_sat_safe?*)
+    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(6) nfv_exists[of \<phi> t] by auto
+    have "0 \<in> fv \<phi> \<Longrightarrow> ty_of za = t" 
+      using ty_of_sat_safe[where ?E="case_nat t E" and ?S=S and ?\<phi>=\<phi> and ?v="za#v" and ?V=V and ?i=i and ?\<sigma>=\<sigma> and ?x=0]  
+      Exists(1,4-5)  nfv assm by auto 
     then have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using Exists(3)   by (auto simp add:  fvi_Suc split: nat.splits )
 
-    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of "za#v" V i] Exists(3-6) assm
-      apply auto
+    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of "za#v" V i] Exists(4-5) nfv assm by auto
   }
   moreover {
     fix za
    assume  assm: "local.sat' \<sigma> V (za # v) i \<phi>" 
-   from this have "ty_of za = t" using Exists(1,2) sorry (*safety requied for ty_of_sat_safe?*)
+ have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(6) nfv_exists[of \<phi> t] by auto
+    have "0 \<in> fv \<phi> \<Longrightarrow> ty_of za = t" 
+      using ty_of_sat_safe[where ?E="case_nat t E" and ?S=S and ?\<phi>=\<phi> and ?v="za#v" and ?V=V and ?i=i and ?\<sigma>=\<sigma> and ?x=0]  
+      Exists(1,4-5)  nfv assm apply auto sorry
     from this have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using Exists(3) assm by (auto simp add: fvi_Suc split: nat.splits )
-
-    from this have " Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of "za#v" V i] assm by auto
+    from this have " Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of "za#v" V i] Exists(4-6) nfv_exists[of \<phi> t] assm by auto
   }
-  ultimately show ?case by auto 
+  ultimately show ?case   by auto 
 next
   case (MatchF S E x2 x1) 
   from this  have other_IH: "\<phi> \<in> regex.atms x2 \<Longrightarrow> Formula.sat \<sigma> V5 v i5 \<phi> = local.sat' \<sigma> V5 v i5 \<phi>" for \<phi> V5 i5 
-    by (auto simp add: regex.pred_set fv_regex_alt) 
+    using MatchF by (auto simp add: regex.pred_set fv_regex_alt) 
   then show ?case  using match_cong[OF refl other_IH, where ?r=x2] by auto 
 next
   case (MatchP S E x2 x1)
