@@ -621,8 +621,8 @@ next
   case (Prev I \<phi>)
   from Prev.prems(1) have wty: "S, E \<turnstile> \<phi>" by cases
   from Prev.prems(3) have forall_j: "\<forall>j . i = Suc j \<longrightarrow> Formula.sat \<sigma> V v j \<phi>" by auto
-  from this have " Formula.sat \<sigma> V v (Nat.pred i) \<phi>"
-    by (smt (z3) Prev.prems(3) nat.split_sels(2) old.nat.simps(4) pred_def sat.simps(12))
+  from this have " Formula.sat \<sigma> V v (Nat.pred i) \<phi>" using Prev.prems(3)
+    by (auto split: nat.splits)
   from this wty Prev.prems(2-5) Prev.IH show ?case by auto
 next
   case (Next I \<phi>)
