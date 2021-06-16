@@ -3357,11 +3357,13 @@ type pred_mode = Copy | Simple | Match;;
 type ('a, 'b) mformula = MRel of ((event_data option) list) set |
   MPred of string * trm list * pred_mode |
   MLet of string * nat * ('a, 'b) mformula * ('a, 'b) mformula |
-  MLetPast of string * nat * ('a, 'b) mformula * ('a, 'b) mformula * nat |
-  MAnd of
-    nat set * ('a, 'b) mformula * bool * nat set * ('a, 'b) mformula *
-      (((event_data option) list) set list *
-        ((event_data option) list) set list)
+  MLetPast of
+    string * nat * ('a, 'b) mformula * ('a, 'b) mformula * nat *
+      ((event_data option) list) set option
+  | MAnd of
+      nat set * ('a, 'b) mformula * bool * nat set * ('a, 'b) mformula *
+        (((event_data option) list) set list *
+          ((event_data option) list) set list)
   | MAndAssign of ('a, 'b) mformula * (nat * trm) |
   MAndRel of ('a, 'b) mformula * (trm * (bool * (mconstraint * trm))) |
   MAnds of
@@ -7366,6 +7368,9 @@ let rec eval_constraint
 
 let rec eval_assignment (x, t) y = list_update y x (Some (meval_trm t y));;
 
+let rec list_of_option = function None -> []
+                         | Some x -> [x];;
+
 let rec r_epsilon_strict (_A1, _A2, _A3)
   n phi_s x2 = match n, phi_s, x2 with
     n, phi_s, MSkip m ->
@@ -7738,8 +7743,9 @@ let rec meval
              (mbuf2_add xs ys buf)
            in
           (zs, MAnd (a_phi, phia, pos, a_psi, psia, bufa)))
-    | j, n, ts, db, MLetPast (p, m, phi, psi, i) ->
-        (let (ia, (xs, phia)) = letpast_meval m j i [] [] (p, m) ts db phi in
+    | j, n, ts, db, MLetPast (p, m, phi, psi, i, buf) ->
+        (let (xs, (ia, (bufa, phia))) =
+           letpast_meval m j i [] (list_of_option buf) (p, m) ts db phi in
          let (ys, psia) =
            meval j n ts
              (updateb
@@ -7748,7 +7754,7 @@ let rec meval
                (p, m) xs db)
              psi
            in
-          (ys, MLetPast (p, m, phia, psia, ia)))
+          (ys, MLetPast (p, m, phia, psia, ia, bufa)))
     | j, n, ts, db, MLet (p, m, phi, psi) ->
         (let (xs, phia) = meval j m ts db phi in
          let (ys, psia) =
@@ -7830,12 +7836,15 @@ and letpast_meval
            p xs db)
          phi
        in
-      (if null ysa || less_eq_nat j (plus_nata i (size_list xs))
-        then (plus_nata i (size_list xs), (ys @ ysa, phia))
-        else letpast_meval m j (plus_nata i (size_list xs)) (ys @ ysa) ysa p []
-               (map_values (ccompare_prod ccompare_string8 ccompare_nat)
-                 (fun _ _ -> []) db)
-               phia));;
+      (match ysa
+        with [] -> (ys @ ysa, (plus_nata i (size_list xs), (None, phia)))
+        | y :: _ ->
+          (if less_eq_nat j (suc (plus_nata i (size_list xs)))
+            then (ys @ ysa, (plus_nata i (size_list xs), (Some y, phia)))
+            else letpast_meval m j (plus_nata i (size_list xs)) (ys @ ysa) ysa p
+                   [] (map_values (ccompare_prod ccompare_string8 ccompare_nat)
+                        (fun _ _ -> []) db)
+                   phia)));;
 
 let rec args_n
   (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_n;;
@@ -7989,7 +7998,8 @@ let rec minit0
     | n, Let (p, phi, psi) ->
         MLet (p, nfv phi, minit0 (nfv phi) phi, minit0 n psi)
     | n, LetPast (p, phi, psi) ->
-        MLetPast (p, nfv phi, minit0 (nfv phi) phi, minit0 n psi, zero_nata)
+        MLetPast
+          (p, nfv phi, minit0 (nfv phi) phi, minit0 n psi, zero_nata, None)
     | n, Or (phi, psi) -> MOr (minit0 n phi, minit0 n psi, ([], []))
     | n, And (phi, psi) ->
         (if safe_assignment (fvi zero_nata phi) psi
@@ -8355,8 +8365,9 @@ let rec vmeval
              (mbuf2_add xs ys buf)
            in
           (zs, MAnd (a_phi, phia, pos, a_psi, psia, bufa)))
-    | j, n, ts, db, MLetPast (p, m, phi, psi, i) ->
-        (let (ia, (xs, phia)) = letpast_vmeval m j i [] [] (p, m) ts db phi in
+    | j, n, ts, db, MLetPast (p, m, phi, psi, i, buf) ->
+        (let (xs, (ia, (bufa, phia))) =
+           letpast_vmeval m j i [] (list_of_option buf) (p, m) ts db phi in
          let (ys, psia) =
            vmeval j n ts
              (updateb
@@ -8365,7 +8376,7 @@ let rec vmeval
                (p, m) xs db)
              psi
            in
-          (ys, MLetPast (p, m, phia, psia, ia)))
+          (ys, MLetPast (p, m, phia, psia, ia, bufa)))
     | j, n, ts, db, MLet (p, m, phi, psi) ->
         (let (xs, phia) = vmeval j m ts db phi in
          let (ys, psia) =
@@ -8447,12 +8458,16 @@ and letpast_vmeval
            p xs db)
          phi
        in
-      (if null ysa || less_eq_nat j (plus_nata i (size_list xs))
-        then (plus_nata i (size_list xs), (ys @ ysa, phia))
-        else letpast_vmeval m j (plus_nata i (size_list xs)) (ys @ ysa) ysa p []
-               (map_values (ccompare_prod ccompare_string8 ccompare_nat)
-                 (fun _ _ -> []) db)
-               phia));;
+      (match ysa
+        with [] -> (ys @ ysa, (plus_nata i (size_list xs), (None, phia)))
+        | y :: _ ->
+          (if less_eq_nat j (suc (plus_nata i (size_list xs)))
+            then (ys @ ysa, (plus_nata i (size_list xs), (Some y, phia)))
+            else letpast_vmeval m j (plus_nata i (size_list xs)) (ys @ ysa) ysa
+                   p []
+                   (map_values (ccompare_prod ccompare_string8 ccompare_nat)
+                     (fun _ _ -> []) db)
+                   phia)));;
 
 let rec init_vmuaux x = (fun _ -> (zero_nata, [])) x;;
 
@@ -8473,7 +8488,8 @@ let rec vminit0
     | n, Let (p, phi, psi) ->
         MLet (p, nfv phi, vminit0 (nfv phi) phi, vminit0 n psi)
     | n, LetPast (p, phi, psi) ->
-        MLetPast (p, nfv phi, vminit0 (nfv phi) phi, vminit0 n psi, zero_nata)
+        MLetPast
+          (p, nfv phi, vminit0 (nfv phi) phi, vminit0 n psi, zero_nata, None)
     | n, Or (phi, psi) -> MOr (vminit0 n phi, vminit0 n psi, ([], []))
     | n, And (phi, psi) ->
         (if safe_assignment (fvi zero_nata phi) psi
