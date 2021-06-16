@@ -1701,12 +1701,14 @@ lemma sup_eq_Unused_iff: "(x::rec_safety) \<squnion> y = Unused \<longleftrighta
 
 lemma Sup_rec_safety_le_iff: "\<Squnion> A \<le> (x::rec_safety) \<longleftrightarrow> (\<forall>y\<in>A. y \<le> x)"
   unfolding Sup_rec_safety_def using finite[of A]
-  by (induction A rule: finite_induct) (simp_all add: comp_fun_idem.fold_insert_idem comp_fun_idem_sup)
+  by (induction A rule: finite_induct)
+    (simp_all add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup])
 
 lemma le_Sup_rec_safety_iff: "(x::rec_safety) \<le> \<Squnion> A \<longleftrightarrow> (\<exists>y\<in>insert Unused A. x \<le> y)"
   unfolding Sup_rec_safety_def using finite[of A]
   apply (induction A rule: finite_induct)
-   apply (auto simp add: comp_fun_idem.fold_insert_idem comp_fun_idem_sup bot.extremum_unique
+   apply (auto simp add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup]
+        bot.extremum_unique
       simp flip: bot_rec_safety_def
       intro: sup.coboundedI1 sup.coboundedI2)
   by (smt (z3) sup_rec_safety.elims)

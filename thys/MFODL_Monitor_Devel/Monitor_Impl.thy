@@ -527,13 +527,13 @@ lemma safe_letpast_code[code]:
 
 lemma Sup_rec_safety_set[code_unfold]:
   "\<Squnion> (set l :: rec_safety set) = fold (\<squnion>) l Unused"
-  by (simp add: Sup_rec_safety_def comp_fun_idem.fold_set_fold comp_fun_idem_sup)
+  by (simp add: Sup_rec_safety_def comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_on_sup])
 
 lemma Sup_rec_safety_atms[code_unfold]:
   "\<Squnion> (Regex.atms r :: rec_safety set) = fold (\<squnion>) (csorted_list_of_set (Regex.atms r)) Unused"
-  by (simp add: Sup_rec_safety_def comp_fun_idem_sup csorted_list_of_set_def ccompare_rec_safety_def ID_def
+  by (simp add: Sup_rec_safety_def csorted_list_of_set_def ccompare_rec_safety_def ID_def
       linorder.set_sorted_list_of_set[OF comparator.linorder] comparator_rec_safety
-      flip: comp_fun_idem.fold_set_fold)
+      flip: comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_on_sup])
 
 (*<*)
 end

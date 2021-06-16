@@ -114,17 +114,20 @@ instance ..
 
 end
 
+lemma (in semilattice_sup) comp_fun_idem_on_sup: "comp_fun_idem_on UNIV sup"
+  using comp_fun_idem_sup by (simp add: comp_fun_idem_def')
+
 lemma Sup_rec_safety_empty[simp]: "\<Squnion> {} = Unused"
   by (simp add: Sup_rec_safety_def)
 
 lemma Sup_rec_safety_insert[simp]: "\<Squnion>(insert (x::rec_safety) A) = x \<squnion> \<Squnion>A"
-  by (simp add: Sup_rec_safety_def comp_fun_idem.fold_insert_idem comp_fun_idem_sup)
+  by (simp add: Sup_rec_safety_def comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup])
 
 lemma Sup_rec_safety_union: "\<Squnion>((A::rec_safety set) \<union> B) = \<Squnion>A \<squnion> \<Squnion>B" 
   unfolding Sup_rec_safety_def
   using finite[of A]
   by (induction A rule: finite_induct) (simp_all flip: bot_rec_safety_def
-      add: comp_fun_idem.fold_insert_idem comp_fun_idem_sup sup_assoc)
+      add: comp_fun_idem_on.fold_insert_idem[OF comp_fun_idem_on_sup] sup_assoc)
 
 
 context begin
