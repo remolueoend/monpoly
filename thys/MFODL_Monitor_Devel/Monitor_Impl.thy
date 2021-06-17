@@ -487,6 +487,52 @@ declare [[code drop: New_max_getIJ_genericJoin New_max_getIJ_wrapperGenericJoin]
 declare New_max.genericJoin_code[folded remove_Union_def, code]
 declare New_max.wrapperGenericJoin.simps[folded remove_Union_def, code]
 
+lemma group_images: "(\<lambda>k. let group = Set.filter (\<lambda>x. f x = k) rel in g k group) ` f ` rel =
+    (\<lambda>(k, group). g k group) ` images ((\<lambda>t. (f t, t)) ` rel)"
+proof (rule set_eqI, rule iffI)
+  fix x
+  assume "x \<in> (\<lambda>k. Let (Set.filter (\<lambda>x. f x = k) rel) (g k)) ` f ` rel"
+  then obtain t where t_def: "t \<in> rel" "x = g (f t) {x \<in> rel. f x = f t}"
+    by (auto simp: Set.filter_def)
+  have "(f t, {b. (f t, b) \<in> (\<lambda>t. (f t, t)) ` rel}) \<in>
+    (\<lambda>a. (a, {b. (a, b) \<in> (\<lambda>t. (f t, t)) ` rel})) ` fst ` (\<lambda>t. (f t, t)) ` rel"
+    using t_def(1)
+    by force
+  moreover have "{b. (f t, b) \<in> (\<lambda>t. (f t, t)) ` rel} = {x \<in> rel. f x = f t}"
+    by (auto simp add: image_def)
+  ultimately show "x \<in> (\<lambda>(k, group). g k group) ` images ((\<lambda>t. (f t, t)) ` rel)"
+    unfolding t_def(2) images_def
+    by auto
+next
+  fix x
+  assume "x \<in> (\<lambda>(k, group). g k group) ` images ((\<lambda>t. (f t, t)) ` rel)"
+  then obtain t where t_def: "t \<in> rel" "x = g (f t) {b. (f t, b) \<in> (\<lambda>t. (f t, t)) ` rel}"
+    by (auto simp: images_def)
+  have "{b. (f t, b) \<in> (\<lambda>t. (f t, t)) ` rel} = {x \<in> rel. f x = f t}"
+    by (auto simp add: image_def)
+  then show "x \<in> (\<lambda>k. Let (Set.filter (\<lambda>x. f x = k) rel) (g k)) ` f ` rel"
+    using t_def(1)
+    by (auto simp: t_def(2) Set.filter_def)
+qed
+
+lemma eval_agg_code[code]: "eval_agg n g0 y \<omega> b f rel = (if g0 \<and> rel = empty_table
+  then singleton_table n y (eval_agg_op \<omega> {})
+  else (\<lambda>(k, group). let M = (\<lambda>(e, ts). (e, ecard ts)) ` images ((\<lambda>t. (meval_trm f t, t)) ` group) in
+    k[y:=Some (eval_agg_op \<omega> M)]) ` images ((\<lambda>t. (drop b t, t)) ` rel))"
+proof -
+  have "(\<lambda>k. let group = Set.filter (\<lambda>x. drop b x = k) rel;
+      M = (\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) group))) ` meval_trm f ` group in
+      k[y:=Some (eval_agg_op \<omega> M)]) ` (drop b) ` rel =
+    (\<lambda>(k, group). let M = (\<lambda>(e, ts). (e, ecard ts)) ` images ((\<lambda>t. (meval_trm f t, t)) ` group) in
+      k[y:=Some (eval_agg_op \<omega> M)]) ` images ((\<lambda>t. (drop b t, t)) ` rel)"
+    unfolding Let_def group_images[of "drop b" rel
+      "(\<lambda>k g. k[y := Some (eval_agg_op \<omega> ((\<lambda>y. (y, ecard (Set.filter (\<lambda>x. meval_trm f x = y) g))) ` meval_trm f ` g))])", unfolded Let_def]
+    unfolding group_images[of "meval_trm f" _ "(\<lambda>y g. (y, ecard g))", unfolded Let_def]
+    by simp
+  then show ?thesis
+    by (auto simp: eval_agg_def)
+qed
+
 (*<*)
 end
 (*>*)

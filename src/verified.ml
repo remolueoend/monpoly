@@ -4309,6 +4309,49 @@ let rec meval_trm
     | F2i x, v -> EInt (integer_of_event_data (meval_trm x v))
     | I2f x, v -> EFloat (double_of_event_data (meval_trm x v));;
 
+let rec add_to_rbt_comp (_B1, _B2, _B3)
+  c = (fun (a, b) t ->
+        (match rbt_comp_lookup c t a
+          with None ->
+            rbt_comp_insert c a (insert (_B1, _B2) b (bot_set (_B1, _B2, _B3)))
+              t
+          | Some x ->
+            rbt_comp_insert c a
+              (sup_seta (_B1, _B2) x
+                (insert (_B1, _B2) b (bot_set (_B1, _B2, _B3))))
+              t));;
+
+let rec rbt_set_to_rbt_comp (_B1, _B2, _B3)
+  c t = folda (fun ab _ -> add_to_rbt_comp (_B1, _B2, _B3) c ab) t Empty;;
+
+let rec rbt_comp_bulkload
+  c xs = foldr (fun (a, b) -> rbt_comp_insert c a b) xs Empty;;
+
+let rec bulkload _A
+  xa = Mapping_RBTa (rbt_comp_bulkload (the (ccompare _A)) xa);;
+
+let rec mapping_to_set _A (_B1, _B2, _B3, _B4)
+  t = bulkload (ccompare_prod _A (ccompare_set (_B1, _B2, _B3, _B4)))
+        (mapa (fun x -> (x, ())) (entries t));;
+
+let rec images _A (_B1, _B2, _B3, _B4)
+  (RBT_set t) =
+    (match ccompare _A
+      with None ->
+        failwith "images: ccompare = None"
+          (fun _ -> images _A (_B1, _B2, _B3, _B4) (RBT_set t))
+      | Some c ->
+        (match ccompare _B3.ccompare_cproper_interval
+          with None ->
+            failwith "images: ccompare = None"
+              (fun _ -> images _A (_B1, _B2, _B3, _B4) (RBT_set t))
+          | Some _ ->
+            RBT_set
+              (mapping_to_set _A (_B1, _B2, _B3, _B4)
+                (rbt_set_to_rbt_comp (_B2, _B3.ccompare_cproper_interval, _B4) c
+                  (impl_ofa (ccompare_prod _A _B3.ccompare_cproper_interval)
+                    t)))));;
+
 let rec eval_agg
   n g0 y omega b f rel =
     (if g0 && is_empty
@@ -4322,50 +4365,79 @@ let rec eval_agg
                    (ccompare_prod ccompare_event_data ccompare_enat))
                  (of_phantom
                    (set_impl_proda set_impl_event_data set_impl_enat))))
-      else image ((ceq_list (ceq_option ceq_event_data)),
-                   (ccompare_list (ccompare_option ccompare_event_data)))
+      else image ((ceq_prod (ceq_list (ceq_option ceq_event_data))
+                    (ceq_set
+                      (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                        (cproper_interval_list
+                          (ccompare_option
+                            ccompare_event_data)).ccompare_cproper_interval))),
+                   (ccompare_prod
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (ccompare_set
+                       (finite_UNIV_list,
+                         (ceq_list (ceq_option ceq_event_data)),
+                         (cproper_interval_list
+                           (ccompare_option ccompare_event_data)),
+                         set_impl_list))))
              ((ceq_list (ceq_option ceq_event_data)),
                (ccompare_list (ccompare_option ccompare_event_data)),
                set_impl_list)
-             (fun k ->
-               (let group =
-                  filter
-                    ((ceq_list (ceq_option ceq_event_data)),
-                      (ccompare_list (ccompare_option ccompare_event_data)))
-                    (fun x ->
-                      equal_lista (equal_option equal_event_data) (drop b x) k)
-                    rel
-                  in
-                let m =
-                  image (ceq_event_data, ccompare_event_data)
+             (fun (k, group) ->
+               (let m =
+                  image ((ceq_prod ceq_event_data
+                           (ceq_set
+                             (cenum_list,
+                               (ceq_list (ceq_option ceq_event_data)),
+                               (cproper_interval_list
+                                 (ccompare_option
+                                   ccompare_event_data)).ccompare_cproper_interval))),
+                          (ccompare_prod ccompare_event_data
+                            (ccompare_set
+                              (finite_UNIV_list,
+                                (ceq_list (ceq_option ceq_event_data)),
+                                (cproper_interval_list
+                                  (ccompare_option ccompare_event_data)),
+                                set_impl_list))))
                     ((ceq_prod ceq_event_data ceq_enat),
                       (ccompare_prod ccompare_event_data ccompare_enat),
                       (set_impl_prod set_impl_event_data set_impl_enat))
-                    (fun ya ->
-                      (ya, ecard (card_UNIV_list,
-                                   (ceq_list (ceq_option ceq_event_data)),
-                                   (ccompare_list
-                                     (ccompare_option ccompare_event_data)))
-                             (filter
-                               ((ceq_list (ceq_option ceq_event_data)),
-                                 (ccompare_list
-                                   (ccompare_option ccompare_event_data)))
-                               (fun x -> equal_event_dataa (meval_trm f x) ya)
-                               group)))
-                    (image
-                      ((ceq_list (ceq_option ceq_event_data)),
-                        (ccompare_list (ccompare_option ccompare_event_data)))
-                      (ceq_event_data, ccompare_event_data, set_impl_event_data)
-                      (meval_trm f) group)
+                    (fun (e, ts) ->
+                      (e, ecard (card_UNIV_list,
+                                  (ceq_list (ceq_option ceq_event_data)),
+                                  (ccompare_list
+                                    (ccompare_option ccompare_event_data)))
+                            ts))
+                    (images ccompare_event_data
+                      (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                        (cproper_interval_list
+                          (ccompare_option ccompare_event_data)),
+                        set_impl_list)
+                      (image
+                        ((ceq_list (ceq_option ceq_event_data)),
+                          (ccompare_list (ccompare_option ccompare_event_data)))
+                        ((ceq_prod ceq_event_data
+                           (ceq_list (ceq_option ceq_event_data))),
+                          (ccompare_prod ccompare_event_data
+                            (ccompare_list
+                              (ccompare_option ccompare_event_data))),
+                          (set_impl_prod set_impl_event_data set_impl_list))
+                        (fun t -> (meval_trm f t, t)) group))
                   in
                  list_update k y (Some (eval_agg_op omega m))))
-             (image
-               ((ceq_list (ceq_option ceq_event_data)),
-                 (ccompare_list (ccompare_option ccompare_event_data)))
-               ((ceq_list (ceq_option ceq_event_data)),
-                 (ccompare_list (ccompare_option ccompare_event_data)),
+             (images (ccompare_list (ccompare_option ccompare_event_data))
+               (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                 (cproper_interval_list (ccompare_option ccompare_event_data)),
                  set_impl_list)
-               (drop b) rel));;
+               (image
+                 ((ceq_list (ceq_option ceq_event_data)),
+                   (ccompare_list (ccompare_option ccompare_event_data)))
+                 ((ceq_prod (ceq_list (ceq_option ceq_event_data))
+                    (ceq_list (ceq_option ceq_event_data))),
+                   (ccompare_prod
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (ccompare_list (ccompare_option ccompare_event_data))),
+                   (set_impl_prod set_impl_list set_impl_list))
+                 (fun t -> (drop b t, t)) rel)));;
 
 let rec rbt_product
   f rbt1 rbt2 =
@@ -5193,12 +5265,6 @@ let rec mprev_next
              ys,
             aa));;
 
-let rec rbt_comp_bulkload
-  c xs = foldr (fun (a, b) -> rbt_comp_insert c a b) xs Empty;;
-
-let rec bulkload _A
-  xa = Mapping_RBTa (rbt_comp_bulkload (the (ccompare _A)) xa);;
-
 let rec mrtabulate (_A1, _A2)
   xs f =
     (match ccompare_mregexa
@@ -5755,21 +5821,6 @@ let rec inf_setb (_A1, _A2, _A3, _A4, _A5)
                (top_set (_A3, _A4.ccompare_cproper_interval, _A5)) a
         else failwith "Inf: infinite"
                (fun _ -> inf_setb (_A1, _A2, _A3, _A4, _A5) a));;
-
-let rec add_to_rbt_comp (_B1, _B2, _B3)
-  c = (fun (a, b) t ->
-        (match rbt_comp_lookup c t a
-          with None ->
-            rbt_comp_insert c a (insert (_B1, _B2) b (bot_set (_B1, _B2, _B3)))
-              t
-          | Some x ->
-            rbt_comp_insert c a
-              (sup_seta (_B1, _B2) x
-                (insert (_B1, _B2) b (bot_set (_B1, _B2, _B3))))
-              t));;
-
-let rec rbt_set_to_rbt_comp (_B1, _B2, _B3)
-  c t = folda (fun ab _ -> add_to_rbt_comp (_B1, _B2, _B3) c ab) t Empty;;
 
 let rec proj _A (_B1, _B2, _B3)
   (RBT_set t) =
