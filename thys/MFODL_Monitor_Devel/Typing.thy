@@ -68,7 +68,6 @@ lemma  value_of_eval_trm: "E \<turnstile> x :: TInt \<Longrightarrow> \<forall>y
   subgoal using ty_of_eval_trm by (cases "Formula.eval_trm v x") fastforce+
   done
 
-
 lemma wty_trm_fv_cong:
   assumes "\<And>y. y \<in> fv_trm x \<Longrightarrow> E y = E' y"
   shows "E \<turnstile> x :: t \<longleftrightarrow> E' \<turnstile> x :: t"
@@ -442,6 +441,15 @@ lemma eval_trm_sound:
   subgoal for x  using  value_of_eval_trm[of E x v] by (auto simp add: undef_integer_of_event_data_sound)
   subgoal for x  using  value_of_eval_trm[of E x v] by (auto simp add: undef_double_of_event_data_sound)
   done
+
+
+lemma poly_value_of: "E \<turnstile> x :: t\<Longrightarrow> E \<turnstile> y :: t \<Longrightarrow> \<forall>w\<in>fv_trm x \<union> fv_trm y. ty_of (v ! w) = E w \<Longrightarrow> 
+(\<exists> z z'.(eval_trm' v x) = EInt z \<and> eval_trm' v y = EInt z'\<and> (Formula.eval_trm v x) = EInt z \<and> Formula.eval_trm v y = EInt z') \<or>
+ (\<exists> z z'.(eval_trm' v x) = EFloat z \<and> eval_trm' v y = EFloat z' \<and> (Formula.eval_trm v x) = EFloat z \<and> Formula.eval_trm v y = EFloat z' ) \<or> 
+(\<exists> z z'.(eval_trm' v x) = EString z \<and> eval_trm' v y = EString z' \<and> (Formula.eval_trm v x) = EString z \<and> Formula.eval_trm v y = EString z') "
+  using value_of_eval_trm[of E x v] value_of_eval_trm[of E y v] eval_trm_sound[of E x _ v] eval_trm_sound[of E y _ v] 
+  by (cases t)  auto 
+
 
 lemma nfv_exists: " Formula.nfv \<phi> \<le> Suc (Formula.nfv (Formula.Exists t \<phi>))"
    apply (auto simp add: Formula.nfv_def fvi_Suc) 
@@ -854,6 +862,36 @@ next
 qed
 
 end
+
+interpretation  sat_inst: sat_general "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" "Event_Data.double_of_event_data" "Event_Data.integer_of_event_data" "(\<le>)"
+  by unfold_locales  auto
+
+lemma eval_trm_inst: " sat_inst.eval_trm'  = Formula.eval_trm "
+proof -
+  have  "sat_inst.eval_trm' v f = Formula.eval_trm v f" for v f
+  by (induction f)  auto 
+  then show ?thesis  by auto
+qed 
+
+lemma eval_agg_op_inst: " sat_inst.eval_agg_op' (\<omega>, d) M  = Formula.eval_agg_op (\<omega>, d) M"
+  apply (cases \<omega>)   apply (auto ) apply (induction "flatten_multiset M")  apply (cases \<omega>) apply (auto simp add:  split: list.splits) 
+  apply (smt (verit) foldl_cong min_def sat_inst.undef_min_def sat_inst.undef_min_def) 
+  by (smt (verit) foldl_cong max_def sat_inst.undef_max_def) 
+  
+
+lemma sat_inst_of_sat': "Formula.sat \<sigma> V v i \<phi> = sat_inst.sat' \<sigma> V v i \<phi>"
+ apply (induction \<phi> arbitrary: v V i)  apply  (auto simp add: eval_trm_inst less_event_data_def sat_inst.undef_less_def  split: nat.splits)
+  using eval_trm_inst apply presburger
+                      apply (metis eval_trm_inst) 
+  using eval_agg_op_inst apply presburger+  by  (metis match_cong_strong)+
+
+
+lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow> 
+  Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> Formula.fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x) = E x"
+  using  sat_inst.sat_general_axioms sat_inst_of_sat'
+    sat_general.ty_of_sat'_safe[of  "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" double_of_event_data integer_of_event_data "(\<le>)"]  
+  by auto  blast
+ 
 
 (*<*)
 end
