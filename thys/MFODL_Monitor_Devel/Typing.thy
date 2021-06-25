@@ -318,6 +318,7 @@ undef_times :: "event_data \<Rightarrow> event_data \<Rightarrow> event_data" an
 undef_divide :: "event_data \<Rightarrow> event_data \<Rightarrow> event_data" and
 undef_modulo :: "event_data \<Rightarrow> event_data \<Rightarrow> event_data"  and
 undef_double_of_event_data :: "event_data \<Rightarrow> double" and
+undef_double_of_event_data_agg :: "event_data \<Rightarrow> double" and
 undef_integer_of_event_data :: "event_data \<Rightarrow> integer" and
 undef_less_eq :: "event_data \<Rightarrow> event_data \<Rightarrow> bool"
 assumes undef_plus_sound:  "\<And>x y. undef_plus (EInt x) (EInt y) = EInt x + EInt y" 
@@ -333,6 +334,8 @@ assumes undef_divide_sound:  "\<And>x y. undef_divide (EInt x) (EInt y) = EInt x
 assumes undef_modulo_sound:  "\<And>x y.  undef_modulo (EInt x) (EInt y) = EInt x mod EInt y"  
 
 assumes undef_double_of_event_data_sound: "\<And>x.  undef_double_of_event_data (EInt x) = double_of_event_data (EInt x)"
+assumes undef_double_of_event_data_agg_sound: "\<And>x.  undef_double_of_event_data_agg (EInt x) = double_of_event_data_agg (EInt x)"
+"\<And>x.  undef_double_of_event_data_agg (EFloat x) = double_of_event_data_agg (EFloat x)"
 assumes undef_integer_of_event_data_sound: "\<And>x. undef_integer_of_event_data (EFloat x) = integer_of_event_data (EFloat x)"
 
 assumes undef_less_eq_sound: "\<And>x y. undef_less_eq (EInt x) (EInt y) \<longleftrightarrow> EInt x \<le> EInt y"
@@ -383,14 +386,14 @@ fun eval_agg_op' :: "Formula.agg_op \<Rightarrow> (event_data \<times> enat) set
 | "eval_agg_op' (agg_type.Agg_Avg, y0) M =(case  (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
-    | (x#xs,_) \<Rightarrow> EFloat ( undef_double_of_event_data (foldl undef_plus x xs) / double_of_int (length (x#xs))))"
+    | (x#xs,_) \<Rightarrow> EFloat ( undef_double_of_event_data_agg (foldl undef_plus x xs) / double_of_int (length (x#xs))))"
 | "eval_agg_op' (agg_type.Agg_Med, y0) M =(case (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (xs,_) \<Rightarrow> EFloat (let u = length xs;  u' = u div 2 in
           if even u then
-            (undef_double_of_event_data (xs ! (u'-1)) + undef_double_of_event_data (xs ! u') / double_of_int 2)
-          else undef_double_of_event_data (xs ! u')))"
+            (undef_double_of_event_data_agg (xs ! (u'-1)) + undef_double_of_event_data_agg (xs ! u') / double_of_int 2)
+          else undef_double_of_event_data_agg (xs ! u')))"
 
 fun sat' :: "Formula.trace \<Rightarrow> (Formula.name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> 't Formula.formula \<Rightarrow> bool" where
   "sat' \<sigma> V v i (Formula.Pred r ts) = (case V r of
@@ -870,7 +873,7 @@ qed
 
 end
 
-interpretation  sat_inst: sat_general "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" "Event_Data.double_of_event_data" "Event_Data.integer_of_event_data" "(\<le>)"
+interpretation  sat_inst: sat_general "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" "Event_Data.double_of_event_data" "Event_Data.double_of_event_data_agg" "Event_Data.integer_of_event_data" "(\<le>)"
   by unfold_locales  auto
 
 lemma eval_trm_inst: " sat_inst.eval_trm'  = Formula.eval_trm "
@@ -896,10 +899,17 @@ lemma sat_inst_of_sat': "Formula.sat \<sigma> V v i \<phi> = sat_inst.sat' \<sig
 lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> wty_envs S \<sigma> V \<Longrightarrow> 
   Formula.sat \<sigma> V v i \<phi> \<Longrightarrow> x \<in> Formula.fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x) = E x"
   using  sat_inst.sat_general_axioms sat_inst_of_sat'
-    sat_general.ty_of_sat'_safe[of  "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" double_of_event_data integer_of_event_data "(\<le>)"]  
+    sat_general.ty_of_sat'_safe[of  "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" double_of_event_data double_of_event_data_agg integer_of_event_data "(\<le>)"]  
   by auto  blast
  
 
+type_synonym tyenv' = "nat \<Rightarrow> ty option"
+definition check :: "sig \<Rightarrow> tyenv' \<Rightarrow> ty option Formula.formula => (tyenv * ty Formula.formula) option"
+  where "check=  undefined"
+
+lemma check_soundness:"check S E' \<phi>' = Some (E, \<phi>) \<Longrightarrow> wty_formula S E \<phi> \<and>
+rel_formula (\<lambda>x y. case x of Some t \<Rightarrow> y = t | _ \<Rightarrow> True) \<phi> \<phi>'"
+  sorry
 (*<*)
 end
 (*>*)

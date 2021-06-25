@@ -100,14 +100,14 @@ fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Righta
 | "eval_agg_op (Agg_Avg, y0) M =(case  (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
-    | (x#xs,_) \<Rightarrow> EFloat ( double_of_event_data (foldl plus x xs) / double_of_int (length (x#xs))))"
+    | (x#xs,_) \<Rightarrow> EFloat ( double_of_event_data_agg (foldl plus x xs) / double_of_int (length (x#xs))))"
 | "eval_agg_op (Agg_Med, y0) M =(case (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (xs,_) \<Rightarrow> EFloat (let u = length xs;  u' = u div 2 in
           if even u then
-            (double_of_event_data (xs ! (u'-1)) + double_of_event_data (xs ! u') / double_of_int 2)
-          else double_of_event_data (xs ! u')))"
+            (double_of_event_data_agg (xs ! (u'-1)) + double_of_event_data_agg (xs ! u') / double_of_int 2)
+          else double_of_event_data_agg (xs ! u')))"
  (*
 qualified datatype (discs_sels) formula = Pred name "trm list"
   | Let name formula formula
@@ -1256,7 +1256,7 @@ using Agg(1, 7) that
     apply(rule finite_surj[ of "{v. wf_tuple n (fvi b \<phi> \<union> fvi_trm b f) v \<and>
          ((\<forall>a x. length x = b \<longrightarrow> sat \<sigma> V (x @ map the v) i \<phi> \<longrightarrow> eval_trm (x @ map the v) f \<noteq> a) \<longrightarrow>
           fv \<phi> = {0..<b})}" _ "\<lambda> v. v [y:= (Some (eval_agg_op \<omega>
-         {(x, ecard
+         {(x, ecard                                    
                {zs.
                 length zs = b \<and>
                 sat \<sigma> V (zs @ map the v) i \<phi> \<and> eval_trm (zs @ map the v) f = x}) |

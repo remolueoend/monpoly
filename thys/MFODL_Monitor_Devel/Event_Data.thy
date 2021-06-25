@@ -136,6 +136,13 @@ primrec double_of_event_data :: "event_data \<Rightarrow> double" where
 | "double_of_event_data (EFloat _) = undefined"
 | "double_of_event_data (EString _) = undefined"
 
+
+primrec double_of_event_data_agg :: "event_data \<Rightarrow> double" where
+  "double_of_event_data_agg (EInt x) = double_of_integer x"
+| "double_of_event_data_agg (EFloat x) = x"
+| "double_of_event_data_agg (EString _) = undefined"
+
+
 (*<*)
 end
 (*>*)

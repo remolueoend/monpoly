@@ -8,8 +8,16 @@ begin
 lemma safe_neg_eq: "safe_formula (Formula.Neg (Formula.Eq x1 x2)) \<Longrightarrow> safe_formula  (Formula.Eq x1 x2) \<or>
 (Formula.sat \<sigma> V v i  (Formula.Neg (Formula.Eq x1 x2)) \<longleftrightarrow> sat' \<sigma> V v i  (Formula.Neg (Formula.Eq x1 x2))) "
   by (cases x1; cases x2) auto
-                                                                              
-lemma foldl_eq_type: assumes " \<forall>x\<in>set (x22). ty_of x = t" "ty_of x21 = t" "t \<in> agg_trm_type agg_op" 
+
+lemma foldl_eq_type2:
+ " \<forall>x\<in>set (x22). ty_of x = t \<Longrightarrow> ty_of x21 = t \<Longrightarrow> foldl undef_min x21 x22 = foldl min x21 x22"
+
+ " \<forall>x\<in>set (x22). ty_of x = t \<Longrightarrow> ty_of x21 = t \<Longrightarrow> foldl undef_max x21 x22 = foldl max x21 x22"
+ " \<forall>x\<in>set (x22). ty_of x = t \<Longrightarrow> ty_of x21 = t  \<Longrightarrow> t \<in> numeric_ty
+\<Longrightarrow> foldl undef_plus x21 x22 = foldl (+) x21 x22
+"
+  sorry
+lemma foldl_eq_type: assumes " \<forall>x\<in>set (x22). ty_of x = t" "ty_of x21 = t" "t \<in> agg_trm_type agg_op"
     "undef_op = undef_min \<and> op = min \<and>  agg_op=Formula.Agg_Min \<or> 
 undef_op = undef_max \<and> op = max\<and>  agg_op=Formula.Agg_Max \<or>
  undef_op = undef_plus \<and> op= (+)\<and>  agg_op=Formula.Agg_Sum"
@@ -55,19 +63,8 @@ proof -
         by fastforce
 
     show ?thesis 
-      apply (cases agg_op) apply (auto split: list.splits) using 
-      subgoal for x21 x22
-        apply (cases "finite_multiset M")
-         using wty_flatten apply auto apply (thin_tac "flatten_multiset M = x21 # x22") apply (induction x22) 
-        using undef_less_eq_sound  assms(1)  apply (auto simp add: undef_min_def split: ty.splits) subgoal for a x23
-          by (cases x21; cases a) (auto simp add: undef_min_def min_def) 
-        subgoal for a x23
-          apply (cases x21; cases a) apply (auto simp add: undef_min_def min_def) sledgehammer
-        subgoal for x21 x22
-apply (cases "finite_multiset M")
-         using wty_flatten apply auto  apply (induction x22 arbitrary: x21) 
-        using undef_less_eq_sound  assms(1)  apply (auto simp add: undef_min_def split: ty.splits) subgoal for a x23
-          by (cases x21; cases a) (auto simp add: undef_min_def min_def)
+      apply (cases agg_op) using wty_flatten t_wty apply (auto split: list.splits) sorry
+  qed 
 
 lemma soundness:
   assumes   "safe_formula \<phi>"  "S,E \<turnstile> \<phi>" "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y" "wty_envs S \<sigma> V"
@@ -198,17 +195,7 @@ next
   ultimately show ?case   by auto 
 next
   case (Agg y \<omega> tys f \<phi>) 
-  (*{
-    assume assm: "Formula.sat \<sigma> V v i (formula.Agg y \<omega> tys f \<phi>)"
-    have " \<forall>a\<in>Formula.fvi (length tys) \<phi>.  a < length v " using Agg.prems(4)  apply (auto simp add: Formula.nfv_def) using Suc_le_lessD by blast
-    then have "\<forall>a\<in>Formula.fv \<phi>.  a < length tys + length v" using fvi_plus_bound[of 0 "length tys" \<phi> "length v"] by auto
-    then have  "\<forall>a\<in>Formula.fv \<phi>.  a - length v < length tys"  using diff_less_eq finite_fvi   sorry
-    then have "sat' \<sigma> V v i (formula.Agg y \<omega> tys f \<phi>)" using  assm Agg apply (auto simp add: Formula.nfv_def) sorry
-  }
-  moreover {
-    assume "sat' \<sigma> V v i (formula.Agg y \<omega> tys f \<phi>)"
-  }
-  ultimately show ?case apply auto sorry*)
+  
     have phi_wty: "S, agg_env E tys \<turnstile> \<phi>" using Agg.prems(1) by (auto elim: wty_formula.cases)
  have " a \<in> fv \<phi> \<Longrightarrow> Suc a \<le> length tys + length v" for a 
       using Agg(9)  fvi_plus_bound[of 0 "length tys" \<phi> "length v"] apply (auto simp add: Formula.nfv_def)
@@ -247,7 +234,7 @@ next
   moreover
   obtain agg_op d where omega_def:"\<omega> = (agg_op,d)" using Agg.prems(1) by cases auto
   moreover
-  have eval_agg_op_case: "eval_agg_op (agg_op,d) M = eval_agg_op' (agg_op,d) M" for M  using eval_agg_op_sound by auto 
+  have eval_agg_op_case: "eval_agg_op (agg_op,d) M = eval_agg_op' (agg_op,d) M" for M  using omega_def eval_agg_op_sound apply auto sorry
   ultimately show ?case by auto
 
 next
