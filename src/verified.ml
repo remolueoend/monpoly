@@ -60,7 +60,7 @@ module Bits_Integer : sig
 end = struct
 
 (* We do not need an explicit range checks here,
-   because Big_int.int_of_big_int raises Failure 
+   because Big_int.int_of_big_int raises Failure
    if the argument does not fit into an int. *)
 let shiftl x n = Z.shift_left x (Z.to_int n);;
 
@@ -103,6 +103,7 @@ module Monitor : sig
   type ('a, 'b) mapping
   type ('a, 'b) mformula
   type 'a queue
+  type aggaux
   type ('a, 'b, 'c) mstate_ext
   val wild : 'a regex
   val integer_of_int : int -> Z.t
@@ -112,14 +113,15 @@ module Monitor : sig
       (string, ((event_data list) set list)) mapping
   val mstep :
     (string, ((event_data list) set list)) mapping * nat ->
-      ((nat *
-         (nat *
-           (bool list *
-             (bool list *
-               ((nat * ((event_data option) list) set) queue *
-                 ((nat * ((event_data option) list) set) queue *
-                   ((((event_data option) list), nat) mapping *
-                     (((event_data option) list), nat) mapping))))))),
+      (((nat *
+          (nat *
+            (bool list *
+              (bool list *
+                ((nat * ((event_data option) list) set) queue *
+                  ((nat * ((event_data option) list) set) queue *
+                    ((((event_data option) list), nat) mapping *
+                      (((event_data option) list), nat) mapping))))))) *
+         aggaux option),
         (nat *
           (nat queue *
             (nat *
@@ -132,14 +134,15 @@ module Monitor : sig
         unit)
         mstate_ext ->
         (nat * ((event_data option) list) set) list *
-          ((nat *
-             (nat *
-               (bool list *
-                 (bool list *
-                   ((nat * ((event_data option) list) set) queue *
-                     ((nat * ((event_data option) list) set) queue *
-                       ((((event_data option) list), nat) mapping *
-                         (((event_data option) list), nat) mapping))))))),
+          (((nat *
+              (nat *
+                (bool list *
+                  (bool list *
+                    ((nat * ((event_data option) list) set) queue *
+                      ((nat * ((event_data option) list) set) queue *
+                        ((((event_data option) list), nat) mapping *
+                          (((event_data option) list), nat) mapping))))))) *
+             aggaux option),
             (nat *
               (nat queue *
                 (nat *
@@ -176,14 +179,15 @@ module Monitor : sig
   val mmonitorable_exec : formula -> bool
   val minit_safe :
     formula ->
-      ((nat *
-         (nat *
-           (bool list *
-             (bool list *
-               ((nat * ((event_data option) list) set) queue *
-                 ((nat * ((event_data option) list) set) queue *
-                   ((((event_data option) list), nat) mapping *
-                     (((event_data option) list), nat) mapping))))))),
+      (((nat *
+          (nat *
+            (bool list *
+              (bool list *
+                ((nat * ((event_data option) list) set) queue *
+                  ((nat * ((event_data option) list) set) queue *
+                    ((((event_data option) list), nat) mapping *
+                      (((event_data option) list), nat) mapping))))))) *
+         aggaux option),
         (nat *
           (nat queue *
             (nat *
@@ -1256,7 +1260,7 @@ let rec inter_list _A
           xc)
         Empty);;
 
-let rec filterd _A
+let rec filtere _A
   xb xc = Mapping_RBTa (rbtreeify (filtera xb (entries (impl_ofa _A xc))));;
 
 let rec comp_sinter_with
@@ -1300,7 +1304,7 @@ let rec meet _A
       (rbt_comp_inter_with_key (the (ccompare _A)) xc (impl_ofa _A xd)
         (impl_ofa _A xe));;
 
-let rec filterc _A xb xc = Abs_dlist (filtera xb (list_of_dlist _A xc));;
+let rec filterd _A xb xc = Abs_dlist (filtera xb (list_of_dlist _A xc));;
 
 let rec comp f g = (fun x -> f (g x));;
 
@@ -1334,13 +1338,13 @@ let rec inf_seta (_A1, _A2)
           with None ->
             failwith "inter DList_set Set_Monad: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (DList_set dxs1) (Set_Monad xs))
-          | Some eq -> DList_set (filterc _A1 (list_member eq xs) dxs1))
+          | Some eq -> DList_set (filterd _A1 (list_member eq xs) dxs1))
     | DList_set dxs1, DList_set dxs2 ->
         (match ceq _A1
           with None ->
             failwith "inter DList_set DList_set: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (DList_set dxs1) (DList_set dxs2))
-          | Some _ -> DList_set (filterc _A1 (memberc _A1 dxs2) dxs1))
+          | Some _ -> DList_set (filterd _A1 (memberc _A1 dxs2) dxs1))
     | DList_set dxs, RBT_set rbt ->
         (match ccompare _A2
           with None ->
@@ -1363,7 +1367,7 @@ let rec inf_seta (_A1, _A2)
           with None ->
             failwith "inter Set_Monad DList_set: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (Set_Monad xs) (DList_set dxs2))
-          | Some eq -> DList_set (filterc _A1 (list_member eq xs) dxs2))
+          | Some eq -> DList_set (filterd _A1 (list_member eq xs) dxs2))
     | Set_Monad xs, RBT_set rbt1 ->
         (match ccompare _A2
           with None ->
@@ -1378,7 +1382,7 @@ let rec inf_seta (_A1, _A2)
               (fun _ -> inf_seta (_A1, _A2) g (RBT_set rbt2))
           | Some _ ->
             RBT_set
-              (filterd _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt2))
+              (filtere _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt2))
     | RBT_set rbt1, g ->
         (match ccompare _A2
           with None ->
@@ -1386,21 +1390,21 @@ let rec inf_seta (_A1, _A2)
               (fun _ -> inf_seta (_A1, _A2) (RBT_set rbt1) g)
           | Some _ ->
             RBT_set
-              (filterd _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt1))
+              (filtere _A2 (comp (fun x -> member (_A1, _A2) x g) fst) rbt1))
     | h, DList_set dxs2 ->
         (match ceq _A1
           with None ->
             failwith "inter DList_set2: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) h (DList_set dxs2))
           | Some _ ->
-            DList_set (filterc _A1 (fun x -> member (_A1, _A2) x h) dxs2))
+            DList_set (filterd _A1 (fun x -> member (_A1, _A2) x h) dxs2))
     | DList_set dxs1, h ->
         (match ceq _A1
           with None ->
             failwith "inter DList_set1: ceq = None"
               (fun _ -> inf_seta (_A1, _A2) (DList_set dxs1) h)
           | Some _ ->
-            DList_set (filterc _A1 (fun x -> member (_A1, _A2) x h) dxs1))
+            DList_set (filterd _A1 (fun x -> member (_A1, _A2) x h) dxs1))
     | i, Set_Monad xs -> Set_Monad (filtera (fun x -> member (_A1, _A2) x i) xs)
     | Set_Monad xs, i -> Set_Monad (filtera (fun x -> member (_A1, _A2) x i) xs)
     | j, Collect_set a -> Collect_set (fun x -> a x && member (_A1, _A2) x j)
@@ -3174,7 +3178,13 @@ type formula = Pred of string * trm list | Let of string * formula * formula |
 type ('a, 'b) mapping = Assoc_List_Mapping of ('a, 'b) alist |
   RBT_Mapping of ('a, 'b) mapping_rbt | Mapping of ('a -> 'b option);;
 
-type 'a args_ext = Args_ext of i * nat * nat set * nat set * bool * 'a;;
+type 'a aggargs_ext =
+  Aggargs_ext of
+    nat set * nat * bool * nat * (agg_type * event_data) * nat * trm * 'a;;
+
+type 'a args_ext =
+  Args_ext of
+    i * nat * nat set * nat set * bool * unit aggargs_ext option * 'a;;
 
 type mconstraint = MEq | MLess | MLessEq;;
 
@@ -3222,6 +3232,12 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
             ((event_data option) list) set)) list;;
 
 type 'a queue = Abs_queue of ('a list * 'a list);;
+
+type list_aux = LInt of Z.t list | LString of string list;;
+
+type aggaux = CntAux of (((event_data option) list), nat) mapping |
+  SumAux of (((event_data option) list), (nat * Z.t)) mapping |
+  RankAux of (((event_data option) list), list_aux) mapping;;
 
 type ('b, 'a) comp_fun_idem = Abs_comp_fun_idem of ('b -> 'a -> 'a);;
 
@@ -3962,6 +3978,8 @@ let rec these (_A1, _A2, _A3)
         (filter ((ceq_option _A1), (ccompare_option _A2))
           (fun x -> not (is_none x)) a);;
 
+let rec filterb xb xc = Alist (filtera xb (impl_of xc));;
+
 let rec lookup _A xa = map_of _A (impl_of xa);;
 
 let rec updatea _A xc xd xe = Alist (update _A xc xd (impl_of xe));;
@@ -4040,13 +4058,21 @@ let rec deletea (_A1, _A2)
     | k, Assoc_List_Mapping al -> Assoc_List_Mapping (deleteb _A2 k al)
     | k, Mapping m -> Mapping (fun_upd _A2 m k None);;
 
-let rec filterb _A
-  p (RBT_Mapping t) =
-    (match ccompare _A
-      with None ->
-        failwith "filter RBT_Mapping: ccompare = None"
-          (fun _ -> filterb _A p (RBT_Mapping t))
-      | Some _ -> RBT_Mapping (filterd _A (fun (a, b) -> p a b) t));;
+let rec filterc _A
+  p x1 = match p, x1 with
+    p, RBT_Mapping t ->
+      (match ccompare _A
+        with None ->
+          failwith "filter RBT_Mapping: ccompare = None"
+            (fun _ -> filterc _A p (RBT_Mapping t))
+        | Some _ -> RBT_Mapping (filtere _A (fun (a, b) -> p a b) t))
+    | p, Assoc_List_Mapping al ->
+        Assoc_List_Mapping (filterb (fun (a, b) -> p a b) al)
+    | p, Mapping m ->
+        Mapping
+          (fun k ->
+            (match m k with None -> None
+              | Some v -> (if p k v then Some v else None)));;
 
 let rec lookupa (_A1, _A2) = function RBT_Mapping t -> lookupc _A1 t
                              | Assoc_List_Mapping al -> lookup _A2 al;;
@@ -4131,6 +4157,12 @@ let rec lookup_default (_B1, _B2)
 let rec lookupb (_A1, _A2) (_B1, _B2, _B3)
   = lookup_default (_A1, _A2) (empty_table (_B1, _B2, _B3));;
 
+let rec insort _A
+  x xa1 = match x, xa1 with x, [] -> [x]
+    | x, y :: ys ->
+        (if less_eq _A.order_linorder.preorder_order.ord_preorder x y
+          then x :: y :: ys else y :: insort _A x ys);;
+
 let rec restrict
   a v = mapa (fun i ->
                (if member (ceq_nat, ccompare_nat) i a then nth v i else None))
@@ -4194,37 +4226,39 @@ let rec dvd (_A1, _A2)
 let rec eval_agg_op
   x0 m = match x0, m with
     (Agg_Cnt, y0), m ->
-      EInt (integer_of_int (int_of_nat (size_list (flatten_multiset m))))
+      (match flatten_multiset m with [] -> y0
+        | a :: lista ->
+          EInt (integer_of_int (int_of_nat (size_list (a :: lista)))))
     | (Agg_Min, y0), m ->
         (match flatten_multiset m with [] -> y0
           | a :: b -> foldl (min ord_event_data) a b)
     | (Agg_Max, y0), m ->
         (match flatten_multiset m with [] -> y0
           | a :: b -> foldl (max ord_event_data) a b)
-    | (Agg_Sum, y0), m -> foldl plus_event_data y0 (flatten_multiset m)
+    | (Agg_Sum, y0), m ->
+        (match flatten_multiset m with [] -> y0
+          | a :: b -> foldl plus_event_data a b)
     | (Agg_Avg, y0), m ->
-        EFloat
-          (let xs = flatten_multiset m in
-            (match xs with [] -> 0.0
-              | _ :: _ ->
-                Stdlib.(/.)
-                  (double_of_event_data
-                    (foldl plus_event_data (EInt Z.zero) xs))
-                  (double_of_int (int_of_nat (size_list xs)))))
+        (match flatten_multiset m with [] -> y0
+          | x :: xs ->
+            EFloat
+              (Stdlib.(/.) (double_of_event_data (foldl plus_event_data x xs))
+                (double_of_int (int_of_nat (size_list (x :: xs))))))
     | (Agg_Med, y0), m ->
-        EFloat
-          (let xs = flatten_multiset m in
-           let u = size_list xs in
-            (if equal_nata u zero_nata then 0.0
-              else (let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
-                     (if dvd (equal_nat, semidom_modulo_nat)
-                           (nat_of_integer (Z.of_int 2)) u
-                       then Stdlib.(+.)
-                              (double_of_event_data
-                                (nth xs (minus_nata ua one_nata)))
-                              (Stdlib.(/.) (double_of_event_data (nth xs ua))
-                                (double_of_int (Int_of_integer (Z.of_int 2))))
-                       else double_of_event_data (nth xs ua)))));;
+        (match flatten_multiset m with [] -> y0
+          | a :: lista ->
+            EFloat
+              (let u = size_list (a :: lista) in
+               let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
+                (if dvd (equal_nat, semidom_modulo_nat)
+                      (nat_of_integer (Z.of_int 2)) u
+                  then Stdlib.(+.)
+                         (double_of_event_data
+                           (nth (a :: lista) (minus_nata ua one_nata)))
+                         (Stdlib.(/.)
+                           (double_of_event_data (nth (a :: lista) ua))
+                           (double_of_int (Int_of_integer (Z.of_int 2))))
+                  else double_of_event_data (nth (a :: lista) ua))));;
 
 let rec uminus_event_data = function EInt x -> EInt (Z.neg x)
                             | EFloat x -> EFloat (Stdlib.(~-.) x)
@@ -4431,7 +4465,7 @@ let rec interval
                      not (equal_enat xc Infinity_enat)))
             else ((fun _ -> true), ((fun _ -> true), false)));;
 
-let rec init_args i n l r pos = Args_ext (i, n, l, r, pos, ());;
+let rec init_args i n l r pos agg = Args_ext (i, n, l, r, pos, agg, ());;
 
 let rec epsilon_lax (_A1, _A2, _A3)
   guard phi_s x2 = match guard, phi_s, x2 with
@@ -5241,8 +5275,6 @@ let rec upd_nested_max_tstp (_A1, _A2, _A3, _A4) (_B1, _B2, _B3, _B4, _B5)
                upd_nested_max_tstp (_A1, _A2, _A3, _A4)
                  (_B1, _B2, _B3, _B4, _B5) m d x));;
 
-let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
-
 let rec ts_tp_lt
   i ts tp tstp =
     (match tstp with Inl tsa -> memL i (minus_nata tsa ts)
@@ -5293,7 +5325,8 @@ let rec safe_hd_aux
 let rec safe_hd x = rep_isom (safe_hd_aux x);;
 
 let rec args_ivl
-  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_ivl;;
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, args_agg, more)) =
+    args_ivl;;
 
 let rec eval_step_mmuaux (_A1, _A2)
   args (tp, (tss, (len, (maskL,
@@ -5302,7 +5335,7 @@ let rec eval_step_mmuaux (_A1, _A2)
        let Some m = lookupa (ccompare_nat, equal_nat) a2_map (minus_nata tp len)
          in
        let ma =
-         filterb (ccompare_list (ccompare_option _A2))
+         filterc (ccompare_list (ccompare_option _A2))
            (fun _ -> ts_tp_lt (args_ivl args) ts (minus_nata tp len)) m
          in
        let t =
@@ -5381,7 +5414,8 @@ let rec upd_set (_A1, _A2, _A3, _A4)
              (fun _ -> upd_set (_A1, _A2, _A3, _A4) m f a));;
 
 let rec args_pos
-  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_pos;;
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, args_agg, more)) =
+    args_pos;;
 
 let rec productc (_A1, _A2, _A3) (_B1, _B2, _B3)
   a2 b2 = match a2, b2 with
@@ -5492,182 +5526,218 @@ let rec productc (_A1, _A2, _A3) (_B1, _B2, _B3)
         Collect_set
           (fun (x, y) -> member (_A1, _A2) x a && member (_B1, _B2) y b);;
 
-let rec add_new_mmuaux
-  x = (fun args rel1 rel2 nt aux ->
-        (let (tp, (tss, (len, (maskL,
-                                (maskR,
-                                  (a1_map, (a2_map, (donea, done_length))))))))
-           = shift_mmuaux (ceq_event_data, ccompare_event_data) args nt aux in
-         let i = args_ivl args in
-         let pos = args_pos args in
-         let new_tstp = (if memL i zero_nata then Inr tp else Inl nt) in
-         let tmp =
-           sup_seta
-             ((ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-               (ccompare_prod ccompare_nat
-                 (ccompare_list (ccompare_option ccompare_event_data))))
-             (sup_setb
-               ((finite_UNIV_prod finite_UNIV_nat finite_UNIV_list),
-                 (cenum_prod cenum_nat cenum_list),
-                 (ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-                 (cproper_interval_prod cproper_interval_nat
-                   (cproper_interval_list
-                     (ccompare_option ccompare_event_data))),
-                 (set_impl_prod set_impl_nat set_impl_list))
-               (image
-                 ((ceq_list (ceq_option ceq_event_data)),
-                   (ccompare_list (ccompare_option ccompare_event_data)))
-                 ((ceq_set
-                    ((cenum_prod cenum_nat cenum_list),
-                      (ceq_prod ceq_nat (ceq_list (ceq_option ceq_event_data))),
-                      (cproper_interval_prod cproper_interval_nat
-                        (cproper_interval_list
-                          (ccompare_option
-                            ccompare_event_data))).ccompare_cproper_interval)),
-                   (ccompare_set
-                     ((finite_UNIV_prod finite_UNIV_nat finite_UNIV_list),
-                       (ceq_prod ceq_nat
-                         (ceq_list (ceq_option ceq_event_data))),
-                       (cproper_interval_prod cproper_interval_nat
-                         (cproper_interval_list
-                           (ccompare_option ccompare_event_data))),
-                       (set_impl_prod set_impl_nat set_impl_list))),
-                   set_impl_set)
-                 (fun asa ->
-                   (match
-                     lookupa
-                       ((ccompare_list (ccompare_option ccompare_event_data)),
-                         (equal_list (equal_option equal_event_data)))
-                       a1_map (proj_tuple maskL asa)
-                     with None ->
-                       (if not pos
-                         then insert
-                                ((ceq_prod ceq_nat
-                                   (ceq_list (ceq_option ceq_event_data))),
-                                  (ccompare_prod ccompare_nat
-                                    (ccompare_list
-                                      (ccompare_option ccompare_event_data))))
-                                (minus_nata tp len, asa)
-                                (set_empty
-                                  ((ceq_prod ceq_nat
-                                     (ceq_list (ceq_option ceq_event_data))),
-                                    (ccompare_prod ccompare_nat
-                                      (ccompare_list
-(ccompare_option ccompare_event_data))))
-                                  (of_phantom
-                                    (set_impl_proda set_impl_nat
-                                      set_impl_list)))
-                         else set_empty
-                                ((ceq_prod ceq_nat
-                                   (ceq_list (ceq_option ceq_event_data))),
-                                  (ccompare_prod ccompare_nat
-                                    (ccompare_list
-                                      (ccompare_option ccompare_event_data))))
-                                (of_phantom
-                                  (set_impl_proda set_impl_nat set_impl_list)))
-                     | Some tpa ->
-                       (if pos
-                         then insert
-                                ((ceq_prod ceq_nat
-                                   (ceq_list (ceq_option ceq_event_data))),
-                                  (ccompare_prod ccompare_nat
-                                    (ccompare_list
-                                      (ccompare_option ccompare_event_data))))
-                                (max ord_nat (minus_nata tp len) tpa, asa)
-                                (set_empty
-                                  ((ceq_prod ceq_nat
-                                     (ceq_list (ceq_option ceq_event_data))),
-                                    (ccompare_prod ccompare_nat
-                                      (ccompare_list
-(ccompare_option ccompare_event_data))))
-                                  (of_phantom
-                                    (set_impl_proda set_impl_nat
-                                      set_impl_list)))
-                         else insert
-                                ((ceq_prod ceq_nat
-                                   (ceq_list (ceq_option ceq_event_data))),
-                                  (ccompare_prod ccompare_nat
-                                    (ccompare_list
-                                      (ccompare_option ccompare_event_data))))
-                                (max ord_nat (minus_nata tp len)
-                                   (plus_nata tpa one_nata),
-                                  asa)
-                                (set_empty
-                                  ((ceq_prod ceq_nat
-                                     (ceq_list (ceq_option ceq_event_data))),
-                                    (ccompare_prod ccompare_nat
-                                      (ccompare_list
-(ccompare_option ccompare_event_data))))
-                                  (of_phantom
-                                    (set_impl_proda set_impl_nat
-                                      set_impl_list))))))
-                 rel2))
-             (if memL i zero_nata
-               then productc (ceq_nat, ccompare_nat, set_impl_nat)
-                      ((ceq_list (ceq_option ceq_event_data)),
-                        (ccompare_list (ccompare_option ccompare_event_data)),
-                        set_impl_list)
-                      (insert (ceq_nat, ccompare_nat) tp
-                        (set_empty (ceq_nat, ccompare_nat)
-                          (of_phantom set_impl_nata)))
-                      rel2
-               else set_empty
-                      ((ceq_prod ceq_nat
-                         (ceq_list (ceq_option ceq_event_data))),
-                        (ccompare_prod ccompare_nat
-                          (ccompare_list
-                            (ccompare_option ccompare_event_data))))
-                      (of_phantom (set_impl_proda set_impl_nat set_impl_list)))
-           in
-         let a2_mapa =
-           updateb (ccompare_nat, equal_nat) (plus_nata tp one_nata)
-             (mapping_empty
-               (ccompare_list (ccompare_option ccompare_event_data))
-               (of_phantom mapping_impl_lista))
-             (upd_nested_max_tstp
-               (finite_UNIV_nat, ceq_nat, ccompare_nat, equal_nat)
-               (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
-                 (ccompare_list (ccompare_option ccompare_event_data)),
-                 (equal_list (equal_option equal_event_data)),
-                 mapping_impl_list)
-               a2_map new_tstp tmp)
-           in
-         let a1_mapa =
-           (if pos
-             then filterb (ccompare_list (ccompare_option ccompare_event_data))
-                    (fun asa _ ->
-                      member
-                        ((ceq_list (ceq_option ceq_event_data)),
-                          (ccompare_list (ccompare_option ccompare_event_data)))
-                        asa rel1)
-                    (upd_set
-                      (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
-                        (ccompare_list (ccompare_option ccompare_event_data)),
-                        (equal_list (equal_option equal_event_data)))
-                      a1_map (fun _ -> tp)
-                      (minus_set
-                        ((ceq_list (ceq_option ceq_event_data)),
-                          (ccompare_list (ccompare_option ccompare_event_data)))
-                        rel1
-                        (keys (cenum_list,
-                                (ceq_list (ceq_option ceq_event_data)),
-                                (ccompare_list
-                                  (ccompare_option ccompare_event_data)),
-                                set_impl_list)
-                          a1_map)))
-             else upd_set
-                    (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
-                      (ccompare_list (ccompare_option ccompare_event_data)),
-                      (equal_list (equal_option equal_event_data)))
-                    a1_map (fun _ -> tp) rel1)
-           in
-         let tssa = append_queue nt tss in
-          (plus_nata tp one_nata,
-            (tssa,
-              (plus_nata len one_nata,
-                (maskL,
-                  (maskR, (a1_mapa, (a2_mapa, (donea, done_length))))))))))
-        x;;
+let rec add_new_mmuaux (_A1, _A2, _A3)
+  args rel1 rel2 nt aux =
+    (let (tp, (tss, (len, (maskL,
+                            (maskR,
+                              (a1_map, (a2_map, (donea, done_length))))))))
+       = shift_mmuaux (_A1, _A2) args nt aux in
+     let i = args_ivl args in
+     let pos = args_pos args in
+     let new_tstp = (if memL i zero_nata then Inr tp else Inl nt) in
+     let tmp =
+       sup_seta
+         ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+           (ccompare_prod ccompare_nat (ccompare_list (ccompare_option _A2))))
+         (sup_setb
+           ((finite_UNIV_prod finite_UNIV_nat finite_UNIV_list),
+             (cenum_prod cenum_nat cenum_list),
+             (ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+             (cproper_interval_prod cproper_interval_nat
+               (cproper_interval_list (ccompare_option _A2))),
+             (set_impl_prod set_impl_nat set_impl_list))
+           (image
+             ((ceq_list (ceq_option _A1)),
+               (ccompare_list (ccompare_option _A2)))
+             ((ceq_set
+                ((cenum_prod cenum_nat cenum_list),
+                  (ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                  (cproper_interval_prod cproper_interval_nat
+                    (cproper_interval_list
+                      (ccompare_option _A2))).ccompare_cproper_interval)),
+               (ccompare_set
+                 ((finite_UNIV_prod finite_UNIV_nat finite_UNIV_list),
+                   (ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                   (cproper_interval_prod cproper_interval_nat
+                     (cproper_interval_list (ccompare_option _A2))),
+                   (set_impl_prod set_impl_nat set_impl_list))),
+               set_impl_set)
+             (fun asa ->
+               (match
+                 lookupa
+                   ((ccompare_list (ccompare_option _A2)),
+                     (equal_list (equal_option _A3)))
+                   a1_map (proj_tuple maskL asa)
+                 with None ->
+                   (if not pos
+                     then insert
+                            ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                              (ccompare_prod ccompare_nat
+                                (ccompare_list (ccompare_option _A2))))
+                            (minus_nata tp len, asa)
+                            (set_empty
+                              ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                                (ccompare_prod ccompare_nat
+                                  (ccompare_list (ccompare_option _A2))))
+                              (of_phantom
+                                (set_impl_proda set_impl_nat set_impl_list)))
+                     else set_empty
+                            ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                              (ccompare_prod ccompare_nat
+                                (ccompare_list (ccompare_option _A2))))
+                            (of_phantom
+                              (set_impl_proda set_impl_nat set_impl_list)))
+                 | Some tpa ->
+                   (if pos
+                     then insert
+                            ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                              (ccompare_prod ccompare_nat
+                                (ccompare_list (ccompare_option _A2))))
+                            (max ord_nat (minus_nata tp len) tpa, asa)
+                            (set_empty
+                              ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                                (ccompare_prod ccompare_nat
+                                  (ccompare_list (ccompare_option _A2))))
+                              (of_phantom
+                                (set_impl_proda set_impl_nat set_impl_list)))
+                     else insert
+                            ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                              (ccompare_prod ccompare_nat
+                                (ccompare_list (ccompare_option _A2))))
+                            (max ord_nat (minus_nata tp len)
+                               (plus_nata tpa one_nata),
+                              asa)
+                            (set_empty
+                              ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                                (ccompare_prod ccompare_nat
+                                  (ccompare_list (ccompare_option _A2))))
+                              (of_phantom
+                                (set_impl_proda set_impl_nat set_impl_list))))))
+             rel2))
+         (if memL i zero_nata
+           then productc (ceq_nat, ccompare_nat, set_impl_nat)
+                  ((ceq_list (ceq_option _A1)),
+                    (ccompare_list (ccompare_option _A2)), set_impl_list)
+                  (insert (ceq_nat, ccompare_nat) tp
+                    (set_empty (ceq_nat, ccompare_nat)
+                      (of_phantom set_impl_nata)))
+                  rel2
+           else set_empty
+                  ((ceq_prod ceq_nat (ceq_list (ceq_option _A1))),
+                    (ccompare_prod ccompare_nat
+                      (ccompare_list (ccompare_option _A2))))
+                  (of_phantom (set_impl_proda set_impl_nat set_impl_list)))
+       in
+     let a2_mapa =
+       updateb (ccompare_nat, equal_nat) (plus_nata tp one_nata)
+         (mapping_empty (ccompare_list (ccompare_option _A2))
+           (of_phantom mapping_impl_lista))
+         (upd_nested_max_tstp
+           (finite_UNIV_nat, ceq_nat, ccompare_nat, equal_nat)
+           (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+             (ccompare_list (ccompare_option _A2)),
+             (equal_list (equal_option _A3)), mapping_impl_list)
+           a2_map new_tstp tmp)
+       in
+     let a1_mapa =
+       (if pos
+         then filterc (ccompare_list (ccompare_option _A2))
+                (fun asa _ ->
+                  member
+                    ((ceq_list (ceq_option _A1)),
+                      (ccompare_list (ccompare_option _A2)))
+                    asa rel1)
+                (upd_set
+                  (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                    (ccompare_list (ccompare_option _A2)),
+                    (equal_list (equal_option _A3)))
+                  a1_map (fun _ -> tp)
+                  (filter
+                    ((ceq_list (ceq_option _A1)),
+                      (ccompare_list (ccompare_option _A2)))
+                    (fun k ->
+                      is_none
+                        (lookupa
+                          ((ccompare_list (ccompare_option _A2)),
+                            (equal_list (equal_option _A3)))
+                          a1_map k))
+                    rel1))
+         else upd_set
+                (finite_UNIV_list, (ceq_list (ceq_option _A1)),
+                  (ccompare_list (ccompare_option _A2)),
+                  (equal_list (equal_option _A3)))
+                a1_map (fun _ -> tp) rel1)
+       in
+     let tssa = append_queue nt tss in
+      (plus_nata tp one_nata,
+        (tssa,
+          (plus_nata len one_nata,
+            (maskL, (maskR, (a1_mapa, (a2_mapa, (donea, done_length)))))))));;
+
+let rec eval_mmuaux (_A1, _A2)
+  args nt aux =
+    (let (tp, (tss, (len, (maskL, (maskR, (a1_map, (a2_map, (donea, _)))))))) =
+       shift_mmuaux (_A1, _A2) args nt aux in
+      (rev donea,
+        (tp, (tss, (len, (maskL,
+                           (maskR, (a1_map, (a2_map, ([], zero_nata))))))))));;
+
+let rec args_agg
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, args_agg, more)) =
+    args_agg;;
+
+let rec aggargs_omega
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+      aggargs_f, more))
+    = aggargs_omega;;
+
+let rec aggargs_g0
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+      aggargs_f, more))
+    = aggargs_g0;;
+
+let rec aggargs_y
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+      aggargs_f, more))
+    = aggargs_y;;
+
+let rec aggargs_n
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+      aggargs_f, more))
+    = aggargs_n;;
+
+let rec aggargs_f
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+      aggargs_f, more))
+    = aggargs_f;;
+
+let rec aggargs_b
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+      aggargs_f, more))
+    = aggargs_b;;
+
+let rec eval_aggargs
+  args =
+    eval_agg (aggargs_n args) (aggargs_g0 args) (aggargs_y args)
+      (aggargs_omega args) (aggargs_b args) (aggargs_f args);;
+
+let rec eval_args_agg
+  args x =
+    (match args_agg args with None -> x
+      | Some aggargs -> eval_aggargs aggargs x);;
+
+let rec eval_mmuauxa (_A1, _A2, _A3)
+  args nt aux =
+    (let (res, auxa) =
+       eval_mmuaux (ceq_event_data, ccompare_event_data) args nt aux in
+     let _ = mapa (eval_args_agg args) res in
+      (mapa (fun _ -> bot_set (_A1, _A2, _A3)) res, auxa));;
 
 let rec find_sub_in (_A1, _A2, _A3)
   x xa1 b = match x, xa1, b with x, [], b -> None
@@ -5942,6 +6012,8 @@ let rec filterQuery (_A1, _A2)
                   (inf_seta (ceq_nat, ccompare_nat) s v)))
           q;;
 
+let rec minus_set (_A1, _A2) a b = inf_seta (_A1, _A2) a (uminus_set b);;
+
 let rec remove_Union_cfi (_B1, _B2)
   xa = Abs_comp_fun_idem (fun x a -> minus_set (_B1, _B2) a (xa x));;
 
@@ -5964,13 +6036,31 @@ let rec merge_option = function (None, None) -> None
 
 let rec merge t1 t2 = mapa merge_option (zip t1 t2);;
 
-let rec insort_key _B
-  f x xa2 = match f, x, xa2 with f, x, [] -> [x]
-    | f, x, y :: ys ->
-        (if less_eq _B.order_linorder.preorder_order.ord_preorder (f x) (f y)
-          then x :: y :: ys else y :: insort_key _B f x ys);;
+let rec part _B
+  f pivot x2 = match f, pivot, x2 with
+    f, pivot, x :: xs ->
+      (let (lts, (eqs, gts)) = part _B f pivot xs in
+       let xa = f x in
+        (if less _B.order_linorder.preorder_order.ord_preorder xa pivot
+          then (x :: lts, (eqs, gts))
+          else (if less _B.order_linorder.preorder_order.ord_preorder pivot xa
+                 then (lts, (eqs, x :: gts)) else (lts, (x :: eqs, gts)))))
+    | f, pivot, [] -> ([], ([], []));;
 
-let rec sort_key _B f xs = foldr (insort_key _B f) xs [];;
+let rec sort_key _B
+  f xs =
+    (match xs with [] -> [] | [_] -> xs
+      | [x; y] ->
+        (if less_eq _B.order_linorder.preorder_order.ord_preorder (f x) (f y)
+          then xs else [y; x])
+      | _ :: _ :: _ :: _ ->
+        (let (lts, (eqs, gts)) =
+           part _B f
+             (f (nth xs
+                  (divide_nata (size_list xs) (nat_of_integer (Z.of_int 2)))))
+             xs
+           in
+          sort_key _B f lts @ eqs @ sort_key _B f gts));;
 
 let rec sorted_list_of_set (_A1, _A2, _A3, _A4)
   = function
@@ -6667,6 +6757,166 @@ let rec mmulti_join (_A1, _A2, _A3)
                                xs @ ys) @
                         l_neg))));;
 
+let rec insert_rank
+  args t (v, m) =
+    (if v then (let group = drop (aggargs_b args) t in
+                let term = meval_trm (aggargs_f args) t in
+                let (new_v, new_list) =
+                  (match
+                    (lookupa
+                       ((ccompare_list (ccompare_option ccompare_event_data)),
+                         (equal_list (equal_option equal_event_data)))
+                       m group,
+                      (term, snd (aggargs_omega args)))
+                    with (None, (EInt terma, EInt _)) -> (true, LInt [terma])
+                    | (None, (EInt _, EFloat _)) -> (false, LInt [])
+                    | (None, (EInt _, EString _)) -> (false, LInt [])
+                    | (None, (EFloat _, _)) -> (false, LInt [])
+                    | (None, (EString _, EInt _)) -> (false, LInt [])
+                    | (None, (EString _, EFloat _)) -> (false, LInt [])
+                    | (None, (EString terma, EString _)) ->
+                      (true, LString [terma])
+                    | (Some (LInt ta), (EInt terma, EInt _)) ->
+                      (true, LInt (insort linorder_integer terma ta))
+                    | (Some (LInt _), (EInt _, EFloat _)) -> (false, LInt [])
+                    | (Some (LInt _), (EInt _, EString _)) -> (false, LInt [])
+                    | (Some (LInt _), (EFloat _, _)) -> (false, LInt [])
+                    | (Some (LInt _), (EString _, _)) -> (false, LInt [])
+                    | (Some (LString _), (EInt _, _)) -> (false, LInt [])
+                    | (Some (LString _), (EFloat _, _)) -> (false, LInt [])
+                    | (Some (LString _), (EString _, EInt _)) ->
+                      (false, LInt [])
+                    | (Some (LString _), (EString _, EFloat _)) ->
+                      (false, LInt [])
+                    | (Some (LString ta), (EString terma, EString _)) ->
+                      (true, LString (insort linorder_string8 terma ta)))
+                  in
+                 (new_v,
+                   (if new_v
+                     then updateb
+                            ((ccompare_list
+                               (ccompare_option ccompare_event_data)),
+                              (equal_list (equal_option equal_event_data)))
+                            group new_list m
+                     else mapping_empty
+                            (ccompare_list
+                              (ccompare_option ccompare_event_data))
+                            (of_phantom mapping_impl_lista))))
+      else (v, m));;
+
+let rec insert_rank_cfc xa = Abs_comp_fun_commute (insert_rank xa);;
+
+let rec insert_sum
+  args t (v, m) =
+    (if v then (let group = drop (aggargs_b args) t in
+                let term = meval_trm (aggargs_f args) t in
+                 (match
+                   (lookupa
+                      ((ccompare_list (ccompare_option ccompare_event_data)),
+                        (equal_list (equal_option equal_event_data)))
+                      m group,
+                     term)
+                   with (None, EInt i) ->
+                     (true,
+                       updateb
+                         ((ccompare_list (ccompare_option ccompare_event_data)),
+                           (equal_list (equal_option equal_event_data)))
+                         group (one_nata, i) m)
+                   | (None, EFloat _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))
+                   | (None, EString _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))
+                   | (Some (cnt, agg_sum), EInt i) ->
+                     (true,
+                       updateb
+                         ((ccompare_list (ccompare_option ccompare_event_data)),
+                           (equal_list (equal_option equal_event_data)))
+                         group (plus_nata cnt one_nata, Z.add agg_sum i) m)
+                   | (Some (_, _), EFloat _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))
+                   | (Some (_, _), EString _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))))
+      else (v, m));;
+
+let rec insert_sum_cfc xa = Abs_comp_fun_commute (insert_sum xa);;
+
+let rec insert_cnt
+  args t (v, m) =
+    (if v then (v, (let group = drop (aggargs_b args) t in
+                     (match
+                       lookupa
+                         ((ccompare_list (ccompare_option ccompare_event_data)),
+                           (equal_list (equal_option equal_event_data)))
+                         m group
+                       with None ->
+                         updateb
+                           ((ccompare_list
+                              (ccompare_option ccompare_event_data)),
+                             (equal_list (equal_option equal_event_data)))
+                           group one_nata m
+                       | Some i ->
+                         updateb
+                           ((ccompare_list
+                              (ccompare_option ccompare_event_data)),
+                             (equal_list (equal_option equal_event_data)))
+                           group (plus_nata i one_nata) m)))
+      else (v, m));;
+
+let rec insert_cnt_cfc xa = Abs_comp_fun_commute (insert_cnt xa);;
+
+let rec insert_maggaux
+  args data aux =
+    (match aux
+      with CntAux m ->
+        (let (v, ma) =
+           set_fold_cfc
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)))
+             (insert_cnt_cfc args) (true, m) data
+           in
+          (v, CntAux ma))
+      | SumAux m ->
+        (let (v, ma) =
+           set_fold_cfc
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)))
+             (insert_sum_cfc args) (true, m) data
+           in
+          (v, SumAux ma))
+      | RankAux m ->
+        (let (v, ma) =
+           set_fold_cfc
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)))
+             (insert_rank_cfc args) (true, m) data
+           in
+          (v, RankAux ma)));;
+
+let rec finiteb (_A1, _A2, _A3) = finite (_A1, _A2, _A3);;
+
+let rec insert_maggauxa
+  args x xa2 = match args, x, xa2 with
+    args, x, Some aux ->
+      (let (v, auxa) = insert_maggaux args x aux in
+        (if v && finiteb
+                   (finite_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                     (ccompare_list (ccompare_option ccompare_event_data)))
+                   x
+          then Some auxa else None))
+    | args, x, None -> None;;
+
 let rec add_new_table_mmsaux (_A1, _A2, _A3)
   args x
     (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
@@ -6676,12 +6926,16 @@ let rec add_new_table_mmsaux (_A1, _A2, _A3)
              (ccompare_list (ccompare_option _A2)),
              (equal_list (equal_option _A3)))
            tuple_since (fun _ -> t)
-           (minus_set
+           (filter
              ((ceq_list (ceq_option _A1)),
                (ccompare_list (ccompare_option _A2)))
-             x (keys (cenum_list, (ceq_list (ceq_option _A1)),
-                       (ccompare_list (ccompare_option _A2)), set_impl_list)
-                 tuple_since))
+             (fun k ->
+               is_none
+                 (lookupa
+                   ((ccompare_list (ccompare_option _A2)),
+                     (equal_list (equal_option _A3)))
+                   tuple_since k))
+             x)
          in
         (if memL (args_ivl args) zero_nata
           then (t, (gc, (maskL,
@@ -6699,6 +6953,38 @@ let rec add_new_table_mmsaux (_A1, _A2, _A3)
                           (maskR,
                             (append_queue (t, x) data_prev,
                               (data_in, (tuple_in, tuple_sincea)))))))));;
+
+let rec add_new_table_mmasaux
+  args x
+    ((nt, (gc, (maskL,
+                 (maskR, (data_prev, (data_in, (tuple_in, tuple_since))))))),
+      aggaux)
+    = (let msaux =
+         add_new_table_mmsaux
+           (ceq_event_data, ccompare_event_data, equal_event_data) args x
+           (nt, (gc, (maskL,
+                       (maskR,
+                         (data_prev, (data_in, (tuple_in, tuple_since)))))))
+         in
+        (match args_agg args with None -> (msaux, aggaux)
+          | Some aggargs ->
+            (msaux,
+              (if memL (args_ivl args) zero_nata
+                then insert_maggauxa aggargs
+                       (filter
+                         ((ceq_list (ceq_option ceq_event_data)),
+                           (ccompare_list
+                             (ccompare_option ccompare_event_data)))
+                         (fun k ->
+                           is_none
+                             (lookupa
+                               ((ccompare_list
+                                  (ccompare_option ccompare_event_data)),
+                                 (equal_list (equal_option equal_event_data)))
+                               tuple_in k))
+                         x)
+                       aggaux
+                else aggaux))));;
 
 let rec takedropWhile_queue
   f q = (match safe_hd q with (None, qa) -> (qa, [])
@@ -6718,7 +7004,7 @@ let rec valid_tuple (_A1, _A2)
           tuple_since asa
         with None -> false | Some ta -> less_eq_nat ta t));;
 
-let rec add_new_ts_mmsauxa (_A1, _A2, _A3)
+let rec add_new_ts_mmsaux (_A1, _A2, _A3)
   args nt
     (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
     = (let i = args_ivl args in
@@ -6745,10 +7031,336 @@ let rec add_new_ts_mmsauxa (_A1, _A2, _A3)
                     (maskR,
                       (data_preva, (data_ina, (tuple_ina, tuple_since))))))));;
 
+let rec add_new_ts_mmasauxa
+  args nt
+    ((t, (gc, (maskL,
+                (maskR, (data_prev, (data_in, (tuple_in, tuple_since))))))),
+      aggaux)
+    = (match args_agg args
+        with None ->
+          (add_new_ts_mmsaux
+             (ceq_event_data, ccompare_event_data, equal_event_data) args nt
+             (t, (gc, (maskL,
+                        (maskR,
+                          (data_prev, (data_in, (tuple_in, tuple_since))))))),
+            aggaux)
+        | Some aggargs ->
+          (let i = args_ivl args in
+           let (data_preva, move) =
+             takedropWhile_queue (fun (ta, _) -> memL i (minus_nata nt ta))
+               data_prev
+             in
+           let data_ina =
+             fold (fun (ta, x) -> append_queue (ta, x)) move data_in in
+           let a =
+             fold (fun (ta, x) (tuple_ina, aggauxa) ->
+                    (let new_set =
+                       filter
+                         ((ceq_list (ceq_option ceq_event_data)),
+                           (ccompare_list
+                             (ccompare_option ccompare_event_data)))
+                         (fun asa ->
+                           valid_tuple (ccompare_event_data, equal_event_data)
+                             tuple_since (ta, asa))
+                         x
+                       in
+                      (upd_set
+                         (finite_UNIV_list,
+                           (ceq_list (ceq_option ceq_event_data)),
+                           (ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                           (equal_list (equal_option equal_event_data)))
+                         tuple_ina (fun _ -> ta) new_set,
+                        insert_maggauxa aggargs
+                          (filter
+                            ((ceq_list (ceq_option ceq_event_data)),
+                              (ccompare_list
+                                (ccompare_option ccompare_event_data)))
+                            (fun k ->
+                              is_none
+                                (lookupa
+                                  ((ccompare_list
+                                     (ccompare_option ccompare_event_data)),
+                                    (equal_list
+                                      (equal_option equal_event_data)))
+                                  tuple_ina k))
+                            new_set)
+                          aggauxa)))
+               move (tuple_in, aggaux)
+             in
+           let (tuple_ina, aa) = a in
+            ((nt, (gc, (maskL,
+                         (maskR,
+                           (data_preva,
+                             (data_ina, (tuple_ina, tuple_since))))))),
+              aa)));;
+
+let rec remove1_always _A
+  x xa1 = match x, xa1 with x, [] -> []
+    | x, [y] -> []
+    | x, y :: v :: va ->
+        (if eq _A x y then v :: va else y :: remove1_always _A x (v :: va));;
+
+let rec delete_rank
+  args t (v, m) =
+    (if v then (let group = drop (aggargs_b args) t in
+                let term = meval_trm (aggargs_f args) t in
+                let a =
+                  (match
+                    (lookupa
+                       ((ccompare_list (ccompare_option ccompare_event_data)),
+                         (equal_list (equal_option equal_event_data)))
+                       m group,
+                      term)
+                    with (None, _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LInt []), EInt terma) ->
+                      (true,
+                        updateb
+                          ((ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                            (equal_list (equal_option equal_event_data)))
+                          group (LInt (remove1_always equal_integer terma []))
+                          m)
+                    | (Some (LInt []), EFloat _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LInt []), EString _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LInt [_]), EInt _) ->
+                      (true,
+                        deletea
+                          ((ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                            (equal_list (equal_option equal_event_data)))
+                          group m)
+                    | (Some (LInt [_]), EFloat _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LInt [_]), EString _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LInt (ta :: ab :: lista)), EInt terma) ->
+                      (true,
+                        updateb
+                          ((ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                            (equal_list (equal_option equal_event_data)))
+                          group
+                          (LInt (remove1_always equal_integer terma
+                                  (ta :: ab :: lista)))
+                          m)
+                    | (Some (LInt (_ :: _ :: _)), EFloat _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LInt (_ :: _ :: _)), EString _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString []), EInt _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString []), EFloat _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString []), EString terma) ->
+                      (true,
+                        updateb
+                          ((ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                            (equal_list (equal_option equal_event_data)))
+                          group
+                          (LString (remove1_always equal_string8 terma [])) m)
+                    | (Some (LString [_]), EInt _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString [_]), EFloat _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString [_]), EString _) ->
+                      (true,
+                        deletea
+                          ((ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                            (equal_list (equal_option equal_event_data)))
+                          group m)
+                    | (Some (LString (_ :: _ :: _)), EInt _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString (_ :: _ :: _)), EFloat _) ->
+                      (false,
+                        mapping_empty
+                          (ccompare_list (ccompare_option ccompare_event_data))
+                          (of_phantom mapping_impl_lista))
+                    | (Some (LString (ta :: ab :: lista)), EString terma) ->
+                      (true,
+                        updateb
+                          ((ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                            (equal_list (equal_option equal_event_data)))
+                          group
+                          (LString
+                            (remove1_always equal_string8 terma
+                              (ta :: ab :: lista)))
+                          m))
+                  in
+                let (aa, b) = a in
+                 (aa, b))
+      else (v, m));;
+
+let rec delete_rank_cfc xa = Abs_comp_fun_commute (delete_rank xa);;
+
+let rec delete_sum
+  args t (v, m) =
+    (if v then (let group = drop (aggargs_b args) t in
+                let term = meval_trm (aggargs_f args) t in
+                 (match
+                   (lookupa
+                      ((ccompare_list (ccompare_option ccompare_event_data)),
+                        (equal_list (equal_option equal_event_data)))
+                      m group,
+                     term)
+                   with (None, _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))
+                   | (Some (cnt, agg_sum), EInt i) ->
+                     (true,
+                       (if equal_nata cnt one_nata
+                         then deletea
+                                ((ccompare_list
+                                   (ccompare_option ccompare_event_data)),
+                                  (equal_list (equal_option equal_event_data)))
+                                group m
+                         else updateb
+                                ((ccompare_list
+                                   (ccompare_option ccompare_event_data)),
+                                  (equal_list (equal_option equal_event_data)))
+                                group (minus_nata cnt one_nata, Z.sub agg_sum i)
+                                m))
+                   | (Some (_, _), EFloat _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))
+                   | (Some (_, _), EString _) ->
+                     (false,
+                       mapping_empty
+                         (ccompare_list (ccompare_option ccompare_event_data))
+                         (of_phantom mapping_impl_lista))))
+      else (v, m));;
+
+let rec delete_sum_cfc xa = Abs_comp_fun_commute (delete_sum xa);;
+
+let rec delete_cnt
+  args t (v, m) =
+    (if v then (v, (let group = drop (aggargs_b args) t in
+                     (match
+                       lookupa
+                         ((ccompare_list (ccompare_option ccompare_event_data)),
+                           (equal_list (equal_option equal_event_data)))
+                         m group
+                       with None -> m
+                       | Some i ->
+                         (if equal_nata i one_nata
+                           then deletea
+                                  ((ccompare_list
+                                     (ccompare_option ccompare_event_data)),
+                                    (equal_list
+                                      (equal_option equal_event_data)))
+                                  group m
+                           else updateb
+                                  ((ccompare_list
+                                     (ccompare_option ccompare_event_data)),
+                                    (equal_list
+                                      (equal_option equal_event_data)))
+                                  group (minus_nata i one_nata) m))))
+      else (v, m));;
+
+let rec delete_cnt_cfc xa = Abs_comp_fun_commute (delete_cnt xa);;
+
+let rec delete_maggaux
+  args data aux =
+    (match aux
+      with CntAux m ->
+        (let (v, ma) =
+           set_fold_cfc
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)))
+             (delete_cnt_cfc args) (true, m) data
+           in
+          (v, CntAux ma))
+      | SumAux m ->
+        (let (v, ma) =
+           set_fold_cfc
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)))
+             (delete_sum_cfc args) (true, m) data
+           in
+          (v, SumAux ma))
+      | RankAux m ->
+        (let (v, ma) =
+           set_fold_cfc
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)))
+             (delete_rank_cfc args) (true, m) data
+           in
+          (v, RankAux ma)));;
+
+let rec delete_maggauxa
+  args x xa2 = match args, x, xa2 with args, x, None -> None
+    | args, x, Some aux ->
+        (match delete_maggaux args x aux with (true, auxa) -> Some auxa
+          | (false, _) -> None);;
+
 let rec dropWhile_queue
   f q = (match safe_hd q with (None, qa) -> qa
           | (Some a, qa) ->
             (if f a then dropWhile_queue f (tl_queue qa) else qa));;
+
+let rec filter_set_fold_fun _A (_B1, _B2, _B3)
+  t a (m, x) =
+    (match lookupa (_B2, _B3) m a with None -> (m, x)
+      | Some u ->
+        (if eq _A t u then (deletea (_B2, _B3) a m, insert (_B1, _B2) a x)
+          else (m, x)));;
+
+let rec filter_cfia _B (_A1, _A2, _A3)
+  xa = Abs_comp_fun_idem (filter_set_fold_fun _B (_A1, _A2, _A3) xa);;
+
+let rec filter_seta (_A1, _A2, _A3, _A4, _A5) _B
+  m a t =
+    (if finite (_A1, _A2, _A3) a
+      then set_fold_cfi (_A2, _A3) (filter_cfia _B (_A2, _A3, _A4) t)
+             (m, bot_set (_A2, _A3, _A5)) a
+      else failwith "upd_set: infinite"
+             (fun _ -> filter_seta (_A1, _A2, _A3, _A4, _A5) _B m a t));;
 
 let rec filter_cfi _B (_A1, _A2)
   xa = Abs_comp_fun_idem
@@ -6788,10 +7400,99 @@ let rec shift_end (_A1, _A2, _A3)
                    (maskR,
                      (data_preva, (data_ina, (tuple_ina, tuple_since))))))));;
 
-let rec add_new_ts_mmsaux (_A1, _A2, _A3)
-  args nt aux =
-    add_new_ts_mmsauxa (_A1, _A2, _A3) args nt
-      (shift_end (_A1, _A2, _A3) args nt aux);;
+let rec shift_end_mmasaux
+  args nt
+    ((t, (gc, (maskL,
+                (maskR, (data_prev, (data_in, (tuple_in, tuple_since))))))),
+      aggaux)
+    = (match args_agg args
+        with None ->
+          (shift_end (ceq_event_data, ccompare_event_data, equal_event_data)
+             args nt
+             (t, (gc, (maskL,
+                        (maskR,
+                          (data_prev, (data_in, (tuple_in, tuple_since))))))),
+            aggaux)
+        | Some aggargs ->
+          (let i = args_ivl args in
+           let data_preva =
+             dropWhile_queue (fun (ta, _) -> not (memR i (minus_nata nt ta)))
+               data_prev
+             in
+           let (data_ina, discard) =
+             takedropWhile_queue
+               (fun (ta, _) -> not (memR i (minus_nata nt ta))) data_in
+             in
+           let a =
+             fold (fun (ta, x) (tuple_ina, aux) ->
+                    (let (tuple_inb, to_del) =
+                       filter_seta
+                         (finite_UNIV_list,
+                           (ceq_list (ceq_option ceq_event_data)),
+                           (ccompare_list
+                             (ccompare_option ccompare_event_data)),
+                           (equal_list (equal_option equal_event_data)),
+                           set_impl_list)
+                         equal_nat tuple_ina x ta
+                       in
+                      (tuple_inb, delete_maggauxa aggargs to_del aux)))
+               discard (tuple_in, aggaux)
+             in
+           let (tuple_ina, aa) = a in
+            ((t, (gc, (maskL,
+                        (maskR,
+                          (data_preva,
+                            (data_ina, (tuple_ina, tuple_since))))))),
+              aa)));;
+
+let rec add_new_ts_mmasaux
+  args nt aux = add_new_ts_mmasauxa args nt (shift_end_mmasaux args nt aux);;
+
+let rec init_maggaux
+  args =
+    (if true
+      then (true,
+             (match fst (aggargs_omega args)
+               with Agg_Cnt ->
+                 CntAux
+                   (mapping_empty
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (of_phantom mapping_impl_lista))
+               | Agg_Min ->
+                 RankAux
+                   (mapping_empty
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (of_phantom mapping_impl_lista))
+               | Agg_Max ->
+                 RankAux
+                   (mapping_empty
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (of_phantom mapping_impl_lista))
+               | Agg_Sum ->
+                 SumAux
+                   (mapping_empty
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (of_phantom mapping_impl_lista))
+               | Agg_Avg ->
+                 SumAux
+                   (mapping_empty
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (of_phantom mapping_impl_lista))
+               | Agg_Med ->
+                 RankAux
+                   (mapping_empty
+                     (ccompare_list (ccompare_option ccompare_event_data))
+                     (of_phantom mapping_impl_lista))))
+      else (false,
+             CntAux
+               (mapping_empty
+                 (ccompare_list (ccompare_option ccompare_event_data))
+                 (of_phantom mapping_impl_lista))));;
+
+let rec init_maggauxa
+  args =
+    (match init_maggaux args with (true, aux) -> Some aux
+      | (false, _) -> None);;
 
 let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (deletea (_A1, _A2));;
 
@@ -6801,7 +7502,7 @@ let rec filter_join (_A1, _A2, _A3, _A4)
           (finite (_A1.finite_UNIV_card_UNIV, _A2, _A3) a &&
             less_nat (card (_A1, _A2, _A3) a) (size _A3 m))
       then set_fold_cfi (_A2, _A3) (filter_not_in_cfi (_A3, _A4)) m a
-      else filterb _A3
+      else filterc _A3
              (fun asa _ ->
                (if pos then member (_A2, _A3) asa a
                  else not (member (_A2, _A3) asa a)))
@@ -6857,13 +7558,13 @@ let rec join_mmsaux (_A1, _A2, _A3)
                                        (data_in,
  (tuple_ina, tuple_sincea))))))))
                  else (let tuple_ina =
-                         filterb (ccompare_list (ccompare_option _A2))
+                         filterc (ccompare_list (ccompare_option _A2))
                            (fun asa _ ->
                              proj_tuple_in_join (_A1, _A2) pos maskL asa x)
                            tuple_in
                          in
                        let tuple_sincea =
-                         filterb (ccompare_list (ccompare_option _A2))
+                         filterc (ccompare_list (ccompare_option _A2))
                            (fun asa _ ->
                              proj_tuple_in_join (_A1, _A2) pos maskL asa x)
                            tuple_since
@@ -6873,6 +7574,146 @@ let rec join_mmsaux (_A1, _A2, _A3)
                                      (data_prev,
                                        (data_in,
  (tuple_ina, tuple_sincea)))))))))));;
+
+let rec filter_join_fold_fun (_A1, _A2, _A3)
+  xa (m, x) =
+    (deletea (_A2, _A3) xa m,
+      (match lookupa (_A2, _A3) m xa with None -> x
+        | Some _ -> insert (_A1, _A2) xa x));;
+
+let rec filter_not_in_cfia (_A1, _A2, _A3)
+  = Abs_comp_fun_idem (filter_join_fold_fun (_A1, _A2, _A3));;
+
+let rec filter_joina (_A1, _A2, _A3, _A4, _A5, _A6)
+  pos a m =
+    (if not pos &&
+          (finite (_A1.finite_UNIV_card_UNIV, _A3, _A4) a &&
+            less_nat (card (_A1, _A3, _A4) a) (size _A4 m))
+      then set_fold_cfi (_A3, _A4) (filter_not_in_cfia (_A3, _A4, _A5))
+             (m, bot_set (_A3, _A4, _A6)) a
+      else (filterc _A4
+              (fun asa _ ->
+                (if pos then member (_A3, _A4) asa a
+                  else not (member (_A3, _A4) asa a)))
+              m,
+             filter (_A3, _A4)
+               (fun k ->
+                 is_none
+                   (lookupa (_A4, _A5)
+                     (filterc _A4
+                       (fun asa _ ->
+                         (if pos then member (_A3, _A4) asa a
+                           else not (member (_A3, _A4) asa a)))
+                       m)
+                     k))
+               (keys (_A2, _A3, _A4, _A6) m)));;
+
+let rec join_mmasaux
+  args x
+    ((t, (gc, (maskL,
+                (maskR, (data_prev, (data_in, (tuple_in, tuple_since))))))),
+      aggaux)
+    = (match args_agg args
+        with None ->
+          (join_mmsaux (ceq_event_data, ccompare_event_data, equal_event_data)
+             args x
+             (t, (gc, (maskL,
+                        (maskR,
+                          (data_prev, (data_in, (tuple_in, tuple_since))))))),
+            aggaux)
+        | Some aggargs ->
+          (let pos = args_pos args in
+            (if equal_lista equal_bool maskL maskR
+              then (let (tuple_ina, to_del) =
+                      filter_joina
+                        (card_UNIV_list, cenum_list,
+                          (ceq_list (ceq_option ceq_event_data)),
+                          (ccompare_list (ccompare_option ccompare_event_data)),
+                          (equal_list (equal_option equal_event_data)),
+                          set_impl_list)
+                        pos x tuple_in
+                      in
+                    let tuple_sincea =
+                      filter_join
+                        (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                          (ccompare_list (ccompare_option ccompare_event_data)),
+                          (equal_list (equal_option equal_event_data)))
+                        pos x tuple_since
+                      in
+                     ((t, (gc, (maskL,
+                                 (maskR,
+                                   (data_prev,
+                                     (data_in, (tuple_ina, tuple_sincea))))))),
+                       delete_maggauxa aggargs to_del aggaux))
+              else (if list_all not maskL
+                     then (let nones = replicate (size_list maskL) None in
+                           let take_all =
+                             equal_boola pos
+                               (member
+                                 ((ceq_list (ceq_option ceq_event_data)),
+                                   (ccompare_list
+                                     (ccompare_option ccompare_event_data)))
+                                 nones x)
+                             in
+                           let tuple_ina =
+                             (if take_all then tuple_in
+                               else mapping_empty
+                                      (ccompare_list
+(ccompare_option ccompare_event_data))
+                                      (of_phantom mapping_impl_lista))
+                             in
+                           let aggauxa =
+                             (if take_all then aggaux
+                               else init_maggauxa aggargs)
+                             in
+                           let tuple_sincea =
+                             (if take_all then tuple_since
+                               else mapping_empty
+                                      (ccompare_list
+(ccompare_option ccompare_event_data))
+                                      (of_phantom mapping_impl_lista))
+                             in
+                            ((t, (gc, (maskL,
+(maskR, (data_prev, (data_in, (tuple_ina, tuple_sincea))))))),
+                              aggauxa))
+                     else (let tuple_ina =
+                             filterc
+                               (ccompare_list
+                                 (ccompare_option ccompare_event_data))
+                               (fun asa _ ->
+                                 proj_tuple_in_join
+                                   (ceq_event_data, ccompare_event_data) pos
+                                   maskL asa x)
+                               tuple_in
+                             in
+                           let tuple_sincea =
+                             filterc
+                               (ccompare_list
+                                 (ccompare_option ccompare_event_data))
+                               (fun asa _ ->
+                                 proj_tuple_in_join
+                                   (ceq_event_data, ccompare_event_data) pos
+                                   maskL asa x)
+                               tuple_since
+                             in
+                            ((t, (gc, (maskL,
+(maskR, (data_prev, (data_in, (tuple_ina, tuple_sincea))))))),
+                              delete_maggauxa aggargs
+                                (filter
+                                  ((ceq_list (ceq_option ceq_event_data)),
+                                    (ccompare_list
+                                      (ccompare_option ccompare_event_data)))
+                                  (fun k ->
+                                    is_none
+                                      (lookupa
+((ccompare_list (ccompare_option ccompare_event_data)),
+  (equal_list (equal_option equal_event_data)))
+tuple_ina k))
+                                  (keys (cenum_list,
+  (ceq_list (ceq_option ceq_event_data)),
+  (ccompare_list (ccompare_option ccompare_event_data)), set_impl_list)
+                                    tuple_in))
+                                aggaux))))));;
 
 let rec gc_mmsaux (_A1, _A2)
   (nt, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
@@ -6939,7 +7780,7 @@ let rec gc_mmsaux (_A1, _A2)
                      (linearize data_in))))
          in
        let tuple_sincea =
-         filterb (ccompare_list (ccompare_option _A2))
+         filterc (ccompare_list (ccompare_option _A2))
            (fun asa _ ->
              member
                ((ceq_list (ceq_option _A1)),
@@ -6951,50 +7792,178 @@ let rec gc_mmsaux (_A1, _A2)
                     (maskR,
                       (data_prev, (data_in, (tuple_in, tuple_sincea))))))));;
 
-let rec gc_join_mmsaux (_A1, _A2, _A3)
+let rec gc_join_mmasaux
   args x
-    (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
+    ((t, (gc, (maskL,
+                (maskR, (data_prev, (data_in, (tuple_in, tuple_since))))))),
+      aux)
     = (if not (memR (args_ivl args) (minus_nata t gc))
-        then join_mmsaux (_A1, _A2, _A3) args x
-               (gc_mmsaux (_A1, _A2)
-                 (t, (gc, (maskL,
-                            (maskR,
-                              (data_prev,
-                                (data_in, (tuple_in, tuple_since))))))))
-        else join_mmsaux (_A1, _A2, _A3) args x
-               (t, (gc, (maskL,
-                          (maskR,
-                            (data_prev,
-                              (data_in, (tuple_in, tuple_since))))))));;
+        then join_mmasaux args x
+               (gc_mmsaux (ceq_event_data, ccompare_event_data)
+                  (t, (gc, (maskL,
+                             (maskR,
+                               (data_prev,
+                                 (data_in, (tuple_in, tuple_since))))))),
+                 aux)
+        else join_mmasaux args x
+               ((t, (gc, (maskL,
+                           (maskR,
+                             (data_prev,
+                               (data_in, (tuple_in, tuple_since))))))),
+                 aux));;
 
-let rec result_mmsaux (_A1, _A2)
-  args (nt, (gc, (maskL,
-                   (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
-    = keys (cenum_list, (ceq_list (ceq_option _A1)),
-             (ccompare_list (ccompare_option _A2)), set_impl_list)
-        tuple_in;;
+let rec get_map_result (_A1, _A2, _A3)
+  m y f =
+    image ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
+      ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)),
+        set_impl_list)
+      (fun k ->
+        (match
+          lookupa
+            ((ccompare_list (ccompare_option _A2)),
+              (equal_list (equal_option _A3)))
+            m k
+          with None -> k | Some i -> list_update k y (Some (f i))))
+      (keys (cenum_list, (ceq_list (ceq_option _A1)),
+              (ccompare_list (ccompare_option _A2)), set_impl_list)
+        m);;
+
+let rec get_edata_list
+  x0 n = match x0, n with
+    LString l, n -> EString (nth (sort_key linorder_string8 (fun x -> x) l) n)
+    | LInt l, n -> EInt (nth (sort_key linorder_integer (fun x -> x) l) n);;
+
+let rec get_length
+  l = (match l with LInt a -> size_list a | LString a -> size_list a);;
+
+let rec result_maggaux
+  (Aggargs_ext (cols, n, g0, y, omega, b, f, ())) aux =
+    (match aux
+      with CntAux m ->
+        (if g0 && is_empty
+                    (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                      (cproper_interval_list
+                        (ccompare_option ccompare_event_data)))
+                    (keys (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                            (ccompare_list
+                              (ccompare_option ccompare_event_data)),
+                            set_impl_list)
+                      m)
+          then singleton_table (ceq_event_data, ccompare_event_data) n y
+                 (eval_agg_op omega
+                   (set_empty
+                     ((ceq_prod ceq_event_data ceq_enat),
+                       (ccompare_prod ccompare_event_data ccompare_enat))
+                     (of_phantom
+                       (set_impl_proda set_impl_event_data set_impl_enat))))
+          else get_map_result
+                 (ceq_event_data, ccompare_event_data, equal_event_data) m y
+                 (fun x -> EInt (integer_of_int (int_of_nat x))))
+      | SumAux m ->
+        (if g0 && is_empty
+                    (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                      (cproper_interval_list
+                        (ccompare_option ccompare_event_data)))
+                    (keys (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                            (ccompare_list
+                              (ccompare_option ccompare_event_data)),
+                            set_impl_list)
+                      m)
+          then singleton_table (ceq_event_data, ccompare_event_data) n y
+                 (eval_agg_op omega
+                   (set_empty
+                     ((ceq_prod ceq_event_data ceq_enat),
+                       (ccompare_prod ccompare_event_data ccompare_enat))
+                     (of_phantom
+                       (set_impl_proda set_impl_event_data set_impl_enat))))
+          else (match fst omega
+                 with Agg_Sum ->
+                   get_map_result
+                     (ceq_event_data, ccompare_event_data, equal_event_data) m y
+                     (fun k -> EInt (snd k))
+                 | Agg_Avg ->
+                   get_map_result
+                     (ceq_event_data, ccompare_event_data, equal_event_data) m y
+                     (fun x ->
+                       EFloat
+                         (Stdlib.(/.)
+                           (double_of_event_data
+                             (EInt (snd (let (xa, a) = x in
+  (int_of_nat xa, a)))))
+                           (double_of_int
+                             (fst (let (xa, a) = x in (int_of_nat xa, a))))))))
+      | RankAux m ->
+        (if g0 && is_empty
+                    (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
+                      (cproper_interval_list
+                        (ccompare_option ccompare_event_data)))
+                    (keys (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                            (ccompare_list
+                              (ccompare_option ccompare_event_data)),
+                            set_impl_list)
+                      m)
+          then singleton_table (ceq_event_data, ccompare_event_data) n y
+                 (eval_agg_op omega
+                   (set_empty
+                     ((ceq_prod ceq_event_data ceq_enat),
+                       (ccompare_prod ccompare_event_data ccompare_enat))
+                     (of_phantom
+                       (set_impl_proda set_impl_event_data set_impl_enat))))
+          else (match fst omega
+                 with Agg_Min ->
+                   get_map_result
+                     (ceq_event_data, ccompare_event_data, equal_event_data) m y
+                     (fun k -> get_edata_list k zero_nata)
+                 | Agg_Max ->
+                   get_map_result
+                     (ceq_event_data, ccompare_event_data, equal_event_data) m y
+                     (fun k ->
+                       get_edata_list k (minus_nata (get_length k) one_nata))
+                 | Agg_Med ->
+                   get_map_result
+                     (ceq_event_data, ccompare_event_data, equal_event_data) m y
+                     (fun k ->
+                       (let u = get_length k in
+                        let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
+                        let a =
+                          (if dvd (equal_nat, semidom_modulo_nat)
+                                (nat_of_integer (Z.of_int 2)) u
+                            then Stdlib.(+.)
+                                   (double_of_event_data
+                                     (get_edata_list k
+                                       (minus_nata ua one_nata)))
+                                   (Stdlib.(/.)
+                                     (double_of_event_data
+                                       (get_edata_list k ua))
+                                     (double_of_int
+                                       (Int_of_integer (Z.of_int 2))))
+                            else double_of_event_data (get_edata_list k ua))
+                          in
+                         EFloat a)))));;
+
+let rec result_mmasaux
+  args ((nt, (gc, (maskL,
+                    (maskR, (data_prev, (data_in, (tuple_in, tuple_since))))))),
+         aggaux)
+    = (match (args_agg args, aggaux)
+        with (None, _) ->
+          keys (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                 (ccompare_list (ccompare_option ccompare_event_data)),
+                 set_impl_list)
+            tuple_in
+        | (Some aggargs, None) ->
+          eval_aggargs aggargs
+            (keys (cenum_list, (ceq_list (ceq_option ceq_event_data)),
+                    (ccompare_list (ccompare_option ccompare_event_data)),
+                    set_impl_list)
+              tuple_in)
+        | (Some aggargs, Some a) -> result_maggaux aggargs a);;
 
 let rec mupdate_since
   args rel1 rel2 nt aux =
-    (let aux0 =
-       gc_join_mmsaux (ceq_event_data, ccompare_event_data, equal_event_data)
-         args rel1
-         (add_new_ts_mmsaux
-           (ceq_event_data, ccompare_event_data, equal_event_data) args nt aux)
-       in
-     let auxa =
-       add_new_table_mmsaux
-         (ceq_event_data, ccompare_event_data, equal_event_data) args rel2 aux0
-       in
-      (result_mmsaux (ceq_event_data, ccompare_event_data) args auxa, auxa));;
-
-let rec eval_mmuaux (_A1, _A2)
-  args nt aux =
-    (let (tp, (tss, (len, (maskL, (maskR, (a1_map, (a2_map, (donea, _)))))))) =
-       shift_mmuaux (_A1, _A2) args nt aux in
-      (rev donea,
-        (tp, (tss, (len, (maskL,
-                           (maskR, (a1_map, (a2_map, ([], zero_nata))))))))));;
+    (let aux0 = gc_join_mmasaux args rel1 (add_new_ts_mmasaux args nt aux) in
+     let auxa = add_new_table_mmasaux args rel2 aux0 in
+      (result_mmasaux args auxa, auxa));;
 
 let rec eval_constraint0
   xa0 x y = match xa0, x, y with MEq, x, y -> equal_event_dataa x y
@@ -7200,6 +8169,10 @@ let rec eval_matchF
                  (rel :: xs, aa))
           else ([], (t, (rels, rel)) :: aux));;
 
+let rec args_n
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, args_agg, more)) =
+    args_n;;
+
 let rec meval
   n ts db x3 = match n, ts, db, x3 with
     n, ts, db, MMatchF (i, mr, mrs, phi_s, bufa, nts, t, auxa) ->
@@ -7226,27 +8199,34 @@ let rec meval
             (fun (buf, ntsa) ->
               (zs, MMatchP (i, mr, mrs, phi_sa, buf, ntsa, auxa))))
             b)
-    | n, ts, db, MUntil (args, phi, psi, bufb, nts, t, auxc) ->
-        (let (xs, phia) = meval n ts db phi in
-         let (ys, psia) = meval n ts db psi in
+    | n, ts, db, MUntil (args, phi, psi, bufb, nts, t, auxb) ->
+        (let (xs, phia) = meval (args_n args) ts db phi in
+         let (ys, psia) = meval (args_n args) ts db psi in
          let (aux, (buf, ntsa)) =
-           mbuf2t_take (add_new_mmuaux args) auxc (mbuf2_add xs ys bufb)
-             (nts @ ts)
+           mbuf2t_take
+             (add_new_mmuaux
+               (ceq_event_data, ccompare_event_data, equal_event_data) args)
+             auxb (mbuf2_add xs ys bufb) (nts @ ts)
            in
          let nt = lookahead_ts ntsa nts ts t in
          let (zs, auxa) =
-           eval_mmuaux (ceq_event_data, ccompare_event_data) args nt aux in
+           eval_mmuauxa
+             ((ceq_list (ceq_option ceq_event_data)),
+               (ccompare_list (ccompare_option ccompare_event_data)),
+               set_impl_list)
+             args nt aux
+           in
           (zs, MUntil (args, phia, psia, buf, ntsa, nt, auxa)))
-    | n, ts, db, MSince (args, phi, psi, bufb, nts, auxb) ->
-        (let (xs, phia) = meval n ts db phi in
-         let (ys, psia) = meval n ts db psi in
+    | n, ts, db, MSince (args, phi, psi, bufb, nts, auxc) ->
+        (let (xs, phia) = meval (args_n args) ts db phi in
+         let (ys, psia) = meval (args_n args) ts db psi in
          let a =
            mbuf2t_take
              (fun r1 r2 t (zs, aux) ->
                (let a = mupdate_since args r1 r2 t aux in
                 let (z, aa) = a in
                  (zs @ [z], aa)))
-             ([], auxb) (mbuf2_add xs ys bufb) (nts @ ts)
+             ([], auxc) (mbuf2_add xs ys bufb) (nts @ ts)
            in
          let (aa, b) = a in
           (let (zs, aux) = aa in
@@ -7422,14 +8402,13 @@ let rec meval
 
 let mapping_impl_nat : (nat, mapping_impla) phantom = Phantom Mapping_RBT;;
 
-let rec args_n
-  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_n;;
-
 let rec args_R
-  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_R;;
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, args_agg, more)) =
+    args_R;;
 
 let rec args_L
-  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, more)) = args_L;;
+  (Args_ext (args_ivl, args_n, args_L, args_R, args_pos, args_agg, more)) =
+    args_L;;
 
 let rec init_mmuaux _A
   args =
@@ -7446,6 +8425,19 @@ let rec init_mmuaux _A
                    (mapping_empty ccompare_nat (of_phantom mapping_impl_nat)),
                   ([], zero_nata))))))));;
 
+let rec minit_until
+  minit0 n agg phi i psi =
+    (let args =
+       (fun b -> init_args i n (fvi zero_nata phi) (fvi zero_nata psi) b agg) in
+      (if safe_formula phi
+        then MUntil
+               (args true, minit0 n phi, minit0 n psi, ([], []), [], zero_nata,
+                 init_mmuaux ccompare_event_data (args true))
+        else (let Neg phia = phi in
+               MUntil
+                 (args false, minit0 n phia, minit0 n psi, ([], []), [],
+                   zero_nata, init_mmuaux ccompare_event_data (args false)))));;
+
 let rec init_mmsaux _A
   args =
     (zero_nata,
@@ -7458,6 +8450,26 @@ let rec init_mmsaux _A
                    (of_phantom mapping_impl_lista),
                   mapping_empty (ccompare_list (ccompare_option _A))
                     (of_phantom mapping_impl_lista))))))));;
+
+let rec init_mmasaux
+  args =
+    (match args_agg args
+      with None -> (init_mmsaux ccompare_event_data args, None)
+      | Some aggargs ->
+        (init_mmsaux ccompare_event_data args, init_maggauxa aggargs));;
+
+let rec minit_since
+  minit0 n agg phi i psi =
+    (let args =
+       (fun b -> init_args i n (fvi zero_nata phi) (fvi zero_nata psi) b agg) in
+      (if safe_formula phi
+        then MSince
+               (args true, minit0 n phi, minit0 n psi, ([], []), [],
+                 init_mmasaux (args true))
+        else (let Neg phia = phi in
+               MSince
+                 (args false, minit0 n phia, minit0 n psi, ([], []), [],
+                   init_mmasaux (args false)))));;
 
 let rec split_constraint
   = function Eq (t1, t2) -> (t1, (true, (MEq, t2)))
@@ -7535,6 +8547,9 @@ let rec split_assignment
     | uu, MatchF (v, va) -> failwith "undefined"
     | uu, MatchP (v, va) -> failwith "undefined";;
 
+let rec init_aggargs
+  cols n g0 y omega b f = Aggargs_ext (cols, n, g0, y, omega, b, f, ());;
+
 let rec minit0
   n x1 = match n, x1 with
     n, Neg phi ->
@@ -7572,44 +8587,46 @@ let rec minit0
           MAnds (vpos, vneg, mpos @ mneg, replicate (size_list l) []))
     | n, Exists phi -> MExists (minit0 (suc n) phi)
     | n, Agg (y, omega, b, f, phi) ->
-        MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                (fvi zero_nata phi)
-                (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b)),
-               y, omega, b, f, minit0 (plus_nata b n) phi)
+        (let default =
+           MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                   (fvi zero_nata phi)
+                   (set (ceq_nat, ccompare_nat, set_impl_nat)
+                     (upt zero_nata b)),
+                  y, omega, b, f, minit0 (plus_nata b n) phi)
+           in
+          (match phi with Pred (_, _) -> default | Let (_, _, _) -> default
+            | Eq (_, _) -> default | Less (_, _) -> default
+            | LessEq (_, _) -> default | Neg _ -> default | Or (_, _) -> default
+            | And (_, _) -> default | Ands _ -> default | Exists _ -> default
+            | Agg (_, _, _, _, _) -> default | Prev (_, _) -> default
+            | Next (_, _) -> default
+            | Since (phia, i, psi) ->
+              (let agg =
+                 Some (init_aggargs (fvi zero_nata phi) n
+                        (subset
+                          (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                          (fvi zero_nata phi)
+                          (set (ceq_nat, ccompare_nat, set_impl_nat)
+                            (upt zero_nata b)))
+                        y omega b f)
+                 in
+                minit_since minit0 (plus_nata b n) agg phia i psi)
+            | Until (phia, i, psi) ->
+              (let agg =
+                 Some (init_aggargs (fvi zero_nata phi) n
+                        (subset
+                          (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                          (fvi zero_nata phi)
+                          (set (ceq_nat, ccompare_nat, set_impl_nat)
+                            (upt zero_nata b)))
+                        y omega b f)
+                 in
+                minit_until minit0 (plus_nata b n) agg phia i psi)
+            | MatchF (_, _) -> default | MatchP (_, _) -> default))
     | n, Prev (i, phi) -> MPrev (i, minit0 n phi, true, [], [])
     | n, Next (i, phi) -> MNext (i, minit0 n phi, true, [])
-    | n, Since (phi, i, psi) ->
-        (if safe_formula phi
-          then MSince
-                 (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   minit0 n phi, minit0 n psi, ([], []), [],
-                   init_mmsaux ccompare_event_data
-                     (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
-                       true))
-          else (let Neg phia = phi in
-                 MSince
-                   (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                      false,
-                     minit0 n phia, minit0 n psi, ([], []), [],
-                     init_mmsaux ccompare_event_data
-                       (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                         false))))
-    | n, Until (phi, i, psi) ->
-        (if safe_formula phi
-          then MUntil
-                 (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   minit0 n phi, minit0 n psi, ([], []), [], zero_nata,
-                   init_mmuaux ccompare_event_data
-                     (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
-                       true))
-          else (let Neg phia = phi in
-                 MUntil
-                   (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                      false,
-                     minit0 n phia, minit0 n psi, ([], []), [], zero_nata,
-                     init_mmuaux ccompare_event_data
-                       (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                         false))))
+    | n, Since (phi, i, psi) -> minit_since minit0 n None phi i psi
+    | n, Until (phi, i, psi) -> minit_until minit0 n None phi i psi
     | n, MatchP (i, r) ->
         (let (mr, phi_s) = to_mregex r in
           MMatchP
@@ -7679,17 +8696,19 @@ let rec add_new_ts_vmsaux
 
 let rec result_vmsaux
   x = (fun args (cur, auxlist) ->
-        foldr (sup_seta
-                ((ceq_list (ceq_option ceq_event_data)),
-                  (ccompare_list (ccompare_option ccompare_event_data))))
-          (maps (fun (t, rel) ->
-                  (if memL (args_ivl args) (minus_nata cur t) then [rel]
-                    else []))
-            auxlist)
-          (set_empty
-            ((ceq_list (ceq_option ceq_event_data)),
-              (ccompare_list (ccompare_option ccompare_event_data)))
-            (of_phantom set_impl_lista)))
+        eval_args_agg args
+          (foldr
+            (sup_seta
+              ((ceq_list (ceq_option ceq_event_data)),
+                (ccompare_list (ccompare_option ccompare_event_data))))
+            (maps (fun (t, rel) ->
+                    (if memL (args_ivl args) (minus_nata cur t) then [rel]
+                      else []))
+              auxlist)
+            (set_empty
+              ((ceq_list (ceq_option ceq_event_data)),
+                (ccompare_list (ccompare_option ccompare_event_data)))
+              (of_phantom set_impl_lista))))
         x;;
 
 let rec join_vmsaux
@@ -7745,7 +8764,7 @@ let rec add_new_vmuaux
 let rec eval_vmuaux
   x = (fun args nt (t, auxlist) ->
         (let (res, auxlista) = eval_until (args_ivl args) nt auxlist in
-          (res, (t, auxlista))))
+          (mapa (eval_args_agg args) res, (t, auxlista))))
         x;;
 
 let rec vmeval
@@ -7898,8 +8917,8 @@ let rec vmeval
          let (zs, (_, ntsa)) = mprev_next i xsa (nts @ ts) in
           (zs, MNext (i, phia, firsta, ntsa)))
     | n, ts, db, MSince (args, phi, psi, buf, nts, aux) ->
-        (let (xs, phia) = vmeval n ts db phi in
-         let (ys, psia) = vmeval n ts db psi in
+        (let (xs, phia) = vmeval (args_n args) ts db phi in
+         let (ys, psia) = vmeval (args_n args) ts db psi in
          let a =
            mbuf2t_take
              (fun r1 r2 t (zs, auxa) ->
@@ -7914,8 +8933,8 @@ let rec vmeval
               (zs, MSince (args, phia, psia, bufa, ntsa, auxa))))
             b)
     | n, ts, db, MUntil (args, phi, psi, buf, nts, t, aux) ->
-        (let (xs, phia) = vmeval n ts db phi in
-         let (ys, psia) = vmeval n ts db psi in
+        (let (xs, phia) = vmeval (args_n args) ts db phi in
+         let (ys, psia) = vmeval (args_n args) ts db psi in
          let (auxa, (bufa, ntsa)) =
            mbuf2t_take (add_new_vmuaux args) aux (mbuf2_add xs ys buf)
              (nts @ ts)
@@ -7950,7 +8969,33 @@ let rec vmeval
 
 let rec init_vmuaux x = (fun _ -> (zero_nata, [])) x;;
 
+let rec vminit_until
+  minit0 n agg phi i psi =
+    (let args =
+       (fun b -> init_args i n (fvi zero_nata phi) (fvi zero_nata psi) b agg) in
+      (if safe_formula phi
+        then MUntil
+               (args true, minit0 n phi, minit0 n psi, ([], []), [], zero_nata,
+                 init_vmuaux (args true))
+        else (let Neg phia = phi in
+               MUntil
+                 (args false, minit0 n phia, minit0 n psi, ([], []), [],
+                   zero_nata, init_vmuaux (args false)))));;
+
 let rec init_vmsaux x = (fun _ -> (zero_nata, [])) x;;
+
+let rec vminit_since
+  minit0 n agg phi i psi =
+    (let args =
+       (fun b -> init_args i n (fvi zero_nata phi) (fvi zero_nata psi) b agg) in
+      (if safe_formula phi
+        then MSince
+               (args true, minit0 n phi, minit0 n psi, ([], []), [],
+                 init_vmsaux (args true))
+        else (let Neg phia = phi in
+               MSince
+                 (args false, minit0 n phia, minit0 n psi, ([], []), [],
+                   init_vmsaux (args false)))));;
 
 let rec vminit0
   n x1 = match n, x1 with
@@ -7989,44 +9034,46 @@ let rec vminit0
           MAnds (vpos, vneg, mpos @ mneg, replicate (size_list l) []))
     | n, Exists phi -> MExists (vminit0 (suc n) phi)
     | n, Agg (y, omega, b, f, phi) ->
-        MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                (fvi zero_nata phi)
-                (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b)),
-               y, omega, b, f, vminit0 (plus_nata b n) phi)
+        (let default =
+           MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                   (fvi zero_nata phi)
+                   (set (ceq_nat, ccompare_nat, set_impl_nat)
+                     (upt zero_nata b)),
+                  y, omega, b, f, vminit0 (plus_nata b n) phi)
+           in
+          (match phi with Pred (_, _) -> default | Let (_, _, _) -> default
+            | Eq (_, _) -> default | Less (_, _) -> default
+            | LessEq (_, _) -> default | Neg _ -> default | Or (_, _) -> default
+            | And (_, _) -> default | Ands _ -> default | Exists _ -> default
+            | Agg (_, _, _, _, _) -> default | Prev (_, _) -> default
+            | Next (_, _) -> default
+            | Since (phia, i, psi) ->
+              (let agg =
+                 Some (init_aggargs (fvi zero_nata phi) n
+                        (subset
+                          (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                          (fvi zero_nata phi)
+                          (set (ceq_nat, ccompare_nat, set_impl_nat)
+                            (upt zero_nata b)))
+                        y omega b f)
+                 in
+                vminit_since vminit0 (plus_nata b n) agg phia i psi)
+            | Until (phia, i, psi) ->
+              (let agg =
+                 Some (init_aggargs (fvi zero_nata phi) n
+                        (subset
+                          (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+                          (fvi zero_nata phi)
+                          (set (ceq_nat, ccompare_nat, set_impl_nat)
+                            (upt zero_nata b)))
+                        y omega b f)
+                 in
+                vminit_until vminit0 (plus_nata b n) agg phia i psi)
+            | MatchF (_, _) -> default | MatchP (_, _) -> default))
     | n, Prev (i, phi) -> MPrev (i, vminit0 n phi, true, [], [])
     | n, Next (i, phi) -> MNext (i, vminit0 n phi, true, [])
-    | n, Since (phi, i, psi) ->
-        (if safe_formula phi
-          then MSince
-                 (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   vminit0 n phi, vminit0 n psi, ([], []), [],
-                   init_vmsaux
-                     (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
-                       true))
-          else (let Neg phia = phi in
-                 MSince
-                   (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                      false,
-                     vminit0 n phia, vminit0 n psi, ([], []), [],
-                     init_vmsaux
-                       (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                         false))))
-    | n, Until (phi, i, psi) ->
-        (if safe_formula phi
-          then MUntil
-                 (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   vminit0 n phi, vminit0 n psi, ([], []), [], zero_nata,
-                   init_vmuaux
-                     (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
-                       true))
-          else (let Neg phia = phi in
-                 MUntil
-                   (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                      false,
-                     vminit0 n phia, vminit0 n psi, ([], []), [], zero_nata,
-                     init_vmuaux
-                       (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
-                         false))))
+    | n, Since (phi, i, psi) -> vminit_since vminit0 n None phi i psi
+    | n, Until (phi, i, psi) -> vminit_until vminit0 n None phi i psi
     | n, MatchP (i, r) ->
         (let (mr, phi_s) = to_mregex r in
           MMatchP

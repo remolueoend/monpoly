@@ -3,6 +3,7 @@ theory Optimized_Agg
   Order_Statistic_Tree
 begin
 
+
 type_synonym 'a agg_map = "(event_data tuple, 'a) mapping"
 
 datatype list_aux = LInt "integer list" | LString "string8 list"
@@ -347,6 +348,7 @@ proof -
   qed
 qed
 end
+
 
 lemma valid_finite_group_mset:
   assumes "finite X"
@@ -2863,4 +2865,58 @@ qed
 
 lemma valid_result_maggaux: "valid_maggaux args aux X \<Longrightarrow> result_maggaux args aux = eval_aggargs args X"
   using valid_result_maggaux_unfolded by (cases args) fast 
+
+(*lemma fold_graph_closed_lemma:
+  "fold_graph f (c z) A (c x) \<and> x \<in> B"
+  if "fold_graph g z A x"
+    "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> f a (c b) = c (g a b)"
+    "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> g a b \<in> B"
+    "z \<in> B"
+  using that(1-3)
+proof (induction rule: fold_graph.induct)
+  case (insertI x A y)
+  have "fold_graph f (c z) A (c y)" "y \<in> B"
+    unfolding atomize_conj
+    by (rule insertI.IH) (auto intro: insertI.prems)
+  then have "g x y \<in> B" and f_eq: "f x (c y) = c(g x y)"
+    by (auto simp: insertI.prems)
+  moreover have "fold_graph f (c z) (Set.insert x A) (f x (c y))"
+    by (rule fold_graph.insertI; fact)
+  ultimately
+  show ?case
+    by (simp add: f_eq)
+qed (auto intro!: that fold_graph.intros)
+
+lemma fold_graph_closed_lemma':
+  "\<exists>x \<in> B. y' = c x \<and> fold_graph g z A x"
+  if "fold_graph f (c z) A y'"
+    "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> f a (c b) = c (g a b)"
+    "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> g a b \<in> B"
+    "z \<in> B"
+    using that(1-3)
+proof (induction A y' rule: fold_graph.induct)
+  case (insertI x A y)
+  have "\<exists>x \<in> B. y = c x \<and> fold_graph g z A x"
+    apply(rule insertI(3)) using insertI by auto
+  then obtain x' where defs: "y = c x'" "fold_graph g z A x'" "x' \<in> B" by auto
+  then have aux: "fold_graph g z (Set.insert x A) (g x x')"
+    apply(intro fold_graph.intros(2)) using insertI by auto
+  have "f x y = c (g x x')" unfolding defs(1) using insertI(4)[OF _ defs(3)] by auto
+  moreover have "g x x' \<in> B" using insertI(5)[OF _ defs(3)] by auto
+  ultimately show ?case using aux by auto
+qed (auto intro!: that fold_graph.intros)
+
+lemma fold_graph_closed_eq:
+  "fold_graph f (c z) A = (\<lambda> y. (\<exists>x.  y = c x \<and> fold_graph g z A x))"
+  if "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> f a (c b) = c (g a b)"
+     "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> g a b \<in> B"
+     "z \<in> B" 
+  using that fold_graph_closed_lemma[of g z A _ B f c] fold_graph_closed_lemma'[of f c z A _ B g] by fastforce
+
+lemma fold_closed_eq: "Finite_Set.fold f (c z) A = c (Finite_Set.fold g z A)"
+  if "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> f a (c b) = c (g a b)"
+     "\<And>a b. a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> g a b \<in> B"
+     "z \<in> B"
+  unfolding Finite_Set.fold_def
+  apply (subst fold_graph_closed_eq[where B=B and g=g]) using that apply(auto) *)
 end

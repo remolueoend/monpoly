@@ -520,6 +520,109 @@ lift_definition insert_rank_cfc::"aggargs \<Rightarrow> (event_data tuple, bool 
 lemma [code_unfold]: "Finite_Set.fold (insert_rank args) (v, m) data = set_fold_cfc (insert_rank_cfc args) (v, m) data"
   by(transfer) auto
 
+definition finite' :: "'a set \<Rightarrow> bool" where
+  "finite' = finite"
+
+declare insert_maggaux'.simps [code del]
+declare insert_maggaux'.simps [folded finite'_def, code]
+
+
+lemma [code_unfold]: "X - Mapping.keys tuple_in = Set.filter (\<lambda>k. Mapping.lookup tuple_in k = None) X"
+  by(transfer) (auto simp: Map_To_Mapping.map_apply_def) 
+
+definition "filter_join' pos X m = (Mapping.filter (join_filter_cond pos X) m, Mapping.keys m - Mapping.keys (Mapping.filter (join_filter_cond pos X) m))"
+
+declare [[code drop: join_mmasaux]]
+declare join_mmasaux.simps[folded filter_join'_def filter_join_def, code]
+
+lemma filter_join'_False_empty: "filter_join' False {} m = (m, {})"
+  unfolding filter_join'_def
+  by transfer (auto split: option.splits)
+
+lemma filter_join'_False_insert: 
+  "filter_join' False (Set.insert a A) m = (case filter_join' False A m of
+   (m', X) \<Rightarrow> (Mapping.delete a m', case Mapping.lookup m' a of Some _ \<Rightarrow> Set.insert a X |
+                                    _ \<Rightarrow> X))"
+  unfolding filter_join'_def
+  by(transfer) (auto simp: Map_To_Mapping.map_apply_def split: option.splits if_splits)
+
+fun filter_join'_fold_fun where
+  "filter_join'_fold_fun x (m, X) = (Mapping.delete x m, case Mapping.lookup m x of Some _ \<Rightarrow> Set.insert x X |
+                                                                                      None \<Rightarrow> X)"
+
+lemma filter_join'_False:
+  assumes "finite A"
+  shows "filter_join' False A m = 
+         Finite_Set.fold filter_join'_fold_fun (m, {}) A"
+proof -
+  interpret comp_fun_idem "filter_join'_fold_fun"
+    by(unfold_locales; simp add:fun_eq_iff; transfer) (auto simp: Map_To_Mapping.map_apply_def split:option.splits if_splits)
+  from assms show ?thesis
+  proof (induction A arbitrary: m)
+    case empty
+    then show ?case using filter_join'_False_empty by auto
+  next
+    case (insert a A)
+    then show ?case using filter_join'_False_insert[of a A m]
+      by(simp only:fold_insert[OF insert(1-2)] split:option.splits prod.splits; simp)
+   qed 
+qed
+
+lift_definition filter_not_in_cfi' :: "('a, ('a, 'b) mapping \<times> 'a set) comp_fun_idem" is 
+  "filter_join'_fold_fun"
+  by(unfold_locales; simp add:fun_eq_iff; transfer) (auto simp: Map_To_Mapping.map_apply_def split:option.splits if_splits)
+
+lemma filter_join'_code[code]:
+  "filter_join' pos A m =
+    (if \<not>pos \<and> finite A \<and> card A < Mapping.size m then set_fold_cfi filter_not_in_cfi' (m, {}) A
+    else (Mapping.filter (join_filter_cond pos A) m, Mapping.keys m - Mapping.keys (Mapping.filter (join_filter_cond pos A) m)))"
+  unfolding filter_join'_def
+  by (transfer fixing: m) (use filter_join'_False in \<open>auto simp add: filter_join'_def\<close>)
+
+definition "filter_set' m X t = (Mapping.filter (filter_cond X m t) m, Mapping.keys m - Mapping.keys (Mapping.filter (filter_cond X m t) m))"
+
+declare [[code drop: shift_end_mmasaux]]
+declare shift_end_mmasaux.simps[folded filter_set'_def, code]
+
+lemma filter_set'_empty: "filter_set' m {} t = (m, {})"
+  unfolding filter_set'_def
+  by transfer (auto simp: fun_eq_iff split: option.splits)
+
+lemma filter_set'_insert: "filter_set' m (Set.insert x A) t = (let (m', X) = filter_set' m A t in
+  case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then (Mapping.delete x m', Set.insert x X) else (m', X) | _ \<Rightarrow> (m', X))"
+  unfolding filter_set'_def
+  by transfer (auto simp: Map_To_Mapping.map_apply_def split: option.splits if_splits)
+
+fun filter_set'_fold_fun where
+  "filter_set'_fold_fun t a (m, X) = (case Mapping.lookup m a of 
+                                    Some u \<Rightarrow> if t = u then (Mapping.delete a m, Set.insert a X) else (m, X) | 
+                                    _ \<Rightarrow> (m, X))"
+
+lemma filter_set'_fold:
+  assumes "finite A"
+  shows "filter_set' m A t = Finite_Set.fold (filter_set'_fold_fun t) (m, {}) A"
+proof -
+  interpret comp_fun_idem "filter_set'_fold_fun t"
+    by(unfold_locales; simp add:fun_eq_iff split:option.splits; transfer) (auto simp: Map_To_Mapping.map_apply_def)
+  from assms show ?thesis
+  proof (induction A arbitrary: m)
+    case empty
+    then show ?case using filter_set'_empty by auto
+  next
+    case (insert a A)
+    then show ?case using filter_set'_insert[of m a A t]
+      by(simp only:fold_insert[OF insert(1-2)] Let_def split:option.splits prod.splits; simp)
+   qed 
+qed
+
+lift_definition filter'_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping \<times> 'a set) comp_fun_idem" is 
+  "\<lambda>t. filter_set'_fold_fun t"
+  by(unfold_locales; simp add:fun_eq_iff split:option.splits; transfer) (auto simp: Map_To_Mapping.map_apply_def split:option.splits if_splits)
+
+lemma filter_set'_code[code]:
+  "filter_set' m A t = (if finite A then set_fold_cfi (filter'_cfi t) (m, {}) A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set' m A t))"
+  by (transfer fixing: m) (auto simp: filter_set'_fold)
+
 (*<*)
 end
 (*>*)
