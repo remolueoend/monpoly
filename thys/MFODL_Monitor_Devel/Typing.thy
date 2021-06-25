@@ -455,6 +455,19 @@ lemma nfv_exists: " Formula.nfv \<phi> \<le> Suc (Formula.nfv (Formula.Exists t 
    apply (auto simp add: Formula.nfv_def fvi_Suc) 
   by (metis Max.coboundedI finite_fvi finite_imageI finite_insert fvi_Suc imageI insertCI list_decode.cases)
 
+lemma match_safe_wty_nfv: assumes "\<phi> \<in> atms r"   "safe_formula (formula.MatchP I r) \<or> safe_formula (formula.MatchF I r)" " S, E \<turnstile> formula.MatchP I r \<or>  S, E \<turnstile> formula.MatchF I r"
+   " Formula.nfv (formula.MatchF I r) \<le> length v \<or>  Formula.nfv (formula.MatchP I r) \<le> length v"
+  shows "S, E \<turnstile> \<phi>" "Formula.nfv \<phi> \<le> length v"
+proof -
+ have "\<forall>a \<in> fv \<phi>. a \<in> fv_regex r" using   assms(1)  apply (induction r) apply auto 
+      subgoal for \<psi>  apply (cases "safe_formula \<psi>") apply (auto elim: safe_formula.cases) by (cases \<psi>) auto 
+      done
+    from this assms(4) show  "Formula.nfv \<phi> \<le> length v" by (auto simp add: Formula.nfv_def) 
+  next
+    from assms(3) assms(2) show  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] assms(1) wty_regexatms_atms  
+      by (auto elim: wty_formula.cases)
+  qed
+
 lemma match_sat'_fv: assumes "safe_regex temp Strict r"
     "Regex.match (sat' \<sigma> V v) r j i"
     "x \<in> fv (formula.MatchP I r) \<or> x \<in>fv (formula.MatchF I r)"
@@ -835,29 +848,23 @@ next
   case (MatchP I r)
   from MatchP.prems(3) have "(\<exists>j. Regex.match (sat' \<sigma> V v) r j i)" by auto
     from this  MatchP(1)  MatchP.prems(4) obtain \<phi> j where phidef: " \<phi> \<in> atms r" " sat' \<sigma> V v j \<phi>" "x \<in> fv \<phi> " using match_sat'_fv  by auto blast
-    have "\<forall>a \<in> fv \<phi>. a \<in> fv_regex r" using   phidef(1)  apply (induction r) apply auto 
-      subgoal for \<psi>  apply (cases "safe_formula \<psi>") apply auto by (cases \<psi>) auto 
-      done
-    from  this MatchP.prems(4,5) phidef  have nfv: "Formula.nfv \<phi> \<le> length v"  by  (auto simp add: Formula.nfv_def)
+    from   MatchP.prems(1) MatchP(1)  MatchP.prems(5) phidef(1)  have wty: "S, E \<turnstile> \<phi>" and  nfv:"Formula.nfv \<phi> \<le> length v" 
+      using  match_safe_wty_nfv[of \<phi> r I S E v] by auto
     from MatchP.IH MatchP.prems have IH: "S, E \<turnstile> \<phi> \<Longrightarrow>\<phi> \<in> atms r \<Longrightarrow>
      sat' \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
     for \<phi> E  v  x by blast
-   from MatchP.prems(1) MatchP(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
-  then show ?case apply (rule IH) using nfv  MatchP.prems(5) phidef by auto
+   show ?case apply (rule IH) using wty nfv  MatchP.prems(5) phidef by auto
  
 next
   case (MatchF I r)
  from MatchF.prems(3) have "(\<exists>j. Regex.match (sat' \<sigma> V v) r  i j)" by auto
     from this  MatchF(1)  MatchF.prems(4) obtain \<phi> j where phidef: " \<phi> \<in> atms r" " sat' \<sigma> V v j \<phi>" "x \<in> fv \<phi> " using match_sat'_fv  by auto blast
-    have "\<forall>a \<in> fv \<phi>. a \<in> fv_regex r" using   phidef(1)  apply (induction r) apply auto 
-      subgoal for \<psi>  apply (cases "safe_formula \<psi>") apply auto by (cases \<psi>) auto 
-      done
-    from  this MatchF.prems(4,5) phidef  have nfv: "Formula.nfv \<phi> \<le> length v"  by  (auto simp add: Formula.nfv_def)
+    from   MatchF.prems(1) MatchF(1)  MatchF.prems(5) phidef(1)  have wty: "S, E \<turnstile> \<phi>" and  nfv:"Formula.nfv \<phi> \<le> length v" 
+      using  match_safe_wty_nfv[of \<phi> r I S E v] by auto
     from MatchF.IH MatchF.prems have IH: "S, E \<turnstile> \<phi> \<Longrightarrow>\<phi> \<in> atms r \<Longrightarrow>
      sat' \<sigma> V v j \<phi> \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow> ty_of (v ! x ) = E x"
     for \<phi> E  v  x by blast
-    from MatchF.prems(1) MatchF(1) have  "S, E \<turnstile> \<phi>" using  Regex.Regex.regex.pred_set[of "(\<lambda>\<phi>. S, E \<turnstile> \<phi>)"] phidef(1) wty_regexatms_atms  by cases auto
-  then show ?case apply (rule IH) using nfv  MatchF.prems(5)  phidef by auto
+   show ?case apply (rule IH) using wty nfv  MatchF.prems(5)  phidef by auto
 
 qed
 
