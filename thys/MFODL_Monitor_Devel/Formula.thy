@@ -129,8 +129,8 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
 
 
-qualified definition "FF = Exists undefined (Neg (Eq (Var 0) (Var 0)))" 
-qualified definition "TT \<equiv> Neg FF"
+qualified definition "FF = Eq (Const (EInt 0)) (Const (EInt 1))"
+qualified definition "TT \<equiv> Eq (Const (EInt 0)) (Const (EInt 0))"
 
 qualified fun fvi :: "nat \<Rightarrow> 't formula \<Rightarrow> nat set" where
   "fvi b (Pred r ts) = (\<Union>t\<in>set ts. fvi_trm b t)"
@@ -632,7 +632,6 @@ definition safe_assignment :: "nat set \<Rightarrow> 't formula \<Rightarrow> bo
 
 fun safe_formula :: "'t formula \<Rightarrow> bool" where
   "safe_formula (Eq t1 t2) = (is_Const t1 \<and> (is_Const t2 \<or> is_Var t2) \<or> is_Var t1 \<and> is_Const t2)"
-| "safe_formula (Neg (Eq (Var x) (Var y))) = (x = y)"
 | "safe_formula (Less t1 t2) = False"
 | "safe_formula (LessEq t1 t2) = False"
 | "safe_formula (Pred e ts) = (\<forall>t\<in>set ts. is_Var t \<or> is_Const t)"
@@ -644,7 +643,7 @@ fun safe_formula :: "'t formula \<Rightarrow> bool" where
       fv \<psi> \<subseteq> fv \<phi> \<and> (is_constraint \<psi> \<or> (case \<psi> of Neg \<psi>' \<Rightarrow> safe_formula \<psi>' | _ \<Rightarrow> False))))"
 | "safe_formula (Ands l) = (let (pos, neg) = partition safe_formula l in pos \<noteq> [] \<and>
     list_all safe_formula (map remove_neg neg) \<and> \<Union>(set (map fv neg)) \<subseteq> \<Union>(set (map fv pos)))"
-| "safe_formula (Exists _ \<phi>) = (safe_formula \<phi>)"
+| "safe_formula (Exists x \<phi>) = (safe_formula \<phi> \<and> 0 \<in> fv \<phi>)"
 | "safe_formula (Agg y \<omega> tys f \<phi>) = (safe_formula \<phi> \<and> y + length tys \<notin> fv \<phi> \<and> {0..< length tys} \<subseteq> fv \<phi> \<and> fv_trm f \<subseteq> fv \<phi>)"
 | "safe_formula (Prev I \<phi>) = (safe_formula \<phi>)"
 | "safe_formula (Next I \<phi>) = (safe_formula \<phi>)"
@@ -669,7 +668,7 @@ lemma safe_abbrevs[simp]: "safe_formula TT" "safe_formula FF"
   unfolding TT_def FF_def by auto
 
 definition safe_neg :: "'t formula \<Rightarrow> bool" where
-  "safe_neg \<phi> \<longleftrightarrow> (\<not> safe_formula \<phi> \<longrightarrow> safe_formula (remove_neg \<phi>))"
+  "safe_neg \<phi> \<longleftrightarrow> (safe_formula (remove_neg \<phi>))"
 
 definition atms :: "'t formula Regex.regex \<Rightarrow> 't formula set" where
   "atms r = (\<Union>\<phi> \<in> Regex.atms r.
@@ -689,14 +688,13 @@ lemma finite_atms[simp]: "finite (atms r)"
 lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrightarrow> (\<not>P \<Longrightarrow> Q \<Longrightarrow> R) \<Longrightarrow> R"
   by blast
 
-lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let
+lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 Pred Let
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
     Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
   assumes "safe_formula \<phi>"
     and Eq_Const: "\<And>c d. P (Eq (Const c) (Const d))"
     and Eq_Var1: "\<And>c x. P (Eq (Const c) (Var x))"
     and Eq_Var2: "\<And>c x. P (Eq (Var x) (Const c))"
-    and neq_Var: "\<And>x. P (Neg (Eq (Var x) (Var x)))"
     and Pred: "\<And>e ts. \<forall>t\<in>set ts. is_Var t \<or> is_Const t \<Longrightarrow> P (Pred e ts)"
     and Let: "\<And>p \<phi> \<psi>. {0..<nfv \<phi>} \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Let p \<phi> \<psi>)"
     and And_assign: "\<And>\<phi> \<psi>. safe_formula \<phi> \<Longrightarrow> safe_assignment (fv \<phi>) \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (And \<phi> \<psi>)"
@@ -712,7 +710,7 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
       list_all P pos \<Longrightarrow> list_all P (map remove_neg neg) \<Longrightarrow> P (Ands l)"
     and Neg: "\<And>\<phi>. fv \<phi> = {} \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Neg \<phi>)"
     and Or: "\<And>\<phi> \<psi>. fv \<psi> = fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Or \<phi> \<psi>)"
-    and Exists: "\<And>\<phi> t. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Exists t \<phi>)" (* any t?*)
+    and Exists: "\<And>\<phi> t. safe_formula \<phi> \<Longrightarrow> 0 \<in> fv \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Exists t \<phi>)" (* any t?*)
     and Agg: "\<And>y \<omega> tys f \<phi>. y + length tys \<notin> fv \<phi> \<Longrightarrow> {0..<length tys} \<subseteq> fv \<phi> \<Longrightarrow> fv_trm f \<subseteq> fv \<phi> \<Longrightarrow> safe_formula \<phi> \<Longrightarrow>
       (\<And>\<phi>'. size \<phi>' \<le> size \<phi> \<Longrightarrow> safe_formula \<phi>' \<Longrightarrow> P \<phi>') \<Longrightarrow> P (Agg y \<omega> tys f \<phi>)"
     and Prev: "\<And>I \<phi>. safe_formula \<phi> \<Longrightarrow> P \<phi> \<Longrightarrow> P (Prev I \<phi>)"
@@ -735,8 +733,8 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
     case (1 t1 t2)
     then show ?thesis using Eq_Const Eq_Var1 Eq_Var2 IH by (auto simp: trm.is_Const_def trm.is_Var_def)
   next
-    case (9 \<phi>' \<psi>')
-    from IH(2)[unfolded 9] consider
+    case (8 \<phi>' \<psi>')
+    from IH(2)[unfolded 8] consider
       (a) "safe_assignment (fv \<phi>') \<psi>'"
       | (b) "\<not> safe_assignment (fv \<phi>') \<psi>'" "safe_formula \<psi>'"
       | (c) "fv \<psi>' \<subseteq> fv \<phi>'" "\<not> safe_assignment (fv \<phi>') \<psi>'" "\<not> safe_formula \<psi>'" "is_constraint \<psi>'"
@@ -745,46 +743,66 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
       by (cases \<psi>') auto
     then show ?thesis proof cases
       case a
-      then show ?thesis using IH by (auto simp: 9 intro: And_assign)
+      then show ?thesis using IH by (auto simp: 8 intro: And_assign)
     next
       case b
-      then show ?thesis using IH by (auto simp: 9 intro: And_safe)
+      then show ?thesis using IH by (auto simp: 8 intro: And_safe)
     next
       case c
-      then show ?thesis using IH by (auto simp: 9 intro: And_constraint)
+      then show ?thesis using IH by (auto simp: 8 intro: And_constraint)
     next
       case d
-      then show ?thesis using IH by (auto simp: 9 intro!: And_Not)
+      then show ?thesis using IH by (auto simp: 8 intro!: And_Not)
     qed
   next
-    case (10 l)
+    case (9 l)
     obtain pos neg where posneg: "(pos, neg) = partition safe_formula l" by simp
-    have "pos \<noteq> []" using IH(2) posneg by (simp add: 10)
+    have "pos \<noteq> []" using IH(2) posneg by (simp add: 9)
     moreover have "list_all safe_formula pos" using posneg by (simp add: list.pred_set)
     moreover have safe_remove_neg: "list_all safe_formula (map remove_neg neg)"
-      using IH(2) posneg by (auto simp: 10)
+      using IH(2) posneg by (auto simp: 9)
     moreover have "list_all P pos"
       using posneg IH(1)
-      by (auto simp add: 10 list_all_iff le_imp_less_Suc size_list_estimation')
+      by (auto simp add: 9 list_all_iff le_imp_less_Suc size_list_estimation')
     moreover have "list_all P (map remove_neg neg)"
       using IH(1) posneg safe_remove_neg
-      by (auto simp add: 10 list_all_iff le_imp_less_Suc size_list_estimation' size_remove_neg)
-    ultimately show ?thesis using IH Ands posneg by (simp add: 10)
+      by (auto simp add: 9 list_all_iff le_imp_less_Suc size_list_estimation' size_remove_neg)
+    ultimately show ?thesis using IH Ands posneg by (simp add: 9)
+  next
+    case (14 \<phi>' I \<psi>')
+    with IH show ?thesis
+    proof (cases \<phi>')
+      case (Ands l)
+      then show ?thesis using IH Since
+        by (auto simp: 14)
+    qed (auto 0 3 simp: 14 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
   next
     case (15 \<phi>' I \<psi>')
     with IH show ?thesis
     proof (cases \<phi>')
       case (Ands l)
-      then show ?thesis using IH Since
-        by (auto simp: 15)
-    qed (auto 0 3 simp: 15 elim!: disjE_Not2 intro: Since Not_Since) (*SLOW*)
+      then show ?thesis using IH Until by (auto simp: 15)
+    qed (auto 0 3 simp: 15 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
   next
-    case (16 \<phi>' I \<psi>')
-    with IH show ?thesis
-    proof (cases \<phi>')
-      case (Ands l)
-      then show ?thesis using IH Until by (auto simp: 16)
-    qed (auto 0 3 simp: 16 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
+    case (16 I r)
+    have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> x
+      by (auto split: formula.splits)
+    {
+      fix \<psi>
+      assume atms: "\<psi> \<in> atms r"
+      then have "safe_formula \<psi>"
+        using safe_regex_safe_formula IH(2)
+        by (fastforce simp: 16 atms_def)
+      moreover have "size \<psi> \<le> regex.size_regex size r"
+        using atms
+        by (auto simp: atms_def size_regex_estimation' dest!: case_Neg)
+      ultimately have "P \<psi>"
+        using IH(1)
+        by (auto simp: 16)
+    }
+    then show ?thesis
+      using IH(2)
+      by (auto simp: 16 intro!: MatchP)
   next
     case (17 I r)
     have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> x
@@ -804,27 +822,7 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
     }
     then show ?thesis
       using IH(2)
-      by (auto simp: 17 intro!: MatchP)
-  next
-    case (18 I r)
-    have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> x
-      by (auto split: formula.splits)
-    {
-      fix \<psi>
-      assume atms: "\<psi> \<in> atms r"
-      then have "safe_formula \<psi>"
-        using safe_regex_safe_formula IH(2)
-        by (fastforce simp: 18 atms_def)
-      moreover have "size \<psi> \<le> regex.size_regex size r"
-        using atms
-        by (auto simp: atms_def size_regex_estimation' dest!: case_Neg)
-      ultimately have "P \<psi>"
-        using IH(1)
-        by (auto simp: 18)
-    }
-    then show ?thesis
-      using IH(2)
-      by (auto simp: 18 intro!: MatchF)
+      by (auto simp: 17 intro!: MatchF)
   qed (auto simp: assms)
 qed
 
@@ -988,10 +986,8 @@ next
     apply(auto intro: nth_equalityI simp add: singleton_table_def wf_tuple_def tabulate_alt nfv_def Suc_le_eq)
     done
 next
-  case (neq_Var x)
-  then show ?case by(simp)
 next
-case (Pred e ts)
+  case (Pred e ts)
   then show ?case
    apply(simp)
     apply(cases "V e")
@@ -1216,10 +1212,6 @@ next
        apply(auto simp add: wf_tuple_def)
       apply (metis fvi_Suc length_nth_simps(3) length_nth_simps(4) less_Suc_eq_0_disj option.discI)
             apply (metis fvi_Suc length_nth_simps(4) less_Suc_eq_0_disj)
-            apply (metis fvi_Suc length_nth_simps(4) less_Suc_eq_0_disj)
-       apply (metis fvi_Suc length_nth_simps(3) length_nth_simps(4) less_Suc_eq_0_disj)
-      apply(erule sat_fv_cong[THEN iffD1, rotated])
-      apply(auto simp add: nth_Cons')
       done
     done
 next
@@ -1447,7 +1439,7 @@ next
 qed
 
 lemma safe_formula_NegD:
-  "safe_formula (Formula.Neg \<phi>) \<Longrightarrow> fv \<phi> = {} \<or> (\<exists>x. \<phi> = Formula.Eq (Formula.Var x) (Formula.Var x))"
+  "safe_formula (Formula.Neg \<phi>) \<Longrightarrow> fv \<phi> = {}"
   by (induct "Formula.Neg \<phi>" rule: safe_formula_induct) auto
 
 
@@ -1638,8 +1630,11 @@ fun get_and_list :: "'t formula \<Rightarrow> 't formula list" where
 lemma fv_get_and: "(\<Union>x\<in>(set (get_and_list \<phi>)). fvi b x) = fvi b \<phi>"
   by (induction \<phi> rule: get_and_list.induct) simp_all
 
+lemma safe_remove_negI: "safe_formula \<phi> \<Longrightarrow> safe_formula (remove_neg \<phi>)"
+  by (cases \<phi>) auto
+
 lemma safe_get_and: "safe_formula \<phi> \<Longrightarrow> list_all safe_neg (get_and_list \<phi>)"
-  by (induction \<phi> rule: get_and_list.induct) (simp_all add: safe_neg_def list_all_iff)
+  by (induction \<phi> rule: get_and_list.induct) (auto simp: safe_neg_def list_all_iff intro: safe_remove_negI)
 
 lemma sat_get_and: "sat \<sigma> V v i \<phi> \<longleftrightarrow> list_all (sat \<sigma> V v i) (get_and_list \<phi>)"
   by (induction \<phi> rule: get_and_list.induct) (simp_all add: list_all_iff)
@@ -1705,14 +1700,24 @@ lemma convert_multiway_remove_neg: "safe_formula (remove_neg \<phi>) \<Longright
 
 lemma fv_convert_multiway: "safe_formula \<phi> \<Longrightarrow> fvi b (convert_multiway \<phi>) = fvi b \<phi>"
 proof (induction \<phi> arbitrary: b rule: safe_formula.induct)
-  case (9 \<phi> \<psi>)
+  case (8 \<phi> \<psi>)
   then show ?case by (cases \<psi>) (auto simp: fv_get_and Un_commute)
 next
-  case (10 l)
+  case (9 l)
   then show ?case using convert_multiway_remove_neg
     unfolding convert_multiway.simps fvi.simps list.set_map image_image Let_def
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (fastforce simp: list.pred_set)
+next
+  case (14 \<phi> I \<psi>)
+  show ?case proof (cases "safe_formula \<phi>")
+    case True
+    with 14 show ?thesis by simp
+  next
+    case False
+    with "14.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
+    with False 14 show ?thesis by auto
+  qed
 next
   case (15 \<phi> I \<psi>)
   show ?case proof (cases "safe_formula \<phi>")
@@ -1721,26 +1726,16 @@ next
   next
     case False
     with "15.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 15 show ?thesis by simp
+    with False 15 show ?thesis by auto
   qed
 next
-  case (16 \<phi> I \<psi>)
-  show ?case proof (cases "safe_formula \<phi>")
-    case True
-    with 16 show ?thesis by simp
-  next
-    case False
-    with "16.prems" obtain \<phi>' where "\<phi> = Neg \<phi>'" by (simp split: formula.splits)
-    with False 16 show ?thesis by simp
-  qed
-next
-  case (17 I r)
+  case (16 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
       (auto dest!: safe_regex_safe_formula)
 next
-  case (18 I r)
+  case (17 I r)
   then show ?case
     unfolding convert_multiway.simps fvi.simps fv_regex_alt regex.set_map image_image
     by (intro arg_cong[where f=Union, OF image_cong[OF refl]])
