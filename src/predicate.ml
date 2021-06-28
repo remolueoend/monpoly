@@ -216,9 +216,25 @@ let float_of_cst = function
 
 
 (* TODO: should we return a set instead? *)
+(* Note. This function must compute the variables in the order
+   in which they are assigned by the function Tuple.satisfiesp. *)
 let pvars (p:predicate) =
-  let get_vars l = List.fold_left (fun vars t -> vars @ (tvars t)) [] l in
-  Misc.remove_duplicates (get_vars (get_args p))
+  let rec get_vars assign res args =
+    match args with
+    | [] -> List.rev res
+    | term :: args' ->
+      (match term with
+       | Var x ->
+         (try
+            let _ = List.assoc x assign in
+            get_vars assign res args'
+          with Not_found ->
+            get_vars ((x, ()) :: assign) (x :: res) args'
+         )
+       | _ -> get_vars assign res args'
+      )
+  in
+  get_vars [] [] (get_args p)
 
 
 let cst_eq c c' =
