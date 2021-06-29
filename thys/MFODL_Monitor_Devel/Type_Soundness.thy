@@ -178,25 +178,25 @@ next
     fix za
     assume  assm: "Formula.sat \<sigma> V (za # v) i \<phi>" 
     from Exists.prems(1) have wty: "S, case_nat t E \<turnstile> \<phi>" by cases
-    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(6) nfv_exists[of \<phi> t] by auto
+    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(7) nfv_exists[of \<phi> t] by auto
     have "0 \<in> fv \<phi> \<Longrightarrow> ty_of za = t" 
       using ty_of_sat_safe[where ?E="case_nat t E" and ?S=S and ?\<phi>=\<phi> and ?v="za#v" and ?V=V and ?i=i and ?\<sigma>=\<sigma> and ?x=0]  
-      Exists(1,5)  nfv assm wty by auto 
+      Exists(1,6)  nfv assm wty by auto 
     then have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using  Exists.prems(2)   by (auto simp add:  fvi_Suc split: nat.splits )
 
-    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(5) wty nfv assm by auto
+    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(6) wty nfv assm by auto
   }
   moreover {
    fix za
     assume  assm: "sat' \<sigma> V (za # v) i \<phi>" 
     from Exists.prems(1) have wty: "S, case_nat t E \<turnstile> \<phi>" by cases
-    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(6) nfv_exists[of \<phi> t] by auto
+    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(7) nfv_exists[of \<phi> t] by auto
     have "0 \<in> fv \<phi> \<Longrightarrow> ty_of za = t" 
       using ty_of_sat'_safe[where ?E="case_nat t E" and ?S=S and ?\<phi>=\<phi> and ?v="za#v" and ?V=V and ?i=i and ?\<sigma>=\<sigma> and ?x=0]  
-      Exists(1,5)  nfv assm wty by auto 
+      Exists(1,6)  nfv assm wty by auto 
     then have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using  Exists.prems(2)   by (auto simp add:  fvi_Suc split: nat.splits )
 
-    from this  have "Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(5) wty nfv assm by auto
+    from this  have "Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(6) wty nfv assm by auto
   }
   ultimately show ?case   by auto 
 next
