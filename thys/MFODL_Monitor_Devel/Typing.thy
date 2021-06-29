@@ -520,10 +520,6 @@ next
   from this `E \<turnstile> (trm.Var xa) :: t` have "E x = t" using  wty_trm.cases by fastforce
   from this Eq_Var2 ` E \<turnstile> (trm.Const c) :: t` show ?case
     by (metis \<open>x = xa\<close> empty_iff eval_trm'.simps(1) fvi_trm.simps(2) sat'.simps(3) eval_trm_sound ty_of_eval_trm)
-  
-next
-  case (neq_Var xa)
-  thus ?case by (auto) 
 next
   case (Pred p tms)
   from Pred.prems(1) obtain tys where
@@ -901,7 +897,806 @@ lemma ty_of_sat_safe: "safe_formula \<phi> \<Longrightarrow> S, E \<turnstile> \
   using  sat_inst.sat_general_axioms sat_inst_of_sat'
     sat_general.ty_of_sat'_safe[of  "(+)" "(-)" "uminus" "(*)" "(div)" "(mod)" double_of_event_data double_of_event_data_agg integer_of_event_data "(\<le>)"]  
   by auto  blast
- 
+
+lemma rel_regex_fv_aux: "regex.rel_regex (\<lambda>a b. \<forall>x. Formula.fvi x a = Formula.fvi x b) r r' \<Longrightarrow>
+  Regex.fv_regex (Formula.fvi x) r = Regex.fv_regex (Formula.fvi x) r'"
+  by (induction r r' rule: regex.rel_induct) auto
+
+lemma rel_formula_fv: "formula.rel_formula f \<phi> \<phi>' \<Longrightarrow> Formula.fvi b \<phi> = Formula.fvi b \<phi>'"
+proof (induction \<phi> \<phi>' arbitrary: b rule: formula.rel_induct)
+  case (Ands l l')
+  then show ?case
+    by (induction l l' rule: list.rel_induct) auto
+qed (auto simp add: list_all2_lengthD rel_regex_fv_aux)
+
+lemma rel_regex_fv: "regex.rel_regex (formula.rel_formula f) r r' \<Longrightarrow>
+  Regex.fv_regex (Formula.fvi x) r = Regex.fv_regex (Formula.fvi x) r'"
+  by (induction r r' rule: regex.rel_induct) (auto simp: rel_formula_fv)
+
+lemma rel_regex_fv_cong: "Regex.rel_regex (\<lambda>a b. P a b) r r' \<Longrightarrow> (\<And>\<phi> \<phi>'. P \<phi> \<phi>' \<Longrightarrow> fv \<phi> = fv \<phi>') \<Longrightarrow>
+  fv_regex r = fv_regex r'"
+  by (induction r r' rule: regex.rel_induct) auto
+
+lemma rel_regex_safe_aux: "safe_regex m g r \<Longrightarrow>
+  (\<And>\<phi> \<phi>'. \<phi> \<in> atms r \<Longrightarrow> P \<phi> \<phi>' \<Longrightarrow> safe_formula \<phi> \<Longrightarrow> safe_formula \<phi>') \<Longrightarrow>
+  (\<And>\<phi> \<phi>'. P \<phi> \<phi>' \<Longrightarrow> fv \<phi> = fv \<phi>') \<Longrightarrow>
+  (\<And>\<phi> \<phi>'. P (formula.Neg \<phi>) \<phi>' \<Longrightarrow> (case \<phi>' of formula.Neg \<phi>'' \<Rightarrow> P \<phi> \<phi>'' | _ \<Rightarrow> False)) \<Longrightarrow>
+  Regex.rel_regex (\<lambda>a b. P a b) r r' \<Longrightarrow> safe_regex m g r'"
+proof (induction m g r arbitrary: r' rule: safe_regex_induct)
+  case (Skip m g n)
+  then show ?case
+    by (cases r') auto
+next
+  case (Test m g \<phi>)
+  then show ?case
+    apply (cases r')
+        apply auto
+    subgoal for \<psi>
+      apply (cases "safe_formula \<phi>")
+       apply simp
+      apply (cases \<phi>)
+                      apply (auto)
+      subgoal for \<phi>' x
+        using Test(4)[of \<phi>' \<psi>]
+        by (cases \<psi>) auto
+      done
+    done
+next
+  case (Plus m g r s)
+  then show ?case
+    using rel_regex_fv_cong[OF _ Plus(5)]
+    by (cases r') auto
+next
+  case (TimesF g r s)
+  then show ?case
+    using rel_regex_fv_cong[OF _ TimesF(5)]
+    by (cases r') auto
+next
+  case (TimesP g r s)
+  then show ?case
+    using rel_regex_fv_cong[OF _ TimesP(5)]
+    by (cases r') auto
+next
+  case (Star m g r)
+  then show ?case
+    using rel_regex_fv_cong[OF _ Star(4)]
+    by (cases r') auto
+qed
+
+lemma list_all2_setD1: "list_all2 f xs ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> \<exists>y \<in> set ys. f x y"
+  by (induction xs ys rule: list.rel_induct) auto
+
+lemma list_all2_setD2: "list_all2 f xs ys \<Longrightarrow> y \<in> set ys \<Longrightarrow> \<exists>x \<in> set xs. f x y"
+  by (induction xs ys rule: list.rel_induct) auto
+
+lemma rel_formula_safe: "safe_formula \<phi> \<Longrightarrow> formula.rel_formula f \<phi> \<psi> \<Longrightarrow> safe_formula \<psi>"
+proof (induction \<phi> arbitrary: \<psi> rule: safe_formula_induct)
+  case (Eq_Const c d)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (Eq_Var1 c x)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (Eq_Var2 c x)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (Pred e ts)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (Let p \<phi>' \<phi> \<psi> )
+  then show ?case
+    by (cases \<psi>) (auto simp: Formula.nfv_def rel_formula_fv)
+next
+  case (And_assign \<phi> \<phi>' \<psi>)
+  then show ?case
+    apply (cases \<psi>)
+                    apply (auto simp: rel_formula_fv)
+     apply (auto simp: safe_assignment_def split: formula.splits)
+    done
+next
+  case (And_safe \<phi> \<psi>)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (And_constraint \<phi> \<phi>' \<psi>)
+  moreover have "is_constraint \<phi>' \<Longrightarrow> formula.rel_formula f \<phi>' \<psi>' \<Longrightarrow> is_constraint \<psi>'" for \<psi>'
+    by (cases \<phi>' rule: is_constraint.cases; cases \<psi>' rule: is_constraint.cases) auto
+  ultimately show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (And_Not \<phi> \<phi>' \<psi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv elim!: formula.rel_cases[of _ "formula.Neg \<phi>'"])
+next
+  case (Ands l pos neg \<psi>)
+  obtain l' pos' neg' where \<psi>_def: "\<psi> = formula.Ands l'" "partition safe_formula l' = (pos', neg')"
+    "list_all2 (formula.rel_formula f) l l'"
+    using Ands(8)
+    by (cases \<psi>) auto
+  note part = partition_P[OF \<psi>_def(2)] partition_set[OF Ands(1)[symmetric], symmetric]
+    partition_set[OF \<psi>_def(2), symmetric]
+  have pos_pos': "\<exists>p' \<in> set pos'. formula.rel_formula f p p'" if "p \<in> set pos" for p
+    using that list_all2_setD1[OF \<psi>_def(3), of p] part Ands(6)
+    by (auto simp: list_all_def)
+  have neg'_neg: "\<exists>n \<in> set neg. formula.rel_formula f n n'" if "n' \<in> set neg'" for n'
+    using that list_all2_setD2[OF \<psi>_def(3), of n'] part Ands(6)
+    by (auto simp: list_all_def)
+  have "pos' \<noteq> []"
+    using Ands(2) pos_pos'
+    by fastforce
+  moreover have "safe_formula (remove_neg x')" if "x' \<in> set neg'" for x'
+  proof -
+    have "formula.rel_formula f (remove_neg g) (remove_neg h)" if "formula.rel_formula f g h" for g h
+      using that
+      by (cases g; cases h) auto
+    then show ?thesis
+      using neg'_neg[OF that] Ands(4,7)
+      by (auto simp: list_all_def dest!: bspec spec[of _ "remove_neg x'"])
+  qed
+  moreover have "\<exists>p' \<in> set pos'. x \<in> fv p'" if n': "n' \<in> set neg'" "x \<in> fv n'" for x n'
+  proof -
+    obtain n where n_def: "n \<in> set neg" "x \<in> fv n"
+      using neg'_neg[OF n'(1)] n'(2)
+      by (auto simp: rel_formula_fv)
+    then obtain p where p_def: "p \<in> set pos" "x \<in> fv p"
+      using Ands(5)
+      by auto
+    show ?thesis
+      using pos_pos'[OF p_def(1)] p_def(2)
+      by (auto simp: rel_formula_fv)
+  qed
+  ultimately show ?case
+    by (auto simp: \<psi>_def(1,2) list_all_def simp del: partition_filter_conv)
+next
+  case (Neg \<phi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (Or \<phi> \<phi>' \<psi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (Exists \<phi> t)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (Agg y \<omega> tys t \<phi>)
+  then show ?case
+    using list_all2_lengthD[of f tys]
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (Prev I \<phi>)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (Next I \<phi>)
+  then show ?case
+    by (cases \<psi>) auto
+next
+  case (Since \<phi> I \<phi>' \<psi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (Not_Since \<phi> I \<phi>' \<psi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv elim!: formula.rel_cases[of _ "formula.Neg \<phi>"])
+next
+  case (Until \<phi> I \<phi>' \<psi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv)
+next
+  case (Not_Until \<phi> I \<phi>' \<psi>)
+  then show ?case
+    by (cases \<psi>) (auto simp: rel_formula_fv elim!: formula.rel_cases[of _ "formula.Neg \<phi>"])
+next
+  case (MatchP I r)
+  have "regex.rel_regex (formula.rel_formula f) r r' \<Longrightarrow> safe_regex Past Strict r'" for r'
+    apply (rule rel_regex_safe_aux[OF MatchP(1), where ?P="formula.rel_formula f"])
+    using MatchP(2)
+    by (auto simp: rel_formula_fv split: formula.splits)
+  then show ?case
+    using MatchP
+    by (cases \<psi>) auto
+next
+  case (MatchF I r)
+  have "regex.rel_regex (formula.rel_formula f) r r' \<Longrightarrow> safe_regex Futu Strict r'" for r'
+    apply (rule rel_regex_safe_aux[OF MatchF(1), where ?P="formula.rel_formula f"])
+    using MatchF(2)
+    by (auto simp: rel_formula_fv split: formula.splits)
+  then show ?case
+    using MatchF
+    by (cases \<psi>) auto
+qed
+
+lemma rel_regex_regex_atms: "Regex.rel_regex f r r' \<Longrightarrow> x \<in> Regex.atms r \<Longrightarrow> \<exists>x' \<in> Regex.atms r'. f x x'"
+  by (induction r r' rule: regex.rel_induct) auto
+
+lemma list_all2_swap: "list_all2 f xs ys \<Longrightarrow> list_all2 (\<lambda>x y. f y x) ys xs"
+  by (induction xs ys rule: list.rel_induct) auto
+
+lemma rel_regex_swap: "regex.rel_regex f r r' \<Longrightarrow> regex.rel_regex (\<lambda>x y. f y x) r' r"
+  by (induction r r' rule: regex.rel_induct) auto
+
+lemma rel_formula_swap: "formula.rel_formula f x y \<Longrightarrow> formula.rel_formula (\<lambda>x y. f y x) y x"
+  by (induction x y rule: formula.rel_induct) (auto intro: list_all2_swap rel_regex_swap)
+
+lemma rel_regex_safe:
+  assumes "Regex.rel_regex (formula.rel_formula f) r r'" "safe_regex m g r"
+  shows "safe_regex m g r'"
+proof -
+  have rel_Neg: "\<And>\<phi> \<phi>'. formula.rel_formula f (formula.Neg \<phi>) \<phi>' \<Longrightarrow>
+    case \<phi>' of formula.Neg x \<Rightarrow> formula.rel_formula f \<phi> x | _ \<Rightarrow> False"
+    by (auto split: formula.splits)
+  show ?thesis
+    using rel_regex_safe_aux[OF _ _ _ rel_Neg assms(1)] rel_formula_safe assms(2)
+    by (fastforce simp: rel_formula_fv)
+qed
+
+lemma rel_regex_atms:
+  assumes "Regex.rel_regex (formula.rel_formula f) r r'" "x \<in> atms r"
+  shows "\<exists>x' \<in> atms r'. formula.rel_formula f x x'"
+proof -
+  obtain \<phi> where \<phi>_def: "\<phi> \<in> Regex.atms r" "safe_formula \<phi> \<Longrightarrow> \<phi> = x"
+    "\<not>safe_formula \<phi> \<Longrightarrow> \<phi> = formula.Neg x"
+    using assms(2)
+    by (auto simp: atms_def) (force split: formula.splits)
+  obtain x' where x'_def: "x' \<in> regex.atms r'" "formula.rel_formula f \<phi> x'"
+    using rel_regex_regex_atms[OF assms(1) \<phi>_def(1)]
+    by auto
+  show ?thesis
+  proof (cases "safe_formula \<phi>")
+    case True
+    then show ?thesis
+      using x'_def rel_formula_safe[OF True x'_def(2)]
+      by (auto simp: \<phi>_def(2)[OF True] atms_def intro!: UN_I[OF x'_def(1)] bexI[of _ x'])
+  next
+    case False
+    obtain x'' where x''_def: "x' = formula.Neg x''" "formula.rel_formula f x x''"
+      using x'_def(2)
+      by (cases x') (auto simp: \<phi>_def(3)[OF False])    
+    show ?thesis
+      using x''_def(2) rel_formula_safe[OF _ rel_formula_swap[OF x'_def(2)]] False
+      unfolding atms_def
+      by (fastforce simp: x''_def intro!: UN_I[OF x'_def(1)] bexI[of _ x''])
+  qed
+qed
+
+lemma fv_safe_regex_atms: "safe_regex m g r \<Longrightarrow> x \<in> Regex.fv_regex Formula.fv r \<Longrightarrow>
+  \<exists>\<phi> \<in> atms r. safe_formula \<phi> \<and> x \<in> Formula.fv \<phi>"
+proof (induction r)
+  case (Test z)
+  then show ?case
+    by (cases z) (auto simp: atms_def)
+next
+  case (Times r1 r2)
+  then show ?case
+    by (cases m) auto
+qed auto
+
+lemma pred_regex_wty_formula: "regex.pred_regex (wty_formula S E) r \<Longrightarrow> \<phi> \<in> atms r \<Longrightarrow> S, E \<turnstile> \<phi>"
+  by (induction r) (auto split: if_splits formula.splits elim: wty_formula.cases)
+
+lemma wty_trm_cong_aux: "E \<turnstile> t :: typ \<Longrightarrow> E \<turnstile> t :: typ' \<Longrightarrow> typ = typ'"
+proof (induction t "typ" arbitrary: typ' rule: wty_trm.induct)
+  case (Plus x t y)
+  have "E \<turnstile> x :: typ'"
+    using Plus(6)
+    by (auto elim: wty_trm.cases)
+  then show ?case
+    using Plus(4)
+    by auto
+next
+  case (Minus x t y)
+  have "E \<turnstile> x :: typ'"
+    using Minus(6)
+    by (auto elim: wty_trm.cases)
+  then show ?case
+    using Minus(4)
+    by auto
+next
+  case (UMinus x t)
+  then show ?case
+    by (fastforce elim!: wty_trm.cases[of E "trm.UMinus x" typ'])
+next
+  case (Mult x t y)
+  have "E \<turnstile> x :: typ'"
+    using Mult(6)
+    by (auto elim: wty_trm.cases)
+  then show ?case
+    using Mult(4)
+    by auto
+next
+  case (Div x t y)
+  have "E \<turnstile> x :: typ'"
+    using Div(6)
+    by (auto elim: wty_trm.cases)
+  then show ?case
+    using Div(4)
+    by auto
+next
+  case (Mod x y)
+  have "E \<turnstile> x :: typ'"
+    using Mod(5)
+    by (auto elim: wty_trm.cases)
+  then show ?case
+    using Mod(3)
+    by auto
+next
+  case (F2i x)
+  then show ?case
+    by (fastforce elim!: wty_trm.cases[of E "trm.F2i x" typ'])
+next
+  case (I2f x)
+  then show ?case
+    by (fastforce elim!: wty_trm.cases[of E "trm.I2f x" typ'])
+qed (auto elim: wty_trm.cases)
+
+lemma wty_trm_cong: " (\<And>y. y \<in> fv_trm t \<Longrightarrow> E y = E' y) \<Longrightarrow>
+  E \<turnstile> t :: typ \<Longrightarrow> E' \<turnstile> t :: typ' \<Longrightarrow> typ = typ'"
+  using wty_trm_fv_cong wty_trm_cong_aux
+  by blast
+
+lemma wty_safe_assignment_dest: "wty_formula S E \<psi> \<Longrightarrow> safe_assignment X \<psi> \<Longrightarrow> x \<in> fv \<psi> - X \<Longrightarrow>
+  \<exists>t. E \<turnstile> t :: E x \<and> fv_trm t \<subseteq> X \<and> (\<psi> = formula.Eq (trm.Var x) t \<or> \<psi> = formula.Eq t (trm.Var x))"
+  by (auto simp: safe_assignment_def elim!: wty_formula.cases[of S E \<psi>])
+     (auto elim!: wty_trm.cases[of E "trm.Var x"] split: trm.splits)
+
+lemma rel_formula_wty_unique_fv: "safe_formula \<phi> \<Longrightarrow> wty_formula S E \<phi> \<Longrightarrow> wty_formula S E' \<phi>' \<Longrightarrow>
+  Formula.rel_formula f \<phi> \<phi>' \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> E x = E' x"
+proof (induction \<phi> arbitrary: S E E' \<phi>' x rule: safe_formula_induct)
+  case (Eq_Var1 c y)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "formula.Eq (trm.Const c) (trm.Var y)"] wty_formula.cases[of S E' \<phi>'])
+       (auto elim!: wty_trm.cases[of E] wty_trm.cases[of E'])
+next
+  case (Eq_Var2 c y)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "formula.Eq (trm.Var y) (trm.Const c)"] wty_formula.cases[of S E' \<phi>'])
+       (auto elim!: wty_trm.cases[of E] wty_trm.cases[of E'])
+next
+  case (Pred e ts)
+  then show ?case
+    apply (auto elim!: wty_formula.cases[of S E "formula.Pred e ts"] wty_formula.cases[of S E' \<phi>'])
+    subgoal for t tys
+      apply (cases t)
+               apply (auto simp: list_all2_conv_all_nth elim!: wty_trm.cases[of _ "trm.Var x"])
+      apply (auto simp: in_set_conv_nth)
+      apply (auto dest!: spec elim!: wty_trm.cases[of _ "trm.Var x"])
+      done
+    done
+next
+  case (Let p \<phi> \<phi>' S E E' \<alpha>)
+  obtain \<psi> \<psi>' where \<alpha>_def: "\<alpha> = formula.Let p \<psi> \<psi>'"
+    "formula.rel_formula f \<phi> \<psi>" "formula.rel_formula f \<phi>' \<psi>'"
+    using Let(8)
+    by (cases \<alpha>) auto
+  obtain F where F_def: "S, F \<turnstile> \<phi>"
+    "S(p \<mapsto> tabulate F 0 (Formula.nfv \<phi>)), E \<turnstile> \<phi>'"
+    using Let(6)
+    by (auto elim: wty_formula.cases)
+  obtain F' where F'_def: "S, F' \<turnstile> \<psi>"
+    "S(p \<mapsto> tabulate F' 0 (Formula.nfv \<psi>)), E' \<turnstile> \<psi>'"
+    using Let(7)
+    by (auto simp: \<alpha>_def(1) elim: wty_formula.cases)
+  have nfv: "Formula.nfv \<phi> = Formula.nfv \<psi>"
+    using \<alpha>_def(2)
+    by (auto simp: Formula.nfv_def rel_formula_fv)
+  have tab: "tabulate F 0 (Formula.nfv \<psi>) = tabulate F' 0 (Formula.nfv \<psi>)"
+    using Let(1) Let(4)[OF F_def(1) F'_def(1) \<alpha>_def(2)]
+    by (auto simp: nfv tabulate_alt)
+  show ?case
+    using Let(5)[OF F_def(2) F'_def(2)[folded tab nfv] \<alpha>_def(3)] Let(9)
+    by auto
+next
+  case (And_assign \<phi> \<psi> S E E' \<alpha>)
+  have case_\<phi>: "E z = E' z" if "z \<in> fv \<phi>" for z
+    using And_assign that
+    by (auto elim!: wty_formula.cases[of S E "Formula.And \<phi> \<psi>"] wty_formula.cases[of S E' \<alpha>])
+  {
+    assume notin: "x \<notin> fv \<phi>"
+    obtain \<phi>' \<psi>' where \<alpha>_def: "\<alpha> = Formula.And \<phi>' \<psi>'"
+      "Formula.rel_formula f \<phi> \<phi>'" "Formula.rel_formula f \<psi> \<psi>'"
+      using And_assign
+      by (cases \<alpha>) auto
+    obtain t where t_def: "E \<turnstile> t :: E x" "fv_trm t \<subseteq> fv \<phi>"
+      "\<psi> = formula.Eq (trm.Var x) t \<or> \<psi> = formula.Eq t (trm.Var x)"
+      using wty_safe_assignment_dest[of S E \<psi> "fv \<phi>" x] notin And_assign(2,4,7)
+      by (auto elim: wty_formula.cases)
+    have "safe_assignment (fv \<phi>') \<psi>'"
+      using And_assign(2) \<alpha>_def(2,3)
+      by (auto simp: rel_formula_fv safe_assignment_def split: formula.splits)
+    then obtain t' where t'_def: "E' \<turnstile> t' :: E' x" "fv_trm t' \<subseteq> fv \<phi>'"
+      "\<psi>' = formula.Eq (trm.Var x) t' \<or> \<psi>' = formula.Eq t' (trm.Var x)"
+      using wty_safe_assignment_dest[of S E' \<psi>' "fv \<phi>'" x] notin And_assign(2,5,7) \<alpha>_def(2,3)
+      by (auto simp: \<alpha>_def(1) rel_formula_fv elim: wty_formula.cases)
+    have ?case
+      using t_def t'_def \<alpha>_def(2,3) wty_trm_cong[of t' E E', OF case_\<phi>]
+      by (fastforce simp: rel_formula_fv)
+  }
+  then show ?case
+    using case_\<phi>
+    by (cases "x \<in> fv \<phi>") auto
+next
+  case (And_safe \<phi> \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.And \<phi> \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (And_constraint \<phi> \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.And \<phi> \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (And_Not \<phi> \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.And \<phi> (Formula.Neg \<psi>)"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (Ands l pos neg S E E' \<psi>)
+  obtain l' pos' neg' where \<psi>_def: "\<psi> = formula.Ands l'" "partition safe_formula l' = (pos', neg')"
+    "list_all2 (formula.rel_formula f) l l'"
+    using Ands(10)
+    by (cases \<psi>) auto
+  note part = partition_P[OF Ands(1)[symmetric]] partition_P[OF \<psi>_def(2)] partition_set[OF Ands(1)[symmetric], symmetric]
+    partition_set[OF \<psi>_def(2), symmetric]
+  have pos_pos': "\<exists>p' \<in> set pos'. formula.rel_formula f p p'" if "p \<in> set pos" for p
+    using that list_all2_setD1[OF \<psi>_def(3), of p] part rel_formula_safe
+    by (fastforce simp: list_all_def)
+  obtain p where p_def: "p \<in> set pos" "x \<in> fv p"
+    using Ands(5,11) part
+    by auto
+  then obtain p' where p'_def: "p' \<in> set pos'" "formula.rel_formula f p p'"
+    using pos_pos'
+    by auto
+  show ?case
+    using Ands(6,8,9) part(3,4) p_def p'_def
+    by (force simp: list_all_def \<psi>_def(1) elim!: wty_formula.cases[of S _ "formula.Ands _"])
+next
+  case (Neg \<phi>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "formula.Neg \<phi>"] wty_formula.cases[of S E' \<phi>'])
+next
+  case (Or \<phi> \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.Or \<phi> \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (Exists \<phi> t)
+  then show ?case
+    by (fastforce simp: fvi_Suc elim!: wty_formula.cases[of S E "Formula.Exists t \<phi>"] wty_formula.cases[of S E' \<phi>'])
+next
+  case (Agg y \<omega> tys trm \<phi> S E E' \<psi>)
+  obtain agg_type d where \<omega>_def: "\<omega> = (agg_type, d)"
+    by fastforce
+  obtain t where wty_\<phi>: "S, agg_env E tys \<turnstile> \<phi>" "E y = t_res agg_type t" "agg_env E tys \<turnstile> trm :: t"
+    using Agg
+    by (auto simp: \<omega>_def elim!: wty_formula.cases[of S E "formula.Agg y (agg_type, d) tys trm \<phi>"])
+  obtain tys' \<phi>' where \<psi>_def: "\<psi> = formula.Agg y \<omega> tys' trm \<phi>'"
+    "formula.rel_formula f \<phi> \<phi>'" "list_all2 f tys tys'"
+    using Agg(8)
+    by (cases \<psi>) auto
+  have tys_tys': "length tys = length tys'"
+    using \<psi>_def(3)
+    by (auto simp: list_all2_lengthD)
+  obtain t' where wty_\<phi>': "S, agg_env E' tys' \<turnstile> \<phi>'" "E' y = t_res agg_type t'" "agg_env E' tys' \<turnstile> trm :: t'"
+    using Agg(7)
+    by (auto simp: \<psi>_def(1) \<omega>_def elim!: wty_formula.cases[of S E' "formula.Agg y (agg_type, d) tys' trm \<phi>'"])
+  note IH = Agg(5)[OF order.refl Agg(4) wty_\<phi>(1) wty_\<phi>'(1) \<psi>_def(2)]
+  {
+    assume x: "x \<in> fv (formula.Agg y \<omega> tys trm \<phi>)" "x \<noteq> y"
+    have x_fv_\<phi>: "x + length tys \<in> fv \<phi>"
+      using Agg(3) x
+      by (auto simp: fvi_iff_fv[where ?b="length tys"] fvi_trm_iff_fv_trm[where ?b="length tys"])
+    have "E x = E' x"
+      using IH[OF x_fv_\<phi>]
+      by (auto simp: agg_env_def tys_tys')
+  }
+  then show ?case
+    using Agg(3,9) wty_\<phi>(3) wty_\<phi>'(3) wty_trm_cong[of trm "agg_env E tys" "agg_env E' tys'", OF IH]
+    by (cases "x = y") (auto simp: \<psi>_def(1) wty_\<phi>(2) wty_\<phi>'(2))
+next
+  case (Prev I \<phi>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "formula.Prev I \<phi>"] wty_formula.cases[of S E' \<phi>'])
+next
+  case (Next I \<phi>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "formula.Next I \<phi>"] wty_formula.cases[of S E' \<phi>'])
+next
+  case (Since \<phi> I \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.Since \<phi> I \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (Not_Since \<phi> I \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.Since (Formula.Neg \<phi>) I \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (Until \<phi> I \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.Until \<phi> I \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (Not_Until \<phi> I \<psi> S E E' \<alpha>)
+  then show ?case
+    by (auto elim!: wty_formula.cases[of S E "Formula.Until (Formula.Neg \<phi>) I \<psi>"] wty_formula.cases[of S E' \<alpha>])
+next
+  case (MatchP I r)
+  obtain r' where r'_def: "\<phi>' = formula.MatchP I r'" "Regex.rel_regex (formula.rel_formula f) r r'"
+    using MatchP(5)
+    by (cases \<phi>') auto
+  obtain a where a_def: "a \<in> atms r" "x \<in> fv a"
+    using MatchP(6) fv_safe_regex_atms[OF MatchP(1)]
+    by force
+  obtain a' where a'_def: "a' \<in> atms r'" "formula.rel_formula f a a'"
+    using rel_regex_atms[OF r'_def(2) a_def(1)]
+    by auto
+  have wty: "S, E \<turnstile> a" "S, E' \<turnstile> a'"
+    using MatchP(3,4) a_def(1) a'_def(1)
+    by (auto simp: r'_def(1) elim!: wty_formula.cases[of S E "formula.MatchP I r"]
+        wty_formula.cases[of S E' "formula.MatchP I r'"] intro: pred_regex_wty_formula)
+  show ?case
+    using MatchP(2) a_def(1) wty a'_def(2) a_def(2)
+    by auto
+next
+  case (MatchF I r)
+  obtain r' where r'_def: "\<phi>' = formula.MatchF I r'" "Regex.rel_regex (formula.rel_formula f) r r'"
+    using MatchF(5)
+    by (cases \<phi>') auto
+  obtain a where a_def: "a \<in> atms r" "x \<in> fv a"
+    using MatchF(6) fv_safe_regex_atms[OF MatchF(1)]
+    by force
+  obtain a' where a'_def: "a' \<in> atms r'" "formula.rel_formula f a a'"
+    using rel_regex_atms[OF r'_def(2) a_def(1)]
+    by auto
+  have wty: "S, E \<turnstile> a" "S, E' \<turnstile> a'"
+    using MatchF(3,4) a_def(1) a'_def(1)
+    by (auto simp: r'_def(1) elim!: wty_formula.cases[of S E "formula.MatchF I r"]
+        wty_formula.cases[of S E' "formula.MatchF I r'"] intro: pred_regex_wty_formula)
+  show ?case
+    using MatchF(2) a_def(1) wty a'_def(2) a_def(2)
+    by auto
+qed auto
+
+lemma safe_regex_regex_atms_dest:
+  assumes "safe_regex m g r" "a \<in> regex.atms r"
+  shows "safe_formula a \<and> a \<in> atms r \<or> (\<not>safe_formula a \<and> (case a of formula.Neg \<phi> \<Rightarrow> \<phi> \<in> atms r | _ \<Rightarrow> False))"
+  using assms
+proof (induction m g r rule: safe_regex.induct)
+  case (2 m g \<phi>)
+  then show ?case
+    by (cases "safe_formula a") (auto split: formula.splits)
+next
+  case (3 m g r s)
+  then show ?case
+    by (cases a) auto
+next
+  case (4 g r s)
+  then show ?case
+    by (cases a) auto
+next
+  case (5 g r s)
+  then show ?case
+    by (cases a) auto
+next
+  case (6 m g r)
+  then show ?case
+    by (cases a) auto
+qed (auto split: formula.splits)
+
+lemma rel_formula_wty_unique_bv: "safe_formula \<phi> \<Longrightarrow> wty_formula S E \<phi> \<Longrightarrow> wty_formula S E' \<phi>' \<Longrightarrow>
+  Formula.rel_formula f \<phi> \<phi>' \<Longrightarrow> Formula.rel_formula (=) \<phi> \<phi>'"
+proof (induction \<phi> arbitrary: S E E' \<phi>' rule: safe_formula_induct)
+  case (Eq_Const c d)
+  then show ?case
+    by (cases \<phi>') auto
+next
+  case (Eq_Var1 c x)
+  then show ?case
+    by (cases \<phi>') auto
+next
+  case (Eq_Var2 c x)
+  then show ?case
+    by (cases \<phi>') auto
+next
+  case (Pred e ts)
+  then show ?case
+    by (cases \<phi>') auto
+next
+  case (Let p \<phi> \<phi>' S E E' \<alpha>)
+  obtain \<psi> \<psi>' where \<alpha>_def: "\<alpha> = formula.Let p \<psi> \<psi>'"
+    "formula.rel_formula f \<phi> \<psi>" "formula.rel_formula f \<phi>' \<psi>'"
+    using Let(8)
+    by (cases \<alpha>) auto
+  obtain F where F_def: "S, F \<turnstile> \<phi>"
+    "S(p \<mapsto> tabulate F 0 (Formula.nfv \<phi>)), E \<turnstile> \<phi>'"
+    using Let(6)
+    by (auto elim: wty_formula.cases)
+  obtain F' where F'_def: "S, F' \<turnstile> \<psi>"
+    "S(p \<mapsto> tabulate F' 0 (Formula.nfv \<psi>)), E' \<turnstile> \<psi>'"
+    using Let(7)
+    by (auto simp: \<alpha>_def(1) elim: wty_formula.cases)
+  have nfv: "Formula.nfv \<phi> = Formula.nfv \<psi>"
+    using \<alpha>_def(2)
+    by (auto simp: Formula.nfv_def rel_formula_fv)
+  have tab: "tabulate F 0 (Formula.nfv \<psi>) = tabulate F' 0 (Formula.nfv \<psi>)"
+    using Let(1) rel_formula_wty_unique_fv[OF Let(2) F_def(1) F'_def(1) \<alpha>_def(2)]
+    by (auto simp: nfv tabulate_alt)
+  show ?case
+    using Let(4)[OF F_def(1) F'_def(1) \<alpha>_def(2)]
+      Let(5)[OF F_def(2) F'_def(2)[folded tab nfv] \<alpha>_def(3)]
+    by (auto simp: \<alpha>_def(1))
+next
+  case (And_assign \<phi> \<psi>)
+  then show ?case
+    apply (cases \<phi>')
+                    apply (auto elim!: wty_formula.cases[of _ _ "formula.And _ _"])
+    subgoal for x' y'
+      by (cases \<psi>; cases y') (auto simp: safe_assignment_def)
+    done
+next
+  case (And_safe \<phi> \<psi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.And _ _"])
+next
+  case (And_constraint \<phi> \<psi>)
+  then show ?case
+    apply (cases \<phi>')
+                    apply (auto elim!: wty_formula.cases[of _ _ "formula.And _ _"])
+    subgoal for x' y'
+      by (cases \<psi> rule: is_constraint.cases; cases y' rule: is_constraint.cases) auto
+    done
+next
+  case (And_Not \<phi> \<psi>)
+  then show ?case
+    apply (cases \<phi>') apply (auto elim!: wty_formula.cases[of _ _ "formula.And _ _"])
+    subgoal for x y z
+      by (cases z) (auto elim!: wty_formula.cases[of _ _ "formula.Neg _"])
+    done
+next
+  case (Ands l pos neg)
+  have not_safe: "(case z of formula.Neg \<phi> \<Rightarrow> True | _ \<Rightarrow> False)" if "\<not>safe_formula z" "z \<in> set l" for z
+    using Ands that
+    by (cases z) (auto simp: list_all_def simp del: safe_formula.simps)
+  have "formula.rel_formula (=) z z'"
+    if prems: "z \<in> set l" "z' \<in> set l'" "formula.rel_formula f z z'" "\<phi>' = formula.Ands l'" for z z' l'
+  proof (cases "safe_formula z")
+    case True
+    then show ?thesis
+      using Ands that
+      by (fastforce simp: list_all_def elim!: wty_formula.cases[of _ _ "formula.Ands _"])
+  next
+    case False
+    obtain \<phi> where z_def: "z = formula.Neg \<phi>"
+      using not_safe[OF False prems(1)]
+      by (auto split: formula.splits)
+    show ?thesis
+      using prems(3)
+      apply (cases z')
+                      apply (auto simp: z_def)
+      using Ands prems False
+      by (fastforce simp: list_all_def z_def elim!: wty_formula.cases[of _ _ "formula.Ands _"] wty_formula.cases[of _ _ "formula.Neg _"] dest!: bspec[of "set l" _ "formula.Neg \<phi>"]
+          bspec[of "set l'" _ "formula.Neg _"])
+  qed
+  then show ?case
+    using Ands
+    apply (cases \<phi>')
+                    apply (auto simp: list_all_def)
+    apply (rule list.rel_mono_strong)
+     apply fastforce+
+    done
+next
+  case (Neg \<phi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.Neg _"])
+next
+  case (Or \<phi> \<psi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.Or _ _"])
+next
+  case (Exists \<phi> t)
+  then show ?case
+    using rel_formula_wty_unique_fv[where ?x=0]
+    by (cases \<phi>') (fastforce elim!: wty_formula.cases[of _ _ "formula.Exists _ _ "])+
+next
+  case (Agg y \<omega> tys trm \<phi> S E E' \<psi>)
+  obtain tys' \<phi>' where \<psi>_def: "\<psi> = formula.Agg y \<omega> tys' trm \<phi>'" "list_all2 f tys tys'"
+    using Agg
+    by (cases \<psi>) auto
+  have "agg_env E tys x = agg_env E' tys' x" if "x \<in> fv \<phi>" for x
+    using Agg rel_formula_wty_unique_fv[of \<phi> S "agg_env E tys" "agg_env E' tys'" \<phi>' f] that
+    by (auto simp: \<psi>_def(1) elim!: wty_formula.cases[of _ _ "formula.Agg _ _ _ _ _"])
+  then have "list_all2 (=) tys tys'"
+    using Agg(2) \<psi>_def(2)
+    by (fastforce simp: list_all2_conv_all_nth agg_env_def)
+  then show ?case
+    using Agg
+    by (auto simp: \<psi>_def(1) elim!: wty_formula.cases[of _ _ "formula.Agg _ _ _ _ _"])
+next
+  case (Prev I \<phi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.Prev _ _"])
+next
+  case (Next I \<phi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.Next _ _"])
+next
+  case (Since \<phi> I \<psi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.Since _ _ _"])
+next
+  case (Not_Since \<phi> I \<psi>)
+  then show ?case
+    apply (cases \<phi>')
+                    apply (auto elim!: wty_formula.cases[of _ _ "formula.Since _ _ _"])
+    subgoal for x y z
+      by (cases y) (auto elim!: wty_formula.cases[of _ _ "formula.Neg _"])
+    done
+next
+  case (Until \<phi> I \<psi>)
+  then show ?case
+    by (cases \<phi>') (auto elim!: wty_formula.cases[of _ _ "formula.Until _ _ _"])
+next
+  case (Not_Until \<phi> I \<psi>)
+  then show ?case
+    apply (cases \<phi>')
+                    apply (auto elim!: wty_formula.cases[of _ _ "formula.Until _ _ _"])
+    subgoal for x y z
+      by (cases y) (auto elim!: wty_formula.cases[of _ _ "formula.Neg _"])
+    done
+next
+  case (MatchP I r)
+  obtain r' where r'_def: "\<phi>' = formula.MatchP I r'" "Regex.rel_regex (formula.rel_formula f) r r'"
+    using MatchP(5)
+    by (cases \<phi>') auto
+  show ?case
+    using MatchP
+    apply (auto simp: r'_def(1))
+    apply (rule regex.rel_mono_strong)
+     apply assumption
+    subgoal for z z'
+      using rel_regex_safe[of f r r' Past Strict]
+        safe_regex_regex_atms_dest[of Past Strict r z]
+        safe_regex_regex_atms_dest[of Past Strict r' z']
+      apply (auto elim!: wty_formula.cases[of _ _ "formula.MatchP _ _"])
+      using pred_regex_wty_formula[of S E r] pred_regex_wty_formula[of S E' r']
+         apply fastforce
+        apply (meson rel_formula_safe)
+      using rel_formula_safe rel_formula_swap apply blast
+      subgoal
+        apply (cases z; cases z')
+                            apply auto
+        using pred_regex_wty_formula[of S E r] pred_regex_wty_formula[of S E' r']
+        by (fastforce elim!: wty_formula.cases[of _ _ "formula.Neg _"])+
+      done
+    done
+next
+  case (MatchF I r)
+  obtain r' where r'_def: "\<phi>' = formula.MatchF I r'" "Regex.rel_regex (formula.rel_formula f) r r'"
+    using MatchF(5)
+    by (cases \<phi>') auto
+  show ?case
+    using MatchF
+    apply (auto simp: r'_def(1))
+    apply (rule regex.rel_mono_strong)
+     apply assumption
+    subgoal for z z'
+      using rel_regex_safe[of f r r' Futu Strict]
+        safe_regex_regex_atms_dest[of Futu Strict r z]
+        safe_regex_regex_atms_dest[of Futu Strict r' z']
+      apply (auto elim!: wty_formula.cases[of _ _ "formula.MatchF _ _"])
+      using pred_regex_wty_formula[of S E r] pred_regex_wty_formula[of S E' r']
+         apply fastforce
+        apply (meson rel_formula_safe)
+      using rel_formula_safe rel_formula_swap apply blast
+      subgoal
+        apply (cases z; cases z')
+                            apply auto
+        using pred_regex_wty_formula[of S E r] pred_regex_wty_formula[of S E' r']
+        by (fastforce elim!: wty_formula.cases[of _ _ "formula.Neg _"])+
+      done
+    done
+qed
+
+thm rel_formula_wty_unique_fv rel_formula_wty_unique_bv
 
 type_synonym tyenv' = "nat \<Rightarrow> ty option"
 definition check :: "sig \<Rightarrow> tyenv' \<Rightarrow> ty option Formula.formula => (tyenv * ty Formula.formula) option"
@@ -910,6 +1705,7 @@ definition check :: "sig \<Rightarrow> tyenv' \<Rightarrow> ty option Formula.fo
 lemma check_soundness:"check S E' \<phi>' = Some (E, \<phi>) \<Longrightarrow> wty_formula S E \<phi> \<and>
 rel_formula (\<lambda>x y. case x of Some t \<Rightarrow> y = t | _ \<Rightarrow> True) \<phi> \<phi>'"
   sorry
+
 (*<*)
 end
 (*>*)
