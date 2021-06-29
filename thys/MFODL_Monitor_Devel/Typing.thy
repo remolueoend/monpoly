@@ -1482,7 +1482,7 @@ next
     by (cases a) auto
 qed (auto split: formula.splits)
 
-lemma rel_formula_wty_unique_bv: "safe_formula \<phi> \<Longrightarrow> wty_formula S E \<phi> \<Longrightarrow> wty_formula S E' \<phi>' \<Longrightarrow>
+lemma rel_formula_wty_unique_bv_aux: "safe_formula \<phi> \<Longrightarrow> wty_formula S E \<phi> \<Longrightarrow> wty_formula S E' \<phi>' \<Longrightarrow>
   Formula.rel_formula f \<phi> \<phi>' \<Longrightarrow> Formula.rel_formula (=) \<phi> \<phi>'"
 proof (induction \<phi> arbitrary: S E E' \<phi>' rule: safe_formula_induct)
   case (Eq_Const c d)
@@ -1696,15 +1696,174 @@ next
     done
 qed
 
-thm rel_formula_wty_unique_fv rel_formula_wty_unique_bv
+lemma list_all2_eq: "list_all2 (=) xs ys \<Longrightarrow> xs = ys"
+  by (induction xs ys rule: list.rel_induct) auto
 
-type_synonym tyenv' = "nat \<Rightarrow> ty option"
-definition check :: "sig \<Rightarrow> tyenv' \<Rightarrow> ty option Formula.formula => (tyenv * ty Formula.formula) option"
-  where "check=  undefined"
+lemma rel_regex_eq: "regex.rel_regex (=) r r' \<Longrightarrow> r = r'"
+  by (induction r r' rule: regex.rel_induct) auto
 
-lemma check_soundness:"check S E' \<phi>' = Some (E, \<phi>) \<Longrightarrow> wty_formula S E \<phi> \<and>
-rel_formula (\<lambda>x y. case x of Some t \<Rightarrow> y = t | _ \<Rightarrow> True) \<phi> \<phi>'"
+lemma rel_formula_eq: "Formula.rel_formula (=) \<phi> \<phi>' \<Longrightarrow> \<phi> = \<phi>'"
+  by (induction \<phi> \<phi>' rule: formula.rel_induct) (auto simp: list_all2_eq rel_regex_eq)
+
+lemma rel_formula_wty_unique_bv: "safe_formula \<phi> \<Longrightarrow> wty_formula S E \<phi> \<Longrightarrow> wty_formula S E' \<phi>' \<Longrightarrow>
+  Formula.rel_formula f \<phi> \<phi>' \<Longrightarrow> \<phi> = \<phi>'"
+  using rel_formula_wty_unique_bv_aux
+  by (auto simp: rel_formula_eq)
+
+
+type_synonym tyoenv = "nat \<Rightarrow> ty option"
+
+definition check :: "sig \<Rightarrow> tyoenv \<Rightarrow> ty option Formula.formula \<Rightarrow> (tyenv * ty Formula.formula) option"
+  where "check = undefined"
+
+definition check_safe :: "sig \<Rightarrow> unit Formula.formula \<Rightarrow> (tyenv * ty Formula.formula) option" where
+  "check_safe S \<phi> = check S Map.empty (formula.map_formula Map.empty \<phi>)"
+
+definition extends :: "tyoenv \<Rightarrow> tyenv \<Rightarrow> bool" where
+  "extends E E' \<longleftrightarrow> (\<forall>x. case E x of Some t \<Rightarrow> E' x = t | _ \<Rightarrow> True)"
+
+definition wty_result :: "sig \<Rightarrow> tyoenv \<Rightarrow> ty option Formula.formula \<Rightarrow> tyenv \<Rightarrow> ty Formula.formula \<Rightarrow> bool" where
+  "wty_result S E \<phi> E' \<phi>' \<longleftrightarrow> extends E E' \<and> wty_formula S E' \<phi>' \<and>
+    formula.rel_formula (\<lambda>x y. case x of Some t \<Rightarrow> y = t | _ \<Rightarrow> True) \<phi> \<phi>'"
+
+lemma check_sound: "check S E \<phi> = Some (E', \<phi>') \<Longrightarrow> wty_result S E \<phi> E' \<phi>'"
   sorry
+
+lemma check_safe_sound: "safe_formula \<phi> \<Longrightarrow> check_safe S \<phi> = Some (E', \<phi>') \<Longrightarrow>
+  wty_formula S E' \<phi>' \<and> formula.rel_formula (\<lambda>_ _. True) \<phi> \<phi>'"
+  using check_sound[of S Map.empty "formula.map_formula Map.empty \<phi>" E' \<phi>']
+  by (auto simp: check_safe_def wty_result_def formula.rel_map)
+
+lemma check_complete: "wty_result S E \<phi> E' \<phi>' \<Longrightarrow>
+  (\<And>E'' \<phi>''. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> \<phi>' = \<phi>'') \<Longrightarrow>
+  (\<And>E'' \<phi>'' x. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> E' x = E'' x) \<Longrightarrow>
+  check S E \<phi> = Some (E', \<phi>')"
+  sorry
+
+lemma rel_regex_mono_trans:
+  "regex.rel_regex (\<lambda>a b. \<forall>x. R a x \<longrightarrow> R' b x) x y \<Longrightarrow> regex.rel_regex R x z \<Longrightarrow> regex.rel_regex R' y z"
+proof (induction x y arbitrary: z rule: regex.rel_induct)
+  case (Skip a1 b1)
+  then show ?case
+    by (cases z) auto
+next
+  case (Test a2 b2)
+  then show ?case
+    by (cases z) auto
+next
+  case (Plus a31 a32 b31 b32)
+  then show ?case
+    by (cases z) auto
+next
+  case (Times a41 a42 b41 b42)
+  then show ?case
+    by (cases z) auto
+next
+  case (Star a5 b5)
+  then show ?case
+    by (cases z) auto
+qed
+
+lemma rel_formula_trans:
+  assumes Rtrans: "\<And>x y z. R x y \<Longrightarrow> R x z \<Longrightarrow> R' y z"
+  shows "formula.rel_formula R x y \<Longrightarrow> formula.rel_formula R x z \<Longrightarrow> formula.rel_formula R' y z"
+proof (induction x y arbitrary: z rule: formula.rel_induct)
+  case (Pred a11 a12 b11 b12)
+  then show ?case
+    by (cases z) auto
+next
+  case (Let a21 a22 a23 b21 b22 b23)
+  then show ?case
+    by (cases z) auto
+next
+  case (Eq a31 a32 b31 b32)
+  then show ?case
+    by (cases z) auto
+next
+  case (Less a41 a42 b41 b42)
+  then show ?case
+    by (cases z) auto
+next
+  case (LessEq a51 a52 b51 b52)
+  then show ?case
+    by (cases z) auto
+next
+  case (Neg a6 b6)
+  then show ?case
+    by (cases z) auto
+next
+  case (Or a71 a72 b71 b72)
+  then show ?case
+    by (cases z) auto
+next
+  case (And a81 a82 b81 b82)
+  then show ?case
+    by (cases z) auto
+next
+  case (Ands a9 b9)
+  then show ?case
+    by (cases z) (auto simp: list_all2_conv_all_nth)
+next
+  case (Exists a101 a102 b101 b102)
+  then show ?case
+    using Rtrans
+    by (cases z) auto
+next
+  case (Agg a111 a112 a113 a114 a115 b111 b112 b113 b114 b115)
+  then show ?case
+    using Rtrans
+    by (cases z) (auto simp: list_all2_conv_all_nth)
+next
+  case (Prev a121 a122 b121 b122)
+  then show ?case
+    by (cases z) auto
+next
+  case (Next a131 a132 b131 b132)
+  then show ?case
+    by (cases z) auto
+next
+  case (Since a141 a142 a143 b141 b142 b143)
+  then show ?case
+    by (cases z) auto
+next
+  case (Until a151 a152 a153 b151 b152 b153)
+  then show ?case
+    by (cases z) auto
+next
+  case (MatchF a161 a162 b161 b162)
+  then show ?case
+    by (cases z) (auto intro: rel_regex_mono_trans)
+next
+  case (MatchP a171 a172 b171 b172)
+  then show ?case
+    by (cases z) (auto intro: rel_regex_mono_trans)
+qed
+
+lemma safe_check_complete:
+  assumes "safe_formula \<phi>" "wty_result S E \<phi> E' \<phi>'"
+  shows "check S E \<phi> = Some (E', \<phi>')"
+proof -
+  have safe: "safe_formula \<phi>'"
+    using assms
+    by (auto simp: wty_result_def rel_formula_safe)
+  show ?thesis
+    using rel_formula_wty_unique_bv[OF safe] rel_formula_wty_unique_fv[OF safe] assms(2)
+      rel_formula_trans[of _ "\<lambda>_ _. True"]
+    by (auto simp: wty_result_def rel_formula_fv intro!: check_complete) blast+
+qed
+
+lemma check_safe_complete:
+  assumes "safe_formula \<phi>" "wty_formula S E' \<phi>'" "formula.rel_formula f \<phi> \<phi>'"
+  shows "check_safe S \<phi> = Some (E', \<phi>')"
+proof -
+  have safe: "safe_formula (formula.map_formula Map.empty \<phi>)"
+    by (rule rel_formula_safe[OF assms(1) rel_formula_swap])
+       (auto simp add: formula.rel_map intro: formula.rel_refl)
+  then show ?thesis
+    using assms(2,3)
+    by (auto simp: check_safe_def wty_result_def extends_def formula.rel_map
+        intro!: safe_check_complete intro: formula.rel_mono_strong)
+qed
 
 (*<*)
 end
