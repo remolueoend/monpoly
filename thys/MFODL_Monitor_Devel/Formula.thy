@@ -386,7 +386,8 @@ fun safe_letpast :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> rec_s
 |  "safe_letpast p (Agg y \<omega> b' f \<phi>) = safe_letpast p \<phi>"
 |  "safe_letpast p (Prev I \<phi>) = PastRec * safe_letpast p \<phi>"
 |  "safe_letpast p (Next I \<phi>) = AnyRec * safe_letpast p \<phi>"
-|  "safe_letpast p (Since \<phi> I \<psi>) = safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>"
+|  "safe_letpast p (Since \<phi> I \<psi>) = safe_letpast p \<phi> \<squnion>
+      ((if memL I 0 then NonFutuRec else PastRec) * safe_letpast p \<psi>)"
 |  "safe_letpast p (Until \<phi> I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
 |  "safe_letpast p (MatchP I r) = \<Squnion>(safe_letpast p ` Regex.atms r)"
 |  "safe_letpast p (MatchF I r) =  AnyRec * \<Squnion>(safe_letpast p ` Regex.atms r)"

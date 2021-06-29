@@ -3382,8 +3382,8 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
   MSince of
     unit args_ext * ('a, 'b) mformula * ('a, 'b) mformula *
       (((event_data option) list) set list *
-        ((event_data option) list) set list) *
-      nat list * 'a
+        (((event_data option) list) set list * (nat list * bool))) *
+      'a
   | MUntil of
       unit args_ext * ('a, 'b) mformula * ('a, 'b) mformula *
         (((event_data option) list) set list *
@@ -5013,7 +5013,9 @@ let rec safe_letpast
         times_rec_safety AnyRec
           (sup_rec_safety (safe_letpast p phi) (safe_letpast p psi))
     | p, Since (phi, i, psi) ->
-        sup_rec_safety (safe_letpast p phi) (safe_letpast p psi)
+        sup_rec_safety (safe_letpast p phi)
+          (times_rec_safety (if memL i zero_nata then NonFutuRec else PastRec)
+            (safe_letpast p psi))
     | p, Next (i, phi) -> times_rec_safety AnyRec (safe_letpast p phi)
     | p, Prev (i, phi) -> times_rec_safety PastRec (safe_letpast p phi)
     | p, Agg (y, omega, b, f, phi) -> safe_letpast p phi
@@ -5497,6 +5499,10 @@ let rec eval_until
                 let (xs, aa) = a in
                  (a2 :: xs, aa))
           else ([], (t, (a1, a2)) :: aux));;
+
+let rec mbuf2S_add
+  xsa ysa tsa (xs, (ys, (ts, skew))) =
+    (xs @ xsa, (ys @ ysa, (ts @ tsa, skew)));;
 
 let rec mbuf2_take
   f x1 = match f, x1 with
@@ -7028,6 +7034,14 @@ let rec mmulti_join (_A1, _A2, _A3)
                                xs @ ys) @
                         l_neg))));;
 
+let rec eval_mmuaux (_A1, _A2)
+  args nt aux =
+    (let (tp, (tss, (len, (maskL, (maskR, (a1_map, (a2_map, (donea, _)))))))) =
+       shift_mmuaux (_A1, _A2) args nt aux in
+      (rev donea,
+        (tp, (tss, (len, (maskL,
+                           (maskR, (a1_map, (a2_map, ([], zero_nata))))))))));;
+
 let rec add_new_table_mmsaux (_A1, _A2, _A3)
   args x
     (t, (gc, (maskL, (maskR, (data_prev, (data_in, (tuple_in, tuple_since)))))))
@@ -7335,27 +7349,48 @@ let rec result_mmsaux (_A1, _A2)
              (ccompare_list (ccompare_option _A2)), set_impl_list)
         tuple_in;;
 
-let rec mupdate_since
-  args rel1 rel2 nt aux =
-    (let aux0 =
-       gc_join_mmsaux (ceq_event_data, ccompare_event_data, equal_event_data)
-         args rel1
-         (add_new_ts_mmsaux
-           (ceq_event_data, ccompare_event_data, equal_event_data) args nt aux)
-       in
-     let auxa =
-       add_new_table_mmsaux
-         (ceq_event_data, ccompare_event_data, equal_event_data) args rel2 aux0
-       in
-      (result_mmsaux (ceq_event_data, ccompare_event_data) args auxa, auxa));;
-
-let rec eval_mmuaux (_A1, _A2)
-  args nt aux =
-    (let (tp, (tss, (len, (maskL, (maskR, (a1_map, (a2_map, (donea, _)))))))) =
-       shift_mmuaux (_A1, _A2) args nt aux in
-      (rev donea,
-        (tp, (tss, (len, (maskL,
-                           (maskR, (a1_map, (a2_map, ([], zero_nata))))))))));;
+let rec meval_since
+  args rs x2 aux = match args, rs, x2, aux with
+    args, rs, (x :: xs, ([], (t :: ts, skew))), aux ->
+      (if skew || memL (args_ivl args) zero_nata
+        then (rev rs, ((x :: xs, ([], (t :: ts, skew))), aux))
+        else (let auxa =
+                gc_join_mmsaux
+                  (ceq_event_data, ccompare_event_data, equal_event_data) args x
+                  (add_new_ts_mmsaux
+                    (ceq_event_data, ccompare_event_data, equal_event_data) args
+                    t aux)
+                in
+               (rev (result_mmsaux (ceq_event_data, ccompare_event_data) args
+                       auxa ::
+                      rs),
+                 ((xs, ([], (ts, true))), auxa))))
+    | args, rs, (xs, (y :: ys, (ts, true))), aux ->
+        meval_since args rs (xs, (ys, (ts, false)))
+          (add_new_table_mmsaux
+            (ceq_event_data, ccompare_event_data, equal_event_data) args y aux)
+    | args, rs, (x :: xs, (y :: ys, (t :: ts, false))), aux ->
+        (let auxa =
+           add_new_table_mmsaux
+             (ceq_event_data, ccompare_event_data, equal_event_data) args y
+             (gc_join_mmsaux
+               (ceq_event_data, ccompare_event_data, equal_event_data) args x
+               (add_new_ts_mmsaux
+                 (ceq_event_data, ccompare_event_data, equal_event_data) args t
+                 aux))
+           in
+          meval_since args
+            (result_mmsaux (ceq_event_data, ccompare_event_data) args auxa ::
+              rs)
+            (xs, (ys, (ts, false))) auxa)
+    | args, rs, ([], ([], vb)), aux -> (rev rs, (([], ([], vb)), aux))
+    | args, rs, ([], (v, (vc, false))), aux ->
+        (rev rs, (([], (v, (vc, false))), aux))
+    | args, rs, (v, (vd :: ve, ([], false))), aux ->
+        (rev rs, ((v, (vd :: ve, ([], false))), aux))
+    | args, rs, (v, ([], ([], ve))), aux -> (rev rs, ((v, ([], ([], ve))), aux))
+    | args, rs, (v, (vb, ([], false))), aux ->
+        (rev rs, ((v, (vb, ([], false))), aux));;
 
 let rec eval_constraint0
   xa0 x y = match xa0, x, y with MEq, x, y -> equal_event_dataa x y
@@ -7620,22 +7655,12 @@ let rec meval
          let (zs, auxb) =
            eval_mmuaux (ceq_event_data, ccompare_event_data) args nt auxa in
           (zs, MUntil (args, phia, psia, bufa, ntsa, nt, auxb)))
-    | j, n, ts, db, MSince (args, phi, psi, buf, nts, aux) ->
+    | j, n, ts, db, MSince (args, phi, psi, buf, aux) ->
         (let (xs, phia) = meval j n ts db phi in
          let (ys, psia) = meval j n ts db psi in
-         let a =
-           mbuf2t_take
-             (fun r1 r2 t (zs, auxa) ->
-               (let a = mupdate_since args r1 r2 t auxa in
-                let (z, aa) = a in
-                 (zs @ [z], aa)))
-             ([], aux) (mbuf2_add xs ys buf) (nts @ ts)
-           in
-         let (aa, b) = a in
-          (let (zs, auxa) = aa in
-            (fun (bufa, ntsa) ->
-              (zs, MSince (args, phia, psia, bufa, ntsa, auxa))))
-            b)
+         let (zs, (bufa, auxa)) =
+           meval_since args [] (mbuf2S_add xs ys ts buf) aux in
+          (zs, MSince (args, phia, psia, bufa, auxa)))
     | j, n, ts, db, MNext (i, phi, first, nts) ->
         (let (xs, phia) = meval j n ts db phi in
          let (xsa, firsta) =
@@ -8033,7 +8058,7 @@ let rec minit0
         (if safe_formula phi
           then MSince
                  (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   minit0 n phi, minit0 n psi, ([], []), [],
+                   minit0 n phi, minit0 n psi, ([], ([], ([], false))),
                    init_mmsaux ccompare_event_data
                      (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
                        true))
@@ -8041,7 +8066,7 @@ let rec minit0
                  MSince
                    (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                       false,
-                     minit0 n phia, minit0 n psi, ([], []), [],
+                     minit0 n phia, minit0 n psi, ([], ([], ([], false))),
                      init_mmsaux ccompare_event_data
                        (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                          false))))
@@ -8115,6 +8140,41 @@ let rec mstep
           (plus_nata (mstate_i st) (size_list xs),
             plus_nata (mstate_j st) one_nata, m, mstate_n st, ())));;
 
+let rec update_until
+  args rel1 rel2 nt aux =
+    mapa (fun (t, (a1, a2)) ->
+           (t, ((if args_pos args
+                  then join (ceq_event_data, ccompare_event_data,
+                              equal_event_data)
+                         a1 true rel1
+                  else sup_seta
+                         ((ceq_list (ceq_option ceq_event_data)),
+                           (ccompare_list
+                             (ccompare_option ccompare_event_data)))
+                         a1 rel1),
+                 (if memL (args_ivl args) (minus_nata nt t) &&
+                       memR (args_ivl args) (minus_nata nt t)
+                   then sup_seta
+                          ((ceq_list (ceq_option ceq_event_data)),
+                            (ccompare_list
+                              (ccompare_option ccompare_event_data)))
+                          a2 (join (ceq_event_data, ccompare_event_data,
+                                     equal_event_data)
+                               rel2 (args_pos args) a1)
+                   else a2))))
+      aux @
+      [(nt, (rel1,
+              (if memL (args_ivl args) zero_nata then rel2
+                else empty_table
+                       ((ceq_list (ceq_option ceq_event_data)),
+                         (ccompare_list (ccompare_option ccompare_event_data)),
+                         set_impl_list))))];;
+
+let rec add_new_vmuaux
+  x = (fun args rel1 rel2 nt (_, auxlist) ->
+        (nt, update_until args rel1 rel2 nt auxlist))
+        x;;
+
 let rec add_new_table_vmsaux
   x = (fun _ rel2 (cur, auxlist) ->
         (cur, (match auxlist with [] -> [(cur, rel2)]
@@ -8159,46 +8219,32 @@ let rec join_vmsaux
               auxlist))
         x;;
 
-let rec vmupdate_since
-  args rel1 rel2 nt aux =
-    (let aux0 = join_vmsaux args rel1 (add_new_ts_vmsaux args nt aux) in
-     let auxa = add_new_table_vmsaux args rel2 aux0 in
-      (result_vmsaux args auxa, auxa));;
-
-let rec update_until
-  args rel1 rel2 nt aux =
-    mapa (fun (t, (a1, a2)) ->
-           (t, ((if args_pos args
-                  then join (ceq_event_data, ccompare_event_data,
-                              equal_event_data)
-                         a1 true rel1
-                  else sup_seta
-                         ((ceq_list (ceq_option ceq_event_data)),
-                           (ccompare_list
-                             (ccompare_option ccompare_event_data)))
-                         a1 rel1),
-                 (if memL (args_ivl args) (minus_nata nt t) &&
-                       memR (args_ivl args) (minus_nata nt t)
-                   then sup_seta
-                          ((ceq_list (ceq_option ceq_event_data)),
-                            (ccompare_list
-                              (ccompare_option ccompare_event_data)))
-                          a2 (join (ceq_event_data, ccompare_event_data,
-                                     equal_event_data)
-                               rel2 (args_pos args) a1)
-                   else a2))))
-      aux @
-      [(nt, (rel1,
-              (if memL (args_ivl args) zero_nata then rel2
-                else empty_table
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)),
-                         set_impl_list))))];;
-
-let rec add_new_vmuaux
-  x = (fun args rel1 rel2 nt (_, auxlist) ->
-        (nt, update_until args rel1 rel2 nt auxlist))
-        x;;
+let rec vmeval_since
+  args rs x2 aux = match args, rs, x2, aux with
+    args, rs, (x :: xs, ([], (t :: ts, skew))), aux ->
+      (if skew || memL (args_ivl args) zero_nata
+        then (rev rs, ((x :: xs, ([], (t :: ts, skew))), aux))
+        else (let auxa = join_vmsaux args x (add_new_ts_vmsaux args t aux) in
+               (rev (result_vmsaux args auxa :: rs),
+                 ((xs, ([], (ts, true))), auxa))))
+    | args, rs, (xs, (y :: ys, (ts, true))), aux ->
+        vmeval_since args rs (xs, (ys, (ts, false)))
+          (add_new_table_vmsaux args y aux)
+    | args, rs, (x :: xs, (y :: ys, (t :: ts, false))), aux ->
+        (let auxa =
+           add_new_table_vmsaux args y
+             (join_vmsaux args x (add_new_ts_vmsaux args t aux))
+           in
+          vmeval_since args (result_vmsaux args auxa :: rs)
+            (xs, (ys, (ts, false))) auxa)
+    | args, rs, ([], ([], vb)), aux -> (rev rs, (([], ([], vb)), aux))
+    | args, rs, ([], (v, (vc, false))), aux ->
+        (rev rs, (([], (v, (vc, false))), aux))
+    | args, rs, (v, (vd :: ve, ([], false))), aux ->
+        (rev rs, ((v, (vd :: ve, ([], false))), aux))
+    | args, rs, (v, ([], ([], ve))), aux -> (rev rs, ((v, ([], ([], ve))), aux))
+    | args, rs, (v, (vb, ([], false))), aux ->
+        (rev rs, ((v, (vb, ([], false))), aux));;
 
 let rec eval_vmuaux
   x = (fun args nt (t, auxlist) ->
@@ -8242,22 +8288,12 @@ let rec vmeval
          let nt = lookahead_ts ntsa nts ts t in
          let (zs, auxb) = eval_vmuaux args nt auxa in
           (zs, MUntil (args, phia, psia, bufa, ntsa, nt, auxb)))
-    | j, n, ts, db, MSince (args, phi, psi, buf, nts, aux) ->
+    | j, n, ts, db, MSince (args, phi, psi, buf, aux) ->
         (let (xs, phia) = vmeval j n ts db phi in
          let (ys, psia) = vmeval j n ts db psi in
-         let a =
-           mbuf2t_take
-             (fun r1 r2 t (zs, auxa) ->
-               (let a = vmupdate_since args r1 r2 t auxa in
-                let (z, aa) = a in
-                 (zs @ [z], aa)))
-             ([], aux) (mbuf2_add xs ys buf) (nts @ ts)
-           in
-         let (aa, b) = a in
-          (let (zs, auxa) = aa in
-            (fun (bufa, ntsa) ->
-              (zs, MSince (args, phia, psia, bufa, ntsa, auxa))))
-            b)
+         let (zs, (bufa, auxa)) =
+           vmeval_since args [] (mbuf2S_add xs ys ts buf) aux in
+          (zs, MSince (args, phia, psia, bufa, auxa)))
     | j, n, ts, db, MNext (i, phi, first, nts) ->
         (let (xs, phia) = vmeval j n ts db phi in
          let (xsa, firsta) =
@@ -8523,7 +8559,7 @@ let rec vminit0
         (if safe_formula phi
           then MSince
                  (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   vminit0 n phi, vminit0 n psi, ([], []), [],
+                   vminit0 n phi, vminit0 n psi, ([], ([], ([], false))),
                    init_vmsaux
                      (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
                        true))
@@ -8531,7 +8567,7 @@ let rec vminit0
                  MSince
                    (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                       false,
-                     vminit0 n phia, vminit0 n psi, ([], []), [],
+                     vminit0 n phia, vminit0 n psi, ([], ([], ([], false))),
                      init_vmsaux
                        (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                          false))))

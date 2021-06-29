@@ -1458,19 +1458,7 @@ lemma valid_add_new_table_mmsaux:
 lemma foldr_ts_tuple_rel:
   "as \<in> foldr (\<union>) (concat (map (\<lambda>(t, rel). if P t then [rel] else []) auxlist)) {} \<longleftrightarrow>
   (\<exists>t. (t, as) \<in> ts_tuple_rel (set auxlist) \<and> P t)"
-proof (rule iffI)
-  assume assm: "as \<in> foldr (\<union>) (concat (map (\<lambda>(t, rel). if P t then [rel] else []) auxlist)) {}"
-  then obtain t X where tX_def: "P t" "as \<in> X" "(t, X) \<in> set auxlist"
-    by (auto elim!: in_foldr_UnE)
-  then show "\<exists>t. (t, as) \<in> ts_tuple_rel (set auxlist) \<and> P t"
-    by (auto simp add: ts_tuple_rel_def)
-next
-  assume assm: "\<exists>t. (t, as) \<in> ts_tuple_rel (set auxlist) \<and> P t"
-  then obtain t X where tX_def: "P t" "as \<in> X" "(t, X) \<in> set auxlist"
-    by (auto simp add: ts_tuple_rel_def)
-  show "as \<in> foldr (\<union>) (concat (map (\<lambda>(t, rel). if P t then [rel] else []) auxlist)) {}"
-    using in_foldr_UnI[OF tX_def(2)] tX_def assm by (induction auxlist) force+
-qed
+  by (auto simp: foldr_union ts_tuple_rel_def)
 
 lemma image_snd: "(a, b) \<in> X \<Longrightarrow> b \<in> snd ` X"
   by force
