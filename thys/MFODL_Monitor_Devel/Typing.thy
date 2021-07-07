@@ -10,10 +10,12 @@ subsection \<open>Types\<close>
 
 datatype ty = TInt | TFloat | TString
 
+
 fun ty_of :: "event_data \<Rightarrow> ty" where
   "ty_of (EInt _) = TInt"
 | "ty_of (EFloat _) = TFloat"
 | "ty_of (EString _) = TString"
+
 
 definition "numeric_ty = {TInt, TFloat}"
 
@@ -1711,32 +1713,94 @@ lemma rel_formula_wty_unique_bv: "safe_formula \<phi> \<Longrightarrow> wty_form
   by (auto simp: rel_formula_eq)
 
 
-type_synonym tyoenv = "nat \<Rightarrow> ty option"
+datatype tysym = TAny nat | TNum nat | TCst ty
 
-definition check :: "sig \<Rightarrow> tyoenv \<Rightarrow> ty option Formula.formula \<Rightarrow> (tyenv * ty Formula.formula) option"
+type_synonym tysenv = "nat \<Rightarrow> tysym"
+
+definition check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> (tysenv * tysym Formula.formula) option"
   where "check = undefined"
 
+fun tyless :: "tysym \<Rightarrow> tysym \<Rightarrow> bool" where 
+"tyless (TNum a) (TNum b)  = (a \<le> b)"
+| "tyless (TAny a) (TAny b)  = (a \<le> b)"
+| "tyless (TNum _) (TAny _) = True"
+| "tyless (TCst _) _ = True"
+| "tyless _ _ = False"
+
+(*let (|<=|) t1 t2 = match t1, t2 with 
+   | TSymb (TNum,a), TSymb (TNum,b) 
+   | TSymb (TAny,a), TSymb (TAny,b) -> a <= b
+   | TSymb (TNum,_), TSymb (_,_) -> true
+   | TSymb _ , _ -> false
+   | TCst _ , _ -> true*)
+primrec newSymsList :: "unit list \<Rightarrow> nat \<Rightarrow> tysym list" where
+"newSymsList (_#xs) n =  TAny n #newSymsList xs (n+1) "
+| "newSymsList [] n = []"
+
+
+
+primrec unitToSymRegex :: "(unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysym Formula.formula * nat) \<Rightarrow> unit Formula.formula Regex.regex \<Rightarrow>  nat \<Rightarrow> tysym Formula.formula Regex.regex * nat" where 
+  "unitToSymRegex formulasym (Regex.Skip l) n = (Regex.Skip l, n)"
+| "unitToSymRegex formulasym (Regex.Test \<phi>) n = (case formulasym \<phi> n of (\<phi>', k) \<Rightarrow>  (Regex.Test \<phi>',k))"
+| "unitToSymRegex formulasym (Regex.Plus r s) n = (case unitToSymRegex formulasym r n of (r',k) \<Rightarrow> 
+      (case unitToSymRegex formulasym s k of (s',k') \<Rightarrow> (Regex.Plus r' s' ,k')))"
+| "unitToSymRegex formulasym (Regex.Times r s) n = (case unitToSymRegex formulasym r n of (r',k) \<Rightarrow> 
+      (case unitToSymRegex formulasym s k of (s',k') \<Rightarrow> (Regex.Times r' s' ,k')))"
+| "unitToSymRegex formulasym (Regex.Star r) n = (case unitToSymRegex formulasym r n of (r',k) \<Rightarrow> (Regex.Star r', k))"
+
+primrec unitToSymAnds :: "(unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysym Formula.formula * nat) \<Rightarrow> unit Formula.formula list \<Rightarrow> nat \<Rightarrow> tysym Formula.formula list * nat" where
+"unitToSymAnds formulasym (\<phi>#\<phi>s) n = (case formulasym \<phi> n of (\<phi>',k) \<Rightarrow> ( case unitToSymAnds formulasym \<phi>s k of (\<phi>'s, l) \<Rightarrow>  (  \<phi>'#\<phi>'s, l)))"
+|"unitToSymAnds formulasym [] n = ([] ,n)"
+
+function unitToSym :: "unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysym Formula.formula * nat"  where
+"unitToSym (Formula.Exists () \<phi>) n = (case unitToSym \<phi> (n+1) of (\<phi>',k) \<Rightarrow> (Formula.Exists (TAny n) \<phi>', k))"
+| "unitToSym (Formula.Agg y \<omega> tys f  \<phi>) n = 
+  (case unitToSym \<phi> (n+ length tys) of (\<phi>',k) \<Rightarrow> (Formula.Agg y \<omega> (newSymsList tys n) f \<phi>', k))"
+|  "unitToSym (Formula.Pred r ts) n = (Formula.Pred r ts, n)"
+| "unitToSym (Formula.Let p \<phi> \<psi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow> 
+      (case unitToSym \<psi> k of (\<psi>',k') \<Rightarrow> (Formula.Let p \<phi>' \<psi>' ,k')))"
+| "unitToSym (Formula.Eq t1 t2) n  = (Formula.Eq t1 t2, n) "
+| "unitToSym (Formula.Less t1 t2) n = (Formula.Less t1 t2, n)"
+| "unitToSym (Formula.LessEq t1 t2) n = (Formula.LessEq t1 t2, n)"
+| "unitToSym (Formula.Neg \<phi>) n  = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow>(Formula.Neg \<phi>',k)) "
+| "unitToSym (Formula.Or \<phi> \<psi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow> 
+      (case unitToSym \<psi> k of (\<psi>',k') \<Rightarrow> (Formula.Or \<phi>' \<psi>' ,k')))"
+| "unitToSym (Formula.And \<phi> \<psi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow> 
+      (case unitToSym \<psi> k of (\<psi>',k') \<Rightarrow> (Formula.And \<phi>' \<psi>' ,k')))"
+| "unitToSym (Formula.Ands \<phi>s) n = (case  unitToSymAnds unitToSym \<phi>s n of (\<phi>'s, k) \<Rightarrow>  (Formula.Ands \<phi>'s,k))"
+| "unitToSym (Formula.Prev I \<phi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow>(Formula.Prev I \<phi>',k)) "
+| "unitToSym (Formula.Next I \<phi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow>(Formula.Next I \<phi>',k))"
+| "unitToSym (Formula.Since \<phi> I \<psi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow> 
+      (case unitToSym \<psi> k of (\<psi>',k') \<Rightarrow> (Formula.Since \<phi>' I \<psi>' ,k')))"
+| "unitToSym (Formula.Until \<phi> I \<psi>) n = (case unitToSym \<phi> n of (\<phi>',k) \<Rightarrow> 
+      (case unitToSym \<psi> k of (\<psi>',k') \<Rightarrow> (Formula.Until \<phi>' I \<psi>' ,k')))"
+| "unitToSym (Formula.MatchF I r) n = (case unitToSymRegex unitToSym r n of (r',k) \<Rightarrow> (Formula.MatchF I r',k))"
+| "unitToSym (Formula.MatchP I r) n = (case unitToSymRegex unitToSym r n of (r',k) \<Rightarrow> (Formula.MatchP I r',k))"
+                      apply auto  subgoal for P a by (cases a)  auto done
+
 definition check_safe :: "sig \<Rightarrow> unit Formula.formula \<Rightarrow> (tyenv * ty Formula.formula) option" where
-  "check_safe S \<phi> = check S Map.empty (formula.map_formula Map.empty \<phi>)"
+  "check_safe S \<phi> = map_option 
+  (\<lambda>(E,\<phi>).  ((\<lambda>x. case E x of TCst t' \<Rightarrow> t'), Formula.map_formula (\<lambda>t. case t of TCst t' \<Rightarrow> t') \<phi>))
+     (case unitToSym \<phi> 0 of (\<phi>', n ) \<Rightarrow> check S (\<lambda> k. TAny (n + k) ) \<phi>')"
 
-definition extends :: "tyoenv \<Rightarrow> tyenv \<Rightarrow> bool" where
-  "extends E E' \<longleftrightarrow> (\<forall>x. case E x of Some t \<Rightarrow> E' x = t | _ \<Rightarrow> True)"
+definition tysenvless :: "tysenv \<Rightarrow> tysenv \<Rightarrow> bool" where
+  "tysenvless E E' \<longleftrightarrow> (\<forall>x. tyless  (E x) (E' x))"
 
-definition wty_result :: "sig \<Rightarrow> tyoenv \<Rightarrow> ty option Formula.formula \<Rightarrow> tyenv \<Rightarrow> ty Formula.formula \<Rightarrow> bool" where
-  "wty_result S E \<phi> E' \<phi>' \<longleftrightarrow> extends E E' \<and> wty_formula S E' \<phi>' \<and>
-    formula.rel_formula (\<lambda>x y. case x of Some t \<Rightarrow> y = t | _ \<Rightarrow> True) \<phi> \<phi>'"
+definition "resultless E' E \<phi>' \<phi>  \<longleftrightarrow> tysenvless E' E \<and> formula.rel_formula (\<lambda>x y. tyless x y) \<phi> \<phi>'"  
+definition wty_result :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> bool" where
+  "wty_result S E \<phi> E' \<phi>' \<longleftrightarrow> resultless E' E \<phi>' \<phi> \<and> 
+(\<forall>E'' \<phi>'' .  wty_formula S E'' \<phi>'' \<longleftrightarrow> resultless (TCst \<circ>  E'') E' (Formula.map_formula TCst \<phi>'') \<phi>' )"
 
 lemma check_sound: "check S E \<phi> = Some (E', \<phi>') \<Longrightarrow> wty_result S E \<phi> E' \<phi>'"
   sorry
 
 lemma check_safe_sound: "safe_formula \<phi> \<Longrightarrow> check_safe S \<phi> = Some (E', \<phi>') \<Longrightarrow>
   wty_formula S E' \<phi>' \<and> formula.rel_formula (\<lambda>_ _. True) \<phi> \<phi>'"
-  using check_sound[of S Map.empty "formula.map_formula Map.empty \<phi>" E' \<phi>']
+  sorry (* using check_sound[of S Map.empty "formula.map_formula Map.empty \<phi>" E' \<phi>']
   by (auto simp: check_safe_def wty_result_def formula.rel_map)
-
+*)
 lemma check_complete: "wty_result S E \<phi> E' \<phi>' \<Longrightarrow>
-  (\<And>E'' \<phi>''. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> \<phi>' = \<phi>'') \<Longrightarrow>
-  (\<And>E'' \<phi>'' x. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> x \<in> fv \<phi> \<Longrightarrow> E' x = E'' x) \<Longrightarrow>
+  (\<And>E'' \<phi>''. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> resultless E' E'' \<phi>' \<phi>'') \<Longrightarrow>
   check S E \<phi> = Some (E', \<phi>')"
   sorry
 
@@ -1842,6 +1906,7 @@ qed
 lemma safe_check_complete:
   assumes "safe_formula \<phi>" "wty_result S E \<phi> E' \<phi>'"
   shows "check S E \<phi> = Some (E', \<phi>')"
+  sorry (*
 proof -
   have safe: "safe_formula \<phi>'"
     using assms
@@ -1850,11 +1915,12 @@ proof -
     using rel_formula_wty_unique_bv[OF safe] rel_formula_wty_unique_fv[OF safe] assms(2)
       rel_formula_trans[of _ "\<lambda>_ _. True"]
     by (auto simp: wty_result_def rel_formula_fv intro!: check_complete) blast+
-qed
+qed *)
 
 lemma check_safe_complete:
   assumes "safe_formula \<phi>" "wty_formula S E' \<phi>'" "formula.rel_formula f \<phi> \<phi>'"
   shows "check_safe S \<phi> = Some (E', \<phi>')"
+  sorry (*
 proof -
   have safe: "safe_formula (formula.map_formula Map.empty \<phi>)"
     by (rule rel_formula_safe[OF assms(1) rel_formula_swap])
@@ -1863,7 +1929,7 @@ proof -
     using assms(2,3)
     by (auto simp: check_safe_def wty_result_def extends_def formula.rel_map
         intro!: safe_check_complete intro: formula.rel_mono_strong)
-qed
+qed *)
 
 (*<*)
 end
