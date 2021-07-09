@@ -95,7 +95,7 @@ rule
   | ">="                        { f "GTREQ" lexbuf; GTREQ }
   | ">"                         { f "GTR" lexbuf; GTR }
   | "="                         { f "EQ" lexbuf; EQ }
-  | "MOD"                       { f "NOT" lexbuf; MOD }
+  | "MOD"                       { f "MOD" lexbuf; MOD }
   | "f2i"                       { f "F2I" lexbuf; F2I }
   | "i2f"                       { f "I2F" lexbuf; I2F }
   | "FALSE"                     { f "FALSE" lexbuf; FALSE }
