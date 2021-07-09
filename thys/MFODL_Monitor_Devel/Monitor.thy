@@ -724,7 +724,7 @@ definition eval_args_agg :: "args \<Rightarrow> event_data table \<Rightarrow> e
   "eval_args_agg args X = (case args_agg args of None \<Rightarrow> X | Some aggargs \<Rightarrow> eval_aggargs aggargs X)"
 
 definition type_restr :: "aggargs \<Rightarrow> event_data table \<Rightarrow> bool" where
-  "type_restr args X = (let Z = meval_trm (aggargs_f args) ` X \<union> {snd (aggargs_\<omega> args)};
+  "type_restr args X = (let Z = meval_trm (aggargs_f args) ` X;
     all_int = Z \<subseteq> range EInt;
     all_float = Z \<subseteq> range EFloat;
     all_string = Z \<subseteq> range EString in

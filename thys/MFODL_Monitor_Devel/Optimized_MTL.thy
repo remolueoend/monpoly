@@ -159,11 +159,11 @@ lemma dropWhile_queue_rep: "linearize (dropWhile_queue f q) = dropWhile f (linea
      (auto simp add: tl_queue_rep dropWhile_hd_tl is_empty_alt
       split: prod.splits option.splits dest: safe_hd_rep)
 
-function takeWhile_queue :: "('a \<Rightarrow> bool) \<Rightarrow> 'a queue \<Rightarrow> 'a queue" where
-  "takeWhile_queue f q = (case safe_hd q of (None, q') \<Rightarrow> q'
+function takeWhile_queue :: "('a \<Rightarrow> bool) \<Rightarrow> 'a queue \<Rightarrow> ('a queue \<times> 'a queue)" where
+  "takeWhile_queue f q = (case safe_hd q of (None, q') \<Rightarrow> (q', q')
   | (Some a, q') \<Rightarrow> if f a
-    then prepend_queue a (takeWhile_queue f (tl_queue q'))
-    else empty_queue)"
+    then let (q'', rem) = takeWhile_queue f (tl_queue q') in (prepend_queue a q'', q')
+    else (empty_queue, q'))"
   by pat_completeness auto
 termination
   using length_tl_queue_safe_hd[OF sym]
@@ -173,10 +173,49 @@ lemma takeWhile_hd_tl: "xs \<noteq> [] \<Longrightarrow>
   takeWhile P xs = (if P (hd xs) then hd xs # takeWhile P (tl xs) else [])"
   by (cases xs) auto
 
-lemma takeWhile_queue_rep: "linearize (takeWhile_queue f q) = takeWhile f (linearize q)"
-  by (induction f q rule: takeWhile_queue.induct)
-     (auto simp add: prepend_queue_rep tl_queue_rep empty_queue_rep takeWhile_hd_tl is_empty_alt
-      split: prod.splits option.splits dest: safe_hd_rep)
+lemma takeWhile_queue_rep_fst: "linearize (fst (takeWhile_queue f q)) = takeWhile f (linearize q)"
+proof(induction f q rule: takeWhile_queue.induct)
+  case (1 f q)
+  then obtain hd rm where safe_hd_eq: "safe_hd q = (hd, rm)" by (meson prod.exhaust_sel)
+  then show ?case 
+  proof(cases "hd")
+    case None
+    then show ?thesis using safe_hd_eq by(auto dest: safe_hd_rep)
+  next
+    case (Some a)
+    then show ?thesis 
+    proof(cases "f a")
+      case True
+      then show ?thesis using safe_hd_eq Some 1[OF safe_hd_eq[symmetric] Some True] 
+        by(auto simp add: prepend_queue_rep tl_queue_rep  takeWhile_hd_tl is_empty_alt split: prod.splits dest: safe_hd_rep)
+    next
+      case False
+      then show ?thesis using safe_hd_eq Some by(auto simp add: empty_queue_rep takeWhile_hd_tl  dest: safe_hd_rep) 
+    qed
+  qed
+qed
+
+lemma takeWhile_queue_rep_snd: "linearize (snd (takeWhile_queue f q)) = linearize q"
+proof(induction f q rule: takeWhile_queue.induct)
+  case (1 f q)
+  then obtain hd rm where safe_hd_eq: "safe_hd q = (hd, rm)" by (meson prod.exhaust_sel)
+  then show ?case 
+  proof(cases "hd")
+    case None
+    then show ?thesis using safe_hd_eq by (simp add: safe_hd_rep)
+  next
+    case (Some a)
+    then show ?thesis
+    proof(cases "f a")
+      case True
+      then show ?thesis apply(auto) using 1[OF safe_hd_eq[symmetric] Some True] safe_hd_eq Some
+        by(auto simp: safe_hd_rep split:prod.splits)
+    next
+      case False
+      then show ?thesis using safe_hd_eq Some by (simp add: safe_hd_rep)
+    qed
+  qed
+qed
 
 function takedropWhile_queue :: "('a \<Rightarrow> bool) \<Rightarrow> 'a queue \<Rightarrow> 'a queue \<times> 'a list" where
   "takedropWhile_queue f q = (case safe_hd q of (None, q') \<Rightarrow> (q', [])
@@ -1654,9 +1693,10 @@ fun eval_step_mmuaux :: "args \<Rightarrow> 'a mmuaux \<Rightarrow> 'a mmuaux" w
         T = Mapping.keys m;
         tss' = tl_queue tss';
         ts' = case safe_hd tss' of 
-              (Some ts', tss'') \<Rightarrow> ts';
+              (Some ts', tss'') \<Rightarrow> ts' |
+              _ \<Rightarrow> 0;
         (tables, taken) = takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables;
-        to_del_approx = \<Union>{x. x \<in> set (map fst taken)};
+        to_del_approx = \<Union>(set (map fst taken));
         to_del = Set.filter (\<lambda>x. case Mapping.lookup m x of Some tstp \<Rightarrow> (\<not>ts_tp_lt I ts' (tp - len + 1) tstp) |
                                                             None \<Rightarrow> False) to_del_approx;
         m'' = mapping_delete_set m to_del;
@@ -1833,7 +1873,8 @@ proof -
   have m'_inst_isl: "\<And>xs tstp. Mapping.lookup m' xs = Some tstp \<Longrightarrow> isl tstp \<longleftrightarrow> \<not> memL I 0"
     using m'_inst(2) by fastforce
   define T where "T = Mapping.keys m"
-  define ts' where "ts' = (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts')"
+  define ts' where "ts' = (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts' |
+                                                           _ \<Rightarrow> 0)"
   define tables' where "tables' = fst (takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables)"
   define taken where "taken = snd (takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables)"
   have tables_split: "linearize tables = taken @ (linearize tables')" 
@@ -1953,7 +1994,8 @@ proof -
           using defs(3,4) assms(2) unfolding m_bef_m 
           by (auto 0 3 simp add: Mapping.lookup_filter ts_tp_lt_def intro: Mapping_keys_intro
               split: sum.splits elim: contrapos_np)
-        then have "ts_tp_lt I (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts') (tp - len + 1) tstp"
+        then have "ts_tp_lt I (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts' |
+                                                                _ \<Rightarrow> 0) (tp - len + 1) tstp"
           using defs(4) tp_minus_le tp_len_assoc hd_tl ts''_geq unfolding ts_tp_lt_def 
           by(auto split:sum.splits prod.splits option.splits) 
         then have "Mapping.lookup m'' xs = Some tstp" using lookup unfolding m''_def Let_def Mapping.lookup_filter I_def ts'_def by auto
@@ -2555,9 +2597,9 @@ qed auto
 
 fun shift_mmuaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmuaux \<Rightarrow> 'a mmuaux" where
   "shift_mmuaux args nt (tp, tss, len, maskL, maskR, a1_map, a2_map, done, done_length) =
-    (let tss_list = linearize (takeWhile_queue (\<lambda>t. \<not> memR (args_ivl args) (nt - t)) tss) in
-    foldl (\<lambda>aux _. eval_step_mmuaux args aux) (tp, tss, len, maskL, maskR,
-      a1_map, a2_map, done, done_length) tss_list)"
+    (let (tss_queue, tss') = takeWhile_queue (\<lambda>t. \<not> memR (args_ivl args) (nt - t)) tss in
+    foldl (\<lambda>aux _. eval_step_mmuaux args aux) (tp, tss', len, maskL, maskR,
+      a1_map, a2_map, done, done_length) (linearize tss_queue))"
 
 lemma valid_shift_mmuaux':
   assumes "valid_mmuaux' args cur cur aux auxlist" "nt \<ge> cur"
@@ -2573,28 +2615,31 @@ proof -
     by (cases aux) auto
   note valid_before = valid_folded[unfolded aux_def]
   define tss_list where "tss_list =
-    linearize (takeWhile_queue (\<lambda>t. \<not> memR I (nt - t)) tss)"
+    linearize (fst (takeWhile_queue (\<lambda>t. \<not> memR I (nt - t)) tss))"
+  define tss' where "tss' = snd (takeWhile_queue (\<lambda>t. \<not> memR I (nt - t)) tss)"
+  let ?aux = "(tp, tss', len, tables, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length)"
   have tss_list_takeWhile: "tss_list = takeWhile (\<lambda>t. \<not> memR I (nt - t)) (linearize tss)"
-    using tss_list_def unfolding takeWhile_queue_rep .
+    using tss_list_def unfolding takeWhile_queue_rep_fst .
   then obtain tss_list' where tss_list'_def: "linearize tss = tss_list @ tss_list'"
     "tss_list' = dropWhile (\<lambda>t. \<not> memR I (nt - t)) (linearize tss)"
     by auto
   obtain tp' len' tss' tables' maskL' maskR' a1_map' a2_map' "done'" done_length' where
     foldl_aux_def: "(tp', tss', tables', len', maskL', maskR', a1_map', a2_map',
-      done', done_length') = foldl (\<lambda>aux _. eval_step_mmuaux args aux) aux tss_list"
-    by (cases "foldl (\<lambda>aux _. eval_step_mmuaux args aux) aux tss_list") auto
-  have lin_tss_aux: "lin_ts_mmuaux aux = linearize tss"
-    unfolding aux_def by auto
-  have "take (length tss_list) (lin_ts_mmuaux aux) = tss_list"
+      done', done_length') = foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?aux tss_list"
+    by (cases "foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?aux tss_list") auto
+  have lin_tss_aux: "lin_ts_mmuaux ?aux = linearize tss"
+    unfolding aux_def tss'_def lin_ts_mmuaux.simps takeWhile_queue_rep_snd by auto
+  then have valid_aux: "valid_mmuaux' args cur nt ?aux auxlist" using valid_before by(auto)
+  have "take (length tss_list) (lin_ts_mmuaux ?aux) = tss_list"
     unfolding lin_tss_aux using tss_list'_def(1) by auto
   then have valid_foldl: "valid_mmuaux' args cur nt
-    (foldl (\<lambda>aux _. eval_step_mmuaux args aux) aux tss_list) auxlist"
-    "lin_ts_mmuaux (foldl (\<lambda>aux _. eval_step_mmuaux args aux) aux tss_list) = tss_list'"
-    using valid_foldl_eval_step_mmuaux'[OF valid_before[folded aux_def], unfolded lin_tss_aux,
-      OF tss_list'_def(1)] tss_list_takeWhile set_takeWhileD
+    (foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?aux tss_list) auxlist"
+    "lin_ts_mmuaux (foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?aux tss_list) = tss_list'"
+    using valid_foldl_eval_step_mmuaux'[OF valid_aux, unfolded lin_tss_aux, OF tss_list'_def(1) ]
+       tss_list_takeWhile set_takeWhileD
     unfolding lin_tss_aux I_def by fastforce+
-  have shift_mmuaux_eq: "shift_mmuaux args nt aux = foldl (\<lambda>aux _. eval_step_mmuaux args aux) aux tss_list"
-    using tss_list_def unfolding aux_def I_def by auto
+  have shift_mmuaux_eq: "shift_mmuaux args nt aux = foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?aux tss_list"
+    using tss_list_def unfolding aux_def I_def tss'_def by (auto split:prod.splits)
   have "\<And>ts. ts \<in> set tss_list' \<Longrightarrow> memR (args_ivl args) (nt - ts)"
     using sorted_dropWhile_filter tss_list'_def(2) valid_before unfolding I_def by auto
   then show ?thesis

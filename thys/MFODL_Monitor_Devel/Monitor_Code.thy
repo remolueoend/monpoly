@@ -1,6 +1,7 @@
 (*<*)
 theory Monitor_Code
   imports Monitor_Impl
+  RBT_set_opt
 begin
 (*>*)
 

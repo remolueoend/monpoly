@@ -103,18 +103,18 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   by unfold_locales auto
 
 global_interpretation default_maux: maux valid_mmasaux "init_mmasaux :: _ \<Rightarrow> mmasaux" add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux
-  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux length_mmuaux eval_mmuaux'
-  defines minit0 = "maux.minit0 (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
-  and minit = "maux.minit (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  valid_mmauaux "init_mmauaux :: _ \<Rightarrow> mmauaux" add_new_mmauaux length_mmauaux eval_mmauaux'
+  defines minit0 = "maux.minit0 (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
+  and minit = "maux.minit (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) :: Formula.formula \<Rightarrow> _"
   and minit_since = "default_maux.init_since"
   and minit_until = "default_maux.init_until"
-  and minit_safe = "maux.minit_safe (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
+  and minit_safe = "maux.minit_safe (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) :: Formula.formula \<Rightarrow> _"
   and mupdate_since = "maux.update_since add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux"
-  and meval = "maux.meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
-  and mstep = "maux.mstep add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
-  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
-  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmuaux eval_mmuaux'"
-  and monitor = "maux.monitor init_mmasaux add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux init_mmuaux add_new_mmuaux eval_mmuaux'"
+  and meval = "maux.meval add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmauaux eval_mmauaux'"
+  and mstep = "maux.mstep add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmauaux eval_mmauaux'"
+  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmauaux eval_mmauaux'"
+  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux add_new_mmauaux eval_mmauaux'"
+  and monitor = "maux.monitor init_mmasaux add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux result_mmasaux init_mmauaux add_new_mmauaux eval_mmauaux'"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -323,9 +323,6 @@ lemma upd_nested_max_tstp_code[code]:
     else Code.abort (STR ''upd_nested_max_tstp: infinite'') (\<lambda>_. upd_nested_max_tstp m d X))"
   by transfer (auto simp add: upd_nested_max_tstp_fold)
 
-declare [[code drop: add_new_mmuaux]]
-declare add_new_mmuaux.simps[folded upd_nested_max_tstp_def, code]
-
 lemma filter_set_empty[simp]: "filter_set m {} t = m"
   unfolding filter_set_def
   by transfer (auto simp: fun_eq_iff split: option.splits)
@@ -496,10 +493,10 @@ lift_definition delete_sum_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool 
 lemma [code_unfold]: "Finite_Set.fold (delete_sum args) (v, m) data = set_fold_cfc (delete_sum_cfc args) (v, m) data"
   by(transfer) auto
 
-lift_definition delete_rank_cfc::"aggargs \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
+lift_definition delete_rank_cfc::"aggargs \<Rightarrow> type \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
   "\<lambda>args. delete_rank args" using delete_rank_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (delete_rank args) (v, m) data = set_fold_cfc (delete_rank_cfc args) (v, m) data"
+lemma [code_unfold]: "Finite_Set.fold (delete_rank args type) (v, m) data = set_fold_cfc (delete_rank_cfc args type) (v, m) data"
   by(transfer) auto
 
 lift_definition insert_cnt_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool \<times> nat agg_map)) comp_fun_commute" is
@@ -514,10 +511,10 @@ lift_definition insert_sum_cfc::"aggargs \<Rightarrow> (event_data tuple, (bool 
 lemma [code_unfold]: "Finite_Set.fold (insert_sum args) (v, m) data = set_fold_cfc (insert_sum_cfc args) (v, m) data"
   by(transfer) auto
 
-lift_definition insert_rank_cfc::"aggargs \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
+lift_definition insert_rank_cfc::"aggargs \<Rightarrow> type \<Rightarrow> (event_data tuple, bool \<times> list_aux agg_map) comp_fun_commute" is
   "\<lambda>args. insert_rank args" using insert_rank_comm by unfold_locales auto
 
-lemma [code_unfold]: "Finite_Set.fold (insert_rank args) (v, m) data = set_fold_cfc (insert_rank_cfc args) (v, m) data"
+lemma [code_unfold]: "Finite_Set.fold (insert_rank args type) (v, m) data = set_fold_cfc (insert_rank_cfc args type) (v, m) data"
   by(transfer) auto
 
 definition finite' :: "'a set \<Rightarrow> bool" where
@@ -622,6 +619,139 @@ lift_definition filter'_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping \<times> 
 lemma filter_set'_code[code]:
   "filter_set' m A t = (if finite A then set_fold_cfi (filter'_cfi t) (m, {}) A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set' m A t))"
   by (transfer fixing: m) (auto simp: filter_set'_fold)
+
+lemma mapping_delete_set_empty: "mapping_delete_set m {} = m"
+  unfolding mapping_delete_set_def by (simp add: Mapping.lookup.rep_eq rep_inverse)
+
+lemma mapping_delete_set_insert: "mapping_delete_set m (Set.insert a X) = Mapping.delete a (mapping_delete_set m X)"
+proof(rule mapping_eqI)
+  fix x
+  show "Mapping.lookup (mapping_delete_set m (Set.insert a X)) x =
+        Mapping.lookup (Mapping.delete a (mapping_delete_set m X)) x"
+    unfolding Optimized_MTL.Mapping_lookup_delete mapping_delete_set_def
+    by(auto simp: Mapping.lookup.rep_eq Mapping_inverse)
+qed
+
+lemma mapping_delete_fold:
+  assumes "finite A"
+  shows "mapping_delete_set m A = Finite_Set.fold Mapping.delete m A"
+proof -
+  interpret comp_fun_idem "Mapping.delete" by(unfold_locales; transfer; simp add: fun_eq_iff) 
+  from assms show ?thesis
+  proof (induction A arbitrary: m)
+    case empty
+    then show ?case using mapping_delete_set_empty by auto
+  next
+    case (insert a A)
+    then show ?case using mapping_delete_set_insert[of m a A] fold_insert[OF insert(1-2), of m] by(simp)
+  qed 
+qed
+
+lift_definition mapping_delete_set_cfi :: "('a, ('a, 'b) mapping) comp_fun_idem" is 
+  Mapping.delete by(unfold_locales; transfer; simp add:fun_eq_iff)
+
+lemma mapping_delete_set_code[code]:
+  "mapping_delete_set m A = (if finite A then set_fold_cfi mapping_delete_set_cfi m A else Code.abort (STR ''mapping_delete_set: infinite'') (\<lambda>_. mapping_delete_set m A))"
+  using mapping_delete_fold[of A m] by (simp add: mapping_delete_set_cfi.rep_eq set_fold_cfi.rep_eq)
+
+instantiation treelist :: (equal) equal begin
+lift_definition equal_treelist :: "'a treelist \<Rightarrow> 'a treelist \<Rightarrow> bool" is "(=)" .
+instance by (standard; transfer; auto)
+end
+
+instantiation wf_wbt :: (linorder) equal begin
+lift_definition equal_wf_wbt :: "'a wf_wbt \<Rightarrow> 'a wf_wbt \<Rightarrow> bool" is "(=)" .
+instance by(standard; transfer; auto)
+end
+
+lemma eq_treelist_code[code]: "equal_class.equal (Collapse y1) (Collapse y2) = (if y2 = empty_tree then (y1 = empty_tree) else (tree_inorder y1 = tree_inorder y2))"
+  apply(transfer) using Tree2.inorder.elims by auto
+
+definition to_add_set where
+  "to_add_set a m tmp = {b. (a, b) \<in> tmp \<and> Mapping.lookup m b = None}"
+
+definition to_add_set_fun :: "'b \<Rightarrow> ('a, 'c) mapping \<Rightarrow> 'b \<times> 'a \<Rightarrow> 'a set \<Rightarrow> 'a set" where
+  "to_add_set_fun a m elem s = (if a = fst elem \<and> Mapping.lookup m (snd elem) = None then Set.insert (snd elem) s else s)"
+
+lemma to_add_set_empty: "to_add_set a m {} = {}"
+  unfolding to_add_set_def by auto
+
+lemma to_add_set_insert: "to_add_set a m (Set.insert x X) = to_add_set_fun a m x (to_add_set a m X) "
+  unfolding to_add_set_def to_add_set_fun_def
+  by transfer (auto simp: Map_To_Mapping.map_apply_def)
+
+lemma to_add_set_fold:
+  assumes "finite tmp"
+  shows "to_add_set a m tmp = Finite_Set.fold (to_add_set_fun a m) {} tmp"
+proof -
+  interpret comp_fun_idem "to_add_set_fun a m"
+    by(unfold_locales) (auto simp:to_add_set_fun_def comp_def split:if_splits)
+  from assms show ?thesis
+  proof (induction tmp)
+    case empty
+    then show ?case using to_add_set_empty[of a m] by simp
+  next
+    case (insert a A)
+    show ?case unfolding fold_insert[OF insert(1-2)] insert(3)[symmetric] unfolding to_add_set_def to_add_set_fun_def
+      by transfer auto
+   qed 
+ qed
+
+lift_definition to_add_set_cfi :: "'b \<Rightarrow> ('a, 'c) mapping \<Rightarrow> (('b \<times> 'a), 'a set) comp_fun_idem" is 
+  "\<lambda>a m. to_add_set_fun a m" by(unfold_locales) (auto simp:to_add_set_fun_def comp_def split:if_splits)
+
+lemma [code]: "to_add_set a m tmp = (if finite tmp then set_fold_cfi (to_add_set_cfi a m) {} tmp else Code.abort (STR ''to_add_set: infinite set'') (\<lambda>_. to_add_set a m tmp))"
+  using to_add_set_fold[of tmp a m] by transfer auto
+
+lemma [code]: 
+  "add_new_mmuaux args rel1 rel2 nt aux =
+    (let (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) =
+    shift_mmuaux args nt aux;
+    I = args_ivl args; pos = args_pos args;
+    new_tstp = (if memL I 0 then Inr tp else Inl nt);
+    tstp_map = Mapping.update tp nt tstp_map;
+    tmp = \<Union>((\<lambda>as. case Mapping.lookup a1_map (proj_tuple maskL as) of None \<Rightarrow>
+      (if \<not>pos then {(tp - len, as)} else {})
+      | Some tp' \<Rightarrow> if pos then {(max (tp - len) tp', as)}
+      else {(max (tp - len) (tp' + 1), as)}) ` rel2) \<union> (if memL I 0 then {tp} \<times> rel2 else {});
+    tmp = Set.filter (\<lambda>(tp, as). case Mapping.lookup tstp_map tp of Some ts \<Rightarrow> memL I (nt - ts)) tmp;
+    table = snd ` tmp;
+    tables = append_queue (table, if memL I 0 then Inr tp else Inl nt) tables;
+    a2_map = Mapping.update (tp + 1) Mapping.empty
+      (upd_nested_max_tstp a2_map new_tstp tmp);
+    a1_map = (if pos then Mapping.filter (\<lambda>as _. as \<in> rel1)
+      (upd_set a1_map (\<lambda>_. tp) (rel1 - Mapping.keys a1_map)) else upd_set a1_map (\<lambda>_. tp) rel1);
+    tss = append_queue nt tss in
+    (tp + 1, tss, tables, len + 1, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length))" 
+  by(auto simp: upd_nested_max_tstp_def split:option.splits prod.splits)
+
+lemma [code]:
+  "add_new_mmauaux args rel1 rel2 nt (mmuaux, aggaux, done_agg) =
+    (case args_agg args of 
+     None \<Rightarrow> let (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) = add_new_mmuaux args rel1 rel2 nt mmuaux in
+  ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, replicate done_length None) |
+     Some aggargs \<Rightarrow>
+    (let ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) = shift_mmauaux args nt (mmuaux, aggaux, done_agg);
+    I = args_ivl args; pos = args_pos args;
+    new_tstp = (if memL I 0 then Inr tp else Inl nt);
+    tstp_map = Mapping.update tp nt tstp_map;
+    m = case Mapping.lookup a2_map (tp - len) of Some m \<Rightarrow> m;
+    tmp = \<Union>((\<lambda>as. case Mapping.lookup a1_map (proj_tuple maskL as) of None \<Rightarrow>
+      (if \<not>pos then {(tp - len, as)} else {})
+      | Some tp' \<Rightarrow> if pos then {(max (tp - len) tp', as)}
+      else {(max (tp - len) (tp' + 1), as)}) ` rel2) \<union> (if memL I 0 then {tp} \<times> rel2 else {});
+    tmp = Set.filter (\<lambda>(tp, as). case Mapping.lookup tstp_map tp of Some ts \<Rightarrow> memL I (nt - ts)) tmp;
+    table = snd ` tmp;
+    tables = append_queue (table, if memL I 0 then Inr tp else Inl nt) tables;
+    a2_map' = Mapping.update (tp + 1) Mapping.empty
+      (upd_nested_max_tstp a2_map new_tstp tmp);
+    a1_map = (if pos then Mapping.filter (\<lambda>as _. as \<in> rel1)
+      (upd_set a1_map (\<lambda>_. tp) (rel1 - Mapping.keys a1_map)) else upd_set a1_map (\<lambda>_. tp) rel1);
+    to_add = to_add_set (tp - len) m tmp;
+    aggaux = insert_maggaux' aggargs to_add aggaux;
+    tss = append_queue nt tss in
+    ((tp + 1, tss, tables, len + 1, maskL, maskR, a1_map, a2_map', tstp_map, done, done_length), aggaux, done_agg)))"
+  by(auto simp del: add_new_mmuaux.simps simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
 
 (*<*)
 end

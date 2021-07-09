@@ -156,7 +156,7 @@ qed
 subsubsection "Balance Indicators"
 
 fun balanced1 :: "'a wbt \<Rightarrow> 'a wbt \<Rightarrow> bool" where
-"balanced1 t1 t2 = (\<Delta>1 * (size_wbt t1 + 1) \<ge> \<Delta>2 * (size_wbt t2 + 1))"
+"balanced1 t1 t2 = (25 * (size_wbt t1 + 1) \<ge> 10 * (size_wbt t2 + 1))"
 
 text \<open>The global weight-balanced tree invariant:\<close>
 
@@ -169,7 +169,7 @@ lemma size_wbt_eq_size[simp]: "wbt t \<Longrightarrow> size_wbt t = size t"
 by(induction t) auto
 
 fun single :: "'a wbt \<Rightarrow> 'a wbt \<Rightarrow> bool" where
-"single t1 t2 = (\<Gamma>1 * (size_wbt t2 + 1) > \<Gamma>2 * (size_wbt t1 + 1))"
+"single t1 t2 = (14 * (size_wbt t2 + 1) > 10 * (size_wbt t1 + 1))"
 
 subsubsection "Code"
 
@@ -227,7 +227,8 @@ fun select :: "'a wbt \<Rightarrow> nat \<Rightarrow> 'a" where
     (case cmp s n of
       GT \<Rightarrow> select l n |
       EQ \<Rightarrow> a |
-      LT \<Rightarrow> select r (n - s - 1)))"
+      LT \<Rightarrow> select r (n - s - 1)))" |
+  "select \<langle>\<rangle> n = [] ! n"
 
 subsection "Functional Correctness Proofs"
 
@@ -660,12 +661,12 @@ next
 qed
 
 lemma valid_select_wbt:
-  assumes "n \<ge> 0" and "n < size t" and "wbt t"
+  assumes "wbt t"
   shows "select t n = (inorder t) ! n"
   using assms
 proof(induction t arbitrary:n)
   case Leaf
-  then show ?case by auto
+  then show ?case  by auto
 next
   case (Node t1 x2 t2)
   then obtain a s where "x2 = (a, s)" using old.prod.exhaust by blast
@@ -893,6 +894,27 @@ lemma valid_select_mset_list:
   assumes "valid_wbt_mset t m"
   and "n \<ge> 0" and "n < size t"
   shows "select t n = (sorted_list_of_multiset m) ! n"
-  using inorder_mset_eq[of t m] assms valid_select_wbt[of n t] valid_wbt_mset_valid_wbt[of t m] by simp
+  using inorder_mset_eq[of t m] assms valid_select_wbt[of t n] valid_wbt_mset_valid_wbt[of t m] by simp
+                                                  
+typedef (overloaded) 'a wf_wbt = "{x::'a::linorder wbt. sorted (inorder x) \<and> wbt x}" 
+  by(auto intro!: exI[of _ Leaf]) 
+
+setup_lifting type_definition_wf_wbt
+
+lift_definition tree_insert:: "'a::linorder \<Rightarrow> 'a wf_wbt \<Rightarrow> 'a wf_wbt" is insert 
+  using wbt_insert by (simp add: inorder_insert sorted_wrt_sorted_insort) blast
+
+lift_definition tree_remove:: "'a::linorder \<Rightarrow> 'a wf_wbt \<Rightarrow> 'a wf_wbt" is delete
+  using wbt_delete by auto (simp add: inorder_delete sorted_wrt_sorted_delete)
+
+lift_definition tree_inorder:: "'a::linorder wf_wbt \<Rightarrow> 'a list" is inorder
+  .
+
+lift_definition tree_empty :: "'a::linorder wf_wbt" is Leaf 
+  by auto
+
+lift_definition empty_tree:: "'a::linorder wf_wbt" is Leaf by auto
+lift_definition tree_select:: "'a::linorder wf_wbt \<Rightarrow> nat \<Rightarrow> 'a" is select .
+lift_definition tree_size:: "'a::linorder wf_wbt \<Rightarrow> nat" is size_wbt .
 
 end
