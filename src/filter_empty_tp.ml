@@ -53,6 +53,8 @@ type lformula =
   | LEqual of (term * term)
   | LLess of (term * term)
   | LLessEq of (term * term)
+  | LSubstring of (term * term)
+  | LMatches of (term * term)
   | LPred of predicate
   | LNeg of lformula labeled
   | LAnd of (lformula labeled * lformula labeled)
@@ -118,6 +120,14 @@ let print_formula str f =
      | LLessEq (t1,t2) ->
        Predicate.print_term t1;
        print_string " <= ";
+       Predicate.print_term t2
+     | LSubstring (t1,t2) ->
+       Predicate.print_term t1;
+       print_string " SUBSTRING ";
+       Predicate.print_term t2
+     | LMatches (t1,t2) ->
+       Predicate.print_term t1;
+       print_string " MATCHES ";
        Predicate.print_term t2
      | LPred p ->
        Predicate.print_predicate p;
@@ -213,7 +223,9 @@ let add_labels (lf : lformula) : label list =
   (match lf with
    | LEqual (_,_)
    | LLess (_,_)
-   | LLessEq (_,_) -> ()
+   | LLessEq (_,_)
+   | LSubstring (_, _) 
+   | LMatches (_, _) -> ()
    | LPred _ ->
      labels := add_label LFalse !labels
    | LNeg (f1, l1) -> begin
@@ -254,6 +266,8 @@ let add_labels (lf : lformula) : label list =
    | LEqual (_,_)
    | LLess (_,_)
    | LLessEq (_,_)
+   | LSubstring (_,_)
+   | LMatches (_,_)
    | LPred _ ->
      labels := add_label LEvRel !labels
    | LNeg (f1, l1)
@@ -325,6 +339,8 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     | Equal (t1,t2) -> LEqual (t1,t2)
     | Less (t1,t2) -> LLess (t1,t2)
     | LessEq (t1,t2) -> LLessEq (t1,t2)
+    | Substring (t1,t2) -> LSubstring(t1, t2)
+    | Matches (t1,t2) -> LMatches(t1, t2)
     | Pred p -> LPred p
     | Neg f -> LNeg (go_down f)
     | And (f1,f2) -> LAnd ((go_down f1), (go_down f2))

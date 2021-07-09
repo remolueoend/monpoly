@@ -54,6 +54,8 @@ type formula =
   | Equal of (term * term)
   | Less of (term * term)
   | LessEq of (term * term)
+  | Substring of (term * term)
+  | Matches of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
   | Neg of formula
@@ -95,6 +97,7 @@ let ts_of_string err_place str =
 let ts_of_cst c =
   match c with
   | ZInt _
+  | Regexp _
   | Int _ -> failwith "[MFOTL.ts_of_cst] conversion not possible"
   | Str s -> float_of_string s
   | Float f -> f
@@ -164,6 +167,7 @@ let aggreg_default_value op t = match op, t with
   | _, TFloat -> Float 0.
   | _, TInt -> Int 0
   | _, TStr -> Str ""
+  | _, TRegexp -> Regexp ("", Str.regexp "")
 
 
 let map mapf mapr =
@@ -171,6 +175,8 @@ let rec formula_map = function
   | Equal (_,_)
   | Less (_,_)
   | LessEq (_,_) 
+  | Matches (_,_) 
+  | Substring (_,_) 
   | Pred _ as f -> mapf f
   | Let (p,f1,f2) -> 
     let f1 = formula_map f1 in
@@ -233,6 +239,8 @@ let rec direct_subformulas = function
   | Equal (t1,t2) -> []
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
+  | Matches (t1,t2) -> []
+  | Substring (t1, t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
@@ -312,7 +320,9 @@ let is_regular = function
 let rec is_mfodl = function 
   | Equal (t1,t2) 
   | Less (t1,t2) 
-  | LessEq (t1,t2) -> false
+  | LessEq (t1,t2) 
+  | Substring (t1,t2)
+  | Matches (t1,t2) -> false
   | Pred p -> false
   | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
@@ -339,7 +349,9 @@ let rec is_mfodl = function
 let rec free_vars = function
   | Equal (t1,t2)
   | Less (t1,t2)
-  | LessEq (t1,t2) ->
+  | LessEq (t1,t2)
+  | Matches (t1,t2)
+  | Substring (t1,t2) ->
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
   | Pred p -> Predicate.pvars p
   | Let (_,_,f) -> free_vars f
@@ -394,6 +406,8 @@ let rec substitute_vars m =
   | Equal (t1, t2) -> Equal (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | Less  (t1, t2) -> Less (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | LessEq (t1, t2) -> LessEq (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Matches (t1, t2) -> Matches (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Substring (t1, t2) -> Substring (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
 
   | Pred (p) -> 
     let (n,a,ts) = Predicate.get_info p in
@@ -467,7 +481,9 @@ let count_pred_uses pred f =
   let rec go = function
     | Equal _
     | Less _
-    | LessEq _ -> 0
+    | LessEq _
+    | Matches _
+    | Substring _ -> 0
 
     | Pred p -> if Predicate.get_name p = pred then 1 else 0
 
@@ -549,6 +565,8 @@ let rec type_of_fma = function
   | Equal (t1,t2) -> "Eq"
   | Less (t1,t2) -> "Less"
   | LessEq (t1,t2) -> "LessEq"
+  | Substring (t1, t2) -> "Substring"
+  | Matches (t1, t2) -> "Matches"
   | Pred p -> "Pred"
   | Let (p,f1,f2) -> "Let"
   | Neg f -> "Neg"
@@ -583,6 +601,10 @@ let string_of_formula str g =
         Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2
       | LessEq (t1,t2) ->
         Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2
+      | Substring (t1,t2) ->
+        Predicate.string_of_term t1 ^ " SUBSTRING " ^ Predicate.string_of_term t2
+      | Matches (t1,t2) ->
+        Predicate.string_of_term t1 ^ " MATCHES " ^ Predicate.string_of_term t2
       | Pred p -> Predicate.string_of_predicate p
       | _ ->
         (if par && not top then "(" else "")
@@ -837,6 +859,10 @@ let string_of_formula str g =
           "(" ^ (Predicate.string_of_term t1) ^ " < " ^ (Predicate.string_of_term t2) ^ ")"
         | LessEq (t1,t2) ->
           "(" ^ (Predicate.string_of_term t1) ^ " <= " ^ (Predicate.string_of_term t2) ^ ")"
+        | Substring (t1,t2) ->
+          "(" ^ (Predicate.string_of_term t1) ^ " SUBSTRING " ^ (Predicate.string_of_term t2) ^ ")"
+        | Matches (t1,t2) ->
+          "(" ^ (Predicate.string_of_term t1) ^ " MATCHES " ^ (Predicate.string_of_term t2) ^ ")"
         | Pred p -> Predicate.string_of_predicate p
         | _ ->
            

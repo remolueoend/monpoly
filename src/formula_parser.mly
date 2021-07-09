@@ -89,22 +89,7 @@
       Int (int_of_string str)
     with _ -> Str (strip str)
 
-  let check f =
-    let _ =
-      match f with
-      | Equal (t1,t2)
-      | Less (t1,t2)
-      | LessEq (t1,t2)
-        -> (
-          match t1,t2 with
-          | Cst (Int _), Cst (Str _)
-          | Cst (Str _), Cst (Int _) ->
-             failwith "[Formula_parser.check] \
-              Comparisons should be between constants of the same type"
-          | _ -> ()
-        )
-      | _ -> failwith "[Formula_parser.check] internal error"
-    in f
+  let check f = f
 
   let add_ex p =
     let args = Predicate.get_args p in
@@ -121,7 +106,17 @@
     let len = String.length s in
     assert(s.[0] = '\"' && s.[len-1] = '\"');
     String.sub s 1 (len-2)
-
+  
+  let compile_regexp r =
+    let len = String.length r in
+    assert(r.[0] = 'r' && r.[1] = '\"' && r.[len-1] = '\"');
+    let pattern = String.sub r 2 (len-3) in
+    try
+      f pattern;
+      Regexp (pattern, Str.regexp pattern)
+    with e ->
+      let e_str = Printexc.to_string e in
+      failwith (Printf.sprintf "[Formula_parser.compile_regexp] invalid regexp %s (%s)" r e_str)
 
   (* The rule is: var LARROW aggreg var SC varlist formula  *)
   let aggreg res_var op agg_var groupby_vars f =
@@ -144,9 +139,9 @@
 %}
 
 %token FALSE TRUE
-%token LPA RPA LSB RSB COM SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW
-%token PLUS MINUS SLASH MOD F2I I2F
-%token <string> STR STR_CST
+%token LPA RPA LSB RSB COM SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
+%token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE R2S S2R
+%token <string> STR STR_CST REGEXP_CST
 %token <float> INT RAT
 %token <int*char> TU
 %token LET IN NOT AND OR IMPL EQUIV EX FA
@@ -171,9 +166,9 @@
 %nonassoc RPA
 
 
-%left PLUS MINUS          /* lowest precedence */
-%left STAR DIV            /* medium precedence */
-%nonassoc UMINUS F2I I2F  /* highest precedence */
+%left PLUS MINUS                                             /* lowest precedence */
+%left STAR DIV                                               /* medium precedence */
+%nonassoc UMINUS F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE /* highest precedence */
 
 %start formula
 %type <MFOTL.formula> formula
@@ -187,7 +182,9 @@ formula:
   | TRUE                            { f "TRUE"; Equal (Cst (Int 0), Cst (Int 0)) }
   | predicate                       { f "f(pred)"; $1 }
   | LET predicate EQ formula IN formula  
-                                    { f "f(let)"; let Pred p = $2 in Let (p,$4,$6) }
+                                    { f "f(let)"; match $2 with 
+                                                  | Pred p -> Let (p,$4,$6)
+                                                  | _ -> failwith "[formula_parser.mly] expected predicate"}
   | term EQ term                    { f "f(eq)"; check (Equal ($1,$3)) }
   | term LESSEQ term                { f "f(leq)"; check (LessEq ($1,$3)) }
   | term LESS term                  { f "f(less)"; check (Less ($1,$3)) }
@@ -203,6 +200,8 @@ formula:
   | var LARROW aggreg var formula   { f "f(agg1)"; aggreg $1 $3 $4 [] $5 }
   | var LARROW aggreg var SC varlist formula
                                     { f "f(agg2)"; aggreg $1 $3 $4 $6 $7 }
+  | term SUBSTRING term             { f "f(substring)"; check (Substring ($1, $3)) }
+  | term MATCHES term               { f "f(matches)"; check (Matches ($1, $3)) }
   | PREV interval formula           { f "f(prev)"; Prev ($2,$3) }
   | PREV formula                    { f "f(prevdf)"; Prev (dfintv,$2) }
   | NEXT interval formula           { f "f(next)"; Next ($2,$3) }
@@ -282,17 +281,23 @@ pred:
 
 
 term:
-  | term PLUS term          { f "term(plus)"; Plus ($1, $3) }
-  | term MINUS term         { f "term(minus)"; Minus ($1, $3) }
-  | term STAR term          { f "term(mult)"; Mult ($1, $3) }
-  | term SLASH term         { f "term(div)"; Div ($1, $3) }
-  | term MOD term           { f "term(mod)"; Mod ($1, $3) }
-  | MINUS term %prec UMINUS { f "term(uminus)"; UMinus $2 }
-  | LPA term RPA            { f "term(paren)"; $2 }
-  | F2I LPA term RPA        { f "term(f2i)"; F2i $3 }
-  | I2F LPA term RPA        { f "term(i2f)"; I2f $3 }
-  | cst                     { f "term(cst)"; Cst $1 }
-  | var                     { f "term(var)"; Var $1 }
+  | term PLUS term            { f "term(plus)"; Plus ($1, $3) }
+  | term MINUS term           { f "term(minus)"; Minus ($1, $3) }
+  | term STAR term            { f "term(mult)"; Mult ($1, $3) }
+  | term SLASH term           { f "term(div)"; Div ($1, $3) }
+  | term MOD term             { f "term(mod)"; Mod ($1, $3) }
+  | MINUS term %prec UMINUS   { f "term(uminus)"; UMinus $2 }
+  | LPA term RPA              { f "term(paren)"; $2 }
+  | F2I LPA term RPA          { f "term(f2i)"; F2i $3 }
+  | I2F LPA term RPA          { f "term(i2f)"; I2f $3 }
+  | DAY_OF_MONTH LPA term RPA { f "term(day_of_month)"; DayOfMonth $3 }
+  | MONTH LPA term RPA        { f "term(month)"; Month $3 }
+  | YEAR LPA term RPA         { f "term(year)"; Year $3 }
+  | FORMAT_DATE LPA term RPA  { f "term(format_date)"; FormatDate $3 }
+  | R2S LPA term RPA          { f "term(r2s)"; R2s $3 }
+  | S2R LPA term RPA          { f "term(s2r)"; S2r $3 }
+  | cst                       { f "term(cst)"; Cst $1 }
+  | var                       { f "term(var)"; Var $1 }
 
 
 cst:
@@ -302,6 +307,7 @@ cst:
                               Int (int_of_float $1) }
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }
+  | REGEXP_CST              { f "cst(regex)"; compile_regexp $1 }
 
 
 termlist:
@@ -317,3 +323,4 @@ varlist:
 var:
   | LD                      { f "unnamed var"; incr var_cnt; "_" ^ (string_of_int !var_cnt) }
   | STR                     { f "var"; assert (String.length $1 > 0); $1 }
+

@@ -56,7 +56,9 @@ let get_predicates f =
   let rec get_preds bound preds = function
     | Equal (t1,t2)
     | Less (t1,t2)
-    | LessEq (t1,t2) -> preds
+    | LessEq (t1,t2)
+    | Matches (t1,t2)
+    | Substring (t1,t2) -> preds
     | Pred p ->
         let pn = Predicate.get_name p in
         if List.mem pn bound then preds else pn :: preds
@@ -133,7 +135,9 @@ let get_tuple_filter f =
   let rec get_tuples bound tuples = function (* formula *)
     | Equal (t1,t2)
     | Less (t1,t2)
-    | LessEq (t1,t2) -> tuples
+    | LessEq (t1,t2)
+    | Substring (t1,t2)
+    | Matches (t1,t2) -> tuples
     | Pred p ->
         let pn = Predicate.get_name p in
         if List.mem pn bound

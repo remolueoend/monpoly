@@ -6,3 +6,5 @@ _build
 \#*\#
 
 /thys/*/*.ocaml
+/monpoly
+/src/monpoly

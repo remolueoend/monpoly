@@ -74,6 +74,8 @@ type formula =
   | Equal of (term * term)
   | Less of (term * term)
   | LessEq of (term * term)
+  | Substring of (term * term)
+  | Matches of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
   | Neg of formula
