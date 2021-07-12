@@ -50,6 +50,7 @@ let convert_term fvl bvl =
     | Mult (t1, t2) -> Mult (convert t1, convert t2)
     | Div (t1, t2) -> Div (convert t1, convert t2)
     | Mod (t1, t2) -> Mod (convert t1, convert t2)
+    | _ -> failwith "[convert_term] unsupported term"
   in
   convert
 
@@ -121,7 +122,8 @@ let convert_formula dbschema f =
   | PastAlways (intv,f) -> convert_formula_vars fvl bvl (Neg (Once (intv,(Neg f))))
   | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars fvl bvl r)
   | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars fvl bvl r)
-  and convert_re_vars fvl bvl = function
+  | _ -> failwith "[convert_term] unsupported formula"
+and convert_re_vars fvl bvl = function
   | Wild -> wild
   | Test f -> Test (convert_formula_vars fvl bvl f)
   | Concat (r1,r2) -> Times (convert_re_vars fvl bvl r1, convert_re_vars fvl bvl r2)

@@ -361,5 +361,5 @@ let join_rev pos2 posval t2 t1 =
 
 (** printing functions **)
 
-let string_of_tuple = Misc.string_of_list (string_of_cst false)
-let print_tuple = Misc.print_list (print_cst false)
+let string_of_tuple = Misc.string_of_list string_of_cst
+let print_tuple = Misc.print_list print_cst

@@ -200,7 +200,7 @@ let rec print_csts = function
   | [] -> ()
   | (p,i,c) :: t ->
     Printf.printf "(%s,%d," p i;
-    Predicate.print_cst true c;
+    Predicate.print_cst c;
     Printf.printf ")\n";
     print_csts t
 

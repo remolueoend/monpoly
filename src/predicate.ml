@@ -21,7 +21,7 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library. If not, see
  * http://www.gnu.org/licenses/lgpl-2.1.html.
- *7
+ *
  * As a special exception to the GNU Lesser General Public License,
  * you may link, statically or dynamically, a "work that uses the
  * Library" with a publicly distributed version of the Library to
@@ -313,14 +313,14 @@ let print_tcst t =
 let string_of_var var =
   var
 
-let rec string_of_cst qm c =
+let rec string_of_cst c =
   let format_string s =
     if s = "" then "\"\""
-      else (* if qm then*)
+      else 
         if (s.[0] = '\"' && s.[(String.length s)-1] = '\"') then
           s
         else "\"" ^ s ^ "\""
-      (*      else s*)
+
   in match c with
   | Int i -> string_of_int i
   | Float f -> Printf.sprintf "%g" f
@@ -329,7 +329,7 @@ let rec string_of_cst qm c =
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
   
 
-let print_cst qm c = print_string (string_of_cst qm c)
+let print_cst c = print_string (string_of_cst c)
 
 
 
@@ -338,7 +338,7 @@ let rec string_of_term term =
   let rec t2s b term =
     let b', str = match term with
       | Var v -> true, v
-      | Cst c -> true, string_of_cst true c
+      | Cst c -> true, string_of_cst c
       | F2i t ->  false, "f2i(" ^ (t2s true t) ^ ")"
       | I2f t ->  false, "i2f(" ^ (t2s true t) ^ ")"
       | R2s t ->  false, "r2s(" ^ (t2s true t) ^ ")"

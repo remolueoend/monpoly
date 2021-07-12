@@ -488,7 +488,7 @@ let warn_if_empty_aggreg {op; default} {Aggreg.empty_rel; Aggreg.rel} =
     (match op with
     | Avg | Med | Min | Max ->
       let op_str = MFOTL.string_of_agg_op op in
-      let default_str = string_of_cst true default in
+      let default_str = string_of_cst default in
       let msg = Printf.sprintf "WARNING: %s applied on empty relation! \
                                 Resulting value is %s, by (our) convention.\n"
         op_str default_str

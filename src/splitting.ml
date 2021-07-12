@@ -433,7 +433,7 @@ let int_arr_to_string l =
 
 let pred_list_to_string l =
   let str = ref "" in
-  let append s = str := !str ^ (Predicate.string_of_cst false s) ^ ", " in
+  let append s = str := !str ^ (Predicate.string_of_cst s) ^ ", " in
   List.iter (fun s -> append s ) l;
   !str
 
@@ -640,6 +640,8 @@ let split_state mapping mf size =
       (*print_endline "pred";
       let vars = (pvars p) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
       let arr = split_info inf (pvars p) in Array.map (fun e -> MPred(p, comp, e)) arr
+    | MLet           (p, comp, f1, f2, c)                       ->
+       failwith "[split_state] unsupported forumula"
     | MNeg           (f1)                                       -> 
       (*print_endline "neg";*)
       Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
