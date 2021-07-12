@@ -1769,12 +1769,13 @@ Some (E', t_typ) \<Rightarrow>  Some (propagate_constraints (TCst TInt) t_typ E'
 |"check_trm S E typ (Formula.Div t1 t2) vars = check_binop check_trm S E typ t1 t2 vars (TNum (new_type_symbol E vars)) "
 |"check_trm S E typ (Formula.Mod t1 t2) vars = check_binop check_trm S E typ t1 t2 vars (TCst TInt) "
 
-abbreviation check_comparison where
+
+definition check_comparison where
 "check_comparison S E \<omega> t1 t2 vars \<equiv> (case check_trm S E (TAny (new_type_symbol E vars)) t1 vars of
    Some (E',t1_typ ) \<Rightarrow> (case check_trm S E' t1_typ t2 vars of Some (E'', t2_typ) \<Rightarrow> Some (propagate_constraints t1_typ t2_typ E'', (\<omega> t1 t2) ) | None \<Rightarrow> None)
 | None \<Rightarrow> None)"
 
-abbreviation check_and_or where
+definition check_and_or where
 "check_and_or check S E \<omega> \<phi> \<psi> vars \<equiv> (case check S E \<phi> vars of
    Some (E', \<phi>') \<Rightarrow> (case check S E' \<psi> vars of 
         Some (E'', \<psi>') \<Rightarrow> Some (E'', \<omega> \<phi>' \<psi>') 
@@ -1789,7 +1790,7 @@ primrec check_ands :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.for
  | None \<Rightarrow> None)"
 |"check_ands check S E [] vars = Some (E,[])"
 
-abbreviation check_since_until where
+definition check_since_until where
 "check_since_until check S E \<omega> \<phi> I \<psi> vars \<equiv> (case check S E \<phi> vars of
    Some (E', \<phi>') \<Rightarrow> (case check S E' \<psi> vars of 
         Some (E'', \<psi>') \<Rightarrow> Some (E'', \<omega> \<phi>' I \<psi>') 
@@ -1893,7 +1894,7 @@ definition wty_result :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.f
   "wty_result S E \<phi> E' \<phi>' \<longleftrightarrow> resultless E' E \<phi>' \<phi> \<and> 
 (\<forall>E'' \<phi>'' .  wty_formula S E'' \<phi>'' \<longleftrightarrow> resultless (TCst \<circ>  E'') E' (Formula.map_formula TCst \<phi>'') \<phi>' )"
 
-lemma check_sound: "check S E \<phi> = Some (E', \<phi>') \<Longrightarrow> wty_result S E \<phi> E' \<phi>'"
+lemma check_sound: "wf_formula \<phi> \<Longrightarrow> check S E \<phi> = Some (E', \<phi>') \<Longrightarrow> wty_result S E \<phi> E' \<phi>'"
   sorry
 
 lemma check_safe_sound: "safe_formula \<phi> \<Longrightarrow> check_safe S \<phi> = Some (E', \<phi>') \<Longrightarrow>
@@ -1901,7 +1902,7 @@ lemma check_safe_sound: "safe_formula \<phi> \<Longrightarrow> check_safe S \<ph
   sorry (* using check_sound[of S Map.empty "formula.map_formula Map.empty \<phi>" E' \<phi>']
   by (auto simp: check_safe_def wty_result_def formula.rel_map)
 *)
-lemma check_complete: "wty_result S E \<phi> E' \<phi>' \<Longrightarrow>
+lemma check_complete: "wf_formula \<phi> \<Longrightarrow> wty_result S E \<phi> E' \<phi>' \<Longrightarrow>
   (\<And>E'' \<phi>''. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> resultless E' E'' \<phi>' \<phi>'') \<Longrightarrow>
   check S E \<phi> = Some (E', \<phi>')"
   sorry

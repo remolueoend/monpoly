@@ -597,6 +597,24 @@ next
   with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
 qed auto
 
+subsection \<open>Well-formed formulas\<close>
+
+fun wf_formula :: "'a formula \<Rightarrow> bool" where
+
+ "wf_formula (Let p \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> wf_formula \<phi> \<and> wf_formula \<psi>)"
+| "wf_formula (Neg \<phi>) =  wf_formula \<phi>"
+| "wf_formula (Or \<phi> \<psi>) = (wf_formula \<phi> \<and> wf_formula \<psi>)"
+| "wf_formula (And \<phi> \<psi>) = (wf_formula \<phi> \<and> wf_formula \<psi> )"
+| "wf_formula (Ands l) = (list_all wf_formula l)"
+| "wf_formula (Exists x \<phi>) = (wf_formula \<phi> \<and> 0 \<in> fv \<phi>)"
+| "wf_formula (Agg y \<omega> tys f \<phi>) = (wf_formula \<phi> \<and> y + length tys \<notin> fv \<phi> \<and> {0..< length tys} \<subseteq> fv \<phi> )"
+| "wf_formula (Prev I \<phi>) = (wf_formula \<phi>)"
+| "wf_formula (Next I \<phi>) = (wf_formula \<phi>)"
+| "wf_formula (Since \<phi> I \<psi>) = (wf_formula \<phi> \<and> wf_formula \<psi>)"
+| "wf_formula (Until \<phi> I \<psi>) = (wf_formula \<phi> \<and> wf_formula \<psi>)"
+| "wf_formula (MatchP I r) = Regex.pred_regex wf_formula r"
+| "wf_formula (MatchF I r) = Regex.pred_regex wf_formula r"
+| "wf_formula _ = True"
 
 subsection \<open>Safe formulas\<close>
 
@@ -825,6 +843,12 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
       by (auto simp: 17 intro!: MatchF)
   qed (auto simp: assms)
 qed
+lemma aux: "safe_regex m g r \<Longrightarrow> \<forall>x\<in>atms r. wf_formula x \<Longrightarrow>\<forall>x\<in>regex.atms r. wf_formula x" apply(induction rule: safe_regex_induct)
+  sorry
+
+lemma safe_wf: "safe_formula \<phi> \<Longrightarrow> wf_formula \<phi>" apply (induction rule: safe_formula_induct) using aux
+                      apply (auto simp add: safe_assignment_def  split: formula.splits) subgoal for \<phi> x6 x by (cases x6) auto
+  subgoal for \<phi> x6 by (cases x6) auto subgoal sorry sorry
 
 lemma sat_the_restrict: "fv \<phi> \<subseteq> A \<Longrightarrow> Formula.sat \<sigma> V (map the (restrict A v)) i \<phi> = Formula.sat \<sigma> V (map the v) i \<phi>"
   by (rule sat_fv_cong) (auto intro!: map_the_restrict)
