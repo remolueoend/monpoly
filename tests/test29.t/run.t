@@ -190,7 +190,7 @@
   At time point 1:
   @0. (time point 1): ((""))
   At time point 2:
-  @0. (time point 2): ((no))
+  @0. (time point 2): (("no"))
   WARNING: MIN applied on empty relation! Resulting value is "", by (our) convention.
   WARNING: MIN applied on empty relation! Resulting value is "", by (our) convention.
 
@@ -204,7 +204,7 @@
   At time point 1:
   @0. (time point 1): ((""))
   At time point 2:
-  @0. (time point 2): ((yes))
+  @0. (time point 2): (("yes"))
   WARNING: MAX applied on empty relation! Resulting value is "", by (our) convention.
   WARNING: MAX applied on empty relation! Resulting value is "", by (our) convention.
 
@@ -377,7 +377,7 @@
   At time point 1:
   @0. (time point 1): ()
   At time point 2:
-  @0. (time point 2): ((1,no,1),(1,yes,1))
+  @0. (time point 2): ((1,"no",1),(1,"yes",1))
 
   $ echo '(r <- MIN x ; x (W(x)))' > test29_34.mfotl
   $ monpoly -sig test29.sig -formula test29_34.mfotl -log test29.log -verbose -nonewlastts
@@ -389,7 +389,7 @@
   At time point 1:
   @0. (time point 1): ()
   At time point 2:
-  @0. (time point 2): ((no,no),(yes,yes))
+  @0. (time point 2): (("no","no"),("yes","yes"))
 
   $ echo '(r <- MAX x ; x (W(x)))' > test29_35.mfotl
   $ monpoly -sig test29.sig -formula test29_35.mfotl -log test29.log -verbose -nonewlastts
@@ -401,7 +401,7 @@
   At time point 1:
   @0. (time point 1): ()
   At time point 2:
-  @0. (time point 2): ((no,no),(yes,yes))
+  @0. (time point 2): (("no","no"),("yes","yes"))
 
   $ echo '(r <- MED x ; x (W(x)))' > test29_36.mfotl
   $ monpoly -sig test29.sig -formula test29_36.mfotl -log test29.log -verbose -nonewlastts

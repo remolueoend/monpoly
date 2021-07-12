@@ -50,27 +50,27 @@
 
   $ echo 'v <- CNT y; x p(x,y)' > test_agg_empty_rel_8.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_8.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1,b) (2,a)
+  @20. (time point 1): (1,"b") (2,"a")
 
   $ echo 'v <- SUM y; x p(x,y)' > test_agg_empty_rel_9.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_9.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (3,a) (3,b)
+  @20. (time point 1): (3,"a") (3,"b")
 
   $ echo 'v <- AVG y; x p(x,y)' > test_agg_empty_rel_10.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_10.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1.5,a) (3,b)
+  @20. (time point 1): (1.5,"a") (3,"b")
 
   $ echo 'v <- MED y; x p(x,y)' > test_agg_empty_rel_11.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_11.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1.5,a) (3,b)
+  @20. (time point 1): (1.5,"a") (3,"b")
 
   $ echo 'v <- MIN y; x p(x,y)' > test_agg_empty_rel_12.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_12.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1,a) (3,b)
+  @20. (time point 1): (1,"a") (3,"b")
 
   $ echo 'v <- MAX y; x p(x,y)' > test_agg_empty_rel_13.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_13.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (2,a) (3,b)
+  @20. (time point 1): (2,"a") (3,"b")
 
   $ echo 'v <- CNT y ONCE p(x,y)' > test_agg_empty_rel_14.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_14.mfotl -log test_agg_empty_rel.log -nonewlastts
@@ -114,30 +114,30 @@
 
   $ echo 'v <- CNT y; x ONCE p(x,y)' > test_agg_empty_rel_20.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_20.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1,b) (2,a)
-  @30. (time point 2): (1,b) (2,a)
+  @20. (time point 1): (1,"b") (2,"a")
+  @30. (time point 2): (1,"b") (2,"a")
 
   $ echo 'v <- SUM y; x ONCE p(x,y)' > test_agg_empty_rel_21.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_21.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (3,a) (3,b)
-  @30. (time point 2): (3,a) (3,b)
+  @20. (time point 1): (3,"a") (3,"b")
+  @30. (time point 2): (3,"a") (3,"b")
 
   $ echo 'v <- AVG y; x ONCE p(x,y)' > test_agg_empty_rel_22.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_22.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1.5,a) (3,b)
-  @30. (time point 2): (1.5,a) (3,b)
+  @20. (time point 1): (1.5,"a") (3,"b")
+  @30. (time point 2): (1.5,"a") (3,"b")
 
   $ echo 'v <- MED y; x ONCE p(x,y)' > test_agg_empty_rel_23.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_23.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1.5,a) (3,b)
-  @30. (time point 2): (1.5,a) (3,b)
+  @20. (time point 1): (1.5,"a") (3,"b")
+  @30. (time point 2): (1.5,"a") (3,"b")
 
   $ echo 'v <- MIN y; x ONCE p(x,y)' > test_agg_empty_rel_24.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_24.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (1,a) (3,b)
-  @30. (time point 2): (1,a) (3,b)
+  @20. (time point 1): (1,"a") (3,"b")
+  @30. (time point 2): (1,"a") (3,"b")
 
   $ echo 'v <- MAX y; x ONCE p(x,y)' > test_agg_empty_rel_25.mfotl
   $ monpoly -sig test_agg_empty_rel.sig -formula test_agg_empty_rel_25.mfotl -log test_agg_empty_rel.log -nonewlastts
-  @20. (time point 1): (2,a) (3,b)
-  @30. (time point 2): (2,a) (3,b)
+  @20. (time point 1): (2,"a") (3,"b")
+  @30. (time point 2): (2,"a") (3,"b")

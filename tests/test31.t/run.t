@@ -8,4 +8,4 @@
   At time point 1:
   @0. (time point 1): ()
   At time point 2:
-  @0. (time point 2): ((2,no,2),(2,yes,2))
+  @0. (time point 2): ((2,"no",2),(2,"yes",2))
