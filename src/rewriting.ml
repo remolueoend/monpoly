@@ -1167,7 +1167,7 @@ let  type_check_term_debug d (sch, vars) typ term =
     let _ = 
       if (d) then
       begin
-        Printf.printf "[Rewriting.type_check] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
+        Printf.printf "[Rewriting.type_check_term] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
         Predicate.print_term term;
         Printf.printf ": %s" (string_of_type typ);
         Printf.printf "\n";
@@ -1250,7 +1250,8 @@ let  type_check_term_debug d (sch, vars) typ term =
         let (s,v,t_typ) = type_check_term (sch, vars) exp_typ t in
         type_error exp_typ t_typ t;
         let v = propagate_constraints t_typ exp_typ v in
-        (s,v,more_spec_type t_typ exp_typ)
+        let exp_typ = more_spec_type t_typ exp_typ in
+        (s,v,exp_typ)
       | Plus (t1, t2) 
       | Minus (t1, t2) 
       | Mult (t1, t2)  
@@ -1261,10 +1262,12 @@ let  type_check_term_debug d (sch, vars) typ term =
         let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
         type_error exp_typ t1_typ t1;
         let v1 = propagate_constraints t1_typ exp_typ v1 in
-        let (s2,v2,t2_typ) = type_check_term (s1, v1) t1_typ t2 in
-        type_error t1_typ t2_typ t2;
-        let v2 = propagate_constraints t2_typ t1_typ v2 in
-        (s2,v2,t2_typ)
+        let exp_typ = more_spec_type t1_typ exp_typ in
+        let (s2,v2,t2_typ) = type_check_term (s1, v1) exp_typ t2 in
+        type_error exp_typ t2_typ t2;
+        let v2 = propagate_constraints t2_typ exp_typ v2 in
+        let exp_typ = more_spec_type t2_typ exp_typ in
+        (s2,v2,exp_typ)
       | Mod (t1, t2) as tt ->
         let exp_typ = (TCst TInt) in
         type_error exp_typ typ tt;
@@ -1297,7 +1300,7 @@ let rec type_check_formula (sch, vars) f =
   let _ = 
     if (d) then
       begin
-        Printf.printf "[Rewriting.type_check] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
+        Printf.printf "[Rewriting.type_check_formula] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
         MFOTL.print_formula "" f;
         Printf.printf "\n";
       end
@@ -1310,6 +1313,7 @@ let rec type_check_formula (sch, vars) f =
     let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ t1 in
     type_error exp_typ t1_typ t1;
     let v1 = propagate_constraints t1_typ exp_typ v1 in
+    let exp_typ = more_spec_type t1_typ exp_typ in
     let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ t2 in
     type_error exp_typ t2_typ t2;
     let v2 = propagate_constraints t2_typ exp_typ v2 in
