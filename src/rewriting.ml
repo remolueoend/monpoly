@@ -1049,6 +1049,54 @@ and expand_let_re_rec m = function
   | Star r -> Star (expand_let_re_rec m r) in
 expand_let_rec [] f
 
+let rec check_aggregations = function
+  | Aggreg (ytyp, y, op, x, g, f) as a -> 
+    let sf = check_aggregations f in 
+    let ffv = free_vars f in
+    let check = sf && not (List.mem y g) && (List.mem x ffv) in
+    if check 
+      then check
+    else failwith ("[Rewriting.check_aggregations] Aggregation " 
+    ^ (MFOTL.string_of_formula "" a)  ^ " is not well formed." ^
+    "Variable " ^ y ^ " may not be among the group variables and variable " ^ x 
+    ^ " must be among the free variables of " ^ (MFOTL.string_of_formula "" f))
+  | Equal _
+  | Less _
+  | LessEq _
+  | Pred _
+  | Substring _
+  | Matches _
+    -> true
+
+  | Neg f
+  | Exists (_, f)
+  | ForAll (_, f)
+  | Prev (_, f)
+  | Once (_, f)
+  | PastAlways (_, f)
+  | Next (_, f)
+  | Always (_, f)
+  | Eventually (_, f)
+    -> check_aggregations f
+
+  | Prex (_,r) 
+  | Frex (_,r) -> check_re_aggregations r
+
+  | Let (_,f1,f2)
+  | And (f1, f2)
+  | Or (f1, f2)
+  | Implies (f1, f2)
+  | Equiv (f1, f2)
+  | Since (_, f1, f2)
+  | Until (_, f1, f2)
+    -> (check_aggregations f1) && (check_aggregations f2)
+and check_re_aggregations = function 
+  | Wild -> true
+  | Test f -> (check_aggregations f)
+  | Concat (r1,r2)
+  | Plus (r1,r2) -> (check_re_aggregations r1) && (check_re_aggregations r2)
+  | Star r -> (check_re_aggregations r)
+
 
 (* We check that
   - any predicate used in the formula is declared in the signature
@@ -1502,33 +1550,43 @@ let print_reason str reason =
     print_endline msg
   | None -> failwith "[Rewriting.print_reason] internal error"
 
-(* TODO: rename; this functions checks and rewrites *)
-let check_formula s f =
-  (* Remember the order of variables in the input formula. This order is used
-     for output, regardless of any transformations that follow. *)
-  let orig_fv = MFOTL.free_vars f in
-
-  (* we then check all LET bindings *)
-  ignore (check_let f);
-
-  (* we first infer and check types *)
-  let (fvtypes,f) = check_syntax s f in
-  let fvtypes = List.map (fun v -> v, List.assoc v fvtypes) orig_fv in
-
-  (* we then check that it contains wf intervals *)
-  if not (check_intervals f) then
+let check_wff f = 
+    (* we check that all LET bindings are well-formed *)
+    let cl = check_let f in
+    let ci = check_intervals f in
+    let cb = check_bounds f in
+    let ca = check_aggregations f in
+    
+    (* we then check that it contains wf intervals *)
+  if not ci then
     begin
       print_endline "The formula contains a negative or empty interval";
       exit 1;
     end;
 
   (* we then check that it is a bounded future formula *)
-  if not (check_bounds f) then
+  if not cb then
     begin
       print_endline "The formula contains an unbounded future temporal operator. \
                      It is hence not monitorable.";
       exit 1;
     end;
+
+  cl && ci && cb && ca
+
+
+(* TODO: rename; this functions checks and rewrites *)
+let check_formula s f =
+  (* Remember the order of variables in the input formula. This order is used
+     for output, regardless of any transformations that follow. *)
+  let orig_fv = MFOTL.free_vars f in
+
+  (* Check well-formdness of the formula *)
+  ignore(check_wff f);
+
+  (* We first infer and check types *)
+  let (fvtypes,f) = check_syntax s f in
+  let fvtypes = List.map (fun v -> v, List.assoc v fvtypes) orig_fv in
 
   (* Unfold LETs now if requested. Note that this is independent of -no_rw. *)
   let f = match !unfold_let with
@@ -1536,6 +1594,7 @@ let check_formula s f =
     | Some mode -> expand_let mode f
   in
 
+  (* Check monitorability *)
   let check_mon = if !Misc.verified then Verified_adapter.is_monitorable s
     else is_monitorable
   in
@@ -1554,6 +1613,7 @@ let check_formula s f =
       print_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
     (is_mon, f, fvtypes)
   else
+    (* Rewriting and checking monitorability again *)
     let nf = normalize f in
     if (Misc.debugging Dbg_monitorable) && nf <> f then
       MFOTL.printnl_formula "The normalized formula is:\n  " nf;
@@ -1606,5 +1666,5 @@ let check_formula s f =
     else if !Misc.checkf then
       print_string "The analyzed formula is monitorable.\n";
 
-    let (_,rf) = check_syntax s rf in
+    (* let (_,rf) = check_syntax s rf in *) (* TODO: why is this needed? *)
     (fst is_mon, rf, fvtypes)
