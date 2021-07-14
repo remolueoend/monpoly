@@ -465,19 +465,13 @@ interpretation default_mmasaux: msaux valid_mmasaux init_mmasaux add_new_ts_mmas
     valid_result_mmasaux
   by unfold_locales (auto simp del: valid_mmasaux.simps split:prod.splits)
 
-type_synonym mmauaux = "event_data mmuaux \<times> aggaux option \<times> event_data table option list"
-
-fun valid_aggaux_list :: "Monitor.args \<Rightarrow> event_data option list set list \<Rightarrow> event_data table option list \<Rightarrow> bool"where
-  "valid_aggaux_list args vals auxs = list_all2 (\<lambda>x y. (case y of Some k \<Rightarrow> (k = eval_args_agg args x) |
-                                                     None \<Rightarrow> True)) vals auxs"
+type_synonym mmauaux = "event_data mmuaux \<times> aggaux option"
 
 fun valid_mmauaux' :: "args \<Rightarrow> ts \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> event_data muaux \<Rightarrow> bool" where
-  "valid_mmauaux' args cur dt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) auxlist 
+  "valid_mmauaux' args cur dt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) auxlist 
  = (valid_mmuaux' args cur dt (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) auxlist \<and>
-    (length done_agg = done_length) \<and>
   (case args_agg args of
-      Some aggargs \<Rightarrow> (valid_maggaux' aggargs aggaux (Mapping.keys (the (Mapping.lookup a2_map (tp - len)))) \<and>
-                      valid_aggaux_list args done done_agg) |
+      Some aggargs \<Rightarrow> (valid_maggaux' aggargs aggaux (Mapping.keys (the (Mapping.lookup a2_map (tp - len))))) |
       None \<Rightarrow> True))"
 
 definition valid_mmauaux :: "args \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> event_data muaux \<Rightarrow> bool" where
@@ -486,23 +480,22 @@ definition valid_mmauaux :: "args \<Rightarrow> ts \<Rightarrow> mmauaux \<Right
 fun init_mmauaux :: "args \<Rightarrow> mmauaux" where
   "init_mmauaux args = (init_mmuaux args, (case args_agg args of
     Some aggargs \<Rightarrow> init_maggaux' aggargs |
-    None \<Rightarrow> None), [])"
+    None \<Rightarrow> None))"
 
 fun lin_ts_mmauaux :: "mmauaux \<Rightarrow> ts list" where
-  "lin_ts_mmauaux ((tp, tss, len, tables, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) =
+  "lin_ts_mmauaux ((tp, tss, len, tables, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs) =
     linearize tss"
 
 fun eval_step_mmauaux :: "args \<Rightarrow> mmauaux \<Rightarrow> mmauaux" where
-  "eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) = 
+  "eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) = 
   (case safe_hd tss of 
   (Some ts, tss') \<Rightarrow>
     (case args_agg args of 
-    None \<Rightarrow> (eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, None#done_agg) |
+    None \<Rightarrow> (eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) |
     Some aggargs \<Rightarrow>
       (case Mapping.lookup a2_map (tp - len) of 
       Some m \<Rightarrow> 
         let I = args_ivl args;
-        T = Mapping.keys m;
         tss' = tl_queue tss';
         ts' = case safe_hd tss' of 
               (Some ts', tss'') \<Rightarrow> ts' |
@@ -519,24 +512,26 @@ fun eval_step_mmauaux :: "args \<Rightarrow> mmauaux \<Rightarrow> mmauaux" wher
         a2_map = Mapping.delete (tp - len) a2_map;
         tstp_map = Mapping.delete (tp - len) tstp_map;
         agg_result = result_maggaux' aggargs aggaux;
+        T = case agg_result of Some k \<Rightarrow> k |
+                               None \<Rightarrow> eval_args_agg args (Mapping.keys m);
         to_ins = Mapping.filter (\<lambda>k v. Mapping.lookup m'' k = None) to_ins;
         aggaux = (if len = 1 then init_maggaux' aggargs else insert_maggaux' aggargs (Mapping.keys to_ins) (delete_maggaux' aggargs to_del aggaux)) in
         ((tp, tss', tables, len - 1, maskL, maskR, a1_map, a2_map, tstp_map,
-        T # done, done_length + 1), aggaux, agg_result#done_agg))))"
+        T # done, done_length + 1), aggaux))))"
 
 fun shift_mmauaux :: "args \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> mmauaux" where
-  "shift_mmauaux args nt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) =
+  "shift_mmauaux args nt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs) =
     (let (tss_queue, tss') = takeWhile_queue (\<lambda>t. \<not> memR (args_ivl args) (nt - t)) tss in
     foldl (\<lambda>aux _. eval_step_mmauaux args aux) ((tp, tss', tables, len, maskL, maskR,
-      a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) (linearize tss_queue))"
+      a1_map, a2_map, tstp_map, done, done_length), auxs) (linearize tss_queue))"
 
 fun add_new_mmauaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> mmauaux" where
-  "add_new_mmauaux args rel1 rel2 nt (mmuaux, aggaux, done_agg) =
+  "add_new_mmauaux args rel1 rel2 nt (mmuaux, aggaux) =
     (case args_agg args of 
      None \<Rightarrow> let (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) = add_new_mmuaux args rel1 rel2 nt mmuaux in
-  ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, replicate done_length None) |
+  ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) |
      Some aggargs \<Rightarrow>
-    (let ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) = shift_mmauaux args nt (mmuaux, aggaux, done_agg);
+    (let ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) = shift_mmauaux args nt (mmuaux, aggaux);
     I = args_ivl args; pos = args_pos args;
     new_tstp = (if memL I 0 then Inr tp else Inl nt);
     tstp_map = Mapping.update tp nt tstp_map;
@@ -555,32 +550,21 @@ fun add_new_mmauaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_
     to_add = {b. (tp - len, b) \<in> tmp \<and> Mapping.lookup m b = None};
     aggaux = insert_maggaux' aggargs to_add aggaux;
     tss = append_queue nt tss in
-    ((tp + 1, tss, tables, len + 1, maskL, maskR, a1_map, a2_map', tstp_map, done, done_length), aggaux, done_agg)))"
+    ((tp + 1, tss, tables, len + 1, maskL, maskR, a1_map, a2_map', tstp_map, done, done_length), aggaux)))"
 
 fun length_mmauaux :: "args \<Rightarrow> mmauaux \<Rightarrow> nat" where
-  "length_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) =
+  "length_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs) =
     len + done_length"
 
-fun eval_mmauaux :: "args \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> (event_data table list \<times> event_data table option list \<times> mmauaux)" where
-  "eval_mmauaux args nt aux =
-    (let ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) =
+fun eval_mmauaux' :: "args \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> (event_data table list \<times> mmauaux)" where
+  "eval_mmauaux' args nt aux =
+    (let ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs) =
     shift_mmauaux args nt aux in
-    (rev done, rev done_agg, ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, [], 0), auxs, [])))"
-
-fun combine_res where
-  "combine_res args [] [] = []" |
-  "combine_res args (x#xs) (y#ys) = (case args_agg args of 
-    None \<Rightarrow> map (eval_args_agg args) (x#xs) |
-    Some _ \<Rightarrow>  (case y of Some k \<Rightarrow> k |
-                                               None \<Rightarrow> eval_args_agg args x)#combine_res args xs ys)"
-          
-
-definition "eval_mmauaux' args nt aux = (case eval_mmauaux args nt aux of (res, res_agg, aux') \<Rightarrow>
-    (combine_res args res res_agg, aux'))"
+    (rev done, ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, [], 0), auxs)))"
 
 lemma valid_length_mmauaux:
-  assumes "valid_mmauaux args cur (mmaux, auxs, done_agg) auxlist"
-  shows "length_mmauaux args (mmaux, auxs, done_agg) = length auxlist"
+  assumes "valid_mmauaux args cur (mmaux, auxs) auxlist"
+  shows "length_mmauaux args (mmaux, auxs) = length auxlist"
   using assms by (cases mmaux) (auto simp add: valid_mmauaux_def dest: list_all2_lengthD)
 
 lemma valid_init_mmauaux:
@@ -593,7 +577,7 @@ proof -
   proof (cases "agg")
     case None
     then show ?thesis using valid_mmuaux
-      by(simp only:init_args_def init_mmauaux.simps) (simp add: init_mmuaux_def valid_mmauaux_def valid_mmuaux_def) 
+      by(simp only:init_args_def init_mmauaux.simps; simp add: init_mmuaux_def valid_mmauaux_def valid_mmuaux_def) fastforce
   next
     case (Some a)
     then show ?thesis using valid_mmuaux Some valid_init_maggaux[of a]
@@ -604,12 +588,12 @@ qed
 lemma finite_keys_filter: "finite (Mapping.keys m) \<Longrightarrow> finite (Mapping.keys (Mapping.filter p m))" by (meson infinite_super keys_filter)
 
 lemma valid_eval_step_mmauaux_unfolded:
-  assumes "valid_mmauaux' args cur dt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) auxlist"
-    "lin_ts_mmauaux ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) = ts # tss''" "\<not> memR (args_ivl args) (dt - ts)"
-  shows "valid_mmauaux' args cur dt (eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg)) auxlist \<and>
-    lin_ts_mmauaux (eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg)) = tss'' \<and>
-    (case eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg) of
-    (mmaux', auxs', done_agg') \<Rightarrow> mmaux' = eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length))"
+  assumes "valid_mmauaux' args cur dt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) auxlist"
+    "lin_ts_mmauaux ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) = ts # tss''" "\<not> memR (args_ivl args) (dt - ts)"
+  shows "valid_mmauaux' args cur dt (eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux)) auxlist \<and>
+    lin_ts_mmauaux (eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux)) = tss'' \<and>
+    (case eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux) of
+    (mmaux', auxs') \<Rightarrow> mmaux' = eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length))"
 proof -
   let ?muaux = "(tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length)"
   obtain tss' where safe_hd_eq: "safe_hd tss = (Some ts, tss')" using assms(2) safe_hd_rep case_optionE by (cases "safe_hd tss") fastforce
@@ -629,7 +613,7 @@ proof -
     using tp_minus_keys by (auto dest: Mapping_keys_dest)
   obtain m' where m'_def: "Mapping.lookup a2_map (tp - len + 1) = Some m'"
       using tp_minus_keys' by (auto dest: Mapping_keys_dest)
-  obtain muaux' auxs' done_agg' where updated_def: "(muaux', auxs', done_agg') = eval_step_mmauaux args (?muaux, aggaux, done_agg)" by (smt (z3) lin_ts_mmauaux.cases)
+  obtain muaux' auxs' where updated_def: "(muaux', auxs') = eval_step_mmauaux args (?muaux, aggaux)" by (smt (z3) lin_ts_mmauaux.cases)
   then obtain tp' tss''' tables' len' maskL' maskR' a1_map' a2_map' tstp_map' done' done_length' where split:
     "muaux' = (tp', tss''', tables', len', maskL', maskR', a1_map', a2_map', tstp_map',  done', done_length')" using lin_ts_mmuaux.cases by (smt (verit, ccfv_SIG) length_mmuaux.elims)
   define I where "I = args_ivl args"
@@ -643,34 +627,45 @@ proof -
                                                             None \<Rightarrow> False) to_del_approx"
   define to_ins where "to_ins = (case Mapping.lookup a2_map (tp - len + 1) of Some m' \<Rightarrow> m')"
   define m'' where "m'' = mapping_delete_set m to_del"
-  have muaux'_def: "muaux' = eval_step_mmuaux args ?muaux" using updated_def m_def safe_hd_eq m'_def
-    by(auto simp del: takedropWhile_queue.simps split:option.splits prod.splits)
+  have muaux'_def: "muaux' = eval_step_mmuaux args ?muaux" 
+  proof(cases "args_agg args")
+    case None
+    then show ?thesis using updated_def safe_hd_eq by auto
+  next
+    case (Some a)
+    then have "valid_maggaux' a aggaux (Mapping.keys m)" using m_def assms(1) by auto
+    moreover define T where "T = (case (result_maggaux' a aggaux) of Some k \<Rightarrow> k |
+                               None \<Rightarrow> eval_args_agg args (Mapping.keys m))"
+    ultimately have T_eq: "T = eval_args_agg args (Mapping.keys m)" unfolding eval_args_agg_def
+      using valid_result_maggaux[of a _ "Mapping.keys m"] Some by(cases aggaux; auto split:option.splits)
+    show ?thesis 
+      using updated_def T_eq[unfolded T_def] m_def safe_hd_eq m'_def eval_args_agg_def Some
+      by(auto simp del: takedropWhile_queue.simps  split:option.splits prod.splits)
+  qed
   have valid_muaux: "valid_mmuaux' args cur dt ?muaux auxlist" using assms(1) by auto
   have lin_ts_muaux: "lin_ts_mmuaux (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) = ts # tss''" using assms(2) by(auto split:option.splits)
-  have valid_old: "lin_ts_mmauaux (eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux, done_agg)) = tss''"
+  have valid_old: "lin_ts_mmauaux (eval_step_mmauaux args ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), aggaux)) = tss''"
                   "valid_mmuaux' args cur dt muaux' auxlist"
     using updated_def[symmetric] split valid_eval_step_mmuaux'[OF valid_muaux lin_ts_muaux assms(3)] muaux'_def[symmetric]
     by simp+
-
-  obtain agg_result where done_agg'_def: "done_agg' = agg_result # done_agg" using updated_def m_def safe_hd_eq m'_def
-    by (auto simp del:takedropWhile_queue.simps split:prod.splits option.splits)
-  have "done_length' = done_length + 1" using updated_def[unfolded split] m_def safe_hd_eq m'_def by(auto simp del: takedropWhile_queue.simps split:option.splits prod.splits)
-  moreover have "length done_agg = done_length" using assms(1) valid_mmauaux'.simps by blast
-  ultimately have length_eq: "length done_agg' = done_length'" unfolding done_agg'_def by auto
   show ?thesis
   proof(cases "args_agg args")
   case None
   then show ?thesis 
     using updated_def[symmetric] valid_old split
-    using valid_old length_eq by (simp add: muaux'_def)
+    using valid_old by (simp add: muaux'_def)
   next
     case aargs: (Some aggargs)
     let ?m' = "mapping_delete_set m to_del"
-    have done'_def: "done' = (Mapping.keys m)#done" using updated_def split m_def safe_hd_eq aargs m'_def 
-      by (auto simp del:takedropWhile_queue.simps split:prod.splits)
-    have subs: "to_del \<subseteq> Mapping.keys m" unfolding to_del_def by(transfer) (auto split:option.splits)
     have valid_agg: "valid_maggaux' aggargs aggaux (Mapping.keys m)"
       using assms(1) m_def aargs by(auto simp del: valid_mmuaux'.simps)
+    define T where "T = (case (result_maggaux' aggargs aggaux) of Some k \<Rightarrow> k |
+                               None \<Rightarrow> eval_args_agg args (Mapping.keys m))"
+    then have T_eq: "T = eval_args_agg args (Mapping.keys m)" unfolding eval_args_agg_def
+      using valid_agg valid_result_maggaux[of aggargs _ "Mapping.keys m"] aargs by(cases aggaux; auto split:option.splits)
+    have done'_def: "done' = T#done" using updated_def split m_def safe_hd_eq aargs m'_def T_def
+      by (auto simp del:takedropWhile_queue.simps split:prod.splits)
+    have subs: "to_del \<subseteq> Mapping.keys m" unfolding to_del_def by(transfer) (auto split:option.splits)
     then have valid_del: "valid_maggaux' aggargs (delete_maggaux' aggargs to_del aggaux) (Mapping.keys ?m')"
     proof(cases aggaux)
       case None
@@ -681,19 +676,6 @@ proof -
       then show ?thesis  
         using valid_delete_maggaux[OF * subs] Some unfolding delete_set_keys by(auto simp del:delete_maggaux.simps split:prod.splits if_splits)
     qed
-    have "agg_result = Some (eval_args_agg args (Mapping.keys m)) \<or> agg_result = None"
-    proof(cases aggaux)
-      case None
-      then have "agg_result = None" using done_agg'_def updated_def safe_hd_eq m_def aargs m'_def by (auto simp del:takedropWhile_queue.simps split:prod.splits)
-      then show ?thesis by auto
-    next
-      case (Some a)
-      then have *: "valid_maggaux aggargs a (Mapping.keys m)" using valid_agg by auto
-      have "agg_result = Some (eval_args_agg args (Mapping.keys m))"
-        unfolding eval_args_agg_def using valid_result_maggaux[OF *] aargs done_agg'_def updated_def safe_hd_eq m_def Some m'_def by (auto simp del:takedropWhile_queue.simps split:prod.splits)
-      then show ?thesis by auto
-    qed
-    then have valid1: "valid_aggaux_list args done' done_agg'" using done'_def done_agg'_def assms(1) aargs by auto
     have aux: "Suc (tp - Suc 0) = tp" using len_pos len_tp by fastforce
     then have a2_map_split: "Mapping.lookup  a2_map' (tp - len + 1) = (if len = 1 then Some Mapping.empty else Some (Mapping.combine max_tstp ?m' to_ins))" 
       using takedrop_split m'_def m_def split updated_def safe_hd_eq aargs lookup_delete[of _ "Mapping.update tp Mapping.empty a2_map"] lookup_update'[of _ _ a2_map]
@@ -722,22 +704,22 @@ proof -
       qed
     qed
     moreover have "tp - len + 1 = tp - (len - 1)" using len_pos len_tp by force
-    ultimately show ?thesis using length_eq m''_def to_ins_def to_del_def to_del_approx_def aux takedrop_split updated_def valid_old split aargs safe_hd_eq m_def m'_def valid1 unfolding I_def ts'_def 
+    ultimately show ?thesis using T_eq T_def aargs m''_def to_ins_def to_del_def to_del_approx_def aux takedrop_split updated_def valid_old split aargs safe_hd_eq m_def m'_def  unfolding I_def ts'_def 
       by(auto simp del:valid_mmuaux'.simps takedropWhile_queue.simps)   
   qed
 qed
 
 lemma valid_eval_step_mmauaux':
-  assumes "valid_mmauaux' args cur dt (mmaux, auxs, done_agg) auxlist"
-    "lin_ts_mmauaux (mmaux, auxs, done_agg) = ts # tss''" "\<not> memR (args_ivl args) (dt - ts)"
-  shows "valid_mmauaux' args cur dt (eval_step_mmauaux args (mmaux, auxs, done_agg)) auxlist \<and>
-    lin_ts_mmauaux (eval_step_mmauaux args (mmaux, auxs, done_agg)) = tss'' \<and> 
-    (case eval_step_mmauaux args (mmaux, auxs, done_agg) of (mmaux', auxs', done_agg') \<Rightarrow>
+  assumes "valid_mmauaux' args cur dt (mmaux, auxs) auxlist"
+    "lin_ts_mmauaux (mmaux, auxs) = ts # tss''" "\<not> memR (args_ivl args) (dt - ts)"
+  shows "valid_mmauaux' args cur dt (eval_step_mmauaux args (mmaux, auxs)) auxlist \<and>
+    lin_ts_mmauaux (eval_step_mmauaux args (mmaux, auxs)) = tss'' \<and> 
+    (case eval_step_mmauaux args (mmaux, auxs) of (mmaux', auxs') \<Rightarrow>
     mmaux' = eval_step_mmuaux args mmaux)"
 proof -
   obtain tp tss tables len maskL maskR a1_map a2_map tstp_map donea done_length where "mmaux = (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, donea, done_length)" 
     using lin_ts_mmuaux.cases by (smt (z3) prod_cases7)
-  then show ?thesis using valid_eval_step_mmauaux_unfolded[of args cur dt tp tss tables len maskL maskR a1_map a2_map tstp_map donea done_length auxs done_agg auxlist ts tss'']
+  then show ?thesis using valid_eval_step_mmauaux_unfolded[of args cur dt tp tss tables len maskL maskR a1_map a2_map tstp_map donea done_length auxs  auxlist ts tss'']
     assms by presburger
 qed
 
@@ -746,29 +728,29 @@ lemma valid_foldl_eval_step_mmauaux':
     "lin_ts_mmauaux aux = tss @ tss'"
     "\<And>ts. ts \<in> set (take (length tss) (lin_ts_mmauaux aux)) \<Longrightarrow> \<not> memR (args_ivl args) (dt - ts)"
   shows "valid_mmauaux' args cur dt (foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux tss) auxlist \<and>
-    lin_ts_mmauaux (foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux tss) = tss' \<and> (case (foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux tss) of (mmaux', auxs', done_agg') \<Rightarrow>
-     case aux of (mmaux, auxs, donw_agg) \<Rightarrow> mmaux' = foldl (\<lambda>aux _. eval_step_mmuaux args aux) mmaux tss)"
+    lin_ts_mmauaux (foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux tss) = tss' \<and> (case (foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux tss) of (mmaux', auxs') \<Rightarrow>
+     case aux of (mmaux, auxs) \<Rightarrow> mmaux' = foldl (\<lambda>aux _. eval_step_mmuaux args aux) mmaux tss)"
   using assms
 proof (induction tss arbitrary: aux)
   case (Cons ts tss)
   have app_ass: "lin_ts_mmauaux aux = ts # (tss @ tss')"
     using Cons(3) by auto
-  obtain mmaux auxs done_agg where split: "aux = (mmaux, auxs, done_agg)" using proj_thd.cases by blast
+  obtain mmaux auxs where split: "aux = (mmaux, auxs)" by fastforce
   have "\<not> memR (args_ivl args) (dt - ts)"
     using Cons by auto
   then have valid_step: "valid_mmauaux' args cur dt (eval_step_mmauaux args aux) auxlist"
     "lin_ts_mmauaux (eval_step_mmauaux args aux) = tss @ tss'" 
-    "case eval_step_mmauaux args aux of (mmaux', auxs', done_agg') \<Rightarrow>
+    "case eval_step_mmauaux args aux of (mmaux', auxs') \<Rightarrow>
      mmaux' = eval_step_mmuaux args mmaux"
     using valid_eval_step_mmauaux' Cons(2) app_ass split by auto 
   have *: "\<And>ts. ts \<in> set (take (length tss) (lin_ts_mmauaux (eval_step_mmauaux args aux))) \<Longrightarrow>
          \<not> memR (args_ivl args) (dt - ts)" using app_ass Cons(4) apply(auto) using valid_step(2) by force
-  have "(case foldl (\<lambda>aux _. eval_step_mmauaux args aux) (eval_step_mmauaux args aux) tss of (mmaux', auxs', done_agg') \<Rightarrow>
-         case eval_step_mmauaux args aux of (mmaux, auxs, donw_agg) \<Rightarrow> 
+  have "(case foldl (\<lambda>aux _. eval_step_mmauaux args aux) (eval_step_mmauaux args aux) tss of (mmaux', auxs') \<Rightarrow>
+         case eval_step_mmauaux args aux of (mmaux, auxs) \<Rightarrow> 
          mmaux' = foldl (\<lambda>aux _. eval_step_mmuaux args aux) mmaux tss)"
     using Cons(1)[OF valid_step(1-2) *] by auto
-  then have "(case foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux (ts # tss) of (mmaux', auxs', done_agg') \<Rightarrow>
-       case aux of (mmaux, auxs, donw_agg) \<Rightarrow> mmaux' = foldl (\<lambda>aux _. eval_step_mmuaux args aux) mmaux (ts # tss))" 
+  then have "(case foldl (\<lambda>aux _. eval_step_mmauaux args aux) aux (ts # tss) of (mmaux', auxs') \<Rightarrow>
+       case aux of (mmaux, auxs) \<Rightarrow> mmaux' = foldl (\<lambda>aux _. eval_step_mmuaux args aux) mmaux (ts # tss))" 
     using valid_step(3) split by(simp only:foldl.simps split:prod.splits) simp
   then show ?case
     using Cons(1)[OF valid_step(1-2)] valid_step Cons(4) app_ass by auto
@@ -781,15 +763,15 @@ lemma valid_mmauaux'_mono:
 
 
 lemma valid_shift_mmauaux':
-  assumes "valid_mmauaux' args cur cur (mmaux, auxs, done_agg) auxlist" "nt \<ge> cur"
-  shows "valid_mmauaux' args cur nt (shift_mmauaux args nt (mmaux, auxs, done_agg)) auxlist \<and>
-    (\<forall>ts \<in> set (lin_ts_mmauaux (shift_mmauaux args nt (mmaux, auxs, done_agg))). memR (args_ivl args) (nt - ts)) \<and>
-     (case shift_mmauaux args nt (mmaux, auxs, done_agg) of (mmaux', auxs', done_agg') \<Rightarrow> 
+  assumes "valid_mmauaux' args cur cur (mmaux, auxs) auxlist" "nt \<ge> cur"
+  shows "valid_mmauaux' args cur nt (shift_mmauaux args nt (mmaux, auxs)) auxlist \<and>
+    (\<forall>ts \<in> set (lin_ts_mmauaux (shift_mmauaux args nt (mmaux, auxs))). memR (args_ivl args) (nt - ts)) \<and>
+     (case shift_mmauaux args nt (mmaux, auxs) of (mmaux', auxs') \<Rightarrow> 
      mmaux' = shift_mmuaux args nt mmaux)"
 proof -
   define I where "I = args_ivl args"
   define pos where "pos = args_pos args"
-  let ?aux = "(mmaux, auxs, done_agg)"
+  let ?aux = "(mmaux, auxs)"
   have valid_folded: "valid_mmauaux' args cur nt ?aux auxlist"
     using assms(1,2) valid_mmauaux'_mono by blast
   obtain tp len tss tables maskL maskR a1_map a2_map tstp_map "done" done_length where aux_def:
@@ -811,22 +793,22 @@ proof -
     foldl_aux_def: "(tp', tss', tables', len', maskL', maskR', a1_map', a2_map', tstp_map',
       done', done_length') = foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?mmaux tss_list"
     by (cases "foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?mmaux tss_list") auto
-  have lin_tss_aux: "lin_ts_mmauaux (?mmaux, auxs, done_agg) = linearize tss"
+  have lin_tss_aux: "lin_ts_mmauaux (?mmaux, auxs) = linearize tss"
     unfolding aux_def tss'_def lin_ts_mmauaux.simps takeWhile_queue_rep_snd by auto
-  then have valid_aux: "valid_mmauaux' args cur nt (?mmaux, auxs, done_agg) auxlist" using valid_before by(auto)
-  have "take (length tss_list) (lin_ts_mmauaux (?mmaux, auxs, done_agg)) = tss_list"
+  then have valid_aux: "valid_mmauaux' args cur nt (?mmaux, auxs) auxlist" using valid_before by(auto)
+  have "take (length tss_list) (lin_ts_mmauaux (?mmaux, auxs)) = tss_list"
     unfolding lin_tss_aux using tss_list'_def(1) by auto
   then have valid_foldl: "valid_mmauaux' args cur nt
-    (foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs, done_agg) tss_list) auxlist"
-    "lin_ts_mmauaux (foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs, done_agg) tss_list) = tss_list'"
-    "case (foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs, done_agg) tss_list) of (mmaux', auxs', done_agg') \<Rightarrow>
+    (foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs) tss_list) auxlist"
+    "lin_ts_mmauaux (foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs) tss_list) = tss_list'"
+    "case (foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs) tss_list) of (mmaux', auxs') \<Rightarrow>
      mmaux' = foldl (\<lambda>aux _. eval_step_mmuaux args aux) ?mmaux tss_list"
     using valid_foldl_eval_step_mmauaux'[OF valid_aux, unfolded lin_tss_aux,
       OF tss_list'_def(1)] tss_list_takeWhile set_takeWhileD
     unfolding lin_tss_aux I_def by fastforce+
-  have shift_mmuaux_eq: "shift_mmauaux args nt (mmaux, auxs, done_agg) = foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs, done_agg) tss_list"
+  have shift_mmuaux_eq: "shift_mmauaux args nt (mmaux, auxs) = foldl (\<lambda>aux _. eval_step_mmauaux args aux) (?mmaux, auxs) tss_list"
     using tss_list_def unfolding aux_def I_def tss'_def by (auto split:prod.splits)
-  have aux: "(case shift_mmauaux args nt (mmaux, auxs, done_agg) of (mmaux', auxs', done_agg') \<Rightarrow> 
+  have aux: "(case shift_mmauaux args nt (mmaux, auxs) of (mmaux', auxs') \<Rightarrow> 
      mmaux' = shift_mmuaux args nt mmaux)" using valid_foldl(3)
     unfolding aux_def apply(simp only:shift_mmauaux.simps shift_mmuaux.simps) unfolding takeWhile_def[unfolded I_def] tss'_def
     by(simp only:Let_def split:prod.splits) (auto simp add:list_queue_aux simp del:takeWhile_queue.simps)
@@ -838,21 +820,21 @@ proof -
 qed
 
 lemma valid_add_new_mmauaux_unfolded:
-  assumes valid_before: "valid_mmauaux args cur ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) auxlist"
+  assumes valid_before: "valid_mmauaux args cur ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs) auxlist"
     and tabs: "table (args_n args) (args_L args) rel1" "table (args_n args) (args_R args) rel2"
     and nt_mono: "nt \<ge> cur"
-  shows "valid_mmauaux args nt (add_new_mmauaux args rel1 rel2 nt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg))
+  shows "valid_mmauaux args nt (add_new_mmauaux args rel1 rel2 nt ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs))
     (update_until args rel1 rel2 nt auxlist)"
 proof - 
   let ?muaux = "(tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length)"
-  have *: "valid_mmauaux' args cur cur (?muaux, auxs, done_agg) auxlist" using valid_before unfolding valid_mmauaux_def by auto
-  obtain tp' tss' tables' len' maskL' maskR' a1_map' a2_map' tstp_map' done' done_length' aggaux' done_agg' where updated_def: 
-    "add_new_mmauaux args rel1 rel2 nt (?muaux, auxs, done_agg) = ((tp', tss', tables', len', maskL', maskR', a1_map', a2_map', tstp_map', done', done_length'), aggaux', done_agg')" by (smt (z3) lin_ts_mmauaux.cases)
-  obtain tp_i tss_i tables_i len_i maskL_i maskR_i a1_map_i a2_map_i tstp_map_i done_i done_length_i aggaux_i done_agg_i where inter_def: 
-    "shift_mmauaux args nt (?muaux, auxs, done_agg) = ((tp_i, tss_i, tables_i, len_i, maskL_i, maskR_i, a1_map_i, a2_map_i, tstp_map_i, done_i, done_length_i), aggaux_i, done_agg_i)" by (smt (z3) lin_ts_mmauaux.cases)
+  have *: "valid_mmauaux' args cur cur (?muaux, auxs) auxlist" using valid_before unfolding valid_mmauaux_def by auto
+  obtain tp' tss' tables' len' maskL' maskR' a1_map' a2_map' tstp_map' done' done_length' aggaux' where updated_def: 
+    "add_new_mmauaux args rel1 rel2 nt (?muaux, auxs) = ((tp', tss', tables', len', maskL', maskR', a1_map', a2_map', tstp_map', done', done_length'), aggaux')" by (smt (z3) lin_ts_mmauaux.cases)
+  obtain tp_i tss_i tables_i len_i maskL_i maskR_i a1_map_i a2_map_i tstp_map_i done_i done_length_i aggaux_i where inter_def: 
+    "shift_mmauaux args nt (?muaux, auxs) = ((tp_i, tss_i, tables_i, len_i, maskL_i, maskR_i, a1_map_i, a2_map_i, tstp_map_i, done_i, done_length_i), aggaux_i)" by (smt (z3) lin_ts_mmauaux.cases)
   let ?muaux_i = "(tp_i, tss_i, tables_i, len_i, maskL_i, maskR_i, a1_map_i, a2_map_i, tstp_map_i, done_i, done_length_i)"
   let ?muaux' = "(tp', tss', tables', len', maskL', maskR', a1_map', a2_map', tstp_map', done', done_length')"
-  have valid_shift: "valid_mmauaux' args cur nt (?muaux_i, aggaux_i, done_agg_i) auxlist"
+  have valid_shift: "valid_mmauaux' args cur nt (?muaux_i, aggaux_i) auxlist"
     "?muaux_i = shift_mmuaux args nt ?muaux"
     using valid_shift_mmauaux'[OF * nt_mono] inter_def by(auto simp del:valid_mmauaux'.simps shift_mmauaux.simps shift_mmuaux.simps) 
   define new_tstp where "new_tstp = (if memL (args_ivl args) 0 then Inr tp_i else Inl nt)"
@@ -869,22 +851,18 @@ proof -
   have valid_old: "valid_mmuaux args cur ?muaux auxlist" using assms(1) unfolding valid_mmauaux_def valid_mmuaux_def by auto
   have valid_muaux: "valid_mmuaux args nt ?muaux' (update_until args rel1 rel2 nt auxlist)" 
     using valid_add_new_mmuaux[OF valid_old tabs nt_mono] muaux'_def by simp
-  have "length done_agg_i = done_length_i" using valid_mmauaux'.simps valid_shift(1) by presburger
-  moreover have "length done_agg = done_length" by (meson "*" valid_mmauaux'.simps)
-  ultimately have length_eq: "length done_agg' = done_length'" 
-    using updated_def inter_def by(auto simp del:shift_mmauaux.simps add_new_mmuaux.simps split:option.splits prod.splits)
   show ?thesis
   proof(cases "args_agg args")
     case None
-    then show ?thesis using length_eq valid_muaux unfolding updated_def valid_mmauaux_def split valid_mmauaux'.simps valid_mmuaux_def by auto
+    then show ?thesis using valid_muaux unfolding updated_def valid_mmauaux_def split valid_mmauaux'.simps valid_mmuaux_def by auto
   next
     case aargs: (Some aggargs)
     have upd_defs: "a2_map' = Mapping.update (tp_i + 1) Mapping.empty (upd_nested a2_map_i new_tstp (max_tstp new_tstp) tmp')"
-     "done' = done_i" "done_agg' = done_agg_i" "tp' = tp_i + 1" "len' = len_i + 1"
+     "done' = done_i" "tp' = tp_i + 1" "len' = len_i + 1"
       using aargs updated_def unfolding tmp'_def tstp_map'_def tmp_def new_tstp_def add_new_mmauaux.simps unfolding inter_def  by(auto)
     have "(tp_i + 1 = tp_i - len_i) = False" by auto
     then obtain m' where m'_def: "Mapping.lookup a2_map' (tp' - len') = Some m'" "m' = (upd_set' m new_tstp (max_tstp new_tstp) {b. (tp_i - len_i, b) \<in> tmp'})"
-      using m_def upd_defs(4-5) unfolding upd_defs(1) lookup_update' upd_nested_lookup by auto
+      using m_def upd_defs(3-4) unfolding upd_defs(1) lookup_update' upd_nested_lookup by auto
     define to_add where "to_add = {b. (tp_i - len_i, b) \<in> tmp' \<and> Mapping.lookup m b = None}"
     have upd_agg: "aggaux' = insert_maggaux' aggargs to_add aggaux_i"
       using m_def aargs updated_def unfolding to_add_def tmp'_def tstp_map'_def tmp_def new_tstp_def add_new_mmauaux.simps inter_def by auto
@@ -907,48 +885,41 @@ proof -
         then show ?thesis using Some unfolding upd_agg by auto
       qed
     qed
-    moreover have "valid_aggaux_list args done_i done_agg_i" using valid_shift(1) aargs by auto
-    ultimately show ?thesis using length_eq valid_muaux m'_def(1) unfolding updated_def valid_mmauaux_def split valid_mmauaux'.simps upd_defs valid_mmuaux_def aargs
+    then show ?thesis using valid_muaux m'_def(1) unfolding updated_def valid_mmauaux_def split valid_mmauaux'.simps upd_defs valid_mmuaux_def aargs
       by(simp del:valid_mmuaux'.simps) 
   qed
 qed
 
 lemma valid_add_new_mmauaux:
-  assumes valid_before: "valid_mmauaux args cur (mmaux, auxs, done_agg) auxlist"
+  assumes valid_before: "valid_mmauaux args cur (mmaux, auxs) auxlist"
     and tabs: "table (args_n args) (args_L args) rel1" "table (args_n args) (args_R args) rel2"
     and nt_mono: "nt \<ge> cur"
-  shows "valid_mmauaux args nt (add_new_mmauaux args rel1 rel2 nt (mmaux, auxs, done_agg))
+  shows "valid_mmauaux args nt (add_new_mmauaux args rel1 rel2 nt (mmaux, auxs))
     (update_until args rel1 rel2 nt auxlist)"
   using valid_add_new_mmauaux_unfolded[OF _ tabs nt_mono] valid_before by (cases mmaux) fast
 
 lemma done_empty_valid_mmauaux'_intro:
   assumes "valid_mmauaux' args cur dt
-    ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs, done_agg) auxlist"
+    ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs) auxlist"
   shows "valid_mmauaux' args cur dt'
-    ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, [], 0), auxs, [])
+    ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, [], 0), auxs)
     (drop (length done) auxlist)"
   using assms sorted_drop by (auto simp add: drop_map[symmetric] split:option.splits)
 
-lemma valid_agg_list_rev:
-  assumes "valid_aggaux_list args done done_agg"
-  shows "valid_aggaux_list args (rev done) (rev done_agg)"
-  using assms by auto
-
 lemma valid_eval_mmauaux:
-  assumes "valid_mmauaux args cur (mmaux, auxs, done_agg) auxlist" "nt \<ge> cur"
-    "eval_mmauaux args nt (mmaux, auxs, done_agg) = (res, res_agg, aux')" "eval_until (args_ivl args) nt auxlist = (res', auxlist')"
-  shows "res = res' \<and> valid_mmauaux args cur aux' auxlist' \<and> (case args_agg args of Some aggargs \<Rightarrow> valid_aggaux_list args res res_agg|
-                                                                                    None \<Rightarrow> True)"
+  assumes "valid_mmauaux args cur (mmaux, auxs) auxlist" "nt \<ge> cur"
+    "eval_mmauaux' args nt (mmaux, auxs) = (res, aux')" "eval_until (args_ivl args) nt auxlist = (res', auxlist')"
+  shows "valid_mmauaux args cur aux' auxlist' \<and> res = map (eval_args_agg args) res'"
 proof -
   define I where "I = args_ivl args"
   define pos where "pos = args_pos args"
-  have valid_folded: "valid_mmauaux' args cur nt (mmaux, auxs, done_agg) auxlist"
+  have valid_folded: "valid_mmauaux' args cur nt (mmaux, auxs) auxlist"
     using assms(1,2) valid_mmauaux'_mono unfolding valid_mmauaux_def by blast
-  obtain tp len tss tables maskL maskR a1_map a2_map tstp_map "done" done_length auxs' done_agg' where shift_aux_def:
-    "shift_mmauaux args nt (mmaux, auxs, done_agg) = ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs', done_agg')"
-    by (cases "shift_mmauaux args nt (mmaux, auxs, done_agg)") auto
+  obtain tp len tss tables maskL maskR a1_map a2_map tstp_map "done" done_length auxs' where shift_aux_def:
+    "shift_mmauaux args nt (mmaux, auxs) = ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs')"
+    by (cases "shift_mmauaux args nt (mmaux, auxs)") auto
   have valid_shift_aux: "valid_mmauaux' args cur nt ((tp, tss, tables, len, maskL, maskR,
-    a1_map, a2_map, tstp_map, done, done_length), auxs', done_agg') auxlist"
+    a1_map, a2_map, tstp_map, done, done_length), auxs') auxlist"
     "\<And>ts. ts \<in> set (linearize tss) \<Longrightarrow> memR (args_ivl args) (nt - ts)"
     using valid_shift_mmauaux'[OF assms(1)[unfolded valid_mmauaux_def]  assms(2)]
     unfolding shift_aux_def by auto
@@ -962,100 +933,22 @@ proof -
   have take_auxlist_takeWhile: "take (length done) auxlist = takeWhile (check_before I nt) auxlist"
     using len_done_auxlist list_all set_drop_auxlist
     by (rule take_takeWhile) assumption+
-  have rev_done: "rev done = map proj_thd (take (length done) auxlist)"
+  have rev_done: "rev done = map (eval_args_agg args) (map proj_thd (take (length done) auxlist))"
     using valid_shift_aux by auto
-  then have res'_def: "res' = rev done"
+  then have res'_def: "map (eval_args_agg args) res' = rev done"
     using eval_until_res[OF assms(4)] unfolding take_auxlist_takeWhile I_def by auto
   then have auxlist'_def: "auxlist' = drop (length done) auxlist"
-    using eval_until_auxlist'[OF assms(4)] by auto
-  have eval_mmuaux_eq: "eval_mmauaux args nt (mmaux, auxs, done_agg)  = (rev done, rev done_agg', ((tp, tss, tables, len, maskL, maskR,
-    a1_map, a2_map, tstp_map, [], 0), auxs', []))"
+    using eval_until_auxlist'[OF assms(4)] by (metis length_map length_rev)
+  have eval_mmuaux_eq: "eval_mmauaux' args nt (mmaux, auxs)  = (rev done, ((tp, tss, tables, len, maskL, maskR,
+    a1_map, a2_map, tstp_map, [], 0), auxs'))"
     using shift_aux_def by auto
-  have "case args_agg args of Some aggargs \<Rightarrow> valid_aggaux_list args done done_agg' |
-                              None \<Rightarrow> True" using valid_shift_aux(1) unfolding valid_mmauaux'.simps
-    by(auto split:option.splits)
-  then have "case args_agg args of Some aggargs \<Rightarrow> valid_aggaux_list args (rev done) (rev done_agg') |
-                              None \<Rightarrow> True"
-    using valid_agg_list_rev[of args "done" done_agg'] by(auto split:option.splits)
-  then show ?thesis
+  show ?thesis
     using assms(3) done_empty_valid_mmauaux'_intro[OF valid_shift_aux(1)]
     unfolding shift_aux_def eval_mmuaux_eq pos_def auxlist'_def res'_def valid_mmauaux_def by (auto simp del:valid_mmuaux'.simps split:option.splits)
 qed
 
-lemma valid_eval_mmauaux':
-  assumes "valid_mmauaux args cur (mmaux, auxs, done_agg) auxlist" "nt \<ge> cur"
-    "eval_mmauaux' args nt (mmaux, auxs, done_agg) = (res,  aux')" "eval_until (args_ivl args) nt auxlist = (res', auxlist')"
-  shows "valid_mmauaux args cur aux' auxlist' \<and> res = map (eval_args_agg args) res'"
-proof -
-  obtain tp len tss tables maskL maskR a1_map a2_map tstp_map "done" done_length auxs' done_agg' where shift_aux_def:
-    "shift_mmauaux args nt (mmaux, auxs, done_agg) = ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length), auxs', done_agg')"
-    by (cases "shift_mmauaux args nt (mmaux, auxs, done_agg)") auto
-  have valid_shift_aux: "valid_mmauaux' args cur nt ((tp, tss, tables, len, maskL, maskR,
-    a1_map, a2_map, tstp_map, done, done_length), auxs', done_agg') auxlist"
-    "\<And>ts. ts \<in> set (linearize tss) \<Longrightarrow> memR (args_ivl args) (nt - ts)"
-    using  valid_shift_mmauaux'[OF _ assms(2), of args mmaux auxs done_agg auxlist] assms(1)[unfolded valid_mmauaux_def]
-    unfolding shift_aux_def by auto
-  then have valid_shift_aux2: "valid_mmuaux' args cur nt (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) auxlist"
-    unfolding valid_mmauaux'.simps by auto
-  have len_done_auxlist: "length done \<le> length auxlist"
-    using valid_shift_aux by auto
-  have list_all: "\<And>x. x \<in> set (take (length done) auxlist) \<Longrightarrow> check_before (args_ivl args) nt x"
-    using valid_shift_aux by auto
-  have set_drop_auxlist: "\<And>x. x \<in> set (drop (length done) auxlist) \<Longrightarrow> \<not>check_before (args_ivl args) nt x"
-    using valid_shift_aux[unfolded valid_mmauaux'.simps valid_mmuaux'.simps]
-      list_all2_check_before[OF _ valid_shift_aux(2)] by fast
-  have take_auxlist_takeWhile: "take (length done) auxlist = takeWhile (check_before (args_ivl args) nt) auxlist"
-    using len_done_auxlist list_all set_drop_auxlist
-    by (rule take_takeWhile) assumption+
-  have rev_done: "rev done = map proj_thd (take (length done) auxlist)"
-    using valid_shift_aux by auto
-  then have res'_def: "res' = rev done"
-    using eval_until_res[OF assms(4)] unfolding take_auxlist_takeWhile by auto
-  then have auxlist'_def: "auxlist' = drop (length done) auxlist"
-    using eval_until_auxlist'[OF assms(4)] by auto
-  have length_eq: "length done = length done_agg'" using valid_shift_aux(1) by(simp)
-  have aux'_def: "aux' = ((tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, [], 0), auxs', [])" using assms(3) unfolding eval_mmauaux'_def eval_mmauaux.simps shift_aux_def by simp
-  have valid_after: "valid_mmauaux args cur aux' auxlist'" using done_empty_valid_mmuaux'_intro[OF valid_shift_aux2, of cur] valid_shift_aux(1) unfolding aux'_def valid_mmauaux_def auxlist'_def valid_mmauaux'.simps
-    by(cases "args_agg args") (simp del:valid_mmuaux'.simps)+
-  have res_def: "res = combine_res args (rev done) (rev done_agg')" using assms(3) unfolding eval_mmauaux'_def eval_mmauaux.simps shift_aux_def by simp
-  show ?thesis
-  proof(cases "args_agg args")
-    case None
-    then show ?thesis using valid_after length_eq unfolding res'_def res_def
-    proof(induction "rev done" arbitrary: "done")
-      case Nil
-      then show ?case by auto
-    next
-      case (Cons a x)
-      obtain y ys where split: "rev done_agg' = y # ys" using Cons(5) Cons(2) by (metis length_0_conv list.exhaust list.simps(3) rev.simps(1) rev_rev_ident)
-      then show ?case using None Cons(4) unfolding split Cons(2)[symmetric] by auto
-    qed
-  next
-    case (Some aggargs)
-    then have valid_list_aux: "valid_aggaux_list args done done_agg'" using valid_shift_aux(1) by auto
-    show ?thesis using Some valid_after length_eq valid_list_aux unfolding res'_def res_def 
-    proof(induction "rev done" arbitrary: "done" done_agg')
-      case Nil
-      then show ?case by auto
-    next
-      case (Cons a xs)
-      obtain y ys where split: "rev done_agg' = y # ys" using Cons(5) Cons(2) by (metis length_0_conv list.exhaust list.simps(3) rev.simps(1) rev_rev_ident)
-      have "done_agg' = rev (y # ys)" "done = rev (a # xs)" using Cons(2) split rev_rev_ident by auto
-      then have defs: "done_agg' = (rev ys) @ [y]" "done = (rev xs) @ [a]" by auto
-      have "(a, y) \<in> set (zip done done_agg')" using Cons(5) unfolding defs by simp
-      then have y_def: "y \<in> range Some \<longrightarrow> y = Some (eval_args_agg args a)" using list_all2_iff[of _ "done" done_agg'] Cons(6) by(simp) force
-      then have "set (zip (rev xs) (rev ys)) \<subseteq> set (zip done done_agg')" using defs Cons.prems(3) by auto
-      then have valid: "valid_aggaux_list args (rev xs) (rev ys)" using Cons(6) list_all2_iff[of _ "done" "done_agg'"] list_all2_iff[of _ xs ys] unfolding defs by(auto) (metis prod.simps(2) set_rev zip_rev)
-      have "combine_res args xs ys = map (eval_args_agg args) xs" using Cons(1)[OF _ Some Cons(4),of "rev xs" "rev ys"] Cons(5) split Cons(2) valid unfolding defs by auto 
-      moreover have "(case y of None \<Rightarrow> eval_args_agg args a | Some k \<Rightarrow> k) = eval_args_agg args a"
-        using y_def by(cases y) (auto)
-      ultimately show ?case using Some Cons(4) unfolding split Cons(2)[symmetric] by simp
-    qed
-  qed
-qed
-
 interpretation default_mmauaux: muaux valid_mmauaux init_mmauaux add_new_mmauaux length_mmauaux eval_mmauaux'
-  using valid_init_mmauaux valid_add_new_mmauaux valid_length_mmauaux valid_eval_mmauaux'
-  by unfold_locales (auto split:prod.splits)
+  using valid_init_mmauaux valid_add_new_mmauaux valid_length_mmauaux valid_eval_mmauaux
+  by unfold_locales auto
 
 end
