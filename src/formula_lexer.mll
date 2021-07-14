@@ -93,8 +93,8 @@ rule
   | "<="                        { f "LESSEQ" lexbuf; LESSEQ }
   | "SUBSTRING"                 { f "SUBSTRING" lexbuf; SUBSTRING }
   | "MATCHES"                   { f "MATCHES" lexbuf; MATCHES }
-  | "R2S"                       { f "R2S" lexbuf; R2S }
-  | "S2R"                       { f "S2R" lexbuf; S2R }
+  | "r2s"                       { f "R2S" lexbuf; R2S }
+  | "s2r"                       { f "S2R" lexbuf; S2R }
   | "<"                         { f "LESS" lexbuf; LESS }
   | ">="                        { f "GTREQ" lexbuf; GTREQ }
   | ">"                         { f "GTR" lexbuf; GTR }

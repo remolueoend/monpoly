@@ -261,7 +261,7 @@ let msg_PRED = "In subformulas p(t1,...,tn) each term ti should be a variable or
 
 let msg_EQUAL = "In input formulas psi of the form t1 = t2 the terms t1 and t2 should be variables or constants and at least one should be a constant."
 
-let msg_LESS = "Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable."
+let msg_LESS = "Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable."
 
 let msg_NOT_EQUAL = "In subformulas psi of the form NOT (t1 = t2) the terms t1 and t2 should be either the same variable x or some constants (except when psi is part of subformulas of the form phi AND NOT psi, or phi AND NOT psi)."
 
@@ -469,7 +469,8 @@ let rec rr = function
     (match t1, t2 with
      | Var x, Cst c -> ([x], true)
      | _ -> ([], true))
-  | Substring (t1, t2) -> ([], true)
+  | Substring (t1, t2) 
+  | Matches (t1, t2) -> ([], true)
 
   | Neg (Equal (t1, t2)) ->
     (match t1, t2 with
@@ -569,7 +570,7 @@ let rec rr = function
   | Frex (_,r) -> rr_re true r 
   | Prex (_,r) -> rr_re false r 
   | Let (_,_,f) -> rr f
-  | _ -> failwith "[Rewriting.rr] internal error"
+  | _ -> failwith "[Rewriting.rr] internal error syntactic sugar not supported"
   and rr_re future = function 
   | Wild -> ([],true)
   | Test f -> rr f

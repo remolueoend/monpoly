@@ -74,7 +74,7 @@ Safe-range:
   The sequence of free variables is: ()
   The analyzed formula is NOT monitorable, because of the subformula:
     0 < 0
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -87,7 +87,7 @@ Safe-range:
   The sequence of free variables is: ()
   The analyzed formula is NOT monitorable, because of the subformula:
     0 < 1
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -100,7 +100,7 @@ Domain dependent (integers):
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < 0
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -113,7 +113,7 @@ Domain dependent (integers):
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < 5
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -126,7 +126,7 @@ Domain dependent:
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     0 < x
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
@@ -138,7 +138,7 @@ Safe-range:
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < x
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -151,7 +151,7 @@ Domain dependent:
   The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < y
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
