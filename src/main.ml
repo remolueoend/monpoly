@@ -188,7 +188,7 @@ let _ =
     "-negate", Arg.Set negate, "\tAnalyze the negation of the input formula";
     "-log", Arg.Set_string logfile, "\t\tChoose the log file";
     "-version", Arg.Set displayver, "\tDisplay the version (and exit)";
-    "-debug", Arg.Set_string debug, "\tChoose unit to debug, among 'eval', 'perf', 'log', 'formula', 'monitorable', 'filter'";
+    "-debug", Arg.Set_string debug, "\tChoose aspect to debug, among 'eval', 'perf', 'log', 'formula', 'parsing', 'typing' 'monitorable', 'filter'";
     "-verbose", Arg.Set Misc.verbose, "\tTurn on verbose mode";
     "-check", Arg.Set Misc.checkf, "\tCheck if formula is monitorable (and exit)";
     "-no_rw", Arg.Set Rewriting.no_rw, "\tNo formula rewrite";

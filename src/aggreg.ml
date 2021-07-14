@@ -410,3 +410,14 @@ let max_once empty_val intv result_pos arg_pos group_posl =
   let window = new mono_aggregator is_better intv empty_val
     result_pos arg_pos group_posl in
   new once_aggregator window intv
+
+let print_bool b =
+  if b then
+    print_string "true"
+  else
+    print_string "false"
+let print_state (oaggr:once_aggregator):unit =
+  print_string "empty_rel=";
+  print_bool oaggr#get_result.empty_rel;
+  print_string "; rel=";
+  Relation.print_rel "" oaggr#get_result.rel

@@ -67,3 +67,5 @@ val avg_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
 
 val med_once: Predicate.cst -> MFOTL.interval -> int -> int -> int list ->
   once_aggregator
+
+val print_state: once_aggregator -> unit
