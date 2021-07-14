@@ -1057,7 +1057,7 @@ let rec check_aggregations = function
     if check 
       then check
     else failwith ("[Rewriting.check_aggregations] Aggregation " 
-    ^ (MFOTL.string_of_formula "" a)  ^ " is not well formed." ^
+    ^ (MFOTL.string_of_formula "" a)  ^ " is not well formed. " ^
     "Variable " ^ y ^ " may not be among the group variables and variable " ^ x 
     ^ " must be among the free variables of " ^ (MFOTL.string_of_formula "" f))
   | Equal _
@@ -1456,8 +1456,6 @@ let rec type_check_formula (sch, vars) f =
     let (s1,v1,f1) = type_check_formula (sch, vars) f1 in
     let (s2,v2,f2) = type_check_formula (s1, v1) f2 in
     (s2, v2, Until(intv, f1, f2))
-    
-
   | Exists (v,f) -> 
     let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr v) vars in
     let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars v in
@@ -1470,35 +1468,27 @@ let rec type_check_formula (sch, vars) f =
     let (s1,v1,f) = type_check_formula (sch,new_vars) f in
     let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr v)) v1 in
     (s1,unshadowed_vars@shadowed_vars, ForAll (v,f))
-
   | Aggreg (rty,r,op,x,gs,f) -> 
     let zs = List.filter (fun v -> not (List.mem v gs)) (MFOTL.free_vars f) in
     let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr zs) vars in
-    let new_vars = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars zs in
+    let vars' = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars zs in
     let type_check_aggregation exp_typ1 exp_typ2 =
-        let (s1,v1,t1) = type_check_term_debug d (sch,new_vars) exp_typ1 (Var r) in
-        let shadowed_vars = 
-          if (List.mem_assoc r shadowed_vars) 
-          then propagate_constraints (List.assoc r shadowed_vars) (List.assoc r v1) shadowed_vars 
-          else shadowed_vars
-          in
-        let (s2,v2,t2) = type_check_term_debug d (s1,v1) exp_typ2 (Var x) in
-        let (s3,v3,f) = type_check_formula (s2,v2) f in
-        let shadowed_vars = 
-          if (exp_typ1 = exp_typ2) && (List.mem_assoc r shadowed_vars)
-          then propagate_constraints (List.assoc x v3) (List.assoc r shadowed_vars) shadowed_vars
-          else shadowed_vars in 
-        let unshadowed_vars = List.filter (fun (vr,_) -> not (List.mem vr zs)) v3 in
-        let unshadowed_vars = 
-          if (exp_typ1 = exp_typ2) && (List.mem_assoc r unshadowed_vars)
-          then propagate_constraints (List.assoc x v3) (List.assoc r unshadowed_vars) unshadowed_vars
-          else unshadowed_vars in
-        (*TODO add type of r *)
-        let v3 = unshadowed_vars@shadowed_vars in
+        let (s1,v1,_) = type_check_term_debug d (sch,vars') exp_typ2 (Var x) in            (* Type check variable x *)
+        let (s2,v2,_) = type_check_formula (s1,v1) f in                                    (* Type check formula f *)
+        let reduced_vars = List.filter (fun (v,_) -> List.mem_assoc v reduced_vars) v2 in  (* Get the updated types for gs vars*)
+        let vars = shadowed_vars @ reduced_vars in                                         (* Restore the top-level vars with updated vars*)
+        let (s3,v3,_) = type_check_term_debug d (sch,vars) exp_typ1 (Var r) in             (* Type check variable r*)
+        let v3 =  if (exp_typ1 = exp_typ2)                                                 (* If the expected types of r and x are the same *)
+                  then 
+                    begin
+                    type_error (List.assoc x v2) (List.assoc r v3) (Var r);                (* and their inferred types are compatible *)
+                    propagate_constraints (List.assoc x v2) (List.assoc r v3) v3           (* propagate the more specific type *)
+                    end
+                  else v3 in
         (s3, v3, Aggreg ((List.assoc r v3), r,op,x,gs,f))
     in
-    let exp_typ = new_type_symbol TAny new_vars in
-    let exp_num_typ = new_type_symbol TNum new_vars in
+    let exp_typ = new_type_symbol TAny vars' in
+    let exp_num_typ = new_type_symbol TNum vars' in
     (match op with
       | Min | Max -> type_check_aggregation exp_typ exp_typ
       | Cnt -> type_check_aggregation (TCst TInt) exp_typ
