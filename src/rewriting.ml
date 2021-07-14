@@ -1158,12 +1158,16 @@ let type_error t1 t2 t =
 (* Given that v:t1 and v:t2 for some v,
    check which type is more specific and update Γ accordingly
  *)
- let propagate_constraints t1 t2 vars =
+let propagate_constraints t1 t2 vars =
   let update_vars oldt newt  = 
     List.map (fun (v, t) -> if t=oldt then (v,newt) else (v,t)) in
   if (t1 |<=| t2) 
   then update_vars t2 t1 vars 
   else update_vars t1 t2 vars 
+
+let check_and_propagate t1 t2 t vars = 
+  type_error t1 t2 t;
+  propagate_constraints t1 t2 vars
 
 (* DEBUG functions *)
 
@@ -1226,79 +1230,59 @@ let  type_check_term_debug d (sch, vars) typ term =
       | Var v as tt -> 
         if List.mem_assoc v vars then
           let vtyp = (List.assoc v vars) in 
-          type_error typ vtyp tt;
-          let newvars = propagate_constraints typ vtyp vars in
+          let newvars = check_and_propagate typ vtyp tt vars in
           (sch, newvars, (List.assoc v vars))  
         else 
           (sch, (v,typ)::vars, typ)
       | Cst c as tt -> 
         let ctyp = TCst (type_of_cst c) in
-        type_error typ ctyp tt;
-        let newvars = propagate_constraints typ ctyp vars in
+        let newvars = check_and_propagate typ ctyp tt vars in
         (sch, newvars, ctyp)
       | F2i t as tt ->
-        type_error (TCst TInt) typ tt;
-        let vars = propagate_constraints typ (TCst TInt) vars in
+        let vars = check_and_propagate (TCst TInt) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
-        type_error (TCst TFloat) t_typ t;
-        let v = propagate_constraints t_typ (TCst TFloat) v in
+        let v = check_and_propagate (TCst TFloat) t_typ t v in
         (s,v,(TCst TInt))             
       | I2f t as tt ->
-        type_error (TCst TFloat) typ tt;
-        let vars = propagate_constraints typ (TCst TFloat) vars in
+        let vars = check_and_propagate (TCst TFloat) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TInt) t in
-        type_error (TCst TInt) t_typ t;
-        let v = propagate_constraints t_typ (TCst TInt) v in
+        let v = check_and_propagate (TCst TInt) t_typ t v in
         (s,v,(TCst TFloat))            
       | FormatDate t as tt ->
-        type_error (TCst TStr) typ tt;
-        let vars = propagate_constraints typ (TCst TStr) vars in
+        let vars = check_and_propagate (TCst TStr) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
-        type_error (TCst TFloat) t_typ t;
-        let v = propagate_constraints t_typ (TCst TFloat) v in
+        let v = check_and_propagate (TCst TFloat) t_typ t v in
         (s,v,(TCst TStr))             
       | Year t as tt ->
-        type_error (TCst TInt) typ tt;
-        let vars = propagate_constraints typ (TCst TInt) vars in
+        let vars = check_and_propagate (TCst TInt) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
-        type_error (TCst TFloat) t_typ t;
-        let v = propagate_constraints t_typ (TCst TFloat) v in
+        let v = check_and_propagate (TCst TFloat) t_typ t v in
         (s,v,(TCst TInt))             
       | Month t as tt ->
-        type_error (TCst TInt) typ tt;
-        let vars = propagate_constraints typ (TCst TInt) vars in
+        let vars = check_and_propagate (TCst TInt) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
-        type_error (TCst TFloat) t_typ t;
-        let v = propagate_constraints t_typ (TCst TFloat) v in
+        let v = check_and_propagate (TCst TFloat) t_typ t v in
         (s,v,(TCst TInt))             
       | DayOfMonth t as tt ->
-        type_error (TCst TInt) typ tt;
-        let vars = propagate_constraints typ (TCst TInt) vars in
+        let vars = check_and_propagate (TCst TInt) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
-        type_error (TCst TFloat) t_typ t;
-        let v = propagate_constraints t_typ (TCst TFloat) v in
+        let v = check_and_propagate (TCst TFloat) t_typ t v in
         (s,v,(TCst TInt))             
       | R2s t as tt ->
-        type_error (TCst TStr) typ tt;
-        let vars = propagate_constraints typ (TCst TStr) vars in
+        let vars = check_and_propagate (TCst TStr) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TRegexp) t in
-        type_error (TCst TRegexp) t_typ t;
-        let v = propagate_constraints t_typ (TCst TRegexp) v in
+        let v = check_and_propagate (TCst TRegexp) t_typ t v in
         (s,v,(TCst TStr))         
       | S2r t as tt ->
-        type_error (TCst TRegexp) typ tt;
-        let vars = propagate_constraints typ (TCst TRegexp) vars in
+        let vars = check_and_propagate (TCst TRegexp) typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TStr) t in
-        type_error (TCst TStr) t_typ t;
-        let v = propagate_constraints t_typ (TCst TStr) v in
+        let v = check_and_propagate (TCst TStr) t_typ t v in
         (s,v,(TCst TRegexp))
       | UMinus t as tt -> 
         let exp_typ = new_type_symbol TNum vars in
-        type_error exp_typ typ tt;
-        let vars = propagate_constraints typ exp_typ vars in
+        let vars = check_and_propagate exp_typ typ tt vars in
         let (s,v,t_typ) = type_check_term (sch, vars) exp_typ t in
-        type_error exp_typ t_typ t;
-        let v = propagate_constraints t_typ exp_typ v in
+        let v = check_and_propagate exp_typ t_typ t v in
         let exp_typ = more_spec_type t_typ exp_typ in
         (s,v,exp_typ)
       | Plus (t1, t2) 
@@ -1306,27 +1290,21 @@ let  type_check_term_debug d (sch, vars) typ term =
       | Mult (t1, t2)  
       | Div (t1, t2) as tt ->
         let exp_typ = new_type_symbol TNum vars in
-        type_error exp_typ typ tt;
-        let vars = propagate_constraints typ exp_typ vars in
+        let vars = check_and_propagate exp_typ typ tt vars in
         let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
-        type_error exp_typ t1_typ t1;
-        let v1 = propagate_constraints t1_typ exp_typ v1 in
+        let v1 = check_and_propagate exp_typ t1_typ t1 v1 in
         let exp_typ = more_spec_type t1_typ exp_typ in
         let (s2,v2,t2_typ) = type_check_term (s1, v1) exp_typ t2 in
-        type_error exp_typ t2_typ t2;
-        let v2 = propagate_constraints t2_typ exp_typ v2 in
+        let v2 = check_and_propagate exp_typ t2_typ t2 v2 in
         let exp_typ = more_spec_type t2_typ exp_typ in
         (s2,v2,exp_typ)
       | Mod (t1, t2) as tt ->
         let exp_typ = (TCst TInt) in
-        type_error exp_typ typ tt;
-        let vars = propagate_constraints typ exp_typ vars in
+        let vars = check_and_propagate exp_typ typ tt vars in
         let (s1,v1,t1_typ) = type_check_term (sch, vars) exp_typ t1 in
-        type_error exp_typ t1_typ t1;
-        let v1 = propagate_constraints t1_typ exp_typ v1 in
+        let v1 = check_and_propagate exp_typ t1_typ t1 v1 in
         let (s2,v2,t2_typ) = type_check_term (s1, v1) exp_typ t2 in
-        type_error exp_typ t2_typ t2;
-        let v2 = propagate_constraints t2_typ exp_typ v2 in
+        let v2 = check_and_propagate exp_typ t2_typ t2 v2 in
         (s2,v2,exp_typ) in
   type_check_term (sch,vars) typ term
 
@@ -1360,33 +1338,26 @@ let rec type_check_formula (sch, vars) f =
   | LessEq (t1,t2) as f -> 
     let exp_typ = new_type_symbol TAny vars in
     let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ t1 in
-    type_error exp_typ t1_typ t1;
-    let v1 = propagate_constraints t1_typ exp_typ v1 in
+    let v1 = check_and_propagate exp_typ t1_typ t1 v1 in
     let exp_typ = more_spec_type t1_typ exp_typ in
     let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ t2 in
-    type_error exp_typ t2_typ t2;
-    let v2 = propagate_constraints t2_typ exp_typ v2 in
-    type_error t1_typ t2_typ t2;
-    let v2 = propagate_constraints t1_typ t2_typ v2 in
+    let v2 = check_and_propagate exp_typ t2_typ t2 v2 in
+    let v2 = check_and_propagate t1_typ t2_typ t2 v2 in
     (s2,v2,f)
   | Substring (t1,t2) as f -> 
     let exp_typ = TCst TStr in                                                (* Define constant *)
     let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ t1 in    (* Type check t1 *)
-    type_error exp_typ t1_typ t1;                                             (* Type error exp, t1 *)
-    let v1 = propagate_constraints t1_typ exp_typ v1 in                       (* Propagate constraints t1, exp *)
+    let v1 = check_and_propagate exp_typ t1_typ t1 v1 in                       (* Propagate constraints t1, exp *)
     let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ t2 in       (* Type check t2 *)
-    type_error exp_typ t2_typ t2;                                             (* Type error exp, t2 *)
-    let v2 = propagate_constraints t2_typ exp_typ v2 in                       (* Propagate constraints t2, exp *)                     
+    let v2 = check_and_propagate exp_typ t2_typ t2 v2 in                       (* Propagate constraints t2, exp *)                     
     (s2,v2,f)
   | Matches (t1,t2) as f ->  
     let exp_typ_1 = TCst TStr in                                              (* Define constant *)
     let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ_1 t1 in  (* Type check t1 *)
-    type_error exp_typ_1 t1_typ t1;                                           (* Type error exp, t1 *)
-    let v1 = propagate_constraints t1_typ exp_typ_1 v1 in                     (* Propagate constraints t1, exp *)  
+    let v1 = check_and_propagate exp_typ_1 t1_typ t1 v1 in                     (* Propagate constraints t1, exp *)  
     let exp_typ_2 = TCst TRegexp in                                           (* Define constant *)
     let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ_2 t2 in     (* Type check t2 *)
-    type_error exp_typ_2 t2_typ t2;                                           (* Type error exp, t2 *)
-    let v2 = propagate_constraints t2_typ exp_typ_2 v2 in                     (* Propagate constraints t2, exp *)                     
+    let v2 = check_and_propagate exp_typ_2 t2_typ t2 v2 in                     (* Propagate constraints t2, exp *)                     
     (s2,v2,f)
   | Pred p as f ->
     let name = Predicate.get_name p in
@@ -1403,8 +1374,7 @@ let rec type_check_formula (sch, vars) f =
         List.fold_left 
           (fun (s,v,_) (exp_t,t) -> 
               let (s1,v1,t1) = type_check_term_debug d (s,v) exp_t t in
-              type_error exp_t t1 t;
-              let v1 = propagate_constraints exp_t t1 v1 in
+              let v1 = check_and_propagate exp_t t1 t v1 in
               (s1,v1,t1)
           ) (sch, vars, (TCst TInt)) ts in
       (s,v,f)
@@ -1474,18 +1444,17 @@ let rec type_check_formula (sch, vars) f =
     let (shadowed_vars,reduced_vars) = List.partition (fun (vr,_) -> List.mem vr zs) vars in
     let vars' = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) reduced_vars zs in
     let type_check_aggregation exp_typ1 exp_typ2 =
-        let (s1,v1,_) = type_check_term_debug d (sch,vars') exp_typ2 (Var x) in            (* Type check variable x *)
-        let (s2,v2,_) = type_check_formula (s1,v1) f in                                    (* Type check formula f *)
-        let reduced_vars = List.filter (fun (v,_) -> List.mem_assoc v reduced_vars) v2 in  (* Get the updated types for gs vars*)
-        let vars = shadowed_vars @ reduced_vars in                                         (* Restore the top-level vars with updated vars*)
-        let (s3,v3,_) = type_check_term_debug d (sch,vars) exp_typ1 (Var r) in             (* Type check variable r*)
-        let v3 =  if (exp_typ1 = exp_typ2)                                                 (* If the expected types of r and x are the same *)
-                  then 
-                    begin
-                    type_error (List.assoc x v2) (List.assoc r v3) (Var r);                (* and their inferred types are compatible *)
-                    propagate_constraints (List.assoc x v2) (List.assoc r v3) v3           (* propagate the more specific type *)
-                    end
-                  else v3 in
+        let (s1,v1,_) = type_check_term_debug d (sch,vars') exp_typ2 (Var x) in   (* Type check variable x *)
+        let (s2,v2,_) = type_check_formula (s1,v1) f in                           (* Type check formula f *)
+        let reduced_vars = 
+          List.filter (fun (v,_) -> List.mem_assoc v reduced_vars) v2 in          (* Get the updated types for gs vars*)
+        let vars = shadowed_vars @ reduced_vars in                                (* Restore the top-level vars with updated vars*)
+        let (s3,v3,_) = type_check_term_debug d (sch,vars) exp_typ1 (Var r) in    (* Type check variable r*)
+        let v3 =  
+          if (exp_typ1 = exp_typ2)                                                (* If the expected types of r and x are the same *)
+          then 
+            check_and_propagate (List.assoc x v2) (List.assoc r v3) (Var r) v3    (* and have compatible types, propagate the more specific type *)
+          else v3 in
         (s3, v3, Aggreg ((List.assoc r v3), r,op,x,gs,f))
     in
     let exp_typ = new_type_symbol TAny vars' in
