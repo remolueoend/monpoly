@@ -1,0 +1,7 @@
+P()
+Q(x:int)
+R(x:int,y:int)
+S(x:int,y:int,z:int)
+I(x:int)
+F(x:float)
+W(x:string)
