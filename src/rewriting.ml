@@ -1516,7 +1516,7 @@ and type_check_re_formula (sch, vars) = function
 let rec check_syntax db_schema f =
   let lift_type t = TCst t in
   let sch = List.map (fun (t, l) -> (t, List.map (fun (_,t) -> lift_type t) l)) db_schema in 
-  let debug = !first_debug && (Misc.debugging Dbg_formula) in 
+  let debug = !first_debug && (Misc.debugging Dbg_typing)  in 
   let fvs = List.fold_left (fun vrs vr -> (vr,new_type_symbol TAny vrs)::vrs) [] (MFOTL.free_vars f) in
   let (s,v,f) = type_check_formula_debug debug (sch,fvs) f in
   if debug 
