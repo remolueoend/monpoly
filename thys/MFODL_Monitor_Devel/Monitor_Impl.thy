@@ -401,7 +401,7 @@ lift_definition filter_not_in_cfi :: "('a, ('a, 'b) mapping) comp_fun_idem" is "
 
 lemma filter_join_code[code]:
   "filter_join pos A m =
-    (if \<not>pos \<and> finite A \<and> card A < Mapping.size m then set_fold_cfi filter_not_in_cfi m A
+    (if \<not>pos \<and> finite A then set_fold_cfi filter_not_in_cfi m A
     else Mapping.filter (join_filter_cond pos A) m)"
   unfolding filter_join_def
   by (transfer fixing: m) (use filter_join_False in \<open>auto simp add: filter_join_def\<close>)
@@ -571,7 +571,7 @@ lift_definition filter_not_in_cfi' :: "('a, ('a, 'b) mapping \<times> 'a set) co
 
 lemma filter_join'_code[code]:
   "filter_join' pos A m =
-    (if \<not>pos \<and> finite A \<and> card A < Mapping.size m then set_fold_cfi filter_not_in_cfi' (m, {}) A
+    (if \<not>pos \<and> finite A then set_fold_cfi filter_not_in_cfi' (m, {}) A
     else (Mapping.filter (join_filter_cond pos A) m, Mapping.keys m - Mapping.keys (Mapping.filter (join_filter_cond pos A) m)))"
   unfolding filter_join'_def
   by (transfer fixing: m) (use filter_join'_False in \<open>auto simp add: filter_join'_def\<close>)
