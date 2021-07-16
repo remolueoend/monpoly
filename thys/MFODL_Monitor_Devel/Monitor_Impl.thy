@@ -10,8 +10,27 @@ begin
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
 
-lemma [code_unfold del, symmetric, code_post del]: "card \<equiv> Cardinality.card'" by simp
-declare [[code drop: card]] Set_Impl.card_code[code]
+(*
+  The following snippet (context \<dots> end) is taken from HOL-Library.Code_Cardinality.
+  We do not include the entire theory because the remaining code setup is superseded
+  by Containers.
+*)
+context
+begin
+
+qualified definition card_UNIV' :: "'a card_UNIV"
+where [code del]: "card_UNIV' = Phantom('a) CARD('a)"
+
+lemma CARD_code [code_unfold]:
+  "CARD('a) = of_phantom (card_UNIV' :: 'a card_UNIV)"
+by(simp add: card_UNIV'_def)
+
+lemma card_UNIV'_code [code]:
+  "card_UNIV' = card_UNIV"
+by(simp add: card_UNIV card_UNIV'_def)
+
+end
+
 
 instantiation enat :: set_impl begin
 definition set_impl_enat :: "(enat, set_impl) phantom" where
@@ -215,17 +234,13 @@ lemma LPDs_code[code]: "LPDs r = LPDs_aux {r}"
 lemma is_empty_table_unfold [code_unfold]:
   "X = empty_table \<longleftrightarrow> Set.is_empty X"
   "empty_table = X \<longleftrightarrow> Set.is_empty X"
-  "Cardinality.eq_set X empty_table \<longleftrightarrow> Set.is_empty X"
-  "Cardinality.eq_set empty_table X \<longleftrightarrow> Set.is_empty X"
   "set_eq X empty_table \<longleftrightarrow> Set.is_empty X"
   "set_eq empty_table X \<longleftrightarrow> Set.is_empty X"
   "X = (set_empty impl) \<longleftrightarrow> Set.is_empty X"
   "(set_empty impl) = X \<longleftrightarrow> Set.is_empty X"
-  "Cardinality.eq_set X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
-  "Cardinality.eq_set (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
   "set_eq X (set_empty impl) \<longleftrightarrow> Set.is_empty X"
   "set_eq (set_empty impl) X \<longleftrightarrow> Set.is_empty X"
-  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def Cardinality.eq_set_def by auto
+  unfolding set_eq_def set_empty_def empty_table_def Set.is_empty_def by auto
 
 lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
   (case ID CCOMPARE(mregex) of None \<Rightarrow> Code.abort (STR ''tabulate RBT_Mapping: ccompare = None'') (\<lambda>_. Monitor.mrtabulate (xs :: mregex list) f)
@@ -384,13 +399,6 @@ lift_definition filter_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping) comp_fun_
 lemma filter_set_code[code]:
   "filter_set m A t = (if finite A then set_fold_cfi (filter_cfi t) m A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set m A t))"
   by (transfer fixing: m) (auto simp: filter_set_fold)
-
-lemma filter_Mapping[code]:
-  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
-  "Mapping.filter P (RBT_Mapping t) = 
-  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''filter RBT_Mapping: ccompare = None'') (\<lambda>_. Mapping.filter P (RBT_Mapping t))
-                     | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
-  by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
 
 definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
 

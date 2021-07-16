@@ -905,13 +905,13 @@ let rec member (_A1, _A2)
     | x, DList_set dxs -> memberc _A1 dxs x
     | x, Collect_set a -> a x;;
 
-let rec subset_eq (_A1, _A2, _A3)
+let rec less_eq_set (_A1, _A2, _A3)
   x0 c = match x0, c with
     RBT_set rbt1, RBT_set rbt2 ->
       (match ccompare _A3
         with None ->
           failwith "subset RBT_set RBT_set: ccompare = None"
-            (fun _ -> subset_eq (_A1, _A2, _A3) (RBT_set rbt1) (RBT_set rbt2))
+            (fun _ -> less_eq_set (_A1, _A2, _A3) (RBT_set rbt1) (RBT_set rbt2))
         | Some c ->
           (match ceq _A2
             with None ->
@@ -921,26 +921,24 @@ let rec subset_eq (_A1, _A2, _A3)
             | Some eq ->
               sorted_list_subset_fusion (lt_of_comp c) eq rbt_keys_generator
                 rbt_keys_generator (init _A3 rbt1) (init _A3 rbt2)))
-    | Complement a1, Complement a2 -> subset_eq (_A1, _A2, _A3) a2 a1
+    | Complement a1, Complement a2 -> less_eq_set (_A1, _A2, _A3) a2 a1
     | Collect_set p, Complement a ->
-        subset_eq (_A1, _A2, _A3) a (collect _A1 (fun x -> not (p x)))
+        less_eq_set (_A1, _A2, _A3) a (collect _A1 (fun x -> not (p x)))
     | Set_Monad xs, c -> list_all (fun x -> member (_A2, _A3) x c) xs
     | DList_set dxs, c ->
         (match ceq _A2
           with None ->
             failwith "subset DList_set1: ceq = None"
-              (fun _ -> subset_eq (_A1, _A2, _A3) (DList_set dxs) c)
+              (fun _ -> less_eq_set (_A1, _A2, _A3) (DList_set dxs) c)
           | Some _ -> dlist_all _A2 (fun x -> member (_A2, _A3) x c) dxs)
     | RBT_set rbt, b ->
         (match ccompare _A3
           with None ->
             failwith "subset RBT_set1: ccompare = None"
-              (fun _ -> subset_eq (_A1, _A2, _A3) (RBT_set rbt) b)
+              (fun _ -> less_eq_set (_A1, _A2, _A3) (RBT_set rbt) b)
           | Some _ ->
             list_all_fusion rbt_keys_generator (fun x -> member (_A2, _A3) x b)
               (init _A3 rbt));;
-
-let rec less_eq_set (_A1, _A2, _A3) = subset_eq (_A1, _A2, _A3);;
 
 let rec equal_seta (_A1, _A2, _A3, _A4)
   a b = less_eq_set (_A1, _A2, _A3) a b && less_eq_set (_A1, _A2, _A3) b a;;
@@ -1860,19 +1858,18 @@ let rec lexordp_eq
     | less, xs, [] -> null xs
     | less, [], ys -> true;;
 
-let rec finitea _A = finitea _A;;
-
 let rec finite (_A1, _A2, _A3)
   = function
     Collect_set p ->
       of_phantom (finite_UNIV _A1) ||
-        failwith "finite Collect_set" (fun _ -> finitea _A1 (Collect_set p))
+        failwith "finite Collect_set"
+          (fun _ -> finite (_A1, _A2, _A3) (Collect_set p))
     | Set_Monad xs -> true
     | Complement a ->
         (if of_phantom (finite_UNIV _A1) then true
-          else (if finitea _A1 a then false
+          else (if finite (_A1, _A2, _A3) a then false
                  else failwith "finite Complement: infinite set"
-                        (fun _ -> finitea _A1 (Complement a))))
+                        (fun _ -> finite (_A1, _A2, _A3) (Complement a))))
     | RBT_set rbt ->
         (match ccompare _A3
           with None ->
@@ -2391,9 +2388,9 @@ let rec card (_A1, _A2, _A3)
   = function
     Complement a ->
       (let aa = card (_A1, _A2, _A3) a in
-       let s = of_phantom (card_UNIV _A1) in
+       let s = of_phantom (card_UNIVa _A1) in
         (if less_nat zero_nata s then minus_nata s aa
-          else (if finitea _A1.finite_UNIV_card_UNIV a then zero_nata
+          else (if finite (_A1.finite_UNIV_card_UNIV, _A2, _A3) a then zero_nata
                  else failwith "card Complement: infinite"
                         (fun _ -> card (_A1, _A2, _A3) (Complement a)))))
     | Set_Monad xs ->
@@ -2426,7 +2423,7 @@ let rec is_UNIV (_A1, _A2, _A3)
           of_phantom (finite_UNIV _A1.finite_UNIV_card_UNIV) &&
             exhaustive_fusion (cproper_interval _A3) rbt_keys_generator
               (init _A3.ccompare_cproper_interval rbt))
-    | a -> (let aa = of_phantom (card_UNIV _A1) in
+    | a -> (let aa = of_phantom (card_UNIVa _A1) in
             let b = card (_A1, _A2, _A3.ccompare_cproper_interval) a in
              (if less_nat zero_nata aa then equal_nata aa b
                else (if less_nat zero_nata b then false
@@ -4764,8 +4761,6 @@ let rec less_eq_rec_safety x0 uu = match x0, uu with Unused, uu -> true
                              | AnyRec, PastRec -> false
                              | AnyRec, NonFutuRec -> false;;
 
-let rec subset (_A1, _A2, _A3, _A4) = subset_eq (_A2, _A3, _A4);;
-
 let rec safe_assignment
   x phi =
     (match phi with Pred (_, _) -> false | Let (_, _, _) -> false
@@ -4775,43 +4770,43 @@ let rec safe_assignment
           (member (ceq_nat, ccompare_nat) y x)
       | Eq (Var xa, Const event_data) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Const event_data)) x
       | Eq (Var xa, Plus (trm1, trm2)) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Plus (trm1, trm2))) x
       | Eq (Var xa, Minus (trm1, trm2)) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Minus (trm1, trm2))) x
       | Eq (Var xa, UMinus trm) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (UMinus trm)) x
       | Eq (Var xa, Mult (trm1, trm2)) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Mult (trm1, trm2))) x
       | Eq (Var xa, Div (trm1, trm2)) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Div (trm1, trm2))) x
       | Eq (Var xa, Mod (trm1, trm2)) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Mod (trm1, trm2))) x
       | Eq (Var xa, F2i trm) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (F2i trm)) x
       | Eq (Var xa, I2f trm) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (I2f trm)) x
       | Eq (Const event_data, Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Const event_data)) x
       | Eq (Const _, Const _) -> false | Eq (Const _, Plus (_, _)) -> false
       | Eq (Const _, Minus (_, _)) -> false | Eq (Const _, UMinus _) -> false
@@ -4820,7 +4815,7 @@ let rec safe_assignment
       | Eq (Const _, I2f _) -> false
       | Eq (Plus (trm1, trm2), Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Plus (trm1, trm2))) x
       | Eq (Plus (_, _), Const _) -> false
       | Eq (Plus (_, _), Plus (_, _)) -> false
@@ -4832,7 +4827,7 @@ let rec safe_assignment
       | Eq (Plus (_, _), I2f _) -> false
       | Eq (Minus (trm1, trm2), Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Minus (trm1, trm2))) x
       | Eq (Minus (_, _), Const _) -> false
       | Eq (Minus (_, _), Plus (_, _)) -> false
@@ -4844,7 +4839,7 @@ let rec safe_assignment
       | Eq (Minus (_, _), F2i _) -> false | Eq (Minus (_, _), I2f _) -> false
       | Eq (UMinus trm, Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (UMinus trm)) x
       | Eq (UMinus _, Const _) -> false | Eq (UMinus _, Plus (_, _)) -> false
       | Eq (UMinus _, Minus (_, _)) -> false | Eq (UMinus _, UMinus _) -> false
@@ -4853,7 +4848,7 @@ let rec safe_assignment
       | Eq (UMinus _, I2f _) -> false
       | Eq (Mult (trm1, trm2), Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Mult (trm1, trm2))) x
       | Eq (Mult (_, _), Const _) -> false
       | Eq (Mult (_, _), Plus (_, _)) -> false
@@ -4865,7 +4860,7 @@ let rec safe_assignment
       | Eq (Mult (_, _), I2f _) -> false
       | Eq (Div (trm1, trm2), Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Div (trm1, trm2))) x
       | Eq (Div (_, _), Const _) -> false
       | Eq (Div (_, _), Plus (_, _)) -> false
@@ -4877,7 +4872,7 @@ let rec safe_assignment
       | Eq (Div (_, _), I2f _) -> false
       | Eq (Mod (trm1, trm2), Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (Mod (trm1, trm2))) x
       | Eq (Mod (_, _), Const _) -> false
       | Eq (Mod (_, _), Plus (_, _)) -> false
@@ -4889,7 +4884,7 @@ let rec safe_assignment
       | Eq (Mod (_, _), I2f _) -> false
       | Eq (F2i trm, Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (F2i trm)) x
       | Eq (F2i _, Const _) -> false | Eq (F2i _, Plus (_, _)) -> false
       | Eq (F2i _, Minus (_, _)) -> false | Eq (F2i _, UMinus _) -> false
@@ -4898,7 +4893,7 @@ let rec safe_assignment
       | Eq (F2i _, I2f _) -> false
       | Eq (I2f trm, Var xa) ->
         not (member (ceq_nat, ccompare_nat) xa x) &&
-          subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
             (fvi_trm zero_nata (I2f trm)) x
       | Eq (I2f _, Const _) -> false | Eq (I2f _, Plus (_, _)) -> false
       | Eq (I2f _, Minus (_, _)) -> false | Eq (I2f _, UMinus _) -> false
@@ -5075,8 +5070,6 @@ let rec remove_neg = function Neg phi -> phi
                      | MatchF (v, va) -> MatchF (v, va)
                      | MatchP (v, va) -> MatchP (v, va);;
 
-let rec eq_set (_A1, _A2, _A3, _A4) = set_eq (_A2, _A3, _A4);;
-
 let rec safe_formula
   = function
     Eq (t1, t2) ->
@@ -5086,13 +5079,13 @@ let rec safe_formula
     | LessEq (t1, t2) -> false
     | Pred (e, ts) -> list_all (fun t -> is_Var t || is_Const t) ts
     | Let (p, phi, psi) ->
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+        less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
           (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata (nfv phi)))
           (fvi zero_nata phi) &&
           (safe_formula phi && safe_formula psi)
     | LetPast (p, phi, psi) ->
         less_eq_rec_safety (safe_letpast (p, nfv phi) phi) PastRec &&
-          (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
              (set (ceq_nat, ccompare_nat, set_impl_nat)
                (upt zero_nata (nfv phi)))
              (fvi zero_nata phi) &&
@@ -5238,15 +5231,15 @@ let rec safe_formula
           (fvi zero_nata (MatchP (v, va))) &&
           safe_formula (MatchP (v, va))
     | Or (phi, psi) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi zero_nata psi) (fvi zero_nata phi) &&
+        set_eq (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata psi)
+          (fvi zero_nata phi) &&
           (safe_formula phi && safe_formula psi)
     | And (phi, psi) ->
         safe_formula phi &&
           (safe_assignment (fvi zero_nata phi) psi ||
             (safe_formula psi ||
-              subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                (fvi zero_nata psi) (fvi zero_nata phi) &&
+              less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata psi)
+                (fvi zero_nata phi) &&
                 (is_constraint psi ||
                   (match psi with Pred (_, _) -> false | Let (_, _, _) -> false
                     | LetPast (_, _, _) -> false | Eq (_, _) -> false
@@ -5261,7 +5254,7 @@ let rec safe_formula
         (let (pos, neg) = partition safe_formula l in
           not (null pos) &&
             (list_all safe_formula (mapa remove_neg neg) &&
-              subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+              less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                 (sup_setb
                   (finite_UNIV_nat, cenum_nat, ceq_nat, cproper_interval_nat,
                     set_impl_nat)
@@ -5289,16 +5282,16 @@ let rec safe_formula
         safe_formula phi &&
           (not (member (ceq_nat, ccompare_nat) (plus_nata y b)
                  (fvi zero_nata phi)) &&
-            (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b))
                (fvi zero_nata phi) &&
-              subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+              less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                 (fvi_trm zero_nata f) (fvi zero_nata phi)))
     | Prev (i, phi) -> safe_formula phi
     | Next (i, phi) -> safe_formula phi
     | Since (phi, i, psi) ->
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi zero_nata phi) (fvi zero_nata psi) &&
+        less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
+          (fvi zero_nata psi) &&
           ((safe_formula phi ||
              (match phi with Pred (_, _) -> false | Let (_, _, _) -> false
                | LetPast (_, _, _) -> false | Eq (_, _) -> false
@@ -5311,8 +5304,8 @@ let rec safe_formula
                | MatchP (_, _) -> false)) &&
             safe_formula psi)
     | Until (phi, i, psi) ->
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi zero_nata phi) (fvi zero_nata psi) &&
+        less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
+          (fvi zero_nata psi) &&
           ((safe_formula phi ||
              (match phi with Pred (_, _) -> false | Let (_, _, _) -> false
                | LetPast (_, _, _) -> false | Eq (_, _) -> false
@@ -6240,9 +6233,7 @@ let rec filterQueryNeg (_A1, _A2)
                 (finite_UNIV_list, (ceq_list (ceq_option _A1)),
                   (cproper_interval_list (ccompare_option _A2)),
                   set_impl_list))))
-          (fun (a, _) ->
-            subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat) a v)
-          q;;
+          (fun (a, _) -> less_eq_set (cenum_nat, ceq_nat, ccompare_nat) a v) q;;
 
 let rec projectTable (_A1, _A2)
   v (s, t) =
@@ -6873,9 +6864,7 @@ let rec new_max_getIJ_wrapperGenericJoin (_A1, _A2)
                                  (cproper_interval_list (ccompare_option _A2)),
                                  set_impl_list))))
                          (fun (a, _) ->
-                           subset
-                             (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat) a
-                             v &&
+                           less_eq_set (cenum_nat, ceq_nat, ccompare_nat) a v &&
                              less_eq_nat one_nata
                                (card (card_UNIV_nat, ceq_nat, ccompare_nat) a))
                          q_neg
@@ -6978,9 +6967,7 @@ let rec bin_join (_A1, _A2, _A3)
                                   ((ceq_list (ceq_option _A1)),
                                     (ccompare_list (ccompare_option _A2)))
                                   (of_phantom set_impl_lista))
-                    else (if eq_set
-                               (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                               a aa
+                    else (if set_eq (cenum_nat, ceq_nat, ccompare_nat) a aa
                            then (if pos
                                   then inf_seta
  ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2))) ta t
@@ -6988,15 +6975,13 @@ let rec bin_join (_A1, _A2, _A3)
  (card_UNIV_list, (ceq_list (ceq_option _A1)),
    (ccompare_list (ccompare_option _A2)))
  ta t)
-                           else (if subset
-                                      (card_UNIV_nat, cenum_nat, ceq_nat,
-ccompare_nat)
-                                      a aa
+                           else (if less_eq_set
+                                      (cenum_nat, ceq_nat, ccompare_nat) a aa
                                   then filter
  ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
  (fun asa -> proj_tuple_in_join (_A1, _A2) pos (join_mask n a) asa t) ta
-                                  else (if subset
-     (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat) aa a &&
+                                  else (if less_eq_set
+     (cenum_nat, ceq_nat, ccompare_nat) aa a &&
      pos
  then filter
         ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
@@ -8048,8 +8033,7 @@ let rec minit0
           MAnds (vpos, vneg, mpos @ mneg, replicate (size_list l) []))
     | n, Exists phi -> MExists (minit0 (suc n) phi)
     | n, Agg (y, omega, b, f, phi) ->
-        MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                (fvi zero_nata phi)
+        MAgg (less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
                 (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b)),
                y, omega, b, f, minit0 (plus_nata b n) phi)
     | n, Prev (i, phi) -> MPrev (i, minit0 n phi, true, [], [])
@@ -8549,8 +8533,7 @@ let rec vminit0
           MAnds (vpos, vneg, mpos @ mneg, replicate (size_list l) []))
     | n, Exists phi -> MExists (vminit0 (suc n) phi)
     | n, Agg (y, omega, b, f, phi) ->
-        MAgg (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                (fvi zero_nata phi)
+        MAgg (less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
                 (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b)),
                y, omega, b, f, vminit0 (plus_nata b n) phi)
     | n, Prev (i, phi) -> MPrev (i, vminit0 n phi, true, [], [])
@@ -8656,13 +8639,13 @@ let rec mmonitorable_exec
     | Neg (Eq (Var x, Var y)) -> equal_nata x y
     | Pred (e, ts) -> list_all (fun t -> is_Var t || is_Const t) ts
     | Let (p, phi, psi) ->
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+        less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
           (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata (nfv phi)))
           (fvi zero_nata phi) &&
           (mmonitorable_exec phi && mmonitorable_exec psi)
     | LetPast (p, phi, psi) ->
         less_eq_rec_safety (safe_letpast (p, nfv phi) phi) PastRec &&
-          (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+          (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
              (set (ceq_nat, ccompare_nat, set_impl_nat)
                (upt zero_nata (nfv phi)))
              (fvi zero_nata phi) &&
@@ -8808,15 +8791,15 @@ let rec mmonitorable_exec
           (fvi zero_nata (MatchP (v, va))) &&
           mmonitorable_exec (MatchP (v, va))
     | Or (phi, psi) ->
-        eq_set (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi zero_nata phi) (fvi zero_nata psi) &&
+        set_eq (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
+          (fvi zero_nata psi) &&
           (mmonitorable_exec phi && mmonitorable_exec psi)
     | And (phi, psi) ->
         mmonitorable_exec phi &&
           (safe_assignment (fvi zero_nata phi) psi ||
             (mmonitorable_exec psi ||
-              subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-                (fvi zero_nata psi) (fvi zero_nata phi) &&
+              less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata psi)
+                (fvi zero_nata phi) &&
                 (is_constraint psi ||
                   (match psi with Pred (_, _) -> false | Let (_, _, _) -> false
                     | LetPast (_, _, _) -> false | Eq (_, _) -> false
@@ -8831,7 +8814,7 @@ let rec mmonitorable_exec
         (let (pos, neg) = partition mmonitorable_exec l in
           not (null pos) &&
             (list_all mmonitorable_exec (mapa remove_neg neg) &&
-              subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+              less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                 (sup_setb
                   (finite_UNIV_nat, cenum_nat, ceq_nat, cproper_interval_nat,
                     set_impl_nat)
@@ -8859,16 +8842,16 @@ let rec mmonitorable_exec
         mmonitorable_exec phi &&
           (not (member (ceq_nat, ccompare_nat) (plus_nata y b)
                  (fvi zero_nata phi)) &&
-            (subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+            (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b))
                (fvi zero_nata phi) &&
-              subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
+              less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                 (fvi_trm zero_nata f) (fvi zero_nata phi)))
     | Prev (i, phi) -> mmonitorable_exec phi
     | Next (i, phi) -> mmonitorable_exec phi
     | Since (phi, i, psi) ->
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi zero_nata phi) (fvi zero_nata psi) &&
+        less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
+          (fvi zero_nata psi) &&
           ((mmonitorable_exec phi ||
              (match phi with Pred (_, _) -> false | Let (_, _, _) -> false
                | LetPast (_, _, _) -> false | Eq (_, _) -> false
@@ -8881,8 +8864,8 @@ let rec mmonitorable_exec
                | MatchP (_, _) -> false)) &&
             mmonitorable_exec psi)
     | Until (phi, i, psi) ->
-        subset (card_UNIV_nat, cenum_nat, ceq_nat, ccompare_nat)
-          (fvi zero_nata phi) (fvi zero_nata psi) &&
+        less_eq_set (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
+          (fvi zero_nata psi) &&
           (bounded i &&
             ((mmonitorable_exec phi ||
                (match phi with Pred (_, _) -> false | Let (_, _, _) -> false

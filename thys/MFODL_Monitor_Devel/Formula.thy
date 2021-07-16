@@ -1882,7 +1882,7 @@ next
             apply(subst nth_list_update_neq)
              apply blast
             using And_assign(5) apply(simp add: wf_tuple_def nfv_def)
-            by (metis Suc_le_lessD option.expand)
+            by (metis Suc_le_lessD option.expand nth_map)
           apply(simp add: insert_absorb)
            apply(rule finite_surj[OF IH, of _ "\<lambda> v. v [y:=v!x]"])
            apply(auto)[]
@@ -2188,7 +2188,7 @@ next
     apply(auto)
     apply(atomize_elim)
     apply(simp add: bounded_memR)
-    by (metis (no_types, hide_lams) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
+    by (metis (no_types, opaque_lifting) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
   moreover from Until have "\<forall> j. finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j \<psi>}"
     by(simp)
   moreover from Until have "finite (\<Union> j'\<le>j. {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j' \<psi>})"
@@ -2217,7 +2217,7 @@ next
     apply(auto)
     apply(atomize_elim)
     apply(simp add: bounded_memR)
-    by (metis (no_types, hide_lams) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
+    by (metis (no_types, opaque_lifting) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
   moreover from Not_Until have "\<forall> j. finite {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j \<psi>}"
     by(simp)
   moreover from Not_Until have "finite (\<Union> j'\<le>j. {v. wf_tuple n (fv \<psi>) v \<and> sat \<sigma> V (map the v) j' \<psi>})"
@@ -2256,7 +2256,7 @@ next
     apply(auto)
     apply(atomize_elim)
     apply(simp add: bounded_memR)
-    by (metis (no_types, hide_lams) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
+    by (metis (no_types, opaque_lifting) add_diff_cancel_right' diff_le_mono ex_le_\<tau> memR_antimono)
   from MatchF(1,3-) have IH: "finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) k \<phi>}"
     if "\<phi> \<in> atms r" for k \<phi> using that
     apply (intro MatchF(2)[rule_format, OF that])
