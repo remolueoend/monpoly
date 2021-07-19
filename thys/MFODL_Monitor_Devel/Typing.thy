@@ -1730,7 +1730,9 @@ fun tyless :: "tysym \<Rightarrow> tysym \<Rightarrow> bool" where
 "tyless (TNum a) (TNum b)  = (a \<le> b)"
 | "tyless (TAny a) (TAny b)  = (a \<le> b)"
 | "tyless (TNum _) (TAny _) = True"
-| "tyless (TCst _) _ = True"
+| "tyless (TCst x) (TCst y) = (x = y)"
+| "tyless (TCst x) (TNum _) = (x \<in> numeric_ty)"
+| "tyless (TCst _) (TAny _) = True"
 | "tyless _ _ = False"
 
 fun type_clash :: "tysym \<Rightarrow> tysym \<Rightarrow> bool" where
@@ -1750,44 +1752,47 @@ definition clash_propagate :: "tysym \<Rightarrow> tysym \<Rightarrow> tysenv \<
     Some ((\<lambda>v. if E v = told then tnew else E v), tnew)))"
 
 definition check_binop where  (* what if typ < exp_typ? e.g typ = TCst TInt*)
-"check_binop check_trm S E typ t1 t2 exp_typ  \<equiv> (if type_clash typ exp_typ then None else 
+"check_binop check_trm E typ t1 t2 exp_typ  \<equiv> (if type_clash typ exp_typ then None else 
 (let precise_type = if tyless exp_typ typ then exp_typ else typ in
-(case check_trm S (propagate_constraints typ precise_type E) precise_type t1  of
+(case check_trm (propagate_constraints typ precise_type E) precise_type t1  of
  Some (E', t_typ) \<Rightarrow>
-      (case check_trm S (propagate_constraints t_typ precise_type E') precise_type t2  of
+      (case check_trm (propagate_constraints t_typ precise_type E') precise_type t2  of
          Some (E'', t_typ2) \<Rightarrow> Some (propagate_constraints t_typ2 t_typ E'', t_typ2 )
         | None \<Rightarrow> None ) 
  | None \<Rightarrow> None)))"
 
+lemma [fundef_cong]: "(\<And>  E typ t . size t \<le> size t1 + size t2 \<Longrightarrow> check_trm E typ t = check_trm' E typ t) \<Longrightarrow> check_binop check_trm E typ t1 t2 exp_typ = check_binop check_trm' E typ t1 t2 exp_typ"
+ by (auto simp add: check_binop_def split: option.split ) 
+
 (*2nd propagate needed?*)
-function check_trm :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> Formula.trm  \<Rightarrow> (tysenv * tysym) option" where
-"check_trm S E typ (Formula.Var v) = clash_propagate typ (E v) E "
-| "check_trm S E typ (Formula.Const c)  =  clash_propagate typ (TCst (ty_of c)) E"
-| "check_trm S E typ (Formula.F2i t)  = (if type_clash typ (TCst TInt) then None 
-else (case check_trm S (propagate_constraints typ (TCst TInt) E) (TCst TFloat) t  of Some ( E', t_typ) \<Rightarrow>
+fun check_trm :: "tysenv \<Rightarrow> tysym \<Rightarrow> Formula.trm  \<Rightarrow> (tysenv * tysym) option" where
+"check_trm E typ (Formula.Var v) = clash_propagate typ (E v) E "
+| "check_trm E typ (Formula.Const c)  =  clash_propagate typ (TCst (ty_of c)) E"
+| "check_trm E typ (Formula.F2i t)  = (if type_clash typ (TCst TInt) then None 
+else (case check_trm (propagate_constraints typ (TCst TInt) E) (TCst TFloat) t  of Some ( E', t_typ) \<Rightarrow>
     Some ( E', TCst TInt)
     | None \<Rightarrow> None) )" (* deleted 2nd propagate ?*)
-| "check_trm S E typ (Formula.I2f t)  = (if type_clash typ (TCst TFloat) then None 
-else (case check_trm S (propagate_constraints typ (TCst TFloat) E) (TCst TInt) t  of
+| "check_trm E typ (Formula.I2f t)  = (if type_clash typ (TCst TFloat) then None 
+else (case check_trm (propagate_constraints typ (TCst TFloat) E) (TCst TInt) t  of
 Some (E', t_typ) \<Rightarrow>  Some ( E', TCst TFloat) 
   | None \<Rightarrow> None))" (* deleted 2nd propagate*)
-|"check_trm S E typ (Formula.UMinus t)  = (case clash_propagate (TNum 0) typ (new_type_symbol E) of 
+|"check_trm E typ (Formula.UMinus t)  = (case clash_propagate (TNum 0) typ (new_type_symbol E) of 
   Some (E', precise_type) \<Rightarrow>
-    (case check_trm S E' precise_type t  of
+    (case check_trm E' precise_type t  of
       Some (E'', t_typ) \<Rightarrow> Some (propagate_constraints t_typ precise_type E'', t_typ ) 
       | None \<Rightarrow> None)
   | None \<Rightarrow> None)"
-|"check_trm S E typ (Formula.Plus t1 t2)  = check_binop check_trm S  (new_type_symbol E) (new_type_symbol_type typ) t1 t2  (TNum 0) " 
+|"check_trm E typ (Formula.Plus t1 t2)  = check_binop check_trm  (new_type_symbol E) typ t1 t2  (TNum 0) " 
 (* increment typ if its a TNum/TAny? yes! case: E = x:TNum 0, a: TAny 2, b: TAny 3 and \<phi> is x = (a + b)*)
-|"check_trm S E typ (Formula.Minus t1 t2)  = check_binop check_trm S  (new_type_symbol E) (new_type_symbol_type typ) t1 t2  (TNum 0) "
-|"check_trm S E typ (Formula.Mult t1 t2)  = check_binop check_trm S  (new_type_symbol E) (new_type_symbol_type typ) t1 t2  (TNum 0) "
-|"check_trm S E typ (Formula.Div t1 t2)  = check_binop check_trm S  (new_type_symbol E) (new_type_symbol_type typ) t1 t2  (TNum 0) "
-|"check_trm S E typ (Formula.Mod t1 t2)  = check_binop check_trm S E typ t1 t2  (TCst TInt) "
-  apply auto subgoal for P a by (cases a) done
+|"check_trm E typ (Formula.Minus t1 t2)  = check_binop check_trm  (new_type_symbol E) typ t1 t2  (TNum 0) "
+|"check_trm E typ (Formula.Mult t1 t2)  = check_binop check_trm  (new_type_symbol E)  typ t1 t2  (TNum 0) "
+|"check_trm E typ (Formula.Div t1 t2)  = check_binop check_trm  (new_type_symbol E) typ t1 t2  (TNum 0) "
+|"check_trm E typ (Formula.Mod t1 t2)  = check_binop check_trm E typ t1 t2  (TCst TInt) "
+
 
 definition check_comparison where
-"check_comparison S E \<omega> t1 t2  \<equiv> (case check_trm S  (new_type_symbol E) (TAny 0) t1  of
-   Some (E',t1_typ ) \<Rightarrow> (case check_trm S E' t1_typ t2  of Some (E'', t2_typ) \<Rightarrow> Some (propagate_constraints t1_typ t2_typ E'', (\<omega> t1 t2) ) | None \<Rightarrow> None)
+"check_comparison S E \<omega> t1 t2  \<equiv> (case check_trm   (new_type_symbol E) (TAny 0) t1  of
+   Some (E',t1_typ ) \<Rightarrow> (case check_trm  E' t1_typ t2  of Some (E'', t2_typ) \<Rightarrow> Some (propagate_constraints t1_typ t2_typ E'', (\<omega> t1 t2) ) | None \<Rightarrow> None)
 | None \<Rightarrow> None)"
 
 definition check_two_formulas where
@@ -1806,14 +1811,14 @@ primrec check_ands :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.for
 |"check_ands check S E []  = Some (E,[])"
 
 fun check_pred :: "sig \<Rightarrow> tysenv \<Rightarrow> Formula.trm list \<Rightarrow> tysym list \<Rightarrow>  (tysenv) option" where
-"check_pred  S E (f#fs) (t#ts)  = (case check_trm S E t f  of
+"check_pred  S E (f#fs) (t#ts)  = (case check_trm  E t f  of
  Some (E', new_t) \<Rightarrow> Some E'
  | None \<Rightarrow> None)"
 |"check_pred  S E [] []  = Some E"
 |"check_pred  S E _ _  = None"
 
 
-primrec check_regex :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>  (tysenv * tysym Formula.formula) option) \<Rightarrow>sig \<Rightarrow> tysenv \<Rightarrow>  tysym Formula.formula Regex.regex  \<Rightarrow>  (tysenv * tysym Formula.formula Regex.regex) option"  where
+fun check_regex :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>  (tysenv * tysym Formula.formula) option) \<Rightarrow>sig \<Rightarrow> tysenv \<Rightarrow>  tysym Formula.formula Regex.regex  \<Rightarrow>  (tysenv * tysym Formula.formula Regex.regex) option"  where
 "check_regex check S E (Regex.Skip l)  = Some (E, Regex.Skip l)"
 | "check_regex check S E (Regex.Test \<phi>)  = (case check S E \<phi>  of Some (E', \<phi>') \<Rightarrow>Some (E', Regex.Test \<phi>')| None \<Rightarrow> None )"
 | "check_regex check S E (Regex.Plus r s)  = (case check_regex check S E r  of
@@ -1845,9 +1850,19 @@ fun agg_ret_tysym :: "Formula.agg_type \<Rightarrow> tysym \<Rightarrow> tysym" 
 | "agg_ret_tysym Formula.Agg_Min t = t"
 | "agg_ret_tysym Formula.Agg_Max t = t"
 
-term "E,S \<turnstile>\<phi>"
+lemma [fundef_cong]: "(\<And> S E \<phi>' . size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = check' S E \<phi>') \<Longrightarrow> check_two_formulas check S E \<phi> \<psi> = check_two_formulas check' S E \<phi> \<psi>"
+  by (auto simp add: check_two_formulas_def split: option.split) 
 
-function check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>  (tysenv * tysym Formula.formula) option"
+lemma [fundef_cong]: "(\<And> S E \<phi>' . \<phi>' \<in> regex.atms r \<Longrightarrow> check S E \<phi>' = check' S E \<phi>') \<Longrightarrow> check_regex check S E r = check_regex check' S E r"
+   apply (induction r arbitrary: S E) apply auto 
+  by presburger+
+
+lemma [fundef_cong]: "(\<And> S E \<phi>' .  \<phi>' \<in> set \<phi>s  \<Longrightarrow> check S E \<phi>' = check' S E \<phi>') \<Longrightarrow> check_ands check S E \<phi>s = check_ands check' S E \<phi>s"
+  apply (induction \<phi>s arbitrary: E) apply auto
+  by presburger
+
+
+fun check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>  (tysenv * tysym Formula.formula) option"
   where (*what to do if predicate is not in sigs?*)
   "check S E (Formula.Pred r ts)  = (case S r of 
   None \<Rightarrow> None 
@@ -1869,7 +1884,7 @@ function check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula 
 | "check S E (Formula.And \<phi> \<psi>)  = (case check_two_formulas check S E \<phi> \<psi> of Some (E', \<phi>',\<psi>') \<Rightarrow> Some (E', Formula.And \<phi>' \<psi>') | None \<Rightarrow> None)"
 | "check S E (Formula.Ands \<phi>s)  = (case check_ands check S E \<phi>s  of Some (E',\<phi>'s) \<Rightarrow> Some (E', Formula.Ands \<phi>'s) | None \<Rightarrow> None)"
 | "check S E (Formula.Exists t \<phi>)  = (case check S (case_nat t E) \<phi> of Some(E', \<phi>') \<Rightarrow> Some (E'\<circ> (+) 1, Formula.Exists (E' 0) \<phi>') | None \<Rightarrow> None)"
-| "check S E (Formula.Agg y (agg_type, d) tys f \<phi>)  = (case check_trm S (new_type_symbol (agg_tysenv E tys )) (agg_trm_tysym agg_type) f of
+| "check S E (Formula.Agg y (agg_type, d) tys f \<phi>)  = (case check_trm  (new_type_symbol (agg_tysenv E tys )) (agg_trm_tysym agg_type) f of
    Some (E', trm_type) \<Rightarrow> (case check S E' \<phi> of 
        Some (E'', \<phi>') \<Rightarrow> (case clash_propagate ((E''\<circ> (+) (length tys)) y) (TCst (ty_of d) ) (E''\<circ> (+) (length tys)) of 
           Some (E''', ret_t) \<Rightarrow> (case clash_propagate ret_t (agg_ret_tysym agg_type trm_type) E''' of 
@@ -1884,7 +1899,7 @@ function check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula 
 | "check S E (Formula.Until \<phi> I \<psi>) =  (case check_two_formulas check S E \<phi> \<psi> of Some (E', \<phi>',\<psi>') \<Rightarrow> Some (E', Formula.Until \<phi>' I \<psi>') | None \<Rightarrow> None) "
 | "check S E (Formula.MatchF I r)  = (case check_regex check S E r  of Some (E', r') \<Rightarrow> Some (E', Formula.MatchF I r') | None \<Rightarrow> None )"
 | "check S E (Formula.MatchP I r)  = (case check_regex check S E r  of Some (E', r') \<Rightarrow> Some (E', Formula.MatchP I r') | None \<Rightarrow> None )"
-      apply auto  subgoal for P a by (cases a)  auto done
+
 
 primrec newSymsList :: "unit list \<Rightarrow> nat \<Rightarrow> tysym list" where
 "newSymsList (_#xs) n =  TAny n #newSymsList xs (n+1) "
@@ -1900,11 +1915,19 @@ primrec unitToSymRegex :: "(unit Formula.formula \<Rightarrow> nat \<Rightarrow>
       (case unitToSymRegex formulasym s k of (s',k') \<Rightarrow> (Regex.Times r' s' ,k')))"
 | "unitToSymRegex formulasym (Regex.Star r) n = (case unitToSymRegex formulasym r n of (r',k) \<Rightarrow> (Regex.Star r', k))"
 
+lemma [fundef_cong]: "(\<And> n \<phi>' . \<phi>' \<in> regex.atms r \<Longrightarrow> formulasym \<phi>' n = formulasym' \<phi>' n) \<Longrightarrow> unitToSymRegex formulasym r n = unitToSymRegex formulasym' r n"
+   by (induction r arbitrary: n) auto 
+  
+
+
 primrec unitToSymAnds :: "(unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysym Formula.formula * nat) \<Rightarrow> unit Formula.formula list \<Rightarrow> nat \<Rightarrow> tysym Formula.formula list * nat" where
 "unitToSymAnds formulasym (\<phi>#\<phi>s) n = (case formulasym \<phi> n of (\<phi>',k) \<Rightarrow> ( case unitToSymAnds formulasym \<phi>s k of (\<phi>'s, l) \<Rightarrow>  (  \<phi>'#\<phi>'s, l)))"
 |"unitToSymAnds formulasym [] n = ([] ,n)"
 
-function unitToSym :: "unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysym Formula.formula * nat"  where
+lemma [fundef_cong]: "(\<And> \<phi> n .  \<phi> \<in> set \<phi>s  \<Longrightarrow> formulasym \<phi> n = formulasym' \<phi> n) \<Longrightarrow> unitToSymAnds formulasym \<phi>s n = unitToSymAnds formulasym' \<phi>s n"
+ by (induction \<phi>s arbitrary: n)  auto
+
+fun unitToSym :: "unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysym Formula.formula * nat"  where
 "unitToSym (Formula.Exists () \<phi>) n = (case unitToSym \<phi> (n+1) of (\<phi>',k) \<Rightarrow> (Formula.Exists (TAny n) \<phi>', k))"
 | "unitToSym (Formula.Agg y \<omega> tys f  \<phi>) n = 
   (case unitToSym \<phi> (n+ length tys) of (\<phi>',k) \<Rightarrow> (Formula.Agg y \<omega> (newSymsList tys n) f \<phi>', k))"
@@ -1928,7 +1951,6 @@ function unitToSym :: "unit Formula.formula \<Rightarrow> nat \<Rightarrow> tysy
       (case unitToSym \<psi> k of (\<psi>',k') \<Rightarrow> (Formula.Until \<phi>' I \<psi>' ,k')))"
 | "unitToSym (Formula.MatchF I r) n = (case unitToSymRegex unitToSym r n of (r',k) \<Rightarrow> (Formula.MatchF I r',k))"
 | "unitToSym (Formula.MatchP I r) n = (case unitToSymRegex unitToSym r n of (r',k) \<Rightarrow> (Formula.MatchP I r',k))"
-                      apply auto  subgoal for P a by (cases a)  auto done
 
 
 definition check_safe :: "sig \<Rightarrow> unit Formula.formula \<Rightarrow> (tyenv * ty Formula.formula) option" where
@@ -1939,10 +1961,26 @@ definition check_safe :: "sig \<Rightarrow> unit Formula.formula \<Rightarrow> (
 definition tysenvless :: "tysenv \<Rightarrow> tysenv \<Rightarrow> bool" where
   "tysenvless E E' \<longleftrightarrow> (\<forall>x. tyless  (E x) (E' x))"
 
-definition "resultless E' E \<phi>' \<phi>  \<longleftrightarrow> tysenvless E' E \<and> formula.rel_formula (\<lambda>x y. tyless x y) \<phi> \<phi>'"  
+definition wf_f :: "(tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
+"wf_f f \<equiv> (\<forall>x. f (TCst x) = TCst x) \<and> (\<forall>n . case f (TNum n) of TCst x \<Rightarrow> x \<in> numeric_ty | TNum x \<Rightarrow> True | _ \<Rightarrow> False)"
+
+definition "resultless_trm E' E typ' typ \<longleftrightarrow> (\<exists> f. wf_f f \<and>   E' = f \<circ> E  \<and> typ' = f typ)"
+
+definition wty_result_trm :: " Formula.trm \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> bool" where
+ "wty_result_trm  t E typ E' typ' \<longleftrightarrow> resultless_trm E' E typ' typ \<and> 
+(\<forall>E'' typ'' .   E'' \<turnstile> t :: typ'' \<longleftrightarrow> resultless_trm (TCst \<circ>  E'') E' (TCst typ'') typ' )"
+
+lemma check_trm_sound: " check_trm  E typ t = Some (E', typ') \<Longrightarrow> wty_result_trm t E typ E' typ'"
+  sorry
+
+lemma check_trm_complete: " check_trm  E typ t = None \<Longrightarrow> wty_result_trm t E typ E' typ' \<Longrightarrow> False"
+  sorry
+
+definition "resultless E' E \<phi>' \<phi>  \<longleftrightarrow> (\<exists> f. wf_f f \<and>   E' = f \<circ> E \<and> formula.rel_formula (\<lambda>x y. x = f y) \<phi>' \<phi>)"  
+
 definition wty_result :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> bool" where
   "wty_result S E \<phi> E' \<phi>' \<longleftrightarrow> resultless E' E \<phi>' \<phi> \<and> 
-(\<forall>E'' \<phi>'' .  wty_formula S E'' \<phi>'' \<longleftrightarrow> resultless (TCst \<circ>  E'') E' (Formula.map_formula TCst \<phi>'') \<phi>' )"
+(\<forall>E'' \<phi>'' .   S, E'' \<turnstile> \<phi>'' \<longleftrightarrow> resultless (TCst \<circ>  E'') E' (Formula.map_formula TCst \<phi>'') \<phi>' )"
 
 lemma check_sound: "wf_formula \<phi> \<Longrightarrow> check S E \<phi> = Some (E', \<phi>') \<Longrightarrow> wty_result S E \<phi> E' \<phi>'"
   sorry
@@ -1952,9 +1990,8 @@ lemma check_safe_sound: "safe_formula \<phi> \<Longrightarrow> check_safe S \<ph
   sorry (* using check_sound[of S Map.empty "formula.map_formula Map.empty \<phi>" E' \<phi>']
   by (auto simp: check_safe_def wty_result_def formula.rel_map)
 *)
-lemma check_complete: "wf_formula \<phi> \<Longrightarrow> wty_result S E \<phi> E' \<phi>' \<Longrightarrow>
-  (\<And>E'' \<phi>''. wty_result S E \<phi> E'' \<phi>'' \<Longrightarrow> resultless E' E'' \<phi>' \<phi>'') \<Longrightarrow>
-  check S E \<phi> = Some (E', \<phi>')"
+lemma check_complete: "check S E \<phi> = None \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> wty_result S E \<phi> E' \<phi>' \<Longrightarrow>
+   False"
   sorry
 
 lemma rel_regex_mono_trans:
