@@ -1966,12 +1966,108 @@ definition wf_f :: "(tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
 
 definition "resultless_trm E' E typ' typ \<longleftrightarrow> (\<exists> f. wf_f f \<and>   E' = f \<circ> E  \<and> typ' = f typ)"
 
+lemma resultless_trm_trans: assumes " resultless_trm E'' E' type'' type'" "resultless_trm E' E type' type"   
+  shows "resultless_trm E'' E type'' type"
+proof -
+  obtain f where  f_def: "wf_f f" " E' = f \<circ> E " "type' = f type" using assms by (auto simp add: resultless_trm_def)
+  obtain g where  g_def: "wf_f g"  "E'' = g \<circ> E'"  "type'' = g type'" using assms by (auto simp add: resultless_trm_def)
+  have "wf_f (g \<circ> f)" using f_def(1) g_def(1)  apply (auto simp add: wf_f_def split: tysym.splits) by (metis tysym.exhaust)+
+  moreover have "E'' = g \<circ> f \<circ> E" using f_def(2) g_def(2) by auto
+    ultimately show ?thesis using f_def(3) g_def(3) by (auto simp add: resultless_trm_def)
+qed
+
 definition wty_result_trm :: " Formula.trm \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> bool" where
  "wty_result_trm  t E typ E' typ' \<longleftrightarrow> resultless_trm E' E typ' typ \<and> 
-(\<forall>E'' typ'' .   E'' \<turnstile> t :: typ'' \<longleftrightarrow> resultless_trm (TCst \<circ>  E'') E' (TCst typ'') typ' )"
+(\<forall>E'' typ'' .   E'' \<turnstile> t :: typ'' \<and> resultless_trm (TCst \<circ>  E'') E (TCst typ'') typ \<longleftrightarrow> resultless_trm (TCst \<circ>  E'') E' (TCst typ'') typ' )"
 
-lemma check_trm_sound: " check_trm  E typ t = Some (E', typ') \<Longrightarrow> wty_result_trm t E typ E' typ'"
-  sorry
+lemma check_trm_sound: " check_trm  E type t = Some (E', type') \<Longrightarrow> wty_result_trm t E type E' type'"
+proof (induction t arbitrary:  E type)                                     
+  case (Var x)
+  { assume assm: "tyless type (E x)"
+    then have t': "type' = type" using Var apply  (auto simp add: clash_propagate_def) by (cases " type_clash type (E x)") auto
+    let ?f = "(\<lambda>t. if E x = t then type else t)" 
+    have "wf_f ?f" using assm Var by (auto simp add: clash_propagate_def wf_f_def split: tysym.splits)
+    moreover have f_E': "?f \<circ> E = E'" using Var assm apply (auto simp add: clash_propagate_def) by (cases " type_clash type (E x)") auto
+    moreover have "type' = ?f type" using  t' by auto
+    ultimately have  "resultless_trm E' E type' type" by (auto simp add: resultless_trm_def) 
+    moreover { fix E'' type'' fa
+    assume wty: "E'' \<turnstile> trm.Var x :: type''" and  fa_def: "wf_f fa "   "TCst  \<circ> E'' = fa \<circ> E "  "TCst type'' = fa type"
+    let ?g = "(\<lambda>t. if type = t then TCst type'' else fa t)"
+    have g1: "wf_f ?g" using   fa_def by (auto simp add: wf_f_def) 
+    have "\<And>y. (fa \<circ> E) y = ((\<lambda>t. if type = t then TCst type'' else fa t) \<circ> ((\<lambda>t. if E x = t then type else t) \<circ> E)) y " 
+      using fa_def wty apply auto
+       by (metis comp_eq_elim wty_trm.Var wty_trm_cong_aux)
+     then have g2: " TCst  \<circ> E'' = ?g \<circ> E'" using  f_E' fa_def by auto
+      have res_less'': "resultless_trm (TCst \<circ> E'') E' (TCst type'') type'"  using g1 g2 fa_def t' by (auto simp add: wf_f_def resultless_trm_def)
+    }
+moreover
+    {
+      fix fa type'' E''
+      assume  " TCst type'' = fa type" "wf_f fa" "TCst \<circ> E'' = fa \<circ> (?f \<circ> E)"
+      from this have " E'' \<turnstile> trm.Var x :: type''" apply (cases type'') using  t' apply (auto  simp add: wf_f_def split: ty.splits) 
+        by (smt (z3) comp_def tysym.inject wty_trm.Var)+
+    }
+    ultimately have ?case  using f_E' t'  apply (auto simp add: clash_propagate_def wty_result_trm_def resultless_trm_def) 
+        subgoal for f E'' type'' fa   using resultless_trm_trans[of "TCst \<circ> E''" E' "TCst type''" type' E type] by (auto simp add: resultless_trm_def) done
+    } moreover {
+      assume assm: "\<not> tyless type (E x)"
+    then have t': "type' = E x" using Var apply  (auto simp add: clash_propagate_def) by (cases " type_clash type (E x)") auto
+    let ?f = "(\<lambda>t. if type = t then E x else t)" 
+    have "wf_f ?f" using assm Var apply (auto simp add: clash_propagate_def wf_f_def numeric_ty_def split: tysym.splits )
+      subgoal for x2 xa by (cases xa) auto subgoal for x3 by (cases x3) auto done
+    moreover have f_E': "?f \<circ> E = E'" using Var assm apply (auto simp add: clash_propagate_def) by (cases " type_clash type (E x)") auto
+    moreover have "type' = ?f type" using  t' by auto
+    ultimately have  "resultless_trm E' E type' type" by (auto simp add: resultless_trm_def) 
+    moreover { fix E'' type'' fa
+    assume wty: "E'' \<turnstile> trm.Var x :: type''" and  fa_def: "wf_f fa "   "TCst  \<circ> E'' = fa \<circ> E "  "TCst type'' = fa type"
+    let ?g = "(\<lambda>t. if E x = t then TCst type'' else fa t)"
+    have g1: "wf_f ?g" using   fa_def apply (auto simp add: wf_f_def) 
+      by (metis comp_eq_dest wty wty_trm.Var wty_trm_cong_aux)+ 
+    have "\<And>y. (fa \<circ> E) y = (?g \<circ> (?f \<circ> E)) y " 
+      using fa_def wty apply auto
+       by (metis comp_eq_elim wty_trm.Var wty_trm_cong_aux)
+     then have g2: " TCst  \<circ> E'' = ?g \<circ> E'" using  f_E' fa_def by auto
+     have g3: "TCst type'' = ?g type'" using fa_def t' by auto
+      have res_less'': "resultless_trm (TCst \<circ> E'') E' (TCst type'') type'"  using g1 g2 fa_def t' by (auto simp add: wf_f_def resultless_trm_def)
+    }
+moreover
+    {
+      fix fa type'' E''
+      assume  " TCst type'' = fa type'" "wf_f fa" "TCst \<circ> E'' = fa \<circ> (?f \<circ> E)"
+      from this have " E'' \<turnstile> trm.Var x :: type''" apply (cases type'') using  t' apply (auto  simp add: wf_f_def split: ty.splits) 
+          by (smt (z3) comp_def tysym.inject wty_trm.Var)+
+    } 
+ ultimately have ?case  using f_E' t'  apply (auto simp add: clash_propagate_def wty_result_trm_def resultless_trm_def) 
+        subgoal for f E'' type'' fa  using resultless_trm_trans[of "TCst \<circ> E''" E' "TCst type''" type' E type] by (auto simp add: resultless_trm_def) done
+    } ultimately show ?case by auto
+next
+case (Const x)
+  then show ?case sorry
+next
+  case (Plus t1 t2)
+  then show ?case sorry
+next
+case (Minus t1 t2)
+  then show ?case sorry
+next
+case (UMinus t)
+  then show ?case sorry
+next
+  case (Mult t1 t2)
+  then show ?case sorry
+next
+  case (Div t1 t2)
+  then show ?case sorry
+next
+case (Mod t1 t2)
+  then show ?case sorry
+next
+  case (F2i t)
+  then show ?case sorry
+next
+  case (I2f t)
+  then show ?case sorry
+qed 
 
 lemma check_trm_complete: " check_trm  E typ t = None \<Longrightarrow> wty_result_trm t E typ E' typ' \<Longrightarrow> False"
   sorry
