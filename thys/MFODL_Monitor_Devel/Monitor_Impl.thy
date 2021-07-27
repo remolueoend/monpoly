@@ -412,10 +412,44 @@ lift_definition filter_not_in_cfi :: "('a, ('a, 'b) mapping) comp_fun_idem" is "
 
 lemma filter_join_code[code]:
   "filter_join pos A m =
-    (if \<not>pos \<and> finite A \<and> card A < Mapping.size m then set_fold_cfi filter_not_in_cfi m A
+    (if \<not>pos \<and> finite A then set_fold_cfi filter_not_in_cfi m A
     else Mapping.filter (join_filter_cond pos A) m)"
   unfolding filter_join_def
   by (transfer fixing: m) (use filter_join_False in \<open>auto simp add: filter_join_def\<close>)
+
+lemma mapping_delete_set_empty: "mapping_delete_set m {} = m"
+  unfolding mapping_delete_set_def by (simp add: Mapping.lookup.rep_eq rep_inverse)
+
+lemma mapping_delete_set_insert: "mapping_delete_set m (Set.insert a X) = Mapping.delete a (mapping_delete_set m X)"
+proof(rule mapping_eqI)
+  fix x
+  show "Mapping.lookup (mapping_delete_set m (Set.insert a X)) x =
+        Mapping.lookup (Mapping.delete a (mapping_delete_set m X)) x"
+    unfolding Optimized_MTL.Mapping_lookup_delete mapping_delete_set_def
+    by(auto simp: Mapping.lookup.rep_eq Mapping_inverse)
+qed
+
+lemma mapping_delete_fold:
+  assumes "finite A"
+  shows "mapping_delete_set m A = Finite_Set.fold Mapping.delete m A"
+proof -
+  interpret comp_fun_idem "Mapping.delete" by(unfold_locales; transfer; simp add: fun_eq_iff) 
+  from assms show ?thesis
+  proof (induction A arbitrary: m)
+    case empty
+    then show ?case using mapping_delete_set_empty by auto
+  next
+    case (insert a A)
+    then show ?case using mapping_delete_set_insert[of m a A] fold_insert[OF insert(1-2), of m] by(simp)
+  qed 
+qed
+
+lift_definition mapping_delete_set_cfi :: "('a, ('a, 'b) mapping) comp_fun_idem" is 
+  Mapping.delete by(unfold_locales; transfer; simp add:fun_eq_iff)
+
+lemma mapping_delete_set_code[code]:
+  "mapping_delete_set m A = (if finite A then set_fold_cfi mapping_delete_set_cfi m A else Code.abort (STR ''mapping_delete_set: infinite'') (\<lambda>_. mapping_delete_set m A))"
+  using mapping_delete_fold[of A m] by (simp add: mapping_delete_set_cfi.rep_eq set_fold_cfi.rep_eq)
 
 (*
 definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
