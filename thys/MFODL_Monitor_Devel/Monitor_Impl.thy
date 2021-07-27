@@ -31,7 +31,6 @@ by(simp add: card_UNIV card_UNIV'_def)
 
 end
 
-
 instantiation enat :: set_impl begin
 definition set_impl_enat :: "(enat, set_impl) phantom" where
   "set_impl_enat = phantom set_RBT"
@@ -51,15 +50,6 @@ derive (rbt) set_impl string8
 derive (rbt) mapping_impl string8
 derive (rbt) set_impl event_data
 derive (rbt) mapping_impl event_data
-
-definition add_new_mmuaux' :: "args \<Rightarrow> event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow>
-  event_data mmuaux" where
-  "add_new_mmuaux' = add_new_mmuaux"
-
-interpretation muaux valid_mmuaux init_mmuaux add_new_mmuaux' length_mmuaux eval_mmuaux
-  using valid_init_mmuaux valid_add_new_mmuaux valid_length_mmuaux valid_eval_mmuaux
-  unfolding add_new_mmuaux'_def
-  by unfold_locales assumption+
 
 type_synonym 'a vmsaux = "nat \<times> (nat \<times> 'a table) list"
 
@@ -128,17 +118,17 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   by unfold_locales auto
 
 global_interpretation default_maux: maux valid_mmsaux "init_mmsaux :: _ \<Rightarrow> event_data mmsaux" add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux result_mmsaux
-  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux' length_mmuaux eval_mmuaux
+  valid_mmuaux "init_mmuaux :: _ \<Rightarrow> event_data mmuaux" add_new_mmuaux length_mmuaux eval_mmuaux'
   defines minit0 = "maux.minit0 (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: _ \<Rightarrow> Formula.formula \<Rightarrow> _"
   and minit = "maux.minit (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
   and minit_safe = "maux.minit_safe (init_mmsaux :: _ \<Rightarrow> event_data mmsaux) (init_mmuaux :: _ \<Rightarrow> event_data mmuaux) :: Formula.formula \<Rightarrow> _"
   and meval_since = "maux.eval_since add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> event_data table)"
-  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and letpast_meval = "maux.letpast_meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
-  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux' (eval_mmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and meval = "maux.meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux' :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and letpast_meval = "maux.letpast_meval add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux' :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and mstep = "maux.mstep add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux' :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux' :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and msteps_stateless = "maux.msteps_stateless add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) add_new_mmuaux (eval_mmuaux' :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
+  and monitor = "maux.monitor init_mmsaux add_new_ts_mmsaux gc_join_mmsaux add_new_table_mmsaux (result_mmsaux :: _ \<Rightarrow> event_data mmsaux \<Rightarrow> _) init_mmuaux add_new_mmuaux (eval_mmuaux' :: _ \<Rightarrow> _ \<Rightarrow> event_data mmuaux \<Rightarrow> _)"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -284,11 +274,6 @@ lemma lexordp_eq_code[code]: "lexordp_eq xs ys \<longleftrightarrow> (case xs of
     | y # ys \<Rightarrow> if x < y then True else if x > y then False else lexordp_eq xs ys))"
   by (subst lexordp_eq.simps) (auto split: list.split)
 
-definition "filter_set m X t = Mapping.filter (filter_cond X m t) m"
-
-declare [[code drop: shift_end]]
-declare shift_end.simps[folded filter_set_def, code]
-
 lemma upd_set'_empty[simp]: "upd_set' m d f {} = m"
   by (rule mapping_eqI) (auto simp add: upd_set'_lookup)
 
@@ -334,9 +319,6 @@ lemma upd_nested_insert:
   by (auto simp add: Let_def upd_nested_lookup upd_set'_lookup Mapping.lookup_update'
       Mapping.lookup_empty split: option.splits prod.splits if_splits intro!: mapping_eqI)
 
-definition upd_nested_max_tstp where
-  "upd_nested_max_tstp m d X = upd_nested m d (max_tstp d) X"
-
 lemma upd_nested_max_tstp_fold:
   assumes "finite X"
   shows "upd_nested_max_tstp m d X = Finite_Set.fold (upd_nested_step d (max_tstp d)) m X"
@@ -365,45 +347,36 @@ lemma upd_nested_max_tstp_code[code]:
     else Code.abort (STR ''upd_nested_max_tstp: infinite'') (\<lambda>_. upd_nested_max_tstp m d X))"
   by transfer (auto simp add: upd_nested_max_tstp_fold)
 
-declare [[code drop: add_new_mmuaux']]
-declare add_new_mmuaux'_def[unfolded add_new_mmuaux.simps, folded upd_nested_max_tstp_def, code]
+lemma filter_set_empty[simp]: "filter_set (t, {}) (m, Y) = (m, Y)"
+  unfolding filter_set.simps
+  by transfer (auto simp: Let_def fun_eq_iff split: option.splits)
 
-lemma filter_set_empty[simp]: "filter_set m {} t = m"
-  unfolding filter_set_def
-  by transfer (auto simp: fun_eq_iff split: option.splits)
-
-lemma filter_set_insert[simp]: "filter_set m (insert x A) t = (let m' = filter_set m A t in
-  case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then Mapping.delete x m' else m' | _ \<Rightarrow> m')"
-  unfolding filter_set_def
+lemma filter_set_insert[simp]: "filter_set (t, insert x A) (m, Y) = (let (m', Y') = filter_set (t, A) (m, Y) in
+  case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then (Mapping.delete x m', Y' \<union> {x}) else (m', Y') | _ \<Rightarrow> (m', Y'))"
+  unfolding filter_set.simps
   by transfer (auto simp: fun_eq_iff Let_def Map_To_Mapping.map_apply_def split: option.splits)
 
 lemma filter_set_fold:
   assumes "finite A"
-  shows "filter_set m A t = Finite_Set.fold (\<lambda>a m.
-    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m) m A"
+  shows "filter_set (t, A) (m, Y) = Finite_Set.fold (\<lambda>a (m, Y).
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then (Mapping.delete a m, Y \<union> {a}) else (m, Y) | _ \<Rightarrow> (m, Y)) (m, Y) A"
 proof -
-  interpret comp_fun_idem "\<lambda>a m.
-    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m"
+  interpret comp_fun_idem "\<lambda>a (m, Y).
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then (Mapping.delete a m, Y \<union> {a}) else (m, Y) | _ \<Rightarrow> (m, Y)"
     by unfold_locales
       (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
   from assms show ?thesis
     by (induct A arbitrary: m rule: finite.induct) (auto simp: Let_def)
 qed
 
-lift_definition filter_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping) comp_fun_idem"
-  is "\<lambda>t a m.
-    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then Mapping.delete a m else m | _ \<Rightarrow> m"
-  by unfold_locales
-    (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+lift_definition filter_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping \<times> 'a set) comp_fun_idem"
+  is "\<lambda>t a (m, Y).
+    case Mapping.lookup m a of Some u \<Rightarrow> if t = u then (Mapping.delete a m, Y \<union> {a}) else (m, Y) | _ \<Rightarrow> (m, Y)"
+  by unfold_locales (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
 
 lemma filter_set_code[code]:
-  "filter_set m A t = (if finite A then set_fold_cfi (filter_cfi t) m A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set m A t))"
+  "filter_set (t, A) (m, Y) = (if finite A then set_fold_cfi (filter_cfi t) (m, Y) A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set (t, A) (m, Y)))"
   by (transfer fixing: m) (auto simp: filter_set_fold)
-
-definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
-
-declare [[code drop: join_mmsaux]]
-declare join_mmsaux.simps[folded filter_join_def, code]
 
 lemma filter_join_False_empty: "filter_join False {} m = m"
   unfolding filter_join_def
@@ -444,6 +417,7 @@ lemma filter_join_code[code]:
   unfolding filter_join_def
   by (transfer fixing: m) (use filter_join_False in \<open>auto simp add: filter_join_def\<close>)
 
+(*
 definition set_minus :: "'a set \<Rightarrow> 'a set \<Rightarrow> 'a set" where
   "set_minus X Y = X - Y"
 
@@ -467,6 +441,7 @@ lemma set_minus_code[code]: "set_minus X Y =
 
 declare [[code drop: bin_join]]
 declare bin_join.simps[folded set_minus_def, code]
+*)
 
 definition remove_Union where
   "remove_Union A X B = A - (\<Union>x \<in> X. B x)"
