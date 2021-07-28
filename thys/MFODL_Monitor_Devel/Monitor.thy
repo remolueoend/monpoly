@@ -655,9 +655,39 @@ end
 
 subsection \<open>The executable monitor\<close>
 
+typedef 'a mbuf_t = "UNIV :: 'a list set" ..
+
+setup_lifting type_definition_mbuf_t
+
+instantiation mbuf_t :: (type) size
+begin
+
+lift_definition size_mbuf_t :: "'a mbuf_t \<Rightarrow> nat" is "length" .
+
+instance ..
+
+end
+
+lift_definition mbuf_t_empty :: "'a mbuf_t" is "[]" .
+
+lift_definition mbuf_t_Cons :: "'a \<Rightarrow> 'a mbuf_t \<Rightarrow> 'a mbuf_t" is Cons .
+
+no_notation SCons (infixr "##" 65)
+notation mbuf_t_Cons (infixr "##" 65)
+
+lift_definition mbuf_t_append :: "'a mbuf_t \<Rightarrow> 'a list \<Rightarrow> 'a mbuf_t" is append .
+
+notation mbuf_t_append (infixr "@@" 65)
+
+lift_definition mbuf_t_cases :: "'a mbuf_t \<Rightarrow> 'a option \<times> 'a mbuf_t" is
+  "\<lambda>xs. case xs of [] \<Rightarrow> (None, xs) | y # ys \<Rightarrow> (Some y, ys)" .
+
+lemma mbuf_t_cases_size[termination_simp]: "(Some x, xs') = mbuf_t_cases xs \<Longrightarrow> size xs' < size xs"
+  by transfer (auto split: list.splits)
+
 type_synonym ts = nat
 
-type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
+type_synonym 'a mbuf2 = "'a table mbuf_t \<times> 'a table mbuf_t"
 type_synonym 'a mbufn = "'a table list list"
 type_synonym 'a mbuf2S = "'a table list \<times> 'a table list \<times> ts list \<times> bool"
 type_synonym 'a msaux = "(ts \<times> 'a table) list"
@@ -864,15 +894,15 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.Pred e ts) = MPred e ts (pred_mode_of n ts)"
 | "minit0 n (Formula.Let p \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
 | "minit0 n (Formula.LetPast p \<phi> \<psi>) = MLetPast p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>) 0 None"
-| "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
+| "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)"
 | "minit0 n (Formula.And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
       MAndAssign (minit0 n \<phi>) (split_assignment (fv \<phi>) \<psi>)
     else if safe_formula \<psi> then
-      MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) ([], [])
+      MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)
     else if is_constraint \<psi> then
       MAndRel (minit0 n \<phi>) (split_constraint \<psi>)
     else (case \<psi> of Formula.Neg \<psi> \<Rightarrow>
-      MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) ([], [])))"
+      MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)))"
 | "minit0 n (Formula.Ands l) = (let (pos, neg) = partition safe_formula l in
     let mpos = map (minit0 n) pos in
     let mneg = map (minit0 n) (map remove_neg neg) in
@@ -889,9 +919,9 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
       Formula.Neg \<phi> \<Rightarrow> MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) init_mbuf2S (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
     | _ \<Rightarrow> undefined))"
 | "minit0 n (Formula.Until \<phi> I \<psi>) = (if safe_formula \<phi>
-    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
     else (case \<phi> of
-      Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
+      Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
     | _ \<Rightarrow> undefined))"
 | "minit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
@@ -920,19 +950,22 @@ fun mprev_next :: "\<I> \<Rightarrow> event_data table list \<Rightarrow> ts lis
     in ((if mem I ((t' - t)) then x else empty_table) # ys, zs))"
 
 fun mbuf2_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> event_data mbuf2 \<Rightarrow> event_data mbuf2" where
-  "mbuf2_add xs' ys' (xs, ys) = (xs @ xs', ys @ ys')"
+  "mbuf2_add xs' ys' (xs, ys) = (xs @@ xs', ys @@ ys')"
 
 fun mbuf2S_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> ts list \<Rightarrow> event_data mbuf2S \<Rightarrow> event_data mbuf2S" where
   "mbuf2S_add xs' ys' ts' (xs, ys, ts, skew) = (xs @ xs', ys @ ys', ts @ ts', skew)"
 
 fun mbuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data mbuf2 \<Rightarrow> 'b list \<times> event_data mbuf2" where
-  "mbuf2_take f (x # xs, y # ys) = (let (zs, buf) = mbuf2_take f (xs, ys) in (f x y # zs, buf))"
-| "mbuf2_take f (xs, ys) = ([], (xs, ys))"
+  "mbuf2_take f (xs, ys) = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> ([], (xs', ys)) | (Some x, xs') \<Rightarrow>
+    (case mbuf_t_cases ys of (None, ys') \<Rightarrow> ([], (x ## xs', ys')) | (Some y, ys') \<Rightarrow>
+    let (zs, buf) = mbuf2_take f (xs', ys') in (f x y # zs, buf)))"
 
 fun mbuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
     event_data mbuf2 \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbuf2 \<times> ts list" where
-  "mbuf2t_take f z (x # xs, y # ys) (t # ts) = mbuf2t_take f (f x y t z) (xs, ys) ts"
-| "mbuf2t_take f z (xs, ys) ts = (z, (xs, ys), ts)"
+  "mbuf2t_take f z (xs, ys) ts = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> (z, (xs', ys), ts) | (Some x, xs') \<Rightarrow>
+    (case mbuf_t_cases ys of (None, ys') \<Rightarrow> (z, (x ## xs', ys'), ts) | (Some y, ys') \<Rightarrow>
+    (case ts of [] \<Rightarrow> (z, (x ## xs', y ## ys'), ts) | t # ts' \<Rightarrow>
+    mbuf2t_take f (f x y t z) (xs', ys') ts')))"
 
 context maux begin
 context fixes args :: args begin
@@ -2982,7 +3015,7 @@ subsubsection \<open>Invariants\<close>
 definition wf_mbuf2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow>
     event_data mbuf2 \<Rightarrow> bool" where
   "wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
-    list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
+    list_all2 P [i..<ja] (Rep_mbuf_t xs) \<and> list_all2 Q [i..<jb] (Rep_mbuf_t ys))"
 
 inductive list_all3 :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'b list \<Rightarrow> 'c list \<Rightarrow> bool" for P :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool)" where
   "list_all3 P [] [] []"
@@ -3048,9 +3081,9 @@ definition wf_mbufn' :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightar
 
 lemma wf_mbuf2'_UNIV_alt: "wf_mbuf2' \<sigma> P V j n UNIV \<phi> \<psi> buf \<longleftrightarrow> (case buf of (xs, ys) \<Rightarrow>
   list_all2 (\<lambda>i. wf_table n (Formula.fv \<phi>) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
-    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<phi> j)] xs \<and>
+    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<phi> j)] (Rep_mbuf_t xs) \<and>
   list_all2 (\<lambda>i. wf_table n (Formula.fv \<psi>) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>))
-    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<psi> j)] ys)"
+    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<psi> j)] (Rep_mbuf_t ys))"
   unfolding wf_mbuf2'_def wf_mbuf2_def
   by (simp add: mem_restr_UNIV[THEN eqTrueI, abs_def] split: prod.split)
 
@@ -3766,8 +3799,9 @@ lemma (in maux) letpast_meval_ys: "(ys', i', buf', \<phi>f) = letpast_meval m j 
 
 subsubsection \<open>Initialisation\<close>
 
-lemma wf_mbuf2'_0: "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbuf2' \<sigma> P V 0 n R \<phi> \<psi> ([], [])"
-  unfolding wf_mbuf2'_def wf_mbuf2_def by simp
+lemma wf_mbuf2'_0: "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbuf2' \<sigma> P V 0 n R \<phi> \<psi> (mbuf_t_empty, mbuf_t_empty)"
+  unfolding wf_mbuf2'_def wf_mbuf2_def
+  by transfer simp
 
 lemma wf_mbufn'_0: "to_mregex r = (mr, \<phi>s) \<Longrightarrow> pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbufn' \<sigma> P V 0 n R r (replicate (length \<phi>s) [])"
   unfolding wf_mbufn'_def wf_mbufn_def map_replicate_const[symmetric]
@@ -5862,9 +5896,12 @@ lemma wf_mbuf2_add:
     and "ja \<le> ja'" "jb \<le> jb'"
   shows "wf_mbuf2 i ja' jb' P Q (mbuf2_add xs ys buf)"
   using assms unfolding wf_mbuf2_def
-  by (auto 0 3 simp: list_all2_append2 upt_append dest: list_all2_lengthD
-      intro: exI[where x="[i..<ja]"] exI[where x="[ja..<ja']"]
-      exI[where x="[i..<jb]"] exI[where x="[jb..<jb']"] split: prod.splits)
+  apply transfer'
+  subgoal for i ja jb P Q buf ja' xs jb' ys
+    by (auto 0 3 simp: list_all2_append2 upt_append mbuf_t_append.rep_eq dest: list_all2_lengthD
+        intro: exI[where x="[i..<ja]"] exI[where x="[ja..<ja']"]
+        exI[where x="[i..<jb]"] exI[where x="[jb..<jb']"] split: prod.splits)
+  done
 
 lemma wf_mbufn_add:
   assumes "wf_mbufn i js Ps buf"
@@ -5889,14 +5926,64 @@ next
     by (auto simp add: list_all2_append)
 qed
 
+fun mbuf2_list_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data table list \<times> event_data table list \<Rightarrow> 'b list \<times> event_data table list \<times> event_data table list " where
+  "mbuf2_list_take f (x # xs, y # ys) = (let (zs, buf) = mbuf2_list_take f (xs, ys) in (f x y # zs, buf))"
+| "mbuf2_list_take f (xs, ys) = ([], (xs, ys))"
+
+lemma Rep_mbuf_t_cases[simp]:
+  "mbuf_t_cases xs = (None, xs') \<Longrightarrow> Rep_mbuf_t xs = []"
+  "mbuf_t_cases xs = (None, xs') \<Longrightarrow> Rep_mbuf_t xs' = []"
+  "mbuf_t_cases xs = (Some x, xs') \<Longrightarrow> Rep_mbuf_t xs = x # Rep_mbuf_t xs'"
+  subgoal by transfer (auto split: option.splits list.splits)
+  subgoal by transfer (auto split: option.splits list.splits)
+  subgoal by transfer (auto split: option.splits list.splits)
+  done
+
+lemma Rep_mbuf2_take: "mbuf2_take f (xs, ys) = (zs, (xs', ys')) \<Longrightarrow>
+  mbuf2_list_take f (Rep_mbuf_t xs, Rep_mbuf_t ys) = (zs, (Rep_mbuf_t xs', Rep_mbuf_t ys'))"
+proof (induction f "(xs, ys)" arbitrary: xs ys zs xs' ys' rule: mbuf2_take.induct)
+  case (1 f xs ys)
+  obtain x xs'' where xs_def: "mbuf_t_cases xs = (x, xs'')"
+    by fastforce
+  obtain y ys'' where ys_def: "mbuf_t_cases ys = (y, ys'')"
+    by fastforce
+  show ?case
+    using 1 xs_def ys_def
+    by (cases x; cases y) (auto simp: mbuf_t_Cons.rep_eq split: prod.splits)
+qed
+
+definition Rep_wf_mbuf2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow>
+    event_data table list \<times> event_data table list \<Rightarrow> bool" where
+  "Rep_wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
+    list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
+
+lemma Rep_wf_mbuf2: "Rep_wf_mbuf2 i ja jb P Q (Rep_mbuf_t xs, Rep_mbuf_t ys) \<longleftrightarrow>
+  wf_mbuf2 i ja jb P Q (xs, ys)"
+  by (auto simp: Rep_wf_mbuf2_def wf_mbuf2_def)
+
+lemma mbuf2_list_take_eqD:
+  assumes "mbuf2_list_take f buf = (zs, buf')"
+    and "Rep_wf_mbuf2 i ja jb P Q buf"
+  shows "Rep_wf_mbuf2 (min ja jb) ja jb P Q buf'"
+    and "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] zs"
+  using assms unfolding Rep_wf_mbuf2_def
+  by (induction f buf arbitrary: i zs buf' rule: mbuf2_list_take.induct)
+     (fastforce simp add: list_all2_Cons2 upt_eq_Cons_conv min_absorb1 min_absorb2 split: prod.splits)+
+
 lemma mbuf2_take_eqD:
-  assumes "mbuf2_take f buf = (xs, buf')"
+  assumes "mbuf2_take f buf = (zs, buf')"
     and "wf_mbuf2 i ja jb P Q buf"
   shows "wf_mbuf2 (min ja jb) ja jb P Q buf'"
-    and "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] xs"
-  using assms unfolding wf_mbuf2_def
-  by (induction f buf arbitrary: i xs buf' rule: mbuf2_take.induct)
-    (fastforce simp add: list_all2_Cons2 upt_eq_Cons_conv min_absorb1 min_absorb2 split: prod.splits)+
+    and "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] zs"
+proof -
+  obtain xs ys where buf_def: "buf = (xs, ys)"
+    by fastforce
+  obtain xs' ys' where buf'_def: "buf' = (xs', ys')"
+    by fastforce
+  show "wf_mbuf2 (min ja jb) ja jb P Q buf'" "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] zs"
+    using mbuf2_list_take_eqD[OF Rep_mbuf2_take[OF assms(1)[unfolded buf_def buf'_def]], OF assms(2)[unfolded buf_def, folded Rep_wf_mbuf2]]
+    by (auto simp: buf'_def Rep_wf_mbuf2[symmetric])
+qed
 
 lemma list_all3_Nil[simp]:
   "list_all3 P xs ys [] \<longleftrightarrow> xs = [] \<and> ys = []"
@@ -5947,6 +6034,36 @@ lemma wf_mbufn_map_tl:
 lemma list_all3_list_all2I: "list_all3 (\<lambda>x y z. Q x z) xs ys zs \<Longrightarrow> list_all2 Q xs zs"
   by (induct xs ys zs rule: list_all3.induct) auto
 
+fun mbuf2t_list_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
+    event_data table list \<times> event_data table list \<Rightarrow> ts list \<Rightarrow> 'b \<times> (event_data table list \<times> event_data table list) \<times> ts list" where
+  "mbuf2t_list_take f z (x # xs, y # ys) (t # ts) = mbuf2t_list_take f (f x y t z) (xs, ys) ts"
+| "mbuf2t_list_take f z (xs, ys) ts = (z, (xs, ys), ts)"
+
+lemma Rep_mbuf2t_take: "mbuf2t_take f z (xs, ys) ts = (zs, (xs', ys'), nts') \<Longrightarrow>
+  mbuf2t_list_take f z (Rep_mbuf_t xs, Rep_mbuf_t ys) ts = (zs, (Rep_mbuf_t xs', Rep_mbuf_t ys'), nts')"
+proof (induction f z "(xs, ys)" ts arbitrary: xs ys zs xs' ys' rule: mbuf2t_take.induct)
+  case (1 f z xs ys ts)
+  obtain x xs'' where xs_def: "mbuf_t_cases xs = (x, xs'')"
+    by fastforce
+  obtain y ys'' where ys_def: "mbuf_t_cases ys = (y, ys'')"
+    by fastforce
+  show ?case
+    using 1 xs_def ys_def
+    by (cases x; cases y) (auto simp: mbuf_t_Cons.rep_eq split: prod.splits list.splits)
+qed
+
+lemma mbuf2t_take_list_eqD:
+  assumes "mbuf2t_list_take f z buf nts = (z', buf', nts')"
+    and "Rep_wf_mbuf2 i ja jb P Q buf"
+    and "list_all2 R [i..<j] nts"
+    and "ja \<le> j" "jb \<le> j"
+  shows "Rep_wf_mbuf2 (min ja jb) ja jb P Q buf'"
+    and "list_all2 R [min ja jb..<j] nts'"
+  using assms unfolding Rep_wf_mbuf2_def
+  by (induction f z buf nts arbitrary: i z' buf' nts' rule: mbuf2t_list_take.induct)
+     (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
+      split: prod.split)
+
 lemma mbuf2t_take_eqD:
   assumes "mbuf2t_take f z buf nts = (z', buf', nts')"
     and "wf_mbuf2 i ja jb P Q buf"
@@ -5954,10 +6071,15 @@ lemma mbuf2t_take_eqD:
     and "ja \<le> j" "jb \<le> j"
   shows "wf_mbuf2 (min ja jb) ja jb P Q buf'"
     and "list_all2 R [min ja jb..<j] nts'"
-  using assms unfolding wf_mbuf2_def
-  by (induction f z buf nts arbitrary: i z' buf' nts' rule: mbuf2t_take.induct)
-    (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
-      split: prod.split)
+proof -
+  obtain xs ys where buf_def: "buf = (xs, ys)"
+    by fastforce
+  obtain xs' ys' where buf'_def: "buf' = (xs', ys')"
+    by fastforce
+  show "wf_mbuf2 (min ja jb) ja jb P Q buf'" "list_all2 R [min ja jb..<j] nts'"
+    using mbuf2t_take_list_eqD[OF Rep_mbuf2t_take[OF assms(1)[unfolded buf_def buf'_def]], OF assms(2)[unfolded buf_def, folded Rep_wf_mbuf2] assms(3-)]
+    by (auto simp: buf'_def Rep_wf_mbuf2[symmetric])
+qed
 
 lemma wf_mbufn_take:
   assumes "mbufn_take f z buf = (z', buf')"
@@ -6031,6 +6153,20 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: mbufnt_take.induct)
         split: if_splits prod.splits)
 qed
 
+lemma mbuf2t_take_list_induct:
+  assumes "mbuf2t_list_take f z buf nts = (z', buf', nts')"
+    and "Rep_wf_mbuf2 i ja jb P Q buf"
+    and "list_all2 R [i..<j] nts"
+    and "ja \<le> j" "jb \<le> j"
+    and "U i z"
+    and "\<And>k x y t z. i \<le> k \<Longrightarrow> Suc k \<le> ja \<Longrightarrow> Suc k \<le> jb \<Longrightarrow>
+      P k x \<Longrightarrow> Q k y \<Longrightarrow> R k t \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f x y t z)"
+  shows "U (min ja jb) z'"
+  using assms unfolding Rep_wf_mbuf2_def
+  by (induction f z buf nts arbitrary: i z' buf' nts' rule: mbuf2t_list_take.induct)
+     (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
+      elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated] split: prod.split)
+
 lemma mbuf2t_take_induct[consumes 5, case_names base step]:
   assumes "mbuf2t_take f z buf nts = (z', buf', nts')"
     and "wf_mbuf2 i ja jb P Q buf"
@@ -6040,10 +6176,15 @@ lemma mbuf2t_take_induct[consumes 5, case_names base step]:
     and "\<And>k x y t z. i \<le> k \<Longrightarrow> Suc k \<le> ja \<Longrightarrow> Suc k \<le> jb \<Longrightarrow>
       P k x \<Longrightarrow> Q k y \<Longrightarrow> R k t \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f x y t z)"
   shows "U (min ja jb) z'"
-  using assms unfolding wf_mbuf2_def
-  by (induction f z buf nts arbitrary: i z' buf' nts' rule: mbuf2t_take.induct)
-    (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
-      elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated] split: prod.split)
+proof -
+  obtain xs ys where buf_def: "buf = (xs, ys)"
+    by fastforce
+  obtain xs' ys' where buf'_def: "buf' = (xs', ys')"
+    by fastforce
+  show "U (min ja jb) z'"
+    using mbuf2t_take_list_induct[OF Rep_mbuf2t_take[OF assms(1)[unfolded buf_def buf'_def]], OF assms(2)[unfolded buf_def, folded Rep_wf_mbuf2] assms(3-)]
+    by (auto simp: buf'_def Rep_wf_mbuf2[symmetric])
+qed
 
 lemma list_all2_hdD:
   assumes "list_all2 P [i..<j] xs" "xs \<noteq> []"

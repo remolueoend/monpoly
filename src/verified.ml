@@ -91,6 +91,7 @@ module Monitor : sig
   type safety
   type ('a, 'b) sum
   type i
+  type 'a queue
   type modality
   type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
   type formula = Pred of string * trm list | Let of string * formula * formula |
@@ -103,7 +104,6 @@ module Monitor : sig
     MatchP of i * formula regex
   type ('a, 'b) mapping
   type ('a, 'b) mformula
-  type 'a queue
   type ('a, 'b, 'c) mstate_ext
   val wild : 'a regex
   val integer_of_int : int -> Z.t
@@ -3346,6 +3346,10 @@ type ('a, 'b) sum = Inl of 'a | Inr of 'b;;
 
 type i = Abs_I of ((nat -> bool) * ((nat -> bool) * bool));;
 
+type 'a queue = Abs_queue of ('a list * 'a list);;
+
+type 'a mbuf_t = MBuf2_t of 'a queue;;
+
 type modality = Past | Futu;;
 
 type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med;;
@@ -3376,8 +3380,8 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
       ((event_data option) list) set option
   | MAnd of
       nat set * ('a, 'b) mformula * bool * nat set * ('a, 'b) mformula *
-        (((event_data option) list) set list *
-          ((event_data option) list) set list)
+        (((event_data option) list) set mbuf_t *
+          ((event_data option) list) set mbuf_t)
   | MAndAssign of ('a, 'b) mformula * (nat * trm) |
   MAndRel of ('a, 'b) mformula * (trm * (bool * (mconstraint * trm))) |
   MAnds of
@@ -3385,8 +3389,8 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
       (((event_data option) list) set list) list
   | MOr of
       ('a, 'b) mformula * ('a, 'b) mformula *
-        (((event_data option) list) set list *
-          ((event_data option) list) set list)
+        (((event_data option) list) set mbuf_t *
+          ((event_data option) list) set mbuf_t)
   | MNeg of ('a, 'b) mformula | MExists of ('a, 'b) mformula |
   MAgg of bool * nat * (agg_type * event_data) * nat * trm * ('a, 'b) mformula |
   MPrev of
@@ -3400,8 +3404,8 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
       'a
   | MUntil of
       unit args_ext * ('a, 'b) mformula * ('a, 'b) mformula *
-        (((event_data option) list) set list *
-          ((event_data option) list) set list) *
+        (((event_data option) list) set mbuf_t *
+          ((event_data option) list) set mbuf_t) *
         nat list * nat * 'b
   | MMatchP of
       i * mregex * mregex list * ('a, 'b) mformula list *
@@ -3413,8 +3417,6 @@ type ('a, 'b) mformula = MRel of ((event_data option) list) set |
         (nat *
           (((event_data option) list) set list *
             ((event_data option) list) set)) list;;
-
-type 'a queue = Abs_queue of ('a list * 'a list);;
 
 type ('b, 'a) comp_fun_idem = Abs_comp_fun_idem of ('b -> 'a -> 'a);;
 
@@ -4712,7 +4714,15 @@ let rec map_split
                      let (ys, zs) = map_split f xs in
                       (y :: ys, z :: zs));;
 
-let rec mbuf2_add xsa ysa (xs, ys) = (xs @ xsa, ys @ ysa);;
+let rec rep_queue (Abs_queue x) = x;;
+
+let rec append_queue
+  xb xc = Abs_queue (let (fs, ls) = rep_queue xc in (fs, xb :: ls));;
+
+let rec mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold append_queue ys xs);;
+
+let rec mbuf2_add
+  xsa ysa (xs, ys) = (mbuf_t_append xs xsa, mbuf_t_append ys ysa);;
 
 let rec mbufn_add xsa xs = mapa (fun (a, b) -> a @ b) (zip xs xsa);;
 
@@ -5500,14 +5510,71 @@ let rec mbuf2S_add
   xsa ysa tsa (xs, (ys, (ts, skew))) =
     (xs @ xsa, (ys @ ysa, (ts @ tsa, skew)));;
 
+let rec tl_queue_t = function ([], []) -> ([], [])
+                     | ([], [l]) -> ([], [])
+                     | ([], l :: v :: va) -> (tla (rev (v :: va)), [l])
+                     | (a :: asa, fs) -> (asa, fs);;
+
+let rec tl_queue xa = Abs_queue (tl_queue_t (rep_queue xa));;
+
+let rec rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+  (Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod x) =
+    x;;
+
+let rec sel12
+  xa = Abs_queue
+         (let (_, x2) =
+            rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+              xa
+            in
+           x2);;
+
+let rec sel11
+  xa = (let (x1, _) =
+          rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+            xa
+          in
+         x1);;
+
+let rec rep_isom x = (sel11 x, sel12 x);;
+
+let rec safe_hd_t
+  = function ([], []) -> (None, ([], []))
+    | ([], [l]) -> (Some l, ([], [l]))
+    | ([], l :: v :: va) ->
+        (let fs = rev (v :: va) in (Some (hda fs), (fs, [l])))
+    | (f :: fs, l :: ls) -> (Some f, (f :: fs, l :: ls))
+    | (f :: fs, []) -> failwith "undefined";;
+
+let rec safe_hd_aux
+  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+         (safe_hd_t (rep_queue xa));;
+
+let rec safe_hd x = rep_isom (safe_hd_aux x);;
+
+let rec mbuf_t_cases
+  (MBuf2_t xs) =
+    (match safe_hd xs with (None, xsa) -> (None, MBuf2_t xsa)
+      | (Some x, xsa) -> (Some x, MBuf2_t (tl_queue xsa)));;
+
+let rec prepend_queue_t a x1 = match a, x1 with a, ([], []) -> ([], [a])
+                          | a, (fs, l :: ls) -> (a :: fs, l :: ls)
+                          | a, (f :: fs, []) -> failwith "undefined";;
+
+let rec prepend_queue xb xc = Abs_queue (prepend_queue_t xb (rep_queue xc));;
+
+let rec mbuf_t_Cons x (MBuf2_t xs) = MBuf2_t (prepend_queue x xs);;
+
 let rec mbuf2_take
-  f x1 = match f, x1 with
-    f, (x :: xs, y :: ys) ->
-      (let a = mbuf2_take f (xs, ys) in
-       let (zs, aa) = a in
-        (f x y :: zs, aa))
-    | f, ([], ys) -> ([], ([], ys))
-    | f, (xs, []) -> ([], (xs, []));;
+  f (xs, ys) =
+    (match mbuf_t_cases xs with (None, xsa) -> ([], (xsa, ys))
+      | (Some x, xsa) ->
+        (match mbuf_t_cases ys
+          with (None, ysa) -> ([], (mbuf_t_Cons x xsa, ysa))
+          | (Some y, ysa) ->
+            (let a = mbuf2_take f (xsa, ysa) in
+             let (zs, aa) = a in
+              (f x y :: zs, aa))));;
 
 let rec mbufn_take
   f z buf =
@@ -5605,50 +5672,6 @@ let rec minus_set (_A1, _A2)
             (fun _ -> minus_set (_A1, _A2) (RBT_set rbt1) (RBT_set rbt2))
         | Some _ -> RBT_set (minus _A2 rbt1 rbt2))
     | a, b -> inf_seta (_A1, _A2) a (uminus_set b);;
-
-let rec rep_queue (Abs_queue x) = x;;
-
-let rec tl_queue_t = function ([], []) -> ([], [])
-                     | ([], [l]) -> ([], [])
-                     | ([], l :: v :: va) -> (tla (rev (v :: va)), [l])
-                     | (a :: asa, fs) -> (asa, fs);;
-
-let rec tl_queue xa = Abs_queue (tl_queue_t (rep_queue xa));;
-
-let rec rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-  (Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod x) =
-    x;;
-
-let rec sel12
-  xa = Abs_queue
-         (let (_, x2) =
-            rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-              xa
-            in
-           x2);;
-
-let rec sel11
-  xa = (let (x1, _) =
-          rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-            xa
-          in
-         x1);;
-
-let rec rep_isom x = (sel11 x, sel12 x);;
-
-let rec safe_hd_t
-  = function ([], []) -> (None, ([], []))
-    | ([], [l]) -> (Some l, ([], [l]))
-    | ([], l :: v :: va) ->
-        (let fs = rev (v :: va) in (Some (hda fs), (fs, [l])))
-    | (f :: fs, l :: ls) -> (Some f, (f :: fs, l :: ls))
-    | (f :: fs, []) -> failwith "undefined";;
-
-let rec safe_hd_aux
-  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-         (safe_hd_t (rep_queue xa));;
-
-let rec safe_hd x = rep_isom (safe_hd_aux x);;
 
 let rec takedropWhile_queue
   f q = (match safe_hd q with (None, qa) -> (qa, [])
@@ -5797,12 +5820,6 @@ let rec eval_step_mmuaux
                                (result :: donea,
                                  plus_nata done_length one_nata))))))))))));;
 
-let rec prepend_queue_t a x1 = match a, x1 with a, ([], []) -> ([], [a])
-                          | a, (fs, l :: ls) -> (a :: fs, l :: ls)
-                          | a, (f :: fs, []) -> failwith "undefined";;
-
-let rec prepend_queue xb xc = Abs_queue (prepend_queue_t xb (rep_queue xc));;
-
 let empty_queue : 'a queue = Abs_queue ([], []);;
 
 let rec takeWhile_queue
@@ -5831,9 +5848,6 @@ let rec shift_mmuaux
                            (result,
                              (a1_map, (a2_map, (donea, done_length)))))))))
           (linearize tss_queue));;
-
-let rec append_queue
-  xb xc = Abs_queue (let (fs, ls) = rep_queue xc in (fs, xb :: ls));;
 
 let rec proj_tuple x0 x1 = match x0, x1 with [], [] -> []
                      | true :: bs, a :: asa -> a :: proj_tuple bs asa
@@ -7802,11 +7816,15 @@ let rec mbufnt_take
              (tla ts));;
 
 let rec mbuf2t_take
-  f z x2 ts = match f, z, x2, ts with
-    f, z, (x :: xs, y :: ys), t :: ts -> mbuf2t_take f (f x y t z) (xs, ys) ts
-    | f, z, ([], ys), ts -> (z, (([], ys), ts))
-    | f, z, (xs, []), ts -> (z, ((xs, []), ts))
-    | f, z, (xs, ys), [] -> (z, ((xs, ys), []));;
+  f z (xs, ys) ts =
+    (match mbuf_t_cases xs with (None, xsa) -> (z, ((xsa, ys), ts))
+      | (Some x, xsa) ->
+        (match mbuf_t_cases ys
+          with (None, ysa) -> (z, ((mbuf_t_Cons x xsa, ysa), ts))
+          | (Some y, ysa) ->
+            (match ts
+              with [] -> (z, ((mbuf_t_Cons x xsa, mbuf_t_Cons y ysa), ts))
+              | t :: a -> mbuf2t_take f (f x y t z) (xsa, ysa) a)));;
 
 let rec eval_matchF
   i mr nt x3 = match i, mr, nt, x3 with i, mr, nt, [] -> ([], [])
@@ -8220,6 +8238,8 @@ let rec pred_mode_of
     (if is_copy_pattern n ts then Copy
       else (if is_simple_pattern ts zero_nata then Simple else Match));;
 
+let mbuf_t_empty : 'a mbuf_t = MBuf2_t empty_queue;;
+
 let rec minit0
   n x1 = match n, x1 with
     n, Neg phi ->
@@ -8237,20 +8257,22 @@ let rec minit0
     | n, LetPast (p, phi, psi) ->
         MLetPast
           (p, nfv phi, minit0 (nfv phi) phi, minit0 n psi, zero_nata, None)
-    | n, Or (phi, psi) -> MOr (minit0 n phi, minit0 n psi, ([], []))
+    | n, Or (phi, psi) ->
+        MOr (minit0 n phi, minit0 n psi, (mbuf_t_empty, mbuf_t_empty))
     | n, And (phi, psi) ->
         (if safe_assignment (fvi zero_nata phi) psi
           then MAndAssign
                  (minit0 n phi, split_assignment (fvi zero_nata phi) psi)
           else (if safe_formula psi
                  then MAnd (fvi zero_nata phi, minit0 n phi, true,
-                             fvi zero_nata psi, minit0 n psi, ([], []))
+                             fvi zero_nata psi, minit0 n psi,
+                             (mbuf_t_empty, mbuf_t_empty))
                  else (if is_constraint psi
                         then MAndRel (minit0 n phi, split_constraint psi)
                         else (let Neg psia = psi in
                                MAnd (fvi zero_nata phi, minit0 n phi, false,
                                       fvi zero_nata psia, minit0 n psia,
-                                      ([], []))))))
+                                      (mbuf_t_empty, mbuf_t_empty))))))
     | n, Ands l ->
         (let (pos, neg) = partition safe_formula l in
          let mpos = mapa (minit0 n) pos in
@@ -8285,7 +8307,8 @@ let rec minit0
         (if safe_formula phi
           then MUntil
                  (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   minit0 n phi, minit0 n psi, ([], []), [], zero_nata,
+                   minit0 n phi, minit0 n psi, (mbuf_t_empty, mbuf_t_empty), [],
+                   zero_nata,
                    init_mmuaux
                      (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
                        true))
@@ -8293,7 +8316,8 @@ let rec minit0
                  MUntil
                    (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                       false,
-                     minit0 n phia, minit0 n psi, ([], []), [], zero_nata,
+                     minit0 n phia, minit0 n psi, (mbuf_t_empty, mbuf_t_empty),
+                     [], zero_nata,
                      init_mmuaux
                        (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                          false))))
@@ -8737,20 +8761,22 @@ let rec vminit0
     | n, LetPast (p, phi, psi) ->
         MLetPast
           (p, nfv phi, vminit0 (nfv phi) phi, vminit0 n psi, zero_nata, None)
-    | n, Or (phi, psi) -> MOr (vminit0 n phi, vminit0 n psi, ([], []))
+    | n, Or (phi, psi) ->
+        MOr (vminit0 n phi, vminit0 n psi, (mbuf_t_empty, mbuf_t_empty))
     | n, And (phi, psi) ->
         (if safe_assignment (fvi zero_nata phi) psi
           then MAndAssign
                  (vminit0 n phi, split_assignment (fvi zero_nata phi) psi)
           else (if safe_formula psi
                  then MAnd (fvi zero_nata phi, vminit0 n phi, true,
-                             fvi zero_nata psi, vminit0 n psi, ([], []))
+                             fvi zero_nata psi, vminit0 n psi,
+                             (mbuf_t_empty, mbuf_t_empty))
                  else (if is_constraint psi
                         then MAndRel (vminit0 n phi, split_constraint psi)
                         else (let Neg psia = psi in
                                MAnd (fvi zero_nata phi, vminit0 n phi, false,
                                       fvi zero_nata psia, vminit0 n psia,
-                                      ([], []))))))
+                                      (mbuf_t_empty, mbuf_t_empty))))))
     | n, Ands l ->
         (let (pos, neg) = partition safe_formula l in
          let mpos = mapa (vminit0 n) pos in
@@ -8785,7 +8811,8 @@ let rec vminit0
         (if safe_formula phi
           then MUntil
                  (init_args i n (fvi zero_nata phi) (fvi zero_nata psi) true,
-                   vminit0 n phi, vminit0 n psi, ([], []), [], zero_nata,
+                   vminit0 n phi, vminit0 n psi, (mbuf_t_empty, mbuf_t_empty),
+                   [], zero_nata,
                    init_vmuaux
                      (init_args i n (fvi zero_nata phi) (fvi zero_nata psi)
                        true))
@@ -8793,7 +8820,8 @@ let rec vminit0
                  MUntil
                    (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                       false,
-                     vminit0 n phia, vminit0 n psi, ([], []), [], zero_nata,
+                     vminit0 n phia, vminit0 n psi,
+                     (mbuf_t_empty, mbuf_t_empty), [], zero_nata,
                      init_vmuaux
                        (init_args i n (fvi zero_nata phia) (fvi zero_nata psi)
                          false))))

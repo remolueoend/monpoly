@@ -553,6 +553,31 @@ lemma Sup_rec_safety_atms[code_unfold]:
       linorder.set_sorted_list_of_set[OF comparator.linorder] comparator_rec_safety
       flip: comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_on_sup])
 
+lift_definition MBuf2_t :: "'a queue \<Rightarrow> 'a mbuf_t" is "linearize" .
+
+code_datatype MBuf2_t
+
+lemma mbuf_t_empty_code[code]: "mbuf_t_empty = MBuf2_t empty_queue"
+  by transfer' (auto simp: empty_queue_rep)
+
+lemma mbuf_t_Cons_code[code]: "mbuf_t_Cons x (MBuf2_t xs) = MBuf2_t (prepend_queue x xs)"
+  by transfer' (auto simp: prepend_queue_rep)
+
+lemma mbuf_t_append_code[code]: "mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold append_queue ys xs)"
+  apply transfer'
+  subgoal for xs ys
+  proof (induction ys arbitrary: xs)
+    case (Cons y ys)
+    show ?case
+      using Cons[of "append_queue y xs"]
+      by (auto simp: append_queue_rep)
+  qed simp
+  done
+
+lemma mbuf_t_cases_code[code]: "mbuf_t_cases (MBuf2_t xs) = (case safe_hd xs of (None, xs') \<Rightarrow> (None, MBuf2_t xs')
+  | (Some x, xs') \<Rightarrow> (Some x, MBuf2_t (tl_queue xs')))"
+  by transfer' (auto simp: tl_queue_rep[unfolded is_empty_alt, OF list.discI] split: list.splits prod.splits option.splits dest: safe_hd_rep)
+
 (*<*)
 end
 (*>*)
