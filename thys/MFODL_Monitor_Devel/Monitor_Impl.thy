@@ -574,6 +574,9 @@ lemma mbuf_t_append_code[code]: "mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold a
   qed simp
   done
 
+lemma mbuf_t_is_empty_code[code]: "mbuf_t_is_empty (MBuf2_t xs) = is_empty xs"
+  by transfer' (auto simp: is_empty_alt)
+
 lemma mbuf_t_cases_code[code]: "mbuf_t_cases (MBuf2_t xs) = (case safe_hd xs of (None, xs') \<Rightarrow> (None, MBuf2_t xs')
   | (Some x, xs') \<Rightarrow> (Some x, MBuf2_t (tl_queue xs')))"
   by transfer' (auto simp: tl_queue_rep[unfolded is_empty_alt, OF list.discI] split: list.splits prod.splits option.splits dest: safe_hd_rep)
