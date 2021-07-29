@@ -213,7 +213,7 @@ lemma filter_insert:
   by auto
 
 lemma mset_conv_comm:
-  "comp_fun_commute (\<lambda>(t, m) b. case f t of None \<Rightarrow> b | Some k \<Rightarrow> replicate_mset (the_enat m) k + b)"
+  "comp_fun_commute_on UNIV (\<lambda>(t, m) b. case f t of None \<Rightarrow> b | Some k \<Rightarrow> replicate_mset (the_enat m) k + b)"
   by(unfold_locales) (auto split:option.splits)
 
 lemma mset_conv_insert_remove:
@@ -224,9 +224,9 @@ proof -
   have **: "(t, enat (n + 1)) \<notin> (M - {(t, enat n)})" using assms(3) by auto
   have ***: "(t, enat n) \<notin> (M - {(t, enat n)})" by auto
   have simp1: "mset_conv f (Set.insert (t, enat (n + 1)) (M - {(t, enat n)})) = replicate_mset (the_enat (n + 1)) (the (f t)) + mset_conv f (M - {(t, enat n)})"
-    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * **, of f] assms(2) by(auto simp add:mset_conv_def)
+    using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm _ * **, of f] assms(2) by(auto simp add:mset_conv_def)
   then have "mset_conv f (Set.insert (t, enat n) (M - {(t, enat n)})) = replicate_mset (the_enat n) (the (f t)) + mset_conv f (M - {(t, enat n)})"
-    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * ***, of f] assms(2) by(auto simp add:mset_conv_def) 
+    using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm _ * ***, of f] assms(2) by(auto simp add:mset_conv_def) 
   moreover have "Set.insert (t, enat n) (M - {(t, enat n)}) = M" using assms(1) by auto
   ultimately have "mset_conv f M = replicate_mset (the_enat n) (the (f t)) + mset_conv f (M - {(t, enat n)})" by auto
   then show ?thesis using simp1 by simp
@@ -240,9 +240,9 @@ proof -
   have **: "(t, enat n) \<notin> (M - {(t, enat (n + 1))})" using assms(3) by auto
   have ***: "(t, enat (n + 1)) \<notin> (M - {(t, enat (n + 1))})" by auto
   have simp1: "mset_conv f (Set.insert (t, enat n) (M - {(t, enat (n + 1))})) = replicate_mset (the_enat n) (the (f t)) + mset_conv f (M - {(t, enat (n + 1))})"
-    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * **, of f] assms(2) by(auto simp add:mset_conv_def)
+    using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm _ * **, of f] assms(2) by(auto simp add:mset_conv_def)
   then have "mset_conv f (Set.insert (t, enat (n + 1)) (M - {(t, enat (n + 1))})) = replicate_mset (the_enat (n + 1)) (the (f t)) + mset_conv f (M - {(t, enat (n + 1))})"
-    using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm * ***, of f] assms(2) by(auto simp add:mset_conv_def) 
+    using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm _ * ***, of f] assms(2) by(auto simp add:mset_conv_def) 
   moreover have "Set.insert (t, enat (n + 1)) (M - {(t, enat (n + 1))}) = M" using assms(1) by auto
   ultimately have "mset_conv f M = replicate_mset (the_enat (n + 1)) (the (f t)) + mset_conv f (M - {(t, enat (n + 1))})" by auto
   then show ?thesis using simp1 by auto
@@ -402,7 +402,7 @@ proof -
   have finite: "finite F" using assms(3) by (auto simp:valid_finite_mset_def)
   then have "(e, enat n) \<notin> set ?xs" using assms(4) set_sorted_list_of_set by auto
   moreover have "sorted_wrt (le_of_comp c) (sorted_list_of_set F)" 
-    using sorted_sorted_wrt[symmetric] sorted_sorted_list_of_set by(auto)
+    using sorted_sorted_list_of_set by(auto)
   ultimately obtain xs ys where split: "insort ?x ?xs = xs @ (e, enat n) # ys \<and> ?xs = xs @ ys \<and> (\<forall>k. k \<in> set xs \<longrightarrow> (lt_of_comp c) k ?x) \<and> (\<forall>k. k \<in> set ys \<longrightarrow> (lt_of_comp c) ?x k)"
     using split_insort[of ?x ?xs] by blast
   then have concat: "?xs = xs @ ys" by auto
@@ -535,7 +535,7 @@ lemma sort_remove_eq:
 proof -
   fix t l
   show "sort (del_list t l) = del_list t (sort l)"
-    by(induction l; auto simp add: insort_del_inverse) (metis insort_del_comm sorted_sort sorted_sorted_wrt)
+    by(induction l; auto simp add: insort_del_inverse) (metis insort_del_comm sorted_sort)
 qed
 
 lemma insort_remove_comm:
@@ -552,7 +552,7 @@ proof -
     then show ?case by auto
   next
     case (Cons a l)
-    then show ?case by (metis funpow_swap1 insort_del_inverse insort_eq2 insort_remove1 sorted_sorted_wrt)
+    then show ?case by (metis funpow_swap1 insort_del_inverse insort_eq2 insort_remove1)
   qed
 qed
 
@@ -599,7 +599,7 @@ next
     using sort_remove_eq by(induction l) auto
   have in_set: "t \<in> set_treelist ?removed" using bulk_remove_in_set[OF Suc(2)]
     by transfer auto
-  have sorted: "sorted_treelist ?removed" by(transfer) (simp add: sorted_sorted_wrt[symmetric])
+  have sorted: "sorted_treelist ?removed" by(transfer) simp
   have *: "i \<le> (count \<circ> mset_treelist) l t" using Suc(2) by auto
   have "t \<in> set_treelist ((insert_treelist t ^^ i) ?removed)" using bulk_insert_in_set[of t] in_set by auto
   moreover have "sorted_treelist ((insert_treelist t ^^ i) ?removed)" using sorted_bulk_insort sorted by auto
@@ -694,7 +694,7 @@ proof -
     have valid: "valid_finite_mset (Set.insert (t, enat i) F)" using x_def insert(5) by auto
     have notin: "(t, enat i) \<notin> F" using x_def insert(2) by auto
     have "mset_conv f F = mset_conv f (Set.insert x F) - replicate_mset i ?t"
-      using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of f] insert(1) insert(2)] insert(6) x_def
+      using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of f] _ insert(1) insert(2)] insert(6) x_def
       by (auto simp:mset_conv_def) fastforce
     then have "valid_list_aux' ?l_removed (mset_conv f F)" 
       using valid_list_aux_remove[OF insert(4)] by simp
@@ -712,7 +712,7 @@ proof -
       by (simp add: c_def csorted_list_of_set_def flatten_multiset_def)
     then have simp1: "map (\<lambda>a. the (f a)) (flatten_multiset (Set.insert x F)) = (insort ((the \<circ> f) t) ^^ i) (map (the \<circ> f) (flatten_multiset F))"
        using bulk_unpack_insort[OF assms(1) _ **] * by simp
-    have *: "(count \<circ> mset_treelist) l ?t \<ge> i" using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of f] insert(1) insert(2)]
+    have *: "(count \<circ> mset_treelist) l ?t \<ge> i" using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of f] _ insert(1) insert(2)]
        insert(4) insert(6) by(auto simp:x_def valid_list_aux'_def mset_conv_def) fastforce
     have simp2:"unpack (sort_treelist l) = ((insort ?t) ^^ i) (map (the \<circ> f) (flatten_multiset F))" unfolding sort_insert_remove[OF *] 
       using IH by(transfer; auto)
@@ -874,11 +874,21 @@ case 0
   then show ?case by auto
 next
   case (Suc n)
+  have *: "comp_fun_commute_on UNIV f" using commute_f by (simp add: comp_fun_commute_def')
   have aux1: "f t1 ((f t1 ^^ n) y0) = (f t1 ^^ n) (f t1 y0)" by (induction n) auto
   moreover have "f t1 ((f t2 ^^ n2) ((f t1 ^^ n) y0)) = (f t2 ^^ n2) ((f t1 ^^ n) (f t1 y0))" 
-    using aux1 commute_f comp_fun_commute.fun_left_comm[of f t1 t2] by(induction n2) auto
+    using aux1 comp_fun_commute_on.fun_left_comm[OF *, of t1 t2] by(induction n2; auto; metis)
   ultimately show ?case using Suc by auto
 qed
+
+lemma fn_comm_power: "fa \<circ> tr = tr \<circ> fr \<Longrightarrow> fa ^^ n \<circ> tr = tr \<circ> fr ^^ n"
+  apply (rule ext)
+  apply (induct n)
+   apply (auto dest: fun_cong)
+  done
+
+lemmas fn_comm_power' =
+  ext [THEN fn_comm_power, THEN fun_cong, unfolded o_def]
 
 lemma fold_flatten_multiset: 
   assumes finite_m: "finite M"
@@ -912,7 +922,7 @@ proof -
     next
       case (Cons a as)
       then show ?case 
-        using linorder.insort_key.simps[OF c_class, of "(\<lambda>x. x)"] cmp_comm[of f "the_enat m1"] 
+        using linorder.insort_key.simps[OF c_class, of "(\<lambda>x. x)"] cmp_comm[of f "the_enat m"] 
         by (auto simp:xs_def commute_f comp_fun_commute.comp_fun_commute fn_comm_power' fold_commute_apply)
     qed
     then show ?case
@@ -1206,11 +1216,11 @@ next
         using multiset_old_term_insert group_elem False n_def insert
         by(simp only: M_def old_M_def group_def old_group_def updated_data_def group_multiset_def Let_def Optimized_Agg.group_def) auto
       then have aux: "length(flatten_multiset(Set.insert (meval_trm f elem, enat n) old_M)) = length(flatten_multiset(old_M - {(meval_trm f elem, enat n)})) + n" 
-        using both_finite finite_insert finite_remove Finite_Set.comp_fun_commute.fold_insert_remove[of "\<lambda>(t, m) y. y + the_enat m" old_M 0 "(meval_trm f elem, enat n)"]
-        by (simp only: length_flatten_multiset) (metis comp_fun_commute_axioms old.prod.case the_enat.simps)
+        using both_finite finite_insert finite_remove Finite_Set.comp_fun_commute_on.fold_insert_remove[of UNIV "\<lambda>(t, m) y. y + the_enat m" "(meval_trm f elem, enat n)" old_M 0]
+        by (simp only: length_flatten_multiset) (metis case_prod_conv comp_fun_commute_on_axioms the_enat.simps top_greatest)
       have "(meval_trm f elem, enat (n + 1)) \<notin> old_M - {(meval_trm f elem, enat n)}" using n_def old_M_def by force
-      then show ?thesis using both_finite finite_remove M_insert_remove_def Finite_Set.comp_fun_commute.fold_insert[of "\<lambda>(t, m) y. y + the_enat m" "old_M - {(meval_trm f elem, enat n)}" "(meval_trm f elem, enat (n + 1))" 0]
-        by (smt (z3) add.commute add.left_commute aux1 case_prod_conv comp_fun_commute_axioms ecard_def fold_insert_remove insert_absorb length_flatten_multiset one_enat_def plus_enat_simps(1) the_enat.simps xa_def n_def)
+      then show ?thesis using both_finite finite_remove M_insert_remove_def Finite_Set.comp_fun_commute_on.fold_insert[of UNIV "\<lambda>(t, m) y. y + the_enat m" "(meval_trm f elem, enat (n + 1))" "old_M - {(meval_trm f elem, enat n)}" 0]
+        by (smt (z3) UNIV_I case_prod_conv comp_fun_commute_on.fold_rec comp_fun_commute_on_axioms length_flatten_multiset n_def subsetI the_enat.simps)
     qed
     moreover have "group = Set.insert elem old_group"
       using True insert by(auto) 
@@ -1246,7 +1256,7 @@ proof -
     obtain t i where [simp]: "x = (t, enat i)" using insert(5) by(simp add:valid_finite_mset_def) (metis surj_pair) 
     then obtain k where "g t = Some k" using insert(4) by auto
     then show ?case using length_flatten_multiset[OF *] fold_insert[OF insert(1-2)] length_eq 
-      Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of g] insert(1-2)] 
+      Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of g] _ insert(1-2)] 
       length_flatten_multiset[OF insert(1)] by(simp add:mset_conv_def)
   qed
 qed
@@ -1316,10 +1326,10 @@ proof -
           have M_single: "?M = Set.insert (meval_trm f elem, enat 1) {}"
             using multiset_new_term_insert[OF True *(1)] *(2) by (simp add: one_enat_def)
           then have valid_size: "size (int_mset_conv ?M) = 1"
-            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int]] i_def
+            using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int]] i_def
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def)
           then have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = i"
-            using M_single Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int]] i_def
+            using M_single Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int]] i_def
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def)
           then show ?thesis using valid_size valid_fold new_map_def None True lookup_update'[of _ _ m] by simp
         next
@@ -1335,10 +1345,10 @@ proof -
             have M_def: "?M = Set.insert (meval_trm f elem, 1) ?old_M" 
               using multiset_new_term_insert[OF k_def True] by simp
             then have valid_size: "size (int_mset_conv ?M) = len + 1"
-              using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(1)
+              using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def a_def(1)
               by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
             have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = sum + i"
-              using M_def Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(2)
+              using M_def Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def a_def(2)
               by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
             show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def lookup_update)
           next
@@ -1353,10 +1363,10 @@ proof -
               using mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of unpack_int] valid_unpack i_def
               by(simp add:int_mset_conv_def unpack_int_def)
             have valid_size: "size (int_mset_conv ?M) = len + 1"
-              using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(1)
+              using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def a_def(1)
               by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
             moreover have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = sum + i"
-              using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def a_def(2)
+              using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def a_def(2)
               by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
             ultimately show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def lookup_update)
           qed
@@ -1425,7 +1435,7 @@ proof -
         have M_single: "?M = Set.insert (meval_trm f elem, enat 1) {}"
           using multiset_new_term_insert[OF True *(1)] *(2) by (simp add: one_enat_def)
         then have valid_size: "size (mset_conv Some ?M) = 1"
-          using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some], of "{}" "(meval_trm f elem, enat 1)"]
+          using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some], of  "(meval_trm f elem, enat 1)"]
           by(simp add:mset_conv_def)
         then show ?thesis using valid_size new_map_def None True lookup_update'[of _ _ m] by simp
       next
@@ -1440,7 +1450,7 @@ proof -
           have M_def: "?M = Set.insert (meval_trm f elem, 1) ?old_M" 
             using multiset_new_term_insert[OF k_def True] by simp
           then have valid_size: "size (mset_conv Some ?M) = a + 1"
-            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some] finite_old_M not_in] a_def
+            using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some] _ finite_old_M not_in] a_def
             by(simp add: mset_conv_def one_enat_def)
           then show ?thesis using new_map_def Some by (simp add: k_def lookup_update)
         next
@@ -1454,7 +1464,7 @@ proof -
             using mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of Some]
             by simp
           have valid_size: "size (mset_conv Some ?M) = a + 1"
-            using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some] finite_old_M not_in] a_def
+            using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some] _ finite_old_M not_in] a_def
             by(simp add:mset_conv_def one_enat_def)
           then show ?thesis using new_map_def Some by (simp add: k_def lookup_update)
         qed
@@ -1538,8 +1548,8 @@ proof -
             using valid_before valid by(auto) (metis domIff keys_dom_lookup rev_image_eqI)+
           have "?M = Set.insert (meval_trm f elem, 1) {}" using multiset_new_term_insert[OF k_def *(1)] *(2) by auto
           then show ?thesis using None k_in new_map_def meval_def mset_treelist_insert[of s empty_treelist] mset_treelist_insert[of i empty_treelist]
-            Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int]] y0_restr
-            Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_string]]
+            Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int]] y0_restr
+            Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_string]]
             by(auto simp:mset_treelist_empty k_def lookup_update valid_list_aux_def valid_list_aux'_def int_mset_conv_def 
                   unpack_int_def the_enat_one type_restr_mset_def str_mset_conv_def unpack_string_def type_restr_def mset_conv_def
                   split:event_data.splits list_aux.splits type.splits)
@@ -1554,8 +1564,8 @@ proof -
             have mset_rel: "?M = Set.insert (meval_trm f elem, 1) ?old_M"
               using multiset_new_term_insert[OF k_def True] by auto
             then show ?thesis using Some k_in new_map_def meval_def valid_old list_elem_restr mset_treelist_insert[of i] mset_treelist_insert[of s]
-                Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] y0_restr
-                Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_string] finite_old_M not_in]
+                Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] y0_restr
+                Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_string] _ finite_old_M not_in]
               by(auto simp:k_def lookup_update valid_list_aux_def valid_list_aux'_def int_mset_conv_def insort_mset
                   unpack_int_def the_enat_one type_restr_mset_def str_mset_conv_def unpack_string_def type_restr_def mset_conv_def
                   split:list_aux.splits event_data.splits type.splits) (* Slow *)
@@ -1833,11 +1843,11 @@ proof -
           then have not_in: "(meval_trm f elem, 1) \<notin> ?M" by auto
           have mset_insert: "?old_M = Set.insert (meval_trm f elem, 1) ?M" using in_M mset_eq by auto
           then have mset_conv_eq: "int_mset_conv ?old_M = add_mset i (int_mset_conv ?M)"
-            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_M not_in] i_def
+            using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_M not_in] i_def
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
           have "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
           moreover have "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
-            using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M _] i_def vals(2)
+            using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M _] i_def vals(2)
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
           ultimately show ?thesis using new_map_def k_def k_in by(auto) (metis * Pair_inject local.lookup_def lookup_update option.inject)
         next
@@ -1854,7 +1864,7 @@ proof -
             using mset_conv_insert_remove'[OF n'_def _ not_in finite_old_M, of unpack_int] i_def by(simp add:int_mset_conv_def unpack_int_def) 
           have "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
           moreover have "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
-            using mset_conv_eq Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_old_M not_in] i_def vals(2)
+            using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def vals(2)
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
           ultimately show ?thesis using new_map_def k_def k_in by(auto) (metis "*" Pair_inject local.lookup_def lookup_update option.inject)
         qed
@@ -1964,7 +1974,7 @@ proof -
           then have not_in: "(meval_trm f elem, 1) \<notin> ?M" by auto
           have mset_insert: "?old_M = Set.insert (meval_trm f elem, 1) ?M" using in_M mset_eq by auto
           then have mset_conv_eq: "mset_conv Some ?old_M = add_mset (meval_trm f elem) (mset_conv Some ?M)"
-            using Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of Some] finite_M not_in] 
+            using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some] _ finite_M not_in] 
             by(simp add:mset_conv_def one_enat_def)
           have "size (mset_conv Some ?M) = len - 1" using mset_conv_eq vals(1) by simp
           then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def lookup_update option.inject)
@@ -2197,7 +2207,7 @@ proof -
             case (LInt li)
             then obtain i where i_def: "meval_trm f elem = EInt i" using restr by auto
             then have *: "i \<in> set_treelist li" using elem_in_treelist LInt by auto
-            have mset_conv_rel: "int_mset_conv ?M = int_mset_conv ?old_M - {#i#}" using mset_insert Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] finite_M not_in] i_def enat_one
+            have mset_conv_rel: "int_mset_conv ?M = int_mset_conv ?old_M - {#i#}" using mset_insert Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_M not_in] i_def enat_one
               by(auto simp:int_mset_conv_def mset_conv_def unpack_int_def) 
             show ?thesis using mset_remove_treelist[of i li] vals
               unfolding valid_list_aux_def valid_list_aux'_def leq[symmetric] LInt type_restr_mset_def mset_conv_rel i_def laux_rel
@@ -2206,7 +2216,7 @@ proof -
             case (LString ls)
             then obtain i where i_def: "meval_trm f elem = EString i" using restr meval_def by auto
             then have *: "i \<in> set_treelist ls" using elem_in_treelist LString by auto
-            have mset_conv_rel: "str_mset_conv ?M = str_mset_conv ?old_M - {#i#}" using mset_insert Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_string] finite_M not_in] i_def enat_one
+            have mset_conv_rel: "str_mset_conv ?M = str_mset_conv ?old_M - {#i#}" using mset_insert Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_string] _ finite_M not_in] i_def enat_one
               by(auto simp:str_mset_conv_def mset_conv_def unpack_string_def) 
             show ?thesis using mset_remove_treelist[of i ls] vals
               unfolding valid_list_aux_def valid_list_aux'_def leq[symmetric] LString type_restr_mset_def mset_conv_rel i_def laux_rel
@@ -2429,7 +2439,7 @@ proof -
   have finite: "finite s" using assms(2) by (simp add:valid_finite_mset_def)
   have int: "set (flatten_multiset s) \<subseteq> range EInt" using flatten_multiset_range[of s EInt] assms(1) 
       finite by auto
-  have aux: "comp_fun_commute (\<lambda>(t, m). plus' t ^^ the_enat m)" using cmp_comm[OF comp_fun_commute_plus']
+  have aux: "comp_fun_commute_on UNIV (\<lambda>(t, m). plus' t ^^ the_enat m)" using cmp_comm[OF comp_fun_commute_plus']
     by unfold_locales auto
   show ?thesis using finite assms(1-2) int
   proof(induction s)
@@ -2456,8 +2466,8 @@ proof -
     then show ?case using foldl_eint_equival[OF insert(6)] insert(1) x_def
       foldl_eint_equival[OF ***]
       foldl_flatten_multiset[OF _ comp_fun_commute_plus' comm_plus'] 
-      Finite_Set.comp_fun_commute.fold_insert[OF aux insert(1-2)] insert.IH[OF ** * ***, symmetric]
-      Finite_Set.comp_fun_commute.fold_insert[OF mset_conv_comm[of unpack_int] insert(1-2)]
+      Finite_Set.comp_fun_commute_on.fold_insert[OF aux _ insert(1-2)] insert.IH[OF ** * ***, symmetric]
+      Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ insert(1-2)]
       by(simp add:int_mset_conv_def mset_conv_def unpack_int_def)
   qed
 qed
@@ -2569,9 +2579,10 @@ proof(cases l)
   have "set (x # xs) \<subseteq> range EInt" using assms(1) assms(3) LInt flatten_multiset_range 
     by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
   then have type_restr: "x \<in> range EInt" "set xs \<subseteq> range EInt" by auto
-  have "sorted_treelist (sort_treelist x1)" by(transfer) (metis sorted_sort sorted_sorted_wrt)
+  have "sorted_treelist (sort_treelist x1)" by(transfer) (metis sorted_sort)
   moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_int a)) (x # xs) = x' # xs'" "x' = the (unpack_int x)" "xs' = map (\<lambda>a. the (unpack_int a)) xs" by force
-  ultimately have *: "sorted (x' # xs')" using sort_eq[unfolded assms(3)] by(transfer; auto)
+ have "sorted (map (\<lambda>a. the (unpack_int a)) (x # xs))" unfolding sort_eq[unfolded assms(3), symmetric] by (transfer; simp)
+  then have *: "sorted (x' # xs')" unfolding unpack_def(1)[symmetric] unpack_def(2-3) by auto
   show ?thesis unfolding LInt get_edata_list.simps 
     using sort_eq[unfolded assms(3) unpack_def(1)] sorted_foldl_min[OF *, symmetric]  unpack_foldl_min_eq_int[OF type_restr] unfolding unpack_def(2-3) by transfer auto
     
@@ -2587,9 +2598,10 @@ next
   have "set (x # xs) \<subseteq> range EString" using assms(1) assms(3) LString flatten_multiset_range 
     by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
   then have type_restr: "x \<in> range EString" "set xs \<subseteq> range EString" by auto
-  have "sorted_treelist (sort_treelist x2)" by(transfer) (metis sorted_sort sorted_sorted_wrt)
+  have "sorted_treelist (sort_treelist x2)" by(transfer) (metis sorted_sort)
   moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_string a)) (x # xs) = x' # xs'" "x' = the (unpack_string x)" "xs' = map (\<lambda>a. the (unpack_string a)) xs" by force
-  ultimately have *: "sorted (x' # xs')" using sort_eq[unfolded assms(3)] by(transfer; auto)
+  have "sorted (map (\<lambda>a. the (unpack_string a)) (x # xs))" unfolding sort_eq[unfolded assms(3), symmetric] by (transfer; simp)
+  then have *: "sorted (x' # xs')" unfolding unpack_def(1)[symmetric] unpack_def(2-3) by auto
   show ?thesis unfolding LString get_edata_list.simps 
     using sort_eq[unfolded assms(3) unpack_def(1)] sorted_foldl_min[OF *, symmetric]  unpack_foldl_min_eq_str[OF type_restr] unfolding unpack_def(2-3) by transfer auto
 qed
@@ -2617,9 +2629,10 @@ proof(cases l)
   have "set (x # xs) \<subseteq> range EInt" using assms(1) assms(3) LInt flatten_multiset_range 
     by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
   then have type_restr: "x \<in> range EInt" "set xs \<subseteq> range EInt" by auto
-  have "sorted_treelist (sort_treelist x1)" by(transfer) (metis sorted_sort sorted_sorted_wrt)
+  have "sorted_treelist (sort_treelist x1)" by(transfer) (metis sorted_sort)
   moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_int a)) (x # xs) = x' # xs'" "x' = the (unpack_int x)" "xs' = map (\<lambda>a. the (unpack_int a)) xs" by force
-  ultimately have *: "sorted (x' # xs')" using sort_eq[unfolded assms(3)] by(transfer; auto)
+  have "sorted (map (\<lambda>a. the (unpack_int a)) (x # xs))" unfolding sort_eq[unfolded assms(3), symmetric] by (transfer; simp)
+  then have *: "sorted (x' # xs')" unfolding unpack_def(1)[symmetric] unpack_def(2-3) by auto
   show ?thesis unfolding LInt get_edata_list.simps 
     using sort_eq[unfolded assms(3) unpack_def(1)] sorted_foldl_max[OF *, symmetric]  unpack_foldl_max_eq_int[OF type_restr] unfolding unpack_def(2-3) by transfer auto
 next
@@ -2634,9 +2647,10 @@ next
   have "set (x # xs) \<subseteq> range EString" using assms(1) assms(3) LString flatten_multiset_range 
     by(simp add: valid_list_aux_def type_restr_mset_def) (metis (no_types, lifting) assms(2) finite_filter finite_imageI flatten_multiset_range insert_subset list.simps(15))
   then have type_restr: "x \<in> range EString" "set xs \<subseteq> range EString" by auto
-  have "sorted_treelist (sort_treelist x2)" by(transfer) (metis sorted_sort sorted_sorted_wrt)
+  have "sorted_treelist (sort_treelist x2)" by(transfer) (metis sorted_sort)
   moreover obtain x' xs' where unpack_def: "map (\<lambda>a. the (unpack_string a)) (x # xs) = x' # xs'" "x' = the (unpack_string x)" "xs' = map (\<lambda>a. the (unpack_string a)) xs" by force
-  ultimately have *: "sorted (x' # xs')" using sort_eq[unfolded assms(3)] by(transfer; auto)
+  have "sorted (map (\<lambda>a. the (unpack_string a)) (x # xs))" unfolding sort_eq[unfolded assms(3), symmetric] by (transfer; simp)
+  then have *: "sorted (x' # xs')" unfolding unpack_def(1)[symmetric] unpack_def(2-3) by auto
   show ?thesis unfolding LString get_edata_list.simps 
     using sort_eq[unfolded assms(3) unpack_def(1)] sorted_foldl_max[OF *, symmetric]  unpack_foldl_max_eq_str[OF type_restr] unfolding unpack_def(2-3) by transfer auto
 qed

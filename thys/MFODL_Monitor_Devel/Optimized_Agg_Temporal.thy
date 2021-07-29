@@ -497,9 +497,9 @@ fun eval_step_mmauaux :: "args \<Rightarrow> mmauaux \<Rightarrow> mmauaux" wher
       Some m \<Rightarrow> 
         let I = args_ivl args;
         tss' = tl_queue tss';
-        ts' = case safe_hd tss' of 
-              (Some ts', tss'') \<Rightarrow> ts' |
-              _ \<Rightarrow> 0;
+        (ts', tss'') = case safe_hd tss' of 
+              (Some ts', tss'') \<Rightarrow> (ts', tss'') |
+              (None, tss'') \<Rightarrow> (0, tss'');
         (tables, taken) = takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables;
         to_del_approx = \<Union>(set (map fst taken));
         to_del = Set.filter (\<lambda>x. case Mapping.lookup m x of Some tstp \<Rightarrow> (\<not>ts_tp_lt I ts' (tp - len + 1) tstp) |
@@ -516,7 +516,7 @@ fun eval_step_mmauaux :: "args \<Rightarrow> mmauaux \<Rightarrow> mmauaux" wher
                                None \<Rightarrow> eval_args_agg args (Mapping.keys m);
         to_ins = Mapping.filter (\<lambda>k v. Mapping.lookup m'' k = None) to_ins;
         aggaux = (if len = 1 then init_maggaux' aggargs else insert_maggaux' aggargs (Mapping.keys to_ins) (delete_maggaux' aggargs to_del aggaux)) in
-        ((tp, tss', tables, len - 1, maskL, maskR, a1_map, a2_map, tstp_map,
+        ((tp, tss'', tables, len - 1, maskL, maskR, a1_map, a2_map, tstp_map,
         T # done, done_length + 1), aggaux))))"
 
 fun shift_mmauaux :: "args \<Rightarrow> ts \<Rightarrow> mmauaux \<Rightarrow> mmauaux" where
@@ -617,8 +617,12 @@ proof -
   then obtain tp' tss''' tables' len' maskL' maskR' a1_map' a2_map' tstp_map' done' done_length' where split:
     "muaux' = (tp', tss''', tables', len', maskL', maskR', a1_map', a2_map', tstp_map',  done', done_length')" using lin_ts_mmuaux.cases by (smt (verit, ccfv_SIG) length_mmuaux.elims)
   define I where "I = args_ivl args"
-  define ts' where "ts' = (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts' |
-                                                           _ \<Rightarrow> 0)"
+  obtain ts' tss'''' where ts'_tss''''_def: "(case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> (ts', tss'') | (None, tss'') \<Rightarrow> (0, tss'')) = (ts', tss'''')"
+    by fastforce
+  then have ts'_def: "ts' = (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts' | (None, tss'') \<Rightarrow> 0)" by (auto split: prod.splits option.splits)
+  have lin_tss''': "linearize tss'''' = linearize (tl_queue tss')"
+    using ts'_tss''''_def safe_hd_rep[of "tl_queue tss'"]
+    by (auto split: prod.splits option.splits)
   define taken where "taken = snd (takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables)"
   define tables' where "tables' = fst (takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables)"
   have takedrop_split: "takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables = (tables', taken)" unfolding tables'_def taken_def by auto
@@ -680,7 +684,8 @@ proof -
     then have a2_map_split: "Mapping.lookup  a2_map' (tp - len + 1) = (if len = 1 then Some Mapping.empty else Some (Mapping.combine max_tstp ?m' to_ins))" 
       using takedrop_split m'_def m_def split updated_def safe_hd_eq aargs lookup_delete[of _ "Mapping.update tp Mapping.empty a2_map"] lookup_update'[of _ _ a2_map]
       lookup_delete[of "tp - len" "Mapping.update (tp - len + 1) (Mapping.combine max_tstp m'' m') a2_map" "tp - len + 1"]
-      unfolding m''_def to_del_def to_del_approx_def to_ins_def I_def ts'_def by(auto simp del: takedropWhile_queue.simps)
+      unfolding m''_def to_del_def to_del_approx_def to_ins_def I_def ts'_def 
+      by(auto simp del: takedropWhile_queue.simps split:prod.splits) (simp split:option.splits)
     let ?to_ins = "Mapping.filter (\<lambda>k v. Mapping.lookup m'' k = None) to_ins"
     let ?aggaux' = "if len = 1 then init_maggaux' aggargs else insert_maggaux' aggargs (Mapping.keys ?to_ins) (delete_maggaux' aggargs to_del aggaux)"
     have *: "valid_maggaux' aggargs ?aggaux' (Mapping.keys (the (Mapping.lookup a2_map' (tp - len + 1))))"
@@ -703,9 +708,20 @@ proof -
           unfolding m''_def a2_map_split by(auto simp del: insert_maggaux.simps split:prod.splits)
       qed
     qed
-    moreover have "tp - len + 1 = tp - (len - 1)" using len_pos len_tp by force
-    ultimately show ?thesis using T_eq T_def aargs m''_def to_ins_def to_del_def to_del_approx_def aux takedrop_split updated_def valid_old split aargs safe_hd_eq m_def m'_def  unfolding I_def ts'_def 
-      by(auto simp del:valid_mmuaux'.simps takedropWhile_queue.simps)   
+    have "tp - len + 1 = tp - (len - 1)" using len_pos len_tp by force
+    then have new_len: "tp' - len' = Suc (tp - len)" using updated_def[unfolded eval_step_mmauaux.simps safe_hd_eq aargs m_def split]
+      by(auto split:prod.splits) 
+    have aux_eq: "auxs' = ?aggaux'" using updated_def[unfolded eval_step_mmauaux.simps safe_hd_eq aargs m_def] 
+        m''_def to_ins_def to_del_def I_def ts'_tss''''_def to_del_approx_def taken_def 
+      by(auto split:prod.splits) 
+    have "(case eval_step_mmauaux args (?muaux, aggaux) of (mmaux', auxs') \<Rightarrow>
+       mmaux' = eval_step_mmuaux args ?muaux)" unfolding updated_def[symmetric] using muaux'_def by auto
+    moreover have "lin_ts_mmauaux (eval_step_mmauaux args (?muaux, aggaux)) = tss''" 
+      using valid_old unfolding updated_def[symmetric] split by auto
+    moreover have "valid_mmauaux' args cur dt (eval_step_mmauaux args (?muaux, aggaux)) auxlist"
+      using valid_old new_len *[unfolded aux_eq[symmetric]] unfolding updated_def[symmetric] split valid_mmauaux'.simps aargs
+      by(simp del:valid_mmuaux'.simps)
+    ultimately show ?thesis by auto
   qed
 qed
 

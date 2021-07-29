@@ -764,7 +764,7 @@ qed
 lemma sorted_wrt_sorted_insort:
   assumes "sorted xs"
   shows "sorted (insort a (xs))"
-  using Sorting.sorted_insort[of a xs] assms by (simp add: sorted_sorted_wrt)
+  using Sorting.sorted_insort[of a xs] assms by simp
 
 lemma sorted_wrt_sorted_delete:
   assumes "sorted xs"
@@ -842,7 +842,7 @@ next
       case empty then show ?case by auto
     next
       case (add x s)
-      then show ?case using sorted_insort by (auto simp:insort_eq[symmetric] sorted_sorted_wrt)
+      then show ?case using sorted_insort by (auto simp:insort_eq[symmetric])
     qed
     then show ?thesis using add insort_del_comm False by(auto)
   qed

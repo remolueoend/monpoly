@@ -1693,9 +1693,9 @@ fun eval_step_mmuaux :: "args \<Rightarrow> event_data mmuaux \<Rightarrow> even
         T = Mapping.keys m;
         T = eval_args_agg args T;
         tss' = tl_queue tss';
-        ts' = case safe_hd tss' of 
-              (Some ts', tss'') \<Rightarrow> ts' |
-              _ \<Rightarrow> 0;
+        (ts', tss'') = case safe_hd tss' of 
+              (Some ts', tss'') \<Rightarrow> (ts', tss'') |
+              (None, tss'') \<Rightarrow> (0, tss'');
         (tables, taken) = takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables;
         to_del_approx = \<Union>(set (map fst taken));
         to_del = Set.filter (\<lambda>x. case Mapping.lookup m x of Some tstp \<Rightarrow> (\<not>ts_tp_lt I ts' (tp - len + 1) tstp) |
@@ -1707,7 +1707,7 @@ fun eval_step_mmuaux :: "args \<Rightarrow> event_data mmuaux \<Rightarrow> even
           Mapping.combine (\<lambda>tstp tstp'. max_tstp tstp tstp') m'' m') a2_map;
         a2_map = Mapping.delete (tp - len) a2_map;
         tstp_map = Mapping.delete (tp - len) tstp_map  in
-        (tp, tss', tables, len - 1, maskL, maskR, a1_map, a2_map, tstp_map,
+        (tp, tss'', tables, len - 1, maskL, maskR, a1_map, a2_map, tstp_map,
         T # done, done_length + 1)))"
 
 lemma Mapping_update_keys: "Mapping.keys (Mapping.update a b m) = Mapping.keys m \<union> {a}"
@@ -1738,7 +1738,7 @@ lemma Mapping_lookup_update: "Mapping.lookup (Mapping.update k v m) k' =
   by transfer auto
 
 lemma hd_le_set: "sorted xs \<Longrightarrow> xs \<noteq> [] \<Longrightarrow> x \<in> set xs \<Longrightarrow> hd xs \<le> x"
-  by (metis eq_iff list.sel(1) set_ConsD sorted.elims(2))
+  by (metis eq_refl list.sel(1) set_ConsD sorted_wrt.elims(2))
 
 lemma Mapping_lookup_combineE: "Mapping.lookup (Mapping.combine f m m') k = Some v \<Longrightarrow>
   (Mapping.lookup m k = Some v \<Longrightarrow> P) \<Longrightarrow>
@@ -1873,10 +1873,15 @@ proof -
     using Mapping_keys_intro by fastforce+
   have m'_inst_isl: "\<And>xs tstp. Mapping.lookup m' xs = Some tstp \<Longrightarrow> isl tstp \<longleftrightarrow> \<not> memL I 0"
     using m'_inst(2) by fastforce
+  obtain ts' tss''' where ts'_tss'''_def: "(case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> (ts', tss'') | (None, tss'') \<Rightarrow> (0, tss'')) = (ts', tss''')"
+    by fastforce
+  then have ts'_def: "ts' = (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts' | (None, tss'') \<Rightarrow> 0)"
+    by (auto split: prod.splits option.splits)
+  have lin_tss''': "linearize tss''' = linearize (tl_queue tss')"
+    using ts'_tss'''_def safe_hd_rep[of "tl_queue tss'"]
+    by (auto split: prod.splits option.splits)
   define T where "T = Mapping.keys m"
   define T_agg where "T_agg = eval_args_agg args T"
-  define ts' where "ts' = (case safe_hd (tl_queue tss') of (Some ts', tss'') \<Rightarrow> ts' |
-                                                           _ \<Rightarrow> 0)"
   define tables' where "tables' = fst (takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables)"
   define taken where "taken = snd (takedropWhile_queue (\<lambda>(table, tstp). \<not> ts_tp_lt I ts' (tp - len + 1) tstp) tables)"
   have tables_split: "linearize tables = taken @ (linearize tables')" 
@@ -2342,12 +2347,12 @@ proof -
   qed
   ultimately have m_eq: "m'' = m_del" unfolding m''_def m_del_def by auto
   have eval_step_mmuaux_eq: "eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map,
-    done, done_length) = (tp, tl_queue tss', tables', len - 1,  maskL, maskR, a1_map, a2_map'', tstp_map',
+    done, done_length) = (tp, tss''', tables', len - 1,  maskL, maskR, a1_map, a2_map'', tstp_map',
     T_agg # done, done_length + 1)"
-    using safe_hd_eq m_def m'_def T_def mc_def a2_map'_def a2_map''_def I_def tstp_map'_def ts'_def m_eq[unfolded m_del_def to_del_def to_del_approx_def taken_def] tables'_def T_agg_def
+    using safe_hd_eq m_def m'_def T_def mc_def a2_map'_def a2_map''_def I_def tstp_map'_def ts'_def m_eq[unfolded m_del_def to_del_def to_del_approx_def taken_def] tables'_def T_agg_def ts'_tss'''_def[symmetric]
     by (auto simp add: Let_def split:prod.splits) 
   have lin_ts: "lin_ts_mmuaux (eval_step_mmuaux args aux) = tss''"
-    using lin_tss_Cons assms(2) unfolding aux_def eval_step_mmuaux_eq by auto
+    using lin_tss_Cons assms(2) lin_tss''' unfolding aux_def eval_step_mmuaux_eq by auto
   have lookup_old: "Mapping.lookup a2_map tp = Some Mapping.empty" using valid_before by auto
   have len_not_0: "len \<noteq> 0" using valid_before using lin_tss_not_Nil by force
   then have still_empty: "Mapping.lookup a2_map'' tp = Some Mapping.empty" 
@@ -2545,7 +2550,7 @@ proof -
     using valid_before a2_map''_keys sorted_tl list_all' lookup'' list_all2'' list_all'' lin_ts still_empty sorted_tables' isl_tables' valid_tables' valid_table_restr
     unfolding eval_step_mmuaux_eq valid_mmuaux'.simps tl_aux_def aux_def I_def n_def R_def pos_def
     using lin_tss_not_Nil safe_hd_eq len_pos Suc_diff_le
-    by(auto simp add: list.set_sel(2) lin_tss' tl_queue_rep[OF tss'_not_empty] min_auxlist_done)
+    by(auto simp add: list.set_sel(2) lin_tss' lin_tss''' tl_queue_rep[OF tss'_not_empty] min_auxlist_done)
 qed
 
 lemma done_empty_valid_mmuaux'_intro:
