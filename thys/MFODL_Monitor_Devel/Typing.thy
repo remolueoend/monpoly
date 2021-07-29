@@ -2027,32 +2027,26 @@ shows "resultless_trm (TCst \<circ> E'') E'  (TCst type'') type'"
 
 
 lemma resless_wty_num: assumes " resultless_trm (TCst \<circ> E'') E (TCst typ'') type"
-    "Some (newt, oldt) = min_type (TNum 0) (new_type_symbol type)" "typ'' \<in> numeric_ty "
+    "Some (newt, oldt) = min_type (x) (new_type_symbol type)" "case x of TNum 0 \<Rightarrow> typ'' \<in> numeric_ty | TCst t \<Rightarrow> t = typ'' | _ \<Rightarrow> False"
   shows  "resultless_trm (TCst \<circ> E'') (update_env (newt, oldt) (new_type_symbol \<circ> E)) (TCst typ'') newt"
 proof -
   have newtype_E: "resultless_trm (TCst \<circ> E'') (new_type_symbol \<circ> E) (TCst typ'') (new_type_symbol type)" apply (rule resultless_trm_trans[where ?E'=E]) 
     using assms(1) resless_newtype(2) by auto
   then obtain f where f_def: "wf_f f \<and> TCst \<circ> E'' = f \<circ>  new_type_symbol \<circ> E \<and> TCst typ'' = f  (new_type_symbol type)"  unfolding resultless_trm_def  by (auto simp add: comp_def)
   define g where g_def: "g = (\<lambda>x. if x = newt then TCst typ'' else f x)"
-  show ?thesis using assms(2-3) f_def newtype_E apply (auto simp add: resultless_trm_def) apply (rule exI[of _ g])
-   apply (auto simp add: wf_f_def g_def) 
-    apply (metis min_consistent tysym.distinct(5))
-     apply (metis tysym.simps(12)) apply (rule ext) subgoal for fa x
-      apply (auto simp add: update_env_def new_type_symbol_def comp_def split:if_splits tysym.splits)  
-      apply (metis tysym.simps(10)) 
-      apply (metis tysym.simps(11)) 
-      apply (metis tysym.simps(10))
-      apply (metis tysym.simps(11)) 
-      apply (metis min_consistent tysym.distinct(1)) 
+  show ?thesis using assms(2-3) f_def  apply (auto simp add: resultless_trm_def) apply (rule exI[of _ g])
+   apply (auto simp add: wf_f_def g_def split: tysym.splits nat.splits) sorry
+    (*apply (metis min_consistent tysym.distinct(5))
+     apply (metis tysym.simps(12)) apply (rule ext) subgoal for  x
+       apply (auto simp add: update_env_def new_type_symbol_def comp_def split:if_splits tysym.splits)  
+      apply (metis min_consistent tysym.distinct(1))
             apply (metis min_consistent tysym.distinct(1))
-           apply (metis tysym.simps(10))
       apply (metis Suc_neq_Zero min_consistent tysym.inject(2)) 
          apply (metis Suc_neq_Zero min_consistent tysym.inject(2))
-      apply (metis tysym.simps(11)) 
       apply (metis min_consistent tysym.distinct(5) tysym.inject(3)) 
-      by (metis min_consistent tysym.distinct(5) tysym.inject(3)) done
+      by (metis min_consistent tysym.distinct(5) tysym.inject(3)) done *)
 
-qed
+qed 
 
 lemma  assumes " resultless_trm (TCst \<circ> E'') E (TCst TInt) type"
     "Some (newt, oldt) = min_type (TCst TInt) (new_type_symbol type)" 
