@@ -1,7 +1,6 @@
 chapter AFP
 
 session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
-  options [timeout = 1200]
   sessions
     IEEE_Floating_Point
     Generic_Join_Devel

@@ -1091,14 +1091,38 @@ qed simp
 fun mbufn_add :: "event_data table list list \<Rightarrow> event_data mbufn \<Rightarrow> event_data mbufn" where
   "mbufn_add xs' xs = List.map2 (@@) xs xs'"
 
+lemma size_snd_mbuf_t_cases: "\<not> mbuf_t_is_empty a \<Longrightarrow> size (snd (mbuf_t_cases a)) < size a"
+  by transfer (auto split: list.splits)
+
+lemma size_list_snd_mbuf_t_cases: assumes "buf \<noteq> []" "\<And>x. x \<in> set buf \<Longrightarrow> \<not> mbuf_t_is_empty x"
+  shows "size_list (\<lambda>x. size (snd (mbuf_t_cases x))) buf < size_list size buf"
+  using assms
+proof (induction buf)
+  case IH: (Cons a buf)
+  show ?case
+  proof (cases buf)
+    case Nil
+    show ?thesis
+      using IH(3) size_snd_mbuf_t_cases
+      by (auto simp: Nil)
+  next
+    case (Cons a' buf')
+    have "size_list (\<lambda>x. size (snd (mbuf_t_cases x))) buf < size_list size buf"
+      using IH(1,3)
+      by (auto simp: Cons)
+    then show ?thesis
+      using IH(3) size_snd_mbuf_t_cases
+      by force
+  qed
+qed auto
+
 function mbufn_take :: "(event_data table list \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow> event_data mbufn \<Rightarrow> 'b \<times> event_data mbufn" where
   "mbufn_take f z buf = (if buf = [] \<or> (\<exists>x \<in> set buf. mbuf_t_is_empty x) then (z, buf)
     else mbufn_take f (f (map (the \<circ> fst \<circ> mbuf_t_cases) buf) z) (map (snd \<circ> mbuf_t_cases) buf))"
   by pat_completeness auto
 termination
-  apply (relation "measure (\<lambda>(_, _, buf). size_list size buf)")
-   apply   (auto simp: comp_def Suc_le_eq size_list_length_diff1)
-  sorry
+  using size_list_snd_mbuf_t_cases
+  by (relation "measure (\<lambda>(_, _, buf). size_list size buf)") (auto simp: comp_def Suc_le_eq size_list_length_diff1)
 
 fun mbufnt_take :: "(event_data table list \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow>
     'b \<Rightarrow> event_data mbufn \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbufn \<times> ts list" where
@@ -6218,11 +6242,30 @@ function Rep_mbufn_take :: "(event_data table list \<Rightarrow> 'b \<Rightarrow
 termination by (relation "measure (\<lambda>(_, _, buf). size_list length buf)")
     (auto simp: comp_def Suc_le_eq size_list_length_diff1)
 
+lemma mbuf_t_is_empty_in_set: "[] \<in> set (map Rep_mbuf_t buf) \<longleftrightarrow> (\<exists>x \<in> set buf. mbuf_t_is_empty x)"
+  by transfer auto
+
+lemma hd_Rep_mbuf_t:
+  assumes "\<And>x. x \<in> set buf \<Longrightarrow> \<not> mbuf_t_is_empty x"
+  shows "map (hd \<circ> Rep_mbuf_t) buf = map (the \<circ> fst \<circ> mbuf_t_cases) buf"
+  using assms
+  by transfer (auto split: list.splits)
+
+lemma tl_Rep_mbuf_t:
+  assumes "\<And>x. x \<in> set buf \<Longrightarrow> \<not> mbuf_t_is_empty x"
+  shows "map (tl \<circ> Rep_mbuf_t) buf = map Rep_mbuf_t (map (snd \<circ> mbuf_t_cases) buf)"
+  using assms
+  by transfer (auto split: list.splits)
+
 lemma Rep_mbufn_take: "mbufn_take f z buf = (z', buf') \<Longrightarrow>
   Rep_mbufn_take f z (map Rep_mbuf_t buf) = (z', map Rep_mbuf_t buf')"
-  apply (induction f z buf arbitrary: z' buf' rule: mbufn_take.induct)
-  apply (auto simp del: Rep_mbufn_take.simps mbufn_take.simps)
-  sorry
+proof (induction f z buf arbitrary: z' buf' rule: mbufn_take.induct)
+  case (1 f z buf)
+  show ?case
+    using 1(1,2)
+    unfolding mbufn_take.simps[of _ _ buf] Rep_mbufn_take.simps[of _ _ "map Rep_mbuf_t buf"] mbuf_t_is_empty_in_set map_is_Nil_conv
+    by (auto simp del: Rep_mbufn_take.simps mbufn_take.simps simp: hd_Rep_mbuf_t tl_Rep_mbuf_t split: if_splits)
+qed
 
 lemma Rep_wf_mbufn_take:
   assumes "Rep_mbufn_take f z buf = (z', buf')"
@@ -6310,7 +6353,13 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: Rep_mbufnt_take.ind
 qed
 
 lemma Rep_mbufnt_take: "mbufnt_take f z buf nts = (z', buf', nts') \<Longrightarrow>  Rep_mbufnt_take f z (map Rep_mbuf_t buf) nts = (z', map Rep_mbuf_t buf', nts')"
-  sorry
+proof (induction f z buf nts arbitrary: z' buf' nts' rule: mbufnt_take.induct)
+  case (1 f z buf)
+  show ?case
+    using 1(1,2)
+    unfolding mbufnt_take.simps[of _ _ buf] Rep_mbufnt_take.simps[of _ _ "map Rep_mbuf_t buf"] mbuf_t_is_empty_in_set map_is_Nil_conv
+    by (auto simp del: Rep_mbufnt_take.simps mbufnt_take.simps simp: hd_Rep_mbuf_t tl_Rep_mbuf_t split: if_splits)
+qed
 
 lemma mbufnt_take_eqD:
   assumes "mbufnt_take f z buf nts = (z', buf', nts')"
@@ -6450,14 +6499,11 @@ proof (induction f z buf nts arbitrary: i z' buf' nts' rule: Rep_mbufnt_take.ind
     by (fastforce simp: Mini_def list_all3_Cons neq_Nil_conv)
   with 1(2-7) list_all2_hdD[OF 1(4)] show ?case
     unfolding Rep_wf_mbufn_def using Rep_wf_mbufn_in_set_Mini[OF 1(3)] Rep_wf_mbufn_notin_set[OF 1(3)]
-    sorry
-(*
-    apply (subst (asm) Rep_mbufnt_take.simps)
-    apply (auto simp add: Mini_def list.rel_map Suc_le_eq
+    by (subst (asm) Rep_mbufnt_take.simps) (auto simp add: Mini_def list.rel_map Suc_le_eq
+        simp del: Rep_mbufnt_take.simps
         elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated]
         list_all3_mono_strong[THEN list_all3_list_all2I[of _ _ js]] list_all2_hdD
         dest!: 1(1)[rotated, OF _ Rep_wf_mbufn_map_tl[OF 1(3)] * _ 1(7)] split: prod.split if_splits)
-*)
 qed
 
 lemma mbufnt_take_induct[consumes 5, case_names base step]:
