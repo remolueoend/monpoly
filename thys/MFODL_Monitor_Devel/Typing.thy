@@ -1755,12 +1755,13 @@ definition update_env :: "tysym \<times> tysym \<Rightarrow> tysenv \<Rightarrow
 
 (* takes two types as input, checks if there's no clash, returns updated env and the more specific type*)
 definition clash_propagate :: "tysym \<Rightarrow> tysym \<Rightarrow> tysenv \<Rightarrow> (tysenv*tysym) option" where
-"clash_propagate t1 t2 E = (if type_clash t1 t2 then None else 
-  (let (told,tnew) = if tyless t1 t2 then (t2,t1) else (t1,t2) in 
-    Some ((\<lambda>v. if E v = told then tnew else E v), tnew)))"
+"clash_propagate t1 t2 E = (case min_type t1 t2 of Some (newt,oldt) \<Rightarrow> Some ((update_env (newt,oldt) E),newt)| None \<Rightarrow> None ) "
 
 definition clash_propagate2 :: "tysym \<Rightarrow> tysym \<Rightarrow> tysenv \<Rightarrow> (tysenv*tysym) option" where
 "clash_propagate2 t1 t2 E = map_option  (\<lambda>x . (update_env x E, fst x)) (min_type t1 t2)"
+
+lemma clash_prop_alt: "clash_propagate2 t1 t2 E = clash_propagate t1 t2 E"
+  by (auto simp add: clash_propagate2_def clash_propagate_def split: option.splits) 
 
 definition check_binop where  (* what if typ < exp_typ? e.g typ = TCst TInt*)
 "check_binop check_trm E typ t1 t2 exp_typ  \<equiv> 
@@ -1787,28 +1788,32 @@ definition check_binop2 where
 lemma [fundef_cong]: "(\<And>  E typ t . size t \<le> size t1 + size t2 \<Longrightarrow> check_trm E typ t = check_trm' E typ t) \<Longrightarrow> check_binop check_trm E typ t1 t2 exp_typ = check_binop check_trm' E typ t1 t2 exp_typ"
  by (auto simp add: check_binop_def split: option.split ) 
 
+lemma [fundef_cong]: "(\<And>  E typ t . size t \<le> size t1 + size t2 \<Longrightarrow> check_trm E typ t = check_trm' E typ t) \<Longrightarrow> check_binop2 check_trm E typ t1 t2 exp_typ = check_binop2 check_trm' E typ t1 t2 exp_typ"
+ by (auto simp add: check_binop2_def split: option.split ) 
 (*2nd propagate needed?*)
 fun check_trm :: "tysenv \<Rightarrow> tysym \<Rightarrow> Formula.trm  \<Rightarrow> (tysenv * tysym) option" where
 "check_trm E typ (Formula.Var v) = clash_propagate2 typ (E v) E "
 | "check_trm E typ (Formula.Const c)  =  clash_propagate2 (TCst (ty_of c)) typ  E"
-| "check_trm E typ (Formula.F2i t)  = (if type_clash typ (TCst TInt) then None 
-else (case check_trm (propagate_constraints typ (TCst TInt) E) (TCst TFloat) t  of Some ( E', t_typ) \<Rightarrow>
-    Some ( E', TCst TInt)
-    | None \<Rightarrow> None) )" (* deleted 2nd propagate ?*)
-| "check_trm E typ (Formula.I2f t)  = (if type_clash typ (TCst TFloat) then None 
-else (case check_trm (propagate_constraints typ (TCst TFloat) E) (TCst TInt) t  of
-Some (E', t_typ) \<Rightarrow>  Some ( E', TCst TFloat) 
-  | None \<Rightarrow> None))" (* deleted 2nd propagate*)
+| "check_trm E typ (Formula.F2i t)  =   (case clash_propagate2  typ (TCst TInt) E of Some (E',precise_type) \<Rightarrow> 
+ (case check_trm E' (TCst TFloat) t  of Some ( E'', t_typ) \<Rightarrow>
+    Some ( E'', TCst TInt)
+    | None \<Rightarrow> None) 
+| None \<Rightarrow> None)" 
+| "check_trm E typ (Formula.I2f t)  =   (case clash_propagate2  typ (TCst TFloat) E of Some (E',precise_type) \<Rightarrow> 
+ (case check_trm E' (TCst TInt) t  of Some ( E'', t_typ) \<Rightarrow>
+    Some ( E'', TCst TFloat)
+    | None \<Rightarrow> None) 
+| None \<Rightarrow> None)" 
 |"check_trm E typ (Formula.UMinus t)  = (case clash_propagate2 (TNum 0) typ (new_type_symbol \<circ> E) of 
   Some (E', precise_type) \<Rightarrow>  check_trm E' precise_type t
   | None \<Rightarrow> None)"
-|"check_trm E typ (Formula.Plus t1 t2)  = check_binop check_trm  (new_type_symbol \<circ> E) (new_type_symbol typ) t1 t2  (TNum 0) " 
+|"check_trm E typ (Formula.Plus t1 t2)  = check_binop2 check_trm  (new_type_symbol \<circ> E) (new_type_symbol typ) t1 t2  (TNum 0) " 
 (* increment typ if its a TNum/TAny? yes! case: E = x:TNum 0, a: TAny 2, b: TAny 3 and \<phi> is x = (a + b)*)
 (* added increment back to it, makes proof check_trm_sound easier*)
-|"check_trm E typ (Formula.Minus t1 t2)  = check_binop check_trm  (new_type_symbol \<circ> E) (new_type_symbol typ) t1 t2  (TNum 0) "
-|"check_trm E typ (Formula.Mult t1 t2)  = check_binop check_trm  (new_type_symbol \<circ> E)  (new_type_symbol typ) t1 t2  (TNum 0) "
-|"check_trm E typ (Formula.Div t1 t2)  = check_binop check_trm  (new_type_symbol \<circ> E) (new_type_symbol typ) t1 t2  (TNum 0) "
-|"check_trm E typ (Formula.Mod t1 t2)  = check_binop check_trm E typ t1 t2  (TCst TInt) "
+|"check_trm E typ (Formula.Minus t1 t2)  = check_binop2 check_trm  (new_type_symbol \<circ> E) (new_type_symbol typ) t1 t2  (TNum 0) "
+|"check_trm E typ (Formula.Mult t1 t2)  = check_binop2 check_trm  (new_type_symbol \<circ> E)  (new_type_symbol typ) t1 t2  (TNum 0) "
+|"check_trm E typ (Formula.Div t1 t2)  = check_binop2 check_trm  (new_type_symbol \<circ> E) (new_type_symbol typ) t1 t2  (TNum 0) "
+|"check_trm E typ (Formula.Mod t1 t2)  = check_binop2 check_trm E typ t1 t2  (TCst TInt) "
 
 
 definition check_comparison where
@@ -2016,7 +2021,25 @@ lemma min_consistent: assumes "min_type a b = Some(x,y)" shows "x = a \<and> y=b
 
 lemma min_const: assumes "min_type (TCst x) y = Some(a,b)" shows "a = TCst x"
   using assms by (induction "TCst x" y rule: min_type.induct) (auto split: if_splits)
+(*
+Decision for F2i / I2f:
 
+lemma " (case clash_propagate2  typ (TCst TInt) E of Some (E',precise_type) \<Rightarrow> 
+ (case check_trm E' (TCst TFloat) t  of Some ( E'', t_typ) \<Rightarrow>
+    Some ( E'', TCst TInt)
+    | None \<Rightarrow> None) 
+| None \<Rightarrow> None) = (case check_trm E (TCst TFloat) t  of Some ( E', t_typ) \<Rightarrow> clash_propagate2  typ (TCst TInt) E' | None \<Rightarrow> None)"
+   using min_const apply (auto simp add: clash_propagate2_def min_comm[where ?b="TCst TInt"] split: option.splits )
+   oops
+
+lemma "t = trm.Var x \<Longrightarrow> E x = TAny 0 \<Longrightarrow> typ = TAny 0 \<Longrightarrow> (case clash_propagate2  typ (TCst TInt) E of Some (E',precise_type) \<Rightarrow> 
+ (case check_trm E' (TCst TFloat) t  of Some ( E'', t_typ) \<Rightarrow>
+    Some ( E'', TCst TInt)
+    | None \<Rightarrow> None) 
+| None \<Rightarrow> None) = (case check_trm E (TCst TFloat) t  of Some ( E', t_typ) \<Rightarrow> clash_propagate2  typ (TCst TInt) E' | None \<Rightarrow> None) \<Longrightarrow> False"
+    by (auto simp add: clash_propagate2_def  update_env_def split: option.splits) 
+*)
+ 
 lemma resultless_trm_trans: assumes " resultless_trm E'' E' type'' type'" "resultless_trm E' E type' type"   
   shows "resultless_trm E'' E type'' type"
 proof -
@@ -2103,7 +2126,6 @@ lemma resless_wty_const_dir2: assumes
   shows "typ'' = t"
   using assms  min_const[of t type ]
   by (auto simp add: eq_commute[where ?a="Some(newt,oldt)"] resultless_trm_def wf_f_def) 
- 
 
 definition wty_result_trm :: " Formula.trm \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> tysenv \<Rightarrow> tysym \<Rightarrow> bool" where
  "wty_result_trm  t E typ E' typ' \<longleftrightarrow> resultless_trm E' E typ' typ \<and> 
@@ -2115,17 +2137,44 @@ lemma wty_result_trm_alt: "wty_result_trm t E typ E' typ' \<longleftrightarrow> 
   using resultless_trm_trans by blast+
 
 
+lemma assumes
+    "Some (E1, precise_type) = clash_propagate2 (TNum 0) (new_type_symbol type) (new_type_symbol \<circ> E)" 
+    "\<And>E'' y . (E'' \<turnstile> t :: y) \<Longrightarrow> y \<in> numeric_ty"
+  shows "wty_result_trm t E type E1 precise_type "
+proof -
+  obtain  oldt where t_def: "Some (precise_type,oldt) = min_type (TNum 0) (new_type_symbol type)" using assms(1)
+    by (cases "min_type (TNum 0) (new_type_symbol type)")   (auto simp add:  clash_propagate2_def ) 
+  then have E1_def: "E1 =  update_env (precise_type, oldt) (new_type_symbol \<circ> E)" using assms(1) 
+    apply (cases "min_type (TNum 0) (new_type_symbol type)")  by (auto simp add:  clash_propagate2_def ) 
+  then have f1: "resultless_trm E1 E precise_type type"
+      using  t_def resultless_trm_trans[of "update_env (precise_type, oldt) (new_type_symbol \<circ> E)"] resless_newtype[of E type] 
+        some_min_resless[of "new_type_symbol type" "TNum 0" "(precise_type,oldt)" "new_type_symbol \<circ> E"]
+      by  (auto simp add: min_comm[where ?b="new_type_symbol type"])
+    then show ?thesis    apply (auto simp add:    wty_result_trm_def) subgoal for E'' typ''
+        using assms(1) assms(2)[of E'' typ''] resless_wty_num[of E'' E typ'' type precise_type oldt ]
+    
+    sorry
+  qed
+lemma assumes   " E'' \<turnstile> t :: typ''"
+  "resultless_trm (TCst \<circ> E'') E (TCst typ'') type" 
+  "resultless_trm E' E type' type"
+shows "resultless_trm (TCst \<circ> E'') E' (TCst typ'') type'" 
+  using assms apply (induction t)  apply (auto simp add: wty_result_trm_def resultless_trm_def  elim: wty_trm.cases) subgoal for x f fa 
+    apply (rule exI[of _ " (\<lambda>t. if type' = t then TCst typ'' else f t)"])
+    apply (auto simp add:  wf_f_def split: ty.splits tysym.splits) 
+    oops
+
 lemma check_mod_sound: assumes "\<And>E E' type type' . check_trm E type t1 = Some (E', type') \<Longrightarrow> wty_result_trm t1 E type E' type'"
   "\<And>E E' type type' . check_trm E type t2 = Some (E', type') \<Longrightarrow> wty_result_trm t2 E type E' type'"
     "check_trm E type (trm.Mod t1 t2) = Some (E', type')" 
 shows " wty_result_trm (trm.Mod t1 t2) E type E' type'"
 proof -
-  obtain newt oldt where t_def: "Some (newt,oldt) = min_type (TCst TInt)  type" using assms   by (auto simp add: check_binop_def  split: option.splits)
+  obtain newt oldt where t_def: "Some (newt,oldt) = min_type (TCst TInt)  type" using assms   by (auto simp add: check_binop2_def clash_propagate2_def  split: option.splits)
     then have upd: "resultless_trm (update_env (newt, oldt) E) E newt type " using  some_min_resless[of " type" "TCst TInt" "(newt,oldt)" "E"] 
       by  (auto simp add: min_comm[where ?b="type"])
     obtain E1 t_typ where  E1_def: "Some (E1,t_typ) = check_trm (update_env (newt, oldt) E) newt t1" using assms   t_def
-      by (auto simp add: check_binop_def  split: option.splits) 
-    then have E'_def: "Some (E',type') = check_trm E1 t_typ t2" using assms  t_def by (auto simp add: check_binop_def  split: option.splits)
+      by (auto simp add: check_binop2_def clash_propagate2_def split: option.splits) 
+    then have E'_def: "Some (E',type') = check_trm E1 t_typ t2" using assms  t_def by (auto simp add: check_binop2_def clash_propagate2_def split: option.splits) 
    have wty_res2: "wty_result_trm t2 E1 t_typ E' type'" using E'_def assms(2)  by auto
     have wty_res1: "wty_result_trm t1 (update_env (newt, oldt) E) newt E1 t_typ" using E1_def t_def assms(1) by auto
      { 
@@ -2158,14 +2207,15 @@ lemma check_binop_sound: assumes "\<And>E E' type type' . check_trm E type t1 = 
   "check_trm E type (trm t1 t2) = Some (E', type')" "trm \<in> {trm.Plus, trm.Minus, trm.Mult, trm.Div}"
 shows " wty_result_trm (trm t1 t2) E type E' type'"
 proof -
-    obtain newt oldt where t_def: "Some (newt,oldt) = min_type (TNum 0) (new_type_symbol type)" using assms  by (auto simp add: check_binop_def  split: option.splits)
+  obtain newt oldt where t_def: "Some (newt,oldt) = min_type (TNum 0) (new_type_symbol type)" using assms
+    by (auto simp add: check_binop2_def clash_propagate2_def split: option.splits)
     then have f1: "resultless_trm (update_env (newt, oldt) (new_type_symbol \<circ> E)) E newt type"
       using t_def resultless_trm_trans[of "update_env (newt, oldt) (new_type_symbol \<circ> E)"] resless_newtype[of E type] 
         some_min_resless[of "new_type_symbol type" "TNum 0" "(newt,oldt)" "new_type_symbol \<circ> E"]
       by  (auto simp add: min_comm[where ?b="new_type_symbol type"])
     obtain E1 t_typ where  E1_def: "Some (E1,t_typ) = check_trm (update_env (newt, oldt) (new_type_symbol \<circ> E)) newt t1" using assms   t_def
-      by (auto simp add: check_binop_def  split: option.splits) 
-    then have E'_def: "Some (E',type') = check_trm E1 t_typ t2" using assms  t_def by (auto simp add: check_binop_def  split: option.splits)
+      by (auto simp add: check_binop2_def clash_propagate2_def split: option.splits) 
+    then have E'_def: "Some (E',type') = check_trm E1 t_typ t2" using assms  t_def by (auto simp add: check_binop2_def clash_propagate2_def split: option.splits)
     have wty_res2: "wty_result_trm t2 E1 t_typ E' type'" using E'_def assms(2)  by auto
     have wty_res1: "wty_result_trm t1 (update_env (newt, oldt) (new_type_symbol \<circ> E)) newt E1 t_typ" using E1_def t_def assms(1) by auto
     { 
@@ -2213,7 +2263,7 @@ proof (induction t arbitrary:  E type E' type')
       apply (auto simp add: update_env_def g_def comp_def wf_f_def  split: if_splits dest!: min_consistent) 
       by metis+  
   }
-  ultimately have ?case using Var some_min_resless
+  ultimately show ?case using Var some_min_resless
     by (auto simp add: clash_propagate2_def wty_result_trm_def resultless_trm_def)
 next
   case (Const x)
@@ -2243,8 +2293,9 @@ case (Minus t1 t2)
      then show ?case using check_binop_sound by auto
 next
   case (UMinus t)
-  
-  then show ?case  apply (auto simp add: clash_propagate2_def wty_result_trm_def) sorry
+  then obtain E1 precise_type where E1_def: "Some (E1, precise_type) = clash_propagate2 (TNum 0) type (new_type_symbol \<circ> E)" by (auto split: option.splits)
+  have "wty_result_trm t E1 precise_type E' type'"  apply  (rule UMinus.IH) using UMinus(2) E1_def by (auto split: option.splits) 
+  then show ?case using E1_def UMinus apply (auto simp add: clash_propagate2_def wty_result_trm_def)
 next
   case (Mult t1 t2)
      then show ?case using check_binop_sound by auto
