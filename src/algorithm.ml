@@ -1286,6 +1286,8 @@ let add_ext neval f =
     let comp = Relation.reorder new_pos in
     ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0})
 
+  | LetPast _ -> failwith "LETPAST is not supported except in -verified mode"
+
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in
     ERel rel
