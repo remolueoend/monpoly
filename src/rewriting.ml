@@ -1051,22 +1051,28 @@ let expand_let mode f =
       let (args,f) = List.assoc (n,a) m  in
       let args = List.map (fun v -> match v with (Var t) -> t | _ -> failwith "Internal error") args in (* We allow only variables here with check_let *)
       let subm = Misc.zip args ts in
-      expand_let_rec (List.remove_assoc (n,a) m) (substitute_vars subm f)
+      substitute_vars subm f
     else Pred (p)
 
   | Let (p, f1, f2) ->
+    let f1' = expand_let_rec m f1 in
     let (n, a, ts) = get_info p in
+    let m' = List.remove_assoc (n, a) m in
     (match mode with
-    | ExpandAll -> expand_let_rec (((n, a), (ts, f1)) :: m) f2
+    | ExpandAll -> expand_let_rec (((n, a), (ts, f1')) :: m') f2
     | ExpandNonshared ->
-      let f2' = expand_let_rec m f2 in
+      let f2' = expand_let_rec m' f2 in
       if count_pred_uses p f2' <= 1 then
-        expand_let_rec (((n, a), (ts, f1)) :: m) f2'
+        expand_let_rec (((n, a), (ts, f1')) :: m') f2'
       else
-        let f1' = expand_let_rec m f1 in
         Let (p, f1', f2'))
 
-  | LetPast (p, f1, f2) -> failwith "Cannot unfold LETPAST"
+  | LetPast (p, f1, f2) ->
+    let (n, a, _) = get_info p in
+    let m' = List.remove_assoc (n, a) m in
+    let f1' = expand_let_rec m' f1 in
+    let f2' = expand_let_rec m' f2 in
+    LetPast (p, f1', f2')
 
   | Neg f -> Neg (expand_let_rec m f)
   | Exists (v, f) -> Exists (v,expand_let_rec m f)
