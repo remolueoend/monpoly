@@ -361,6 +361,7 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     (* LOr ((go_down (Neg f1)), (go_down f2)) *)
     | Equiv (f1,f2) -> failwith "[Filter_empty_tp.go_down] formula contains Equiv"
     | Let (_,_,_) -> failwith "Internal error"
+    | LetPast (_,_,_) -> failwith "Internal error"
     | Frex (_,_) -> failwith "Internal error"
     | Prex (_,_) -> failwith "Internal error"
   in

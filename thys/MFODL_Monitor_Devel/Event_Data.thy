@@ -56,6 +56,21 @@ code_printing
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<"
   | constant "Code_Evaluation.term_of :: string8 \<Rightarrow> term" \<rightharpoonup> (Eval) "String8.to'_term"
 
+ML \<open>
+structure String8 =
+struct
+  fun to_term x = @{term Abs_string8} $ HOLogic.mk_string x;
+end;
+\<close>
+
+code_printing
+  type_constructor string8 \<rightharpoonup> (Eval) "string"
+  | constant "string8_literal :: String.literal \<Rightarrow> string8" \<rightharpoonup> (Eval) "_"
+  | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "="
+  | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<="
+  | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (Eval) infixl 6 "<"
+  | constant "Code_Evaluation.term_of :: string8 \<Rightarrow> term" \<rightharpoonup> (Eval) "String8.to'_term"
+
 derive (eq) ceq string8
 derive (linorder) compare string8
 derive (compare) ccompare string8

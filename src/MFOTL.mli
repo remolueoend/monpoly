@@ -78,6 +78,7 @@ type formula =
   | Matches of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
+  | LetPast of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -149,7 +150,7 @@ val fresh_var_mapping: string list -> var list -> string list * (var * string) l
 val substitute_vars: (Predicate.var * Predicate.var Predicate.eterm) list -> formula -> formula
  (** [substitute_vars m f] is a capture avoiding substitution f[m]  *)
 
-val count_pred_uses: Predicate.var -> formula -> int
+val count_pred_uses: Predicate.predicate -> formula -> int
   (** [count_pred_uses p f] counts how often the predicate [p] is used within [f] *)
 
 (** Conversion functions: *)

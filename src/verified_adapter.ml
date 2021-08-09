@@ -95,6 +95,10 @@ let convert_formula dbschema f =
       let (n,a,ts) = Predicate.get_info p in
       let fvl1 = List.flatten (List.map Predicate.tvars ts) in
       Let (n, convert_formula_vars fvl1 [] f1, convert_formula_vars fvl bvl f2)
+  | LetPast (p,f1,f2) ->
+      let (n,a,ts) = Predicate.get_info p in
+      let fvl1 = List.flatten (List.map Predicate.tvars ts) in
+      LetPast (n, convert_formula_vars fvl1 [] f1, convert_formula_vars fvl bvl f2)
   | Neg f -> Neg (convert_formula_vars fvl bvl f)
   | And (f1,f2) -> And (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
   | Or (f1,f2) -> Or (convert_formula_vars fvl bvl f1, convert_formula_vars fvl bvl f2)
@@ -139,12 +143,18 @@ let unorderedFlatMap m =
 
 let convert_db md =
   let rbt_single x = RBT_set (rbt_insert x rbt_empty) in
+  let convert_cst' x = Some (convert_cst x) in
   let add_builtin xs (name, tup) =
-    (name, rbt_single (List.map convert_cst tup)) :: xs in
+    let arity = nat_of_int (List.length tup) in
+    ((name, arity), rbt_single (List.map convert_cst' tup)) :: xs
+  in
   let convert_table t =
-    let (name,_) = (Table.get_schema t) in
-    (name, RBT_set (Relation.fold (fun v -> rbt_insert (List.map convert_cst v))
-      (Table.get_relation t) rbt_empty)) in
+    let (name, attrs) = (Table.get_schema t) in
+    let arity = nat_of_int (List.length attrs) in
+    ((name, arity), RBT_set (Relation.fold
+      (fun v -> rbt_insert (List.map convert_cst' v))
+      (Table.get_relation t) rbt_empty))
+  in
   let db_events = List.map convert_table (Db.get_tables md.db) in
   let all_events = List.fold_left add_builtin db_events
     ["tp", [Int md.tp]; "ts", [Float md.ts]; "tpts", [Int md.tp; Float md.ts]]

@@ -58,6 +58,7 @@ type formula =
   | Matches of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
+  | LetPast of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -182,6 +183,10 @@ let rec formula_map = function
     let f1 = formula_map f1 in
     let f2 = formula_map f2 in
     mapf (Let (p,f1,f2))
+  | LetPast (p,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (LetPast (p,f1,f2))
   | Neg f -> mapf (Neg (formula_map f))
   | And (f1,f2) ->
     let f1 = formula_map f1 in
@@ -243,6 +248,7 @@ let rec direct_subformulas = function
   | Substring (t1, t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
+  | LetPast (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
   | And (f1,f2) -> [f1;f2]
   | Or (f1,f2) -> [f1;f2]
@@ -325,6 +331,7 @@ let rec is_mfodl = function
   | Matches (t1,t2) -> false
   | Pred p -> false
   | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
+  | LetPast (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -355,6 +362,7 @@ let rec free_vars = function
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
   | Pred p -> Predicate.pvars p
   | Let (_,_,f) -> free_vars f
+  | LetPast (_,_,f) -> free_vars f
   | Neg f -> free_vars f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -414,6 +422,7 @@ let rec substitute_vars m =
     Pred (Predicate.make_predicate (n,List.map (Predicate.substitute_vars m) ts))
     
   | Let (p, f1, f2) -> Let (p, f1, substitute_vars m f2)
+  | LetPast (p, f1, f2) -> LetPast (p, f1, substitute_vars m f2)
 
   | Neg f -> Neg (substitute_vars m f)
   | Exists (v, f) -> 
@@ -477,6 +486,11 @@ and substitute_re_vars m = function
   | Plus (r1,r2) -> Plus (substitute_re_vars m r1, (substitute_re_vars m r2))
   | Star r -> Star (substitute_re_vars m r) 
 
+let same_pred p1 p2 =
+  let (n1, a1, _) = get_info p1 in
+  let (n2, a2, _) = get_info p2 in
+  n1 = n2 && a1 = a2
+
 let count_pred_uses pred f =
   let rec go = function
     | Equal _
@@ -485,12 +499,14 @@ let count_pred_uses pred f =
     | Matches _
     | Substring _ -> 0
 
-    | Pred p -> if Predicate.get_name p = pred then 1 else 0
+    | Pred p -> if same_pred p pred then 1 else 0
 
     | Let (p, f1, f2) ->
         let c1 = go f1 in
-        let c2 = if Predicate.get_name p = pred then 0 else go f2 in
+        let c2 = if same_pred p pred then 0 else go f2 in
         c1 + c2
+    | LetPast (p, f1, f2) ->
+        if same_pred p pred then 0 else go f1 + go f2
 
     | Neg f
     | Exists (_, f)
@@ -569,6 +585,7 @@ let rec type_of_fma = function
   | Matches (t1, t2) -> "Matches"
   | Pred p -> "Pred"
   | Let (p,f1,f2) -> "Let"
+  | LetPast (p,f1,f2) -> "LetPast"
   | Neg f -> "Neg"
   | And (f1,f2) -> "And"
   | Or (f1,f2) -> "Or"
@@ -754,6 +771,27 @@ let string_of_formula str g =
 
             | Let (p,f1,f2) ->
               "LET"
+              ^
+              " "
+              ^
+              (string_f_rec false true (Pred p))
+              ^
+              " = "
+              ^
+              (string_f_rec false true f1)
+              ^
+              "\n"
+              ^ 
+              padding
+              ^
+              "IN"
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)  
+
+            | LetPast (p,f1,f2) ->
+              "LETPAST"
               ^
               " "
               ^
