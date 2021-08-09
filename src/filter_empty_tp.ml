@@ -360,10 +360,10 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     (* (\* rewrite p => q to ~p or q *\) *)
     (* LOr ((go_down (Neg f1)), (go_down f2)) *)
     | Equiv (f1,f2) -> failwith "[Filter_empty_tp.go_down] formula contains Equiv"
-    | Let (_,_,_) -> failwith "Internal error"
-    | LetPast (_,_,_) -> failwith "Internal error"
-    | Frex (_,_) -> failwith "Internal error"
-    | Prex (_,_) -> failwith "Internal error"
+    | Let (_,_,_) -> failwith "[Filter_empty_tp] LET not supported; use -unfold_let full or -nofilteremptytp"
+    | LetPast (_,_,_) -> failwith "[Filter_empty_tp] LETPAST not supported; use -verified"
+    | Frex (_,_) -> failwith "[Filter_empty_tp] MATCHF not supported; use -nofilteremptytp"
+    | Prex (_,_) -> failwith "[Filter_empty_tp] MATCHP not supported; use -nofilteremptytp"
   in
   let l = add_labels lf
   in
