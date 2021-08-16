@@ -132,7 +132,7 @@ lemma Sup_rec_safety_union: "\<Squnion>((A::rec_safety set) \<union> B) = \<Squn
 
 context begin
 
-subsection \<open>Formulas and satisfiability\<close>
+subsection \<open>Syntax and semantics\<close>
 
 qualified type_synonym name = string8
 qualified type_synonym event = "(name \<times> event_data list)"
@@ -141,11 +141,18 @@ qualified type_synonym trace = "(name \<times> event_data list) trace"
 
 qualified type_synonym env = "event_data list"
 
-subsubsection \<open>Syntax\<close>
+subsubsection \<open>Terms\<close>
 
 qualified datatype trm = is_Var: Var nat | is_Const: Const event_data
   | Plus trm trm | Minus trm trm | UMinus trm | Mult trm trm | Div trm trm | Mod trm trm
   | F2i trm | I2f trm
+
+text \<open> In this implementation of MFODL, to use De Bruijn indices, binding operators increase the 
+value of the bounding number @{term b} (that starts at $0$) and this number is subtracted from 
+all free variables (type @{typ nat}) greater than @{term b}. For instance, the free variable of
+$\exists.\ P\, (Var 0) \land Q\, (Var 1)$ is @{term "Var 0"} because the existential makes $b=1$
+and this value is subtracted from $Q$s argument while that of $P$ is not even taken into account. \<close>
+
 
 qualified primrec fvi_trm :: "nat \<Rightarrow> trm \<Rightarrow> nat set" where
   "fvi_trm b (Var x) = (if b \<le> x then {x - b} else {})"
@@ -176,6 +183,18 @@ qualified primrec eval_trm :: "env \<Rightarrow> trm \<Rightarrow> event_data" w
 lemma eval_trm_fv_cong: "\<forall>x\<in>fv_trm t. v ! x = v' ! x \<Longrightarrow> eval_trm v t = eval_trm v' t"
   by (induction t) simp_all
 
+
+subsubsection \<open>Formulas\<close>
+
+text \<open> Aggregation operators @{term "Agg nat agg_op nat trm formula"} are special 
+formulas with five parameters:
+\begin{itemize}
+\item Variable @{term "y::nat"} that saves the value of the aggregation operation.
+\item Type of aggregation (sum, avg, min, max, ...).
+\item Binding number @{term "b::nat"} for many variables in the next two arguments.
+\item Term @{term "t::trm"} that represents an operation to be aggregated.
+\item Formula @{term "\<phi>"} that restricts the domain where the aggregation takes place.
+\end{itemize} \<close>
 
 qualified datatype agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
 qualified type_synonym agg_op = "agg_type \<times> event_data"
