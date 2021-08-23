@@ -8232,7 +8232,6 @@ next
     qed simp
   qed
   with Suc(1)[OF this(1) Suc.prems(1,2) this(2) refl] Suc.prems show ?case
-    unfolding msteps_msteps_stateless[symmetric]
     by (auto simp: msteps_psnoc split_beta mstep_mverdicts
         dest: mono_monitor[THEN set_mp, rotated] intro!: wf_mstate_mstep)
 qed
