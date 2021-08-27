@@ -7223,10 +7223,11 @@ next
   from MPred show ?case
   proof (cases "?en \<in> dom P")
     case True
-    with MPred(2) have "?en \<in> Mapping.keys db" "?en \<in> dom P'" "?en \<in> dom V"
+    hence "?en \<in> Mapping.keys db" "?en \<in> dom P'" "?en \<in> dom V" and
       "list_all2 (\<lambda>i X. X = map Some ` {v. length v = length ts \<and> the (V ?en) v i}) [the (P ?en)..<the (P'?en)]
-         (the (Mapping.lookup db ?en))" unfolding wf_envs_def rel_mapping_alt
-      by (auto 0 4 simp add: dom_def dest: bspec[where x="?en"])  (* SLOW *)
+         (the (Mapping.lookup db ?en))" 
+      using MPred(2) unfolding wf_envs_def 
+      by (auto simp: dom_def rel_mapping_alt dest: bspec[where x="?en"])
     moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R (MPred e ts (pred_mode_of n ts)) (Formula.Pred e ts)"
       using MPred(1)
       by (cases rule: wf_mformula.cases) (auto intro!: wf_mformula.Pred)
@@ -7282,17 +7283,7 @@ next
     from False MPred(2) have
       "?en \<in> Mapping.keys db \<Longrightarrow> Mapping.lookup db ?en = Some (map (\<lambda>k. map Some ` {t. (e, t) \<in> \<Gamma> \<sigma> k \<and> length t = length ts}) [j ..< j + \<delta>])"
       unfolding wf_envs_def keys_dom_lookup
-      apply -
-      apply (elim conjE)
-      apply (drule bspec)
-       apply (rule DiffI)
-        apply assumption
-       apply assumption
-      apply (drule domD)
-      apply (elim exE)
-      apply (simp only: option.sel)
-      apply (simp (no_asm))
-      done
+      by (clarsimp, erule_tac x="?en" in ballE, auto)
     ultimately show ?thesis
       apply (cases rule: wf_mformula.cases)
       apply (simp add: keys_dom_lookup dom_def)
