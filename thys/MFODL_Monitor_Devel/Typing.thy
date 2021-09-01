@@ -2000,7 +2000,9 @@ definition wf_f :: "(tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
 
 lemma wf_f_comp: "wf_f f \<Longrightarrow> wf_f g \<Longrightarrow> wf_f (f \<circ> g)"
 apply (auto simp add: comp_def wf_f_def split: tysym.splits) 
-    by (metis tysym.exhaust)+ 
+  by (metis tysym.exhaust)+ 
+
+
 (*
 definition tysenvless :: "tysenv \<Rightarrow> tysenv \<Rightarrow> bool" where
   "tysenvless E E' \<longleftrightarrow> (\<forall>x. tyless  (E x) (E' x))"
@@ -2239,6 +2241,11 @@ shows "typ'' \<in> numeric_ty"
 
 *)
 
+lemma subterm_half_wty: assumes "half_wty_trm t E' type' E type" 
+ "\<And> E'' type'' . E'' \<turnstile> subtrm :: type'' \<Longrightarrow>  E'' \<turnstile> t :: type'' "
+shows  "half_wty_trm subtrm E' type' E type"
+  using assms unfolding half_wty_trm_def by (auto)
+
 lemma check_trm_step0_half: assumes
   "Some (E', type') = clash_propagate2 t type  E" 
 shows " resultless_trm E' E type' type "
@@ -2329,12 +2336,10 @@ proof -
     qed
 
 lemma check_trm_step1: assumes "wty_result_trm t E' type' E1 precise_type"
-"resultless_trm E1 E precise_type type"
-       "\<And> E'' typ'' . (resultless_trm (TCst \<circ> E'') E (TCst typ'') type \<Longrightarrow>
-       E'' \<turnstile> t :: typ'' \<Longrightarrow> resultless_trm (TCst \<circ> E'') E1 (TCst typ'') precise_type)"
+"half_wty_trm t E1 precise_type E type"
     shows "wty_result_trm t E' type' E type"
-  using assms(1,2) resultless_trm_trans[of E'] apply (auto simp add: wty_result_trm_def) subgoal for E'' typ''
-      using assms(3)[of E'' typ''] resultless_trm_trans[of "TCst \<circ> E''"] by auto
+  using assms(1,2) resultless_trm_trans[of E'] unfolding half_wty_trm_def apply (auto simp add: wty_result_trm_def) subgoal for E'' typ''
+      using resultless_trm_trans[of "TCst \<circ> E''"]  by blast 
     subgoal for E'' typ'' using resultless_trm_trans[of "TCst \<circ> E''"] by auto done
 
 lemma half_wty_trm_trans: assumes 
@@ -2390,8 +2395,8 @@ proof -
     wtytrm clash_prop_comm by (auto simp add: half_wty_trm_def)  blast+ 
    have wty: "wty_result_trm t E' fl_type E1 (TCst b)"using E2_def assms(3) assms(1)[of E1 "TCst b" E' fl_type] by auto
    then have fl_def: "fl_type = TCst b" unfolding wty_result_trm_def resultless_trm_def wf_f_def by auto
-     have E'_less: "tysenvless E' E1"  using wty half
-       by (auto simp add: wty_result_trm_def half_wty_trm_def resultless_trm_def tysenvless_def)
+     have E'_less: "tysenvless E' E1"  using wty half resultless_trm_tysenvless
+       by (auto simp add: wty_result_trm_def half_wty_trm_def  )
      have typ''_def: "resultless_trm (TCst \<circ> E'') E' (TCst typ'') (TCst a) \<Longrightarrow> typ'' = a" for E'' typ'' using assms(3) 
        unfolding resultless_trm_def wf_f_def by auto 
      have " resultless_trm (TCst \<circ> E'') E (TCst typ'') type \<Longrightarrow>  E'' \<turnstile> trm t :: typ'' \<Longrightarrow>  resultless_trm (TCst \<circ> E'') E1 (TCst b) (TCst b)"
@@ -2491,9 +2496,9 @@ next
   have res_E1_E': "wty_result_trm t E' type' E1 precise_type"  apply  (rule UMinus.IH) using UMinus(2) E1_def by (auto split: option.splits)
   show ?case apply (rule check_trm_step1[where ?E1.0=E1 and ?precise_type=precise_type]) 
     using  res_E1_E' E1_def wtynum check_trm_step0_num[of E1 precise_type type E "trm.UMinus t" ] 
-      apply (auto simp add: wty_result_trm_def elim: wty_trm.cases) subgoal for E'' typ'' 
+      apply (auto simp add: half_wty_trm_def wty_result_trm_def elim: wty_trm.cases) subgoal for E'' typ'' 
       using check_trm_step0_num(2-3)[of E1 precise_type type E "trm.UMinus t" typ'' E''] resultless_trm_trans[of "TCst \<circ> E''"]
-      by (auto intro: wty_trm.intros) done
+      by (auto  intro: wty_trm.intros) done
 next
   case (Mult t1 t2)
   then show ?case by (rule check_binop_sound) auto
@@ -2523,53 +2528,136 @@ lemma exists_coarser: "\<exists> E typ .resultless_trm (TCst \<circ> E'') E (TCs
   apply (rule exI[of _ "TCst typ''" ]) 
   apply (rule exI[of _ id]) by (auto)
 
-lemma assumes " \<exists> f . wf_f f \<and> typ = f typ'"
-  shows " min_type typ typ' = Some (t1,t2)"
+
+lemma eq_refinement_min_type: assumes "\<exists> f g . wf_f f \<and> wf_f g \<and> f typ = g typ'"
+  shows "\<exists> t1 t2 . min_type typ typ' = Some (t1,t2)"
 proof -
-  obtain f where typs: "wf_f f"  "typ = f typ'" using assms  by auto
-  then show ?thesis apply (cases "typ"; cases typ') unfolding wf_f_def apply (auto ) sorry 
+  obtain f g where typs: "wf_f f"  "wf_f g" "f typ = g typ'" using assms  by auto
+  then show ?thesis unfolding wf_f_def apply (induction "typ" typ' rule: min_type.induct) 
+    by (auto  simp add: eq_commute[where ?b=  "g (TAny _)"] eq_commute[where ?b=  "g (TNum _)"] numeric_ty_def 
+        split: tysym.splits nat.splits) 
+qed
+
+
+lemma assumes " \<exists> f . wf_f f \<and>  f typ' = typ"
+  shows "\<exists> t1 t2 . min_type typ typ' = Some (t1,t2)"
+  apply (rule eq_refinement_min_type) using assms apply auto subgoal for f 
+     unfolding wf_f_def by (rule exI[of _ id])  auto done
+
+lemma constr_complete: assumes "resultless_trm (TCst \<circ> E'') E (TCst typ'') typ"
+  "P typ''" 
+  "P = (\<lambda>x. x \<in> numeric_ty) \<and> constr = TNum 0 \<and> E_start = new_type_symbol \<circ> E \<and> type_start = new_type_symbol typ \<and> (P = (\<lambda>y. y \<in> numeric_ty))
+ \<or> P = (\<lambda> x. x =  t) \<and> constr = TCst t \<and> E_start =  E \<and> type_start = typ"
+  " clash_propagate2 constr type_start E_start = None"
+shows False
+proof -
+  obtain f where f_def: "wf_f f \<and> f typ = TCst typ''" using assms(1) unfolding resultless_trm_def by auto
+  have "\<exists> EE tt. min_type  constr type_start = Some(EE,tt)" apply (rule eq_refinement_min_type)
+    apply (rule exI[of _ "(\<lambda> x. if x = constr then TCst typ'' else x)"])
+    apply (rule exI[of _ "(\<lambda>x.  if x = type_start then f typ else x)"])
+    using f_def assms(2,3)   unfolding wf_f_def new_type_symbol_def 
+    by (auto simp add:  split: tysym.splits) 
+  then show False using assms(4) by (auto simp add: clash_propagate2_def  split: option.splits) 
+qed
+
+lemma check_binop_complete: 
+  assumes "\<And>E typ E'' typ''. check_trm E typ t1 = None \<Longrightarrow> resultless_trm (TCst \<circ> E'') E (TCst typ'') typ \<Longrightarrow> E'' \<turnstile> t1 :: typ'' \<Longrightarrow> False"
+    "\<And>E typ E'' typ''. check_trm E typ t2 = None \<Longrightarrow> resultless_trm (TCst \<circ> E'') E (TCst typ'') typ \<Longrightarrow> E'' \<turnstile> t2 :: typ'' \<Longrightarrow> False"
+    "check_trm E typ (trm t1 t2) = None"
+    "resultless_trm (TCst \<circ> E'') E (TCst typ'') typ"
+    " E'' \<turnstile> trm t1 t2 :: typ''" 
+    "trm \<in> {trm.Plus, trm.Minus, trm.Mult, trm.Div } \<and> constr = TNum 0 \<and> E_start = new_type_symbol \<circ> E \<and> type_start = new_type_symbol typ \<and> P = (\<lambda>x. x \<in> numeric_ty)
+ \<or> trm = trm.Mod \<and> constr = TCst TInt \<and> E_start =  E \<and> type_start = typ \<and> P = (\<lambda> x. x =  TInt)"
+  shows False
+proof -
+  have "clash_propagate2 constr type_start E_start = None \<Longrightarrow>  False"
+    apply (rule constr_complete[where ?t=TInt and ?P=P]) using assms(4-6)  by (auto elim: wty_trm.cases)
+    then obtain E1 t_typ where some_cp: " Some(E1, t_typ) = clash_propagate2 constr type_start E_start" by fastforce
+    then have half: "half_wty_trm (trm t1 t2) E1 t_typ E  typ "
+      unfolding half_wty_trm_def apply (cases "trm t1 t2") using  assms(6) check_trm_step0_num(1-2)[of E1 t_typ " typ" E "trm t1 t2"]
+        check_trm_step0_cst2
+      by (auto simp add:  elim:wty_trm.cases)  
+    then have "resultless_trm (TCst \<circ> E'') E1 (TCst typ'') t_typ" unfolding half_wty_trm_def
+      using assms(5,6)  by (auto simp add:  assms(4) elim:wty_trm.cases)
+    then have t1_none: " check_trm E1 t_typ t1 = None \<Longrightarrow> False" using assms(1)[of E1 t_typ E'' typ''] assms(5,6)
+      by (auto simp add: comp_def elim:wty_trm.cases)
+    have half2: "check_trm E1 t_typ t1 = Some(E',type') \<Longrightarrow> half_wty_trm  (trm t1 t2) E' type' E1 t_typ" for E' type'
+      apply (rule subterm_half_wty[where ?t=t1]) using check_trm_sound assms(6) unfolding half_wty_trm_def wty_result_trm_def
+      by (auto elim: wty_trm.cases) 
+    have E'_less: "check_trm E1 t_typ t1 = Some(E',type') \<Longrightarrow> resultless_trm (TCst \<circ> E'') E' (TCst typ'') type'" for E' type'
+      using assms(5,6) half_wty_trm_trans[OF half2 half] unfolding half_wty_trm_def 
+      by (auto simp add: assms(4) elim: wty_trm.cases) 
+    have t2_none: "check_trm E1 t_typ t1 = Some(E',type') \<Longrightarrow> False"  for E' type' 
+      apply  (rule assms(2)[of E' type']) using assms(3,5,6) some_cp E'_less
+      by (auto simp add: comp_def check_binop2_def split: option.splits elim:wty_trm.cases)
+    show False using t1_none t2_none  by fast
+qed
+lemma check_conversion_complete: assumes   
+  "\<And>E typ E'' typ'' . check_trm E typ t = None \<Longrightarrow> resultless_trm (TCst \<circ> E'') E (TCst typ'') typ \<Longrightarrow> E'' \<turnstile> t :: typ'' \<Longrightarrow> False"
+    "check_trm E typ (trm t) = None"
+    "resultless_trm (TCst \<circ> E'') E (TCst typ'') typ"
+   " E'' \<turnstile> trm t :: typ''"
+"trm = trm.F2i \<and> a = TInt \<and> b = TFloat \<or> trm = trm.I2f \<and> a = TFloat \<and> b = TInt"
+ shows False
+proof -
+ have cp_none: "clash_propagate2 typ (TCst a)  E = None \<Longrightarrow> False "
+    apply (simp add: clash_prop_comm[where ?t1.0="typ"])
+         apply (rule constr_complete[where ?t=a and ?P="(\<lambda>x. x = a)" and ?typ="typ" and ?E''=E'' and ?E=E and ?typ''=typ'']) 
+    using  assms(2-5)  by (auto simp add: comp_def elim:wty_trm.cases) 
+  then obtain E_constr where constr_def: "clash_propagate2 typ (TCst a)  E = Some (E_constr, TCst a)"
+    using clash_propagate2_def min_comm min_const by fastforce
+  have  "resultless_trm ( TCst \<circ> E'') E_constr (TCst a) (TCst a)" apply (rule check_trm_step0_cst2(2)[where ?E=E and ?type="typ"]) 
+    using constr_def assms(3-5) by (auto simp add: comp_def clash_prop_comm[where ?t1.0="typ"] elim: wty_trm.cases) 
+  then have  resless: "resultless_trm ( TCst \<circ> E'') E_constr (TCst b) (TCst b)"
+    using tysenvless_resultless_trm[OF resultless_trm_tysenvless] by force 
+   have  "check_trm E_constr (TCst b) t = None \<Longrightarrow> False"  apply (rule assms(1)[where ?typ="TCst b"]) using assms(2-5)
+      using resless by (auto simp add: comp_def elim: wty_trm.cases) 
+  then show False using cp_none assms(2,5) constr_def by (auto simp add: clash_propagate2_def split: option.splits) 
 qed
 
 lemma check_trm_complete: " check_trm  E typ t = None \<Longrightarrow> resultless_trm (TCst \<circ> E'') E (TCst typ'') typ \<Longrightarrow> E'' \<turnstile> t :: typ'' \<Longrightarrow> False"
 proof (induction t arbitrary:  E "typ" E'' typ'')
   case (Var x)
-  (* obtain E'' typ'' where "resultless_trm (TCst \<circ> E'') E (TCst typ'') typ \<longrightarrow> (E'' \<turnstile> trm.Var x :: typ'') = resultless_trm (TCst \<circ> E'') E' (TCst typ'') typ'" 
-    using Var unfolding wty_result_trm_def by auto *)
-  then show ?case apply auto  sorry
-  (* obtain E'' typ'' where "resultless_trm (TCst \<circ> E'') E (TCst typ'') typ" using  exists_refinement[of E "typ"] by auto 
-  obtain E' typ' where resE': "resultless_trm (TCst \<circ> E'') E' (TCst typ'') typ'" using exists_coarser[of E'' typ''] by auto
-  then have eq:" (E'' \<turnstile> trm.Var x :: typ'')" 
-    using Var unfolding wty_result_trm_def by auto
-  have "True" using resless_all_const_eq 
-  have "\<not>(E'' \<turnstile> trm.Var x :: typ'')" sorry
-  then show ?case using eq by auto *)
+   have "\<exists> f . wf_f f \<and> TCst (typ'')  = f (E x) \<and> (TCst typ'') = f typ " using Var(2-3) 
+    apply (auto simp add: resultless_trm_def comp_def elim!: wty_trm.cases)  by metis
+  then show ?case using eq_refinement_min_type[of "E x" "typ"] Var(1) by (auto simp add: clash_propagate2_def) fastforce   
 next
   case (Const x)
-  then show ?case sorry
+  then show ?case using eq_refinement_min_type[of "TCst (ty_of x)" "typ"] 
+    by (auto simp add: clash_propagate2_def resultless_trm_def wf_f_def elim!: wty_trm.cases ) metis  
 next
-case (Plus t1 t2)
-  then show ?case sorry
+  case (Plus t1 t2)
+ then show ?case by (rule check_binop_complete[where ?trm="trm.Plus"]) (auto simp add: comp_def)
 next
 case (Minus t1 t2)
-  then show ?case sorry
+  then show ?case by (rule check_binop_complete[where ?trm="trm.Minus"]) (auto simp add: comp_def)
 next
   case (UMinus t)
-  then show ?case sorry
+  have "clash_propagate2 (TNum 0) (new_type_symbol typ) (new_type_symbol \<circ> E) = None \<Longrightarrow> False "
+         apply (rule constr_complete[where ?t=TInt and ?P="(\<lambda>x. x \<in> numeric_ty)"]) 
+    using  UMinus(2-4)  by (auto simp add: comp_def elim: wty_trm.cases) 
+  then obtain E_constr constr_type where constr_def: " Some(E_constr, constr_type) = clash_propagate2 (TNum 0) (new_type_symbol typ) (new_type_symbol \<circ> E)"
+    by fastforce
+  have resless: "resultless_trm (TCst \<circ> E'') E_constr (TCst typ'') constr_type" 
+    by (rule check_trm_step0_num(2)[OF constr_def _ UMinus(3) UMinus(4)]) (auto elim:wty_trm.cases) 
+  have "check_trm E_constr constr_type t = None " using UMinus(2) constr_def 
+  by (auto simp add: eq_commute[where ?a="Some(E_constr, constr_type)"] clash_propagate2_def)
+    then show ?case apply (rule UMinus.IH[OF _ resless]) using UMinus(4) by (auto elim: wty_trm.cases)
 next
   case (Mult t1 t2)
-  then show ?case sorry
-next
+  then show ?case by (rule check_binop_complete[where ?trm="trm.Mult"]) (auto simp add: comp_def)
+next                                 
 case (Div t1 t2)
-  then show ?case sorry
+  then show ?case by (rule check_binop_complete[where ?trm="trm.Div"]) (auto simp add: comp_def)
 next
   case (Mod t1 t2)
-  then show ?case sorry
+  then show ?case by (rule check_binop_complete[where ?trm="trm.Mod" and ?constr="TCst TInt"]) (auto simp add: comp_def)
 next
   case (F2i t)
-  then show ?case sorry
+  then show ?case by (rule check_conversion_complete[where ?trm=trm.F2i]) (auto simp add: comp_def)  
 next
   case (I2f t)
-  then show ?case sorry
+  then show ?case by (rule check_conversion_complete[where ?trm=trm.I2f and ?a=TFloat]) (auto simp add: comp_def)  
 qed 
 
 definition "resultless E' E \<phi>' \<phi>  \<longleftrightarrow> (\<exists> f. wf_f f \<and>   E' = f \<circ> E \<and> formula.rel_formula (\<lambda>x y. x = f y) \<phi>' \<phi>)"  
