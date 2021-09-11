@@ -1845,9 +1845,11 @@ definition check_two_formulas :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym 
    Some f \<Rightarrow> (case check S (f \<circ> E) (formula.map_formula f \<psi>) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
    | None \<Rightarrow> None)"
 
+definition "check_ands_f check S E = (\<lambda> f_op \<phi> . case f_op of Some f \<Rightarrow> (case check S (f \<circ> E) (formula.map_formula f \<phi>) of Some f' \<Rightarrow> Some (f' \<circ> f)| None \<Rightarrow> None )
+    | None \<Rightarrow> None )"
+
 definition check_ands where
-"check_ands check S E \<phi>s = foldl (\<lambda> f_op \<phi> . case f_op of Some f \<Rightarrow> (case check S (f \<circ> E) (formula.map_formula f \<phi>) of Some f' \<Rightarrow> Some (f' \<circ> f)| None \<Rightarrow> None )
-    | None \<Rightarrow> None ) (Some id) \<phi>s"
+"check_ands check S E \<phi>s = foldl (check_ands_f check S E) (Some id) \<phi>s"
 
 fun check_pred :: "sig \<Rightarrow> tysenv \<Rightarrow> Formula.trm list \<Rightarrow> tysym list \<Rightarrow>  (tysenv) option" where
 "check_pred  S E  (f#fs) (t#ts)  = (case check_trm  E t f of
@@ -1897,8 +1899,12 @@ lemma map_formula_size[simp]:"size (formula.map_formula f \<psi>) = size \<psi>"
 lemma [fundef_cong]: "(\<And> S E \<phi>'  . size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_two_formulas check S E \<phi> \<psi> = check_two_formulas check' S E \<phi> \<psi>"
   by (auto simp add: check_two_formulas_def split: option.split ) 
 
-lemma [fundef_cong]: "(\<And> S E \<phi>'  .  \<phi>' \<in> set \<phi>s \<Longrightarrow> check S E \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_ands check S E \<phi>s = check_ands check' S E \<phi>s"
-   apply (auto simp add:  check_ands_def) apply (induction \<phi>s arbitrary: E) apply (auto split: list.splits)  sorry
+lemma foldl_check_ands_f_fundef_cong: "(\<And> S E \<phi>'  .  size \<phi>' \<le> size_list size \<phi>s \<Longrightarrow> check S E \<phi>' = check' S E  \<phi>') \<Longrightarrow> foldl (check_ands_f check S E) f \<phi>s = foldl (check_ands_f check' S E) f \<phi>s"
+  by (induction \<phi>s arbitrary: f) (auto simp: check_ands_f_def split: option.splits)
+
+lemma [fundef_cong]: "(\<And> S E \<phi>'  .  size \<phi>' \<le> size_list size \<phi>s \<Longrightarrow> check S E \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_ands check S E \<phi>s = check_ands check' S E \<phi>s"
+  using foldl_check_ands_f_fundef_cong[of \<phi>s check]
+  by (auto simp: check_ands_def)
 
 
 lemma [fundef_cong]: "(\<And> S E \<phi>'  . \<phi>' \<in> regex.atms r \<Longrightarrow> check S E  \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_regex check S E  r = check_regex check' S E  r"
@@ -2733,8 +2739,10 @@ proof -
   have "  resultless_f E' E (formula.Or (formula.map_formula f' \<phi>1) (formula.map_formula f' \<phi>2)) (formula.Or \<phi>1 \<phi>2) f' (fv \<phi>1 \<union> fv \<phi>2)"  using assms
     unfolding wty_result_def resultless_f_def apply auto    oops
 
+(*
 lemma subformula_wty: assumes "wty_result S E' \<phi>1' E \<phi>1" "\<And>E'' \<phi>'' . S, E'' \<turnstile> \<phi>1'' \<longleftrightarrow> S, E'' \<turnstile> \<phi>''" shows "wty_result S E' \<phi>' E \<phi> "
   oops
+*)
 
 lemma assumes "wf_f (\<lambda>t. foldl (\<lambda>t' n. if  (E n) = t then E1 n else t') t w)" "set w' \<subset> set w" shows "wf_f (\<lambda>t. foldl (\<lambda>t' n. if  (E n) = t then E1 n else t') t w')"
   using assms
@@ -3007,7 +3015,7 @@ lemma check_safe_sound: "safe_formula \<phi> \<Longrightarrow> check_safe S \<ph
   sorry (* using check_sound[of S Map.empty "formula.map_formula Map.empty \<phi>" E' \<phi>']
   by (auto simp: check_safe_def wty_result_def formula.rel_map)
 *) *)
-lemma check_complete: "check S E \<phi> = None \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> resultless (TCst \<circ> E') E (Formula.map_formula TCst \<phi>') \<phi> \<Longrightarrow> S, E' \<turnstile> \<phi>' \<Longrightarrow>
+lemma check_complete: "check S E \<phi> = None \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> resultless (TCst \<circ> E') E (Formula.map_formula TCst \<phi>') \<phi> (Formula.fv \<phi>) \<Longrightarrow> S, E' \<turnstile> \<phi>' \<Longrightarrow>
    False"
   sorry
 
