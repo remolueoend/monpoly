@@ -150,6 +150,7 @@
 %token END
 %token EOF
 
+%nonassoc LET IN
 %right SINCE UNTIL
 %nonassoc PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS 
 %nonassoc EX FA
