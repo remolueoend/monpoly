@@ -1813,6 +1813,7 @@ let rec check_log lexbuf ff posl neval i last =
           Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
                           (last_ts: %s)\n%!"
             (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts);
+          decr Log.tp;
           loop ffl i
         end
     | MonpolyTestTuple st -> finish ()
