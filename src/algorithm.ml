@@ -1790,32 +1790,17 @@ let rec check_log lexbuf ff posl neval i last =
         in
         process_command c;
     | MonpolyData {tp; ts; db} ->
-      if ts >= !lastts then
-        begin
-          crt_tp := tp;
-          crt_ts := ts;
-          add_index ff tp ts db;
-          ignore (Neval.append (tp, ts) neval);
-          let cont = process_index ff posl last tp in
-          lastts := ts;
-          if cont then
-            loop ffl (i + 1)
-          else
-            finish ()
-        end
-      else
-      if !Misc.stop_at_out_of_order_ts then
-        let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
-                                  (last_ts: %s)" (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts) in
-        failwith msg
-      else
-        begin
-          Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
-                          (last_ts: %s)\n%!"
-            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !lastts);
-          decr Log.tp;
-          loop ffl i
-        end
+        crt_tp := tp;
+        crt_ts := ts;
+        add_index ff tp ts db;
+        ignore (Neval.append (tp, ts) neval);
+        let cont = process_index ff posl last tp in
+        lastts := ts;
+        if cont then
+          loop ffl (i + 1)
+        else
+          finish ()
+        
     | MonpolyTestTuple st -> finish ()
     | MonpolyError s -> finish ()
   in

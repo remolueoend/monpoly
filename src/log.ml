@@ -190,15 +190,33 @@ let get_next_entry lexbuf =
 
     | DataTuple {ts; db; complete;} ->
       if not complete then update lexbuf;
-      last_ts := ts;
-      incr tp;
-      if !Filter_empty_tp.enabled && Db.is_empty db then
-        begin (* skip empty db *)
-          incr skipped_tps;
-          get_next lexbuf
+      if ts >= !last_ts then
+        begin
+        (* Filter_empty_tp is force-disabled for formulas outside of the appropriate fragment *)
+        if !Filter_empty_tp.enabled && Db.is_empty db then
+          begin (* skip empty db *)
+            incr skipped_tps;
+            get_next lexbuf
+          end
+        else
+          begin
+            last_ts := ts;
+            incr tp;
+            MonpolyData {tp = !tp - 1; ts; db; }
+          end
         end
       else
-         MonpolyData {tp = !tp - 1; ts; db; }
+        if !Misc.stop_at_out_of_order_ts then
+          let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
+                                    (last_ts: %s)" (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !last_ts) in
+          failwith msg
+        else
+          begin
+            Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
+                            (last_ts: %s)\n%!"
+              (MFOTL.string_of_ts ts) (MFOTL.string_of_ts !last_ts);
+            get_next lexbuf
+          end
 
     | CommandTuple { c; parameters } ->
         MonpolyCommand { c; parameters }
