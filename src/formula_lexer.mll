@@ -42,7 +42,7 @@
 
   let f str lexbuf =
     if Misc.debugging Dbg_parsing then
-      Printf.printf "[Formula_lexer] lexbuf is %s ---%s---\n" str (Lexing.lexeme lexbuf)
+      Printf.eprintf "[Formula_lexer] lexbuf is %s ---%s---\n" str (Lexing.lexeme lexbuf)
     else
       ()
 

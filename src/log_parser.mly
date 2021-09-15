@@ -51,7 +51,7 @@
 
   let f str =
     if Misc.debugging Dbg_log then
-      Printf.printf "[Log_parser] %s with start=%d and end=%d\n%!" str (symbol_start()) (symbol_end())
+      Printf.eprintf "[Log_parser] %s with start=%d and end=%d\n%!" str (symbol_start()) (symbol_end())
     else
       ()
 

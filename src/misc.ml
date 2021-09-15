@@ -541,7 +541,7 @@ let mem_all () =
   try
     while true; do
       let line = input_line ic in
-      Printf.eprintf "%s\n" line
+      Printf.eprintf "%s\n%!" line
     done
   with End_of_file ->
     close_in ic

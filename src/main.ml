@@ -69,9 +69,9 @@ let analyze_formulafile () =
   try
     let f = Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) in
     if Misc.debugging Dbg_all then
-      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n";
+      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n%!";
     f
-  with e -> Printf.eprintf "[Main.main] Failed to parse formula file\n"; raise e
+  with e -> Printf.eprintf "[Main.main] Failed to parse formula file\n%!"; raise e
 
 
 

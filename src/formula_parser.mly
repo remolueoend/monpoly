@@ -46,7 +46,7 @@
 
   let f str =
     if Misc.debugging Dbg_parsing then
-      Printf.printf "[Formula_parser] %s\t\n" str
+      Printf.eprintf "[Formula_parser] %s\t\n%!" str
     else
       ()
 

@@ -1273,10 +1273,10 @@ let  type_check_term_debug d (sch, vars) typ term =
     let _ = 
       if (d) then
       begin
-        Printf.printf "[Rewriting.type_check_term] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
-        Predicate.print_term term;
-        Printf.printf ": %s" (string_of_type typ);
-        Printf.printf "\n";
+        Printf.eprintf "[Rewriting.type_check_term] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
+        Printf.eprintf "%s" (Predicate.string_of_term term);
+        Printf.eprintf ": %s" (string_of_type typ);
+        Printf.eprintf "\n%!";
       end
       else () in
     match term with 
@@ -1380,9 +1380,9 @@ let rec type_check_formula (sch, vars) f =
   let _ = 
     if (d) then
       begin
-        Printf.printf "[Rewriting.type_check_formula] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
-        MFOTL.print_formula "" f;
-        Printf.printf "\n";
+        Printf.eprintf "[Rewriting.type_check_formula] (%s; %s) ⊢ " (string_of_delta sch) (string_of_gamma vars);
+        Printf.eprintf "%s" (MFOTL.string_of_formula "" f);
+        Printf.eprintf "\n%!";
       end
     else () in
   match f with 
@@ -1562,9 +1562,9 @@ let rec check_syntax db_schema f =
   if debug 
     then 
       begin
-      Printf.printf "[Rewriting.type_check] The final type judgement is (%s; %s) ⊢ " (string_of_delta s) (string_of_gamma v);
-      MFOTL.print_formula "" f;
-      Printf.printf "\n";
+      Printf.eprintf "[Rewriting.type_check] The final type judgement is (%s; %s) ⊢ " (string_of_delta s) (string_of_gamma v);
+      Printf.eprintf "%s" (MFOTL.string_of_formula "" f);
+      Printf.eprintf "\n%!";
       end
     else ();
   first_debug := false;

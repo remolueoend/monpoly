@@ -114,7 +114,7 @@ let get_signature_lexbuf lexbuf =
   try
     let sign = Log_parser.signature Log_lexer.token lexbuf in
     if Misc.debugging Dbg_all then
-      Printf.eprintf "[Log.get_sign] The signature file was parsed correctly.\n";
+      Printf.eprintf "[Log.get_sign] The signature file was parsed correctly.\n%!";
     if (List.mem_assoc "tp" sign || List.mem_assoc "ts" sign || List.mem_assoc "tp" sign) then
       failwith "[Log.get_sign] The predicates tp, ts, tpts are predefined and \
                 should not be declared in the signature file."
@@ -126,7 +126,7 @@ let get_signature_lexbuf lexbuf =
       in predefined_predicates @ sign
   with e ->
     Printf.eprintf
-      "[Log.get_sign_from_file] Failed to parse signature file. Error at line %d:\n%s\n"
+      "[Log.get_sign_from_file] Failed to parse signature file. Error at line %d:\n%s\n%!"
       lexbuf.lex_start_p.pos_lnum
       (Bytes.to_string lexbuf.lex_buffer);
     raise e
@@ -226,7 +226,7 @@ let get_next_entry lexbuf =
 
     | ErrorTuple s ->
       if Misc.debugging Dbg_filter then
-        Printf.eprintf "Filter_empty_tp: skipped: %d, notskipped: %d\n"
+        Printf.eprintf "Filter_empty_tp: skipped: %d, notskipped: %d\n%!"
           !skipped_tps (!tp - !skipped_tps);
 
       if not !last && !Misc.new_last_ts then

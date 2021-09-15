@@ -51,8 +51,8 @@ let f str lexbuf =
       | _ -> lxm
     in
     begin
-      Printf.printf "[Log_lexer]  %s is -%s- with " str show;
-      Printf.printf "abs=%d len=%d start=%d curr=%d last=%d start_p=%d curr_p=%d\n%!"
+      Printf.eprintf "[Log_lexer]  %s is -%s- with " str show;
+      Printf.eprintf "abs=%d len=%d start=%d curr=%d last=%d start_p=%d curr_p=%d\n%!"
         lexbuf.lex_abs_pos lexbuf.lex_buffer_len lexbuf.lex_start_pos lexbuf.lex_curr_pos lexbuf.lex_last_pos
         lexbuf.lex_start_p.pos_cnum lexbuf.lex_curr_p.pos_cnum
     end

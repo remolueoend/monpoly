@@ -57,7 +57,7 @@ let _ =
   try
     let ch = open_in "perf.conf" in
     q_step := int_of_string (input_line ch);
-    (* Printf.eprintf "[Perf] New value for q_step: %d\n" !q_step; *)
+    (* Printf.eprintf "[Perf] New value for q_step: %d\n%!" !q_step; *)
     close_in ch
   with _ -> () (* prerr_endline e *)
 
