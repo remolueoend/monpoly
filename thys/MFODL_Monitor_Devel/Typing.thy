@@ -1781,12 +1781,58 @@ lemma clash_prop_comm: "clash_propagate2 t1 t2 E = clash_propagate2 t2 t1 E"
 definition trm_f :: "(nat \<Rightarrow> tysym) \<Rightarrow> (nat \<Rightarrow> tysym) \<Rightarrow>nat set \<Rightarrow> (tysym \<Rightarrow> tysym) " where
 "trm_f E' E W = (\<lambda>t. foldl (\<lambda> t' n . if E n = t then E' n else t') t (sorted_list_of_set W) )"
 
+definition trm_f_new :: "(nat \<Rightarrow> tysym) \<Rightarrow> (nat \<Rightarrow> tysym) \<Rightarrow>tysym \<Rightarrow> tysym \<Rightarrow>
+nat set \<Rightarrow> (tysym \<Rightarrow> tysym) " where
+"trm_f_new E' E typ' typ  W = undefined"
+(* "trm_f_new E' E typ' typ  W = (\<lambda>t. if t = typ then typ' else foldl (\<lambda> t' n
+. if E n = t then E' n else t') t (sorted_list_of_set W) )" *)
+
+
+lemma trm_f_not_in_fv: assumes  "\<not>(\<exists>n \<in> set xs . E n = t)" shows "foldl (\<lambda>t' n. if E n = t then E2 n else t') t xs = t"
+  using assms by (induction xs) auto
+
+lemma trm_f_not_in_fv_high:   assumes  "\<not>(\<exists>n \<in> W . E n = t)" "finite W" shows "trm_f E2 E W t = t"
+  unfolding trm_f_def apply (rule trm_f_not_in_fv) using  assms by (auto simp add: set_sorted_list_of_set[OF assms(2)])
+
+lemma trm_f_in_fv: assumes  "n \<in> set xs" "E n = t" "\<forall>n' \<in> set xs . E n' = t \<longrightarrow> E2 n' = E2 n "
+  shows "foldl (\<lambda>t' n. if E n = t then E2 n else t') t xs = E2 n"
+  using assms(1,3) proof (induction xs rule: rev_induct)
+  case (snoc x xs)
+  {assume "x = n"
+    then have ?case using assms(2) by auto 
+  }moreover {assume asm: "x \<noteq> n"
+    have " foldl (\<lambda>t' n. if E n = t then E2 n else t') t xs = E2 n" apply (rule snoc.IH) using snoc asm by auto
+    then have ?case using asm snoc.prems(2) by auto
+    }
+  ultimately show ?case by blast
+qed auto
+
+lemma trm_f_in_fv_high:   assumes  "n \<in> W" "E n = t" "finite W" "\<forall>n' \<in>W . E n' = t \<longrightarrow> E2 n' = E2 n "
+    shows "trm_f E2 E W t =  E2 n"
+  unfolding trm_f_def apply (rule trm_f_in_fv) using  assms(1,2) apply (auto simp add:  set_sorted_list_of_set[OF assms(3)])
+  using assms(4)
+  by blast
+
+
 lemma trm_f_foldl_id: assumes "\<forall>n \<in> set w . t \<noteq> E n " shows "foldl (\<lambda>t' n. if E n = t then E' n else t') t w = t"
   using assms by (induction w)  auto 
 
 lemma trm_f_id: assumes "\<forall>n' \<in> W .t \<noteq> E n'" "finite W" shows "(trm_f E' E W) t = t"
   unfolding trm_f_def using trm_f_foldl_id[of "sorted_list_of_set W"  "t" E E'] assms set_sorted_list_of_set[of W] 
   by simp
+
+
+
+lemma map_regex_size: assumes "\<And>x . x \<in> regex.atms r \<Longrightarrow>   size (f x) = size x" shows "regex.size_regex size r = regex.size_regex size (regex.map_regex f r) "
+  using assms by (induction r arbitrary: ) auto
+
+lemma map_regex_map_formula_size[simp]: " size (regex.map_regex (formula.map_formula f) r) = size r"
+  by (induction r)  auto
+
+lemma map_formula_size[simp]:"size (formula.map_formula f \<psi>) = size \<psi>" 
+  apply (induction \<psi> arbitrary: f) 
+ apply auto apply ( simp add: dual_order.eq_iff size_list_pointwise) using map_regex_size  by metis+
+
 
 definition check_binop where  (* what if typ < exp_typ? e.g typ = TCst TInt*)
 "check_binop check_trm E typ t1 t2 exp_typ  \<equiv> 
@@ -1841,7 +1887,7 @@ fun check_trm :: "tysenv \<Rightarrow> tysym \<Rightarrow>  Formula.trm  \<Right
 definition check_comparison where
 "check_comparison E t1 t2  \<equiv> (case check_trm   (new_type_symbol \<circ> E) (TAny 0) t1  of
    Some (E',t1_typ ) \<Rightarrow> (case check_trm  E' t1_typ t2  of Some (E'', t2_typ) \<Rightarrow>
-   Some ( trm_f E'' E (fv_trm t1 \<union> fv_trm t2) ) | None \<Rightarrow> None)
+   Some ( trm_f E'' (new_type_symbol \<circ> E)  (fv_trm t1 \<union> fv_trm t2) \<circ> new_type_symbol ) | None \<Rightarrow> None)
 | None \<Rightarrow> None)"
 
 definition check_two_formulas :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>   (tysym \<Rightarrow> tysym) option) \<Rightarrow> sig \<Rightarrow> tysenv  \<Rightarrow> tysym Formula.formula  \<Rightarrow> tysym Formula.formula \<Rightarrow>  (tysym \<Rightarrow> tysym) option" where
@@ -1862,22 +1908,21 @@ definition highest_bound_TAny where
 definition E_empty where
 "E_empty \<phi> = (TAny \<circ> (+) (highest_bound_TAny \<phi> + 1))"
 
-fun check_pred :: "tysenv \<Rightarrow> Formula.trm list \<Rightarrow> tysym list \<Rightarrow>  (tysenv) option" where
-"check_pred  E  (f#fs) (t#ts)  = (case check_trm  E t f of
- Some (E', new_t) \<Rightarrow> check_pred  E' fs ts
+fun check_pred :: "tysenv \<Rightarrow> Formula.trm list \<Rightarrow> tysym list \<Rightarrow>  (tysym \<Rightarrow> tysym) option" where
+"check_pred  E  (trm#trms) (t#ts)  = (case check_trm  E t trm of
+ Some (E', new_t) \<Rightarrow> (case check_pred  E' trms ts of Some f \<Rightarrow> Some (f \<circ> trm_f_new E' E new_t t (fv_trm trm)) | None \<Rightarrow> None)
  | None \<Rightarrow> None)"
-|"check_pred  E  [] []  = Some E"
+|"check_pred  E  [] []  = Some id"
 |"check_pred  E  _ _  = None"
-
 
 fun check_regex :: "(sig \<Rightarrow> tysenv  \<Rightarrow> tysym Formula.formula  \<Rightarrow>   (tysym \<Rightarrow> tysym) option) \<Rightarrow>sig \<Rightarrow> tysenv  \<Rightarrow> tysym Formula.formula Regex.regex  \<Rightarrow>   (tysym \<Rightarrow> tysym) option"  where
 "check_regex check S E  (Regex.Skip l)  = Some id"
-| "check_regex check S E  (Regex.Test \<phi>)  = check S E  \<phi>"
+| "check_regex check S E  (Regex.Test \<phi>)  = check S E \<phi>"
 | "check_regex check S E  (Regex.Plus r s)  = (case check_regex check S E r  of
-  Some f \<Rightarrow> (case check_regex check S (f \<circ> E) s of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
+  Some f \<Rightarrow> (case check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
 | None \<Rightarrow> None )"
 | "check_regex check S E  (Regex.Times r s)  = (case check_regex check S E r  of
-  Some f \<Rightarrow> (case check_regex check S (f \<circ> E) s of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
+  Some f \<Rightarrow> (case check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
 | None \<Rightarrow> None )"
 | "check_regex check S E  (Regex.Star r)  = check_regex check S E r"
 
@@ -1898,14 +1943,6 @@ fun agg_ret_tysym :: "Formula.agg_type \<Rightarrow> tysym \<Rightarrow> tysym" 
 | "agg_ret_tysym Formula.Agg_Min t = t"
 | "agg_ret_tysym Formula.Agg_Max t = t"
 
-lemma map_regex_size: assumes "\<And>x . x \<in> regex.atms r \<Longrightarrow>   size (f x) =size x" shows"regex.size_regex size r = regex.size_regex size (regex.map_regex f r) "
-  using assms by (induction r arbitrary: ) auto
-
-
-lemma map_formula_size[simp]:"size (formula.map_formula f \<psi>) = size \<psi>" 
-  apply (induction \<psi> arbitrary: f) 
- apply auto apply ( simp add: dual_order.eq_iff size_list_pointwise) using map_regex_size  by metis+
-
 
 lemma [fundef_cong]: "(\<And> S E \<phi>'  . size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_two_formulas check S E \<phi> \<psi> = check_two_formulas check' S E \<phi> \<psi>"
   by (auto simp add: check_two_formulas_def split: option.split ) 
@@ -1918,9 +1955,9 @@ lemma [fundef_cong]: "(\<And> S E \<phi>'  .  size \<phi>' \<le> size_list size 
   by (auto simp: check_ands_def)
 
 
-lemma [fundef_cong]: "(\<And> S E \<phi>'  . \<phi>' \<in> regex.atms r \<Longrightarrow> check S E  \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_regex check S E  r = check_regex check' S E  r"
-   apply (induction r arbitrary: S E ) apply auto 
-  by presburger+
+lemma [fundef_cong]: "(\<And> S E \<phi>'  . size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check S E  \<phi>' = check' S E  \<phi>') \<Longrightarrow> check_regex check S E  r = check_regex check' S E  r"
+   apply (induction r arbitrary: S E ) apply auto sorry
+  
 
 (*
 definition "check_f f f' W = f " *)
@@ -1929,9 +1966,7 @@ fun check :: "sig \<Rightarrow> tysenv  \<Rightarrow> tysym Formula.formula  \<R
   where (*what to do if predicate is not in sigs?*)
   "check S E  (Formula.Pred r ts)  = (case S r of 
   None \<Rightarrow> None 
-  | Some tys \<Rightarrow> (case check_pred E ts (map TCst tys) of
-        Some E' \<Rightarrow> Some (trm_f E' E (\<Union>t\<in>set ts. fv_trm t ))
-        | None \<Rightarrow> None  ))"
+  | Some tys \<Rightarrow>  check_pred E ts (map TCst tys))"
 | "check S E (Formula.Let p \<phi> \<psi>)  = (case check S (E_empty \<phi>)  \<phi> of 
   Some f \<Rightarrow> if \<forall>x \<in> Formula.fv \<phi> . case f ((E_empty \<phi>) x) of TCst _ \<Rightarrow> True | _ \<Rightarrow> False 
       then  check (S(p \<mapsto> tabulate (\<lambda>x. case f ((E_empty \<phi>) x) of TCst t \<Rightarrow> t ) 0 (Formula.nfv \<phi>))) E \<psi> 
@@ -1946,10 +1981,11 @@ fun check :: "sig \<Rightarrow> tysenv  \<Rightarrow> tysym Formula.formula  \<R
 | "check S E (Formula.Ands \<phi>s)  = check_ands check S E \<phi>s" 
 | "check S E  (Formula.Exists t \<phi>)  =   check S (case_nat  t E)  \<phi> " (*change/check f' somehow?*)
 | "check S E  (Formula.Agg y (agg_type, d) tys trm \<phi>)  = (case check_trm  (new_type_symbol \<circ> (agg_tysenv E  tys)) (agg_trm_tysym agg_type) trm of
-   Some (E', trm_type) \<Rightarrow> (case check S E' (formula.map_formula (trm_f E' E (fv_trm trm)) \<phi>) of 
+   Some (E', trm_type) \<Rightarrow> (case check S E' (formula.map_formula (trm_f_new  E' E trm_type (agg_trm_tysym agg_type) (fv_trm trm)) \<phi>) of 
        Some  f \<Rightarrow> (case clash_propagate2 ((f \<circ> E'\<circ> (+) (length tys)) y) (TCst (ty_of d) ) (f \<circ> E' \<circ> (+) (length tys)) of 
           Some (E''', ret_t) \<Rightarrow> (case clash_propagate2 ret_t (agg_ret_tysym agg_type trm_type) E''' of 
-              Some (E4, t4) \<Rightarrow>  Some  (trm_f E4 E ({y} \<union> fv_trm trm \<union> fv \<phi>) ) 
+              Some (E4, t4) \<Rightarrow> 
+                 Some  (trm_f_new E4 E''' t4 ret_t {y} \<circ> trm_f_new E''' (f \<circ> E' \<circ> (+) (length tys)) ret_t (TCst (ty_of d)) {y} \<circ> f ) 
                | None \<Rightarrow> None )
           | None \<Rightarrow> None)
        | None \<Rightarrow> None)
@@ -2046,13 +2082,11 @@ definition "resultless_trm E' E typ' typ \<longleftrightarrow> (\<exists> f. wf_
 
 definition "resultless_trm_f E' E typ' typ f W  \<longleftrightarrow> wf_f f \<and> (\<forall>x \<in> W.   E' x  = (f \<circ> E) x) \<and> typ' = f typ"
 
-lemma resultless_trm_f_correct: "resultless_trm E' E typ' typ \<Longrightarrow>  finite W
-   \<Longrightarrow>  resultless_trm_f E' E typ' typ (trm_f E' E W) W"
-  unfolding resultless_trm_def resultless_trm_f_def trm_f_def using set_sorted_list_of_set sorry
-
-
+definition "resultless_trm_f' E' E f W  \<longleftrightarrow> wf_f f \<and> (\<forall>x \<in> W.   E' x  = (f \<circ> E) x)"
   
-
+lemma resultless_trm_f'_trans: "resultless_trm_f' E'' E' f' W \<Longrightarrow> resultless_trm_f' E' E f W \<Longrightarrow> resultless_trm_f' E'' E (f'\<circ>f) W"
+   using wf_f_comp by (auto simp add: resultless_trm_f'_def) 
+    
 lemma tysenvless_resultless_trm: assumes
  "tysenvless E' E" "case typ of TCst t' \<Rightarrow> typ = typ' | TNum n \<Rightarrow> t \<in> numeric_ty \<and> typ' = TCst t \<or> typ' = typ |_  \<Rightarrow> True "
   "(\<forall>x. E x \<noteq> typ) \<or> typ = TCst t"
@@ -2727,9 +2761,15 @@ definition wty_result :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.f
 
 definition wty_result_f :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
   "wty_result_f S E \<phi> f \<longleftrightarrow> wf_f f \<and> 
-(\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> (S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f))"
+(\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> 
+  (S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and>(\<forall>t \<in> E `fv \<phi> \<union> formula.set_formula \<phi> . f'' t = (g \<circ> f) t)))"
 
-(*
+definition wty_result_f2 :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
+"wty_result_f2 S E \<phi> f \<longleftrightarrow> wf_f f \<and> 
+(\<forall>f'' .  wf_f (TCst \<circ> f'') \<and>  
+  (S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f))"
+
+(* 
 lemma resultless_simple_unary: assumes  "form \<in> {formula.Neg, formula.Next n, formula.Prev n}" (**)shows "resultless E' E \<phi>1 \<phi> \<longleftrightarrow> resultless E' E (form \<phi>1) (form \<phi>)"
   using assms unfolding resultless_def by auto
 *)
@@ -2772,22 +2812,6 @@ next
   then show ?case sorry
   oops
  
-lemma trm_f_not_in_fv: assumes  "\<not>(\<exists>n \<in> set xs . E n = t)" shows "foldl (\<lambda>t' n. if E n = t then E2 n else t') t xs = t"
-  using assms by (induction xs) auto
-
-lemma trm_f_in_fv: assumes  "n \<in> set xs" "E n = t" "\<forall>n' \<in> set xs . E n' = t \<longrightarrow> E2 n' = E2 n "
-  shows "foldl (\<lambda>t' n. if E n = t then E2 n else t') t xs = E2 n"
-  using assms(1,3) proof (induction xs rule: rev_induct)
-  case (snoc x xs)
-  {assume "x = n"
-    then have ?case using assms(2) by auto 
-  }moreover {assume asm: "x \<noteq> n"
-    have " foldl (\<lambda>t' n. if E n = t then E2 n else t') t xs = E2 n" apply (rule snoc.IH) using snoc asm by auto
-    then have ?case using asm snoc.prems(2) by auto
-    }
-  ultimately show ?case by blast
-qed auto
-
 lemma resultless_trm_f_resultless_trm: assumes "resultless_trm_f E' E typ' typ  (trm_f E' E W) W" 
   shows " tysenvless E' E"
   using assms unfolding tysenvless_def resultless_trm_f_def trm_f_def apply auto apply (rule exI[of _])
@@ -2806,7 +2830,7 @@ lemma resultless_trm_f_resultless_trm: assumes "resultless_trm_f E' E typ' typ  
       
     have "((\<lambda>t. foldl (\<lambda>t' n. if E n = t then E' n else t') t (sorted_list_of_set W)) \<circ> E) n = E' n"
       using trm_f_in_fv
-      oops
+      oops       
 (*
 lemma trm_f_comp: assumes "finite w1" "finite w2" "\<And> n n' . E n = E n' \<Longrightarrow> E1 n = E1 n' " 
   "\<And> n n' . E1 n = E1 n' \<Longrightarrow> E2 n = E2 n' "
@@ -2836,6 +2860,14 @@ apply (rule ext) subgoal for t
       }
 qed
 *)
+
+lemma resultless_trm_f_correct: "resultless_trm E' E typ' typ \<Longrightarrow>  finite W
+   \<Longrightarrow>  resultless_trm_f E' E typ' typ (trm_f_new E' E typ' typ W) W"
+  unfolding resultless_trm_def resultless_trm_f_def trm_f_new_def wf_f_def using set_sorted_list_of_set[of W] sorry
+
+lemma resultless_trm_f'_correct: "tysenvless E' E  \<Longrightarrow>  finite W
+   \<Longrightarrow>  resultless_trm_f' E' E  (trm_f E' E W) W"
+  unfolding resultless_trm_def resultless_trm_f_def trm_f_new_def wf_f_def using set_sorted_list_of_set[of W] sorry
 
 lemma map_regex_fv:  assumes "\<And>x . x \<in> regex.atms x2 \<Longrightarrow>  g (formula.map_formula f x) = g' x"
   shows "Regex.fv_regex g (regex.map_regex (formula.map_formula f) x2) = Regex.fv_regex g' x2" using assms by (induction x2) auto
@@ -2872,7 +2904,14 @@ proof -
     using assms(4) 
     apply (auto simp add: comp_assoc formula.map_comp
         elim!: wty_formula.cases[where ?a3.0="formula.Or _ _"] wty_formula.cases[where ?a3.0="formula.And _ _"]
-        wty_formula.cases[where ?a3.0="formula.Since _ _ _"] wty_formula.cases[where ?a3.0="formula.Until _  _ _"]) 
+        wty_formula.cases[where ?a3.0="formula.Since _ _ _"] wty_formula.cases[where ?a3.0="formula.Until _  _ _"] intro! :wty_formula.intros)
+    subgoal premises prems for f'' g1
+    proof -
+      thm prems
+      have " (\<exists>g. wf_f (TCst \<circ> g) \<and> (\<forall>t\<in>(\<lambda>x. f (E x)) ` fv \<psi> \<union> formula.set_formula (formula.map_formula f \<psi>). f'' t = g (f1 t)))"
+        using prems(5,10) apply (auto simp add: o_assoc) apply (drule spec[of _ g1])
+    qed
+     sorry
            apply fastforce apply (auto simp add: o_assoc intro!: wty_formula.intros)
     by (metis (no_types, lifting) comp_assoc)+
 qed
@@ -2946,7 +2985,7 @@ next
       using wty_formula_ands_snoc[of S "f'' \<circ> E" " map (formula.map_formula f'') \<phi>s" "formula.map_formula f'' a"]
       by (auto simp add: o_assoc formula.map_comp 
           elim!:wty_formula.cases[of _ _ "Formula.Ands _"] intro!: wty_formula.intros) 
-    apply (auto simp add: formula.map_comp o_assoc intro!: wty_formula.intros ) 
+    apply (auto simp add: formula.map_comp o_assoc intro!: wty_formula.intros ) sorry
      apply blast
     subgoal for g x apply (drule spec[of _ "g \<circ> fa \<circ> f"]  ) using wf_f_comp 
       apply (auto simp add: fun.map_comp   elim: wty_formula.cases)
@@ -2957,25 +2996,83 @@ qed
 lemma wf_resultless_trm: "wf_f (TCst \<circ> f'') \<Longrightarrow> resultless_trm (TCst \<circ> (f'' \<circ> E)) E (TCst (f'' t)) t" 
   unfolding resultless_trm_def by (auto simp add: o_assoc)
 
-lemma basecase_helper: assumes "wf_f (TCst \<circ> f'')" shows" \<exists>g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f'"
-proof -
-  have f2: "\<forall>n f na. TAny n \<noteq> (TCst \<circ> f) (na::nat)"
-    by simp
-  have "\<forall>E E' n. resultless_trm (TCst \<circ> f'' \<circ> E) E ((TCst \<circ> (f'' \<circ> E')) n) (E' n)"
-    using assms resultless_trm_def by force
-  then show ?thesis
-    using f2 by (metis finite_fvi_trm resultless_trm_f_correct resultless_trm_f_def trm_f_id)
-qed
+lemma check_comparison_sound_strong:
+  assumes " check_comparison E x1 x2 = Some f'" 
+    "form = Formula.Eq \<and> form_ty = Formula.Eq \<or> form = Formula.Less \<and> form_ty = Formula.Less \<or> form = Formula.LessEq \<and> form_ty = Formula.LessEq"
+  shows " wty_result_f S E (form x1 x2) f'"
+proof - find_theorems tysenvless
+  obtain E1 t1 where E1_def: "check_trm (new_type_symbol \<circ> E) (TAny 0) x1 =  Some (E1,t1)" using assms 
+    by (auto simp add: check_comparison_def split: option.splits)
+  then obtain E2 t2 where E2_def: "check_trm E1 t1 x2 = Some (E2, t2)" using assms
+    by (auto simp add: check_comparison_def split: option.splits)
+  have wty1: "wty_result_trm x1 E1 t1 (new_type_symbol \<circ> E) (TAny 0)" apply (rule check_trm_sound) using E1_def by auto
+  have wty2: "wty_result_trm x2 E2 t2 E1 t1" apply (rule check_trm_sound) using  E2_def by auto
+  have f'_def: "f' = trm_f E2 (new_type_symbol \<circ> E) (fv_trm x1 \<union> fv_trm x2) \<circ> new_type_symbol" using E2_def E1_def assms by (auto simp add: check_comparison_def split: option.splits)
 
-lemma "False"
-proof -
-  define f'' where f''_def: "f'' = (\<lambda>x .case x of TAny _ \<Rightarrow> TInt | TNum n \<Rightarrow> TInt | TCst t \<Rightarrow> t)"
-  define f' :: "tysym \<Rightarrow> tysym" where f'_def: "f' =  (\<lambda>x . TCst TFloat)"
-  have wf_f'': "wf_f (TCst \<circ> f'')" unfolding wf_f_def f''_def numeric_ty_def by auto
-  obtain g where  g_def: "wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f'" using basecase_helper[OF wf_f''] by (auto simp add: f''_def f'_def)
-  then have "f'' x = g (f' x)" for x by auto
-  from this[of "TCst TInt"] have False using g_def unfolding wf_f_def f''_def sorry
-  oops
+  have  "resultless_trm_f' E2 (new_type_symbol \<circ> E) (trm_f E2 (new_type_symbol \<circ> E) (fv_trm x1 \<union> fv_trm x2)) (fv_trm x1 \<union> fv_trm x2)"
+    unfolding f'_def
+    apply (rule resultless_trm_f'_correct[OF tysenvless_trans[where ?E'=E1]]) 
+    using wty2 wty1 unfolding wty_result_trm_def resultless_trm_def tysenvless_def by auto
+  moreover  have "resultless_trm_f' (new_type_symbol \<circ> E) E new_type_symbol  (fv_trm x1 \<union> fv_trm x2)"
+    unfolding resultless_trm_f'_def new_type_symbol_def wf_f_def by auto 
+  ultimately have  "resultless_trm_f' E2 E f' (fv_trm x1 \<union> fv_trm x2)" using resultless_trm_f'_trans by (fastforce simp add: f'_def )
+  then show "wty_result_f S E (form x1 x2) f'" using wty1 wty2 assms(2) 
+    unfolding wty_result_f_def wty_result_trm_def resultless_trm_def resultless_trm_f'_def 
+    apply (auto elim!: wty_formula.cases[of _ _ "Formula.Eq _ _"])
+    subgoal premises prems for f'' f fa 
+    proof -
+      define nn where "nn = (\<lambda>t'. case t' of TAny (Suc n) \<Rightarrow> TAny n  | TAny 0 \<Rightarrow> TCst t | TNum n \<Rightarrow> TNum (n-1) | _ \<Rightarrow> t' )"
+      have nn_n: "nn \<circ> new_type_symbol = id"  by (auto simp add: nn_def new_type_symbol_def split: tysym.splits nat.splits)
+      thm prems trm_f_in_fv
+      have wf_nn: "wf_f nn" unfolding nn_def wf_f_def by auto
+      have " wf_f (TCst \<circ> f''\<circ>nn) \<and> TCst \<circ> (f'' \<circ> E) = (TCst \<circ> f''\<circ> nn) \<circ> (new_type_symbol \<circ> E) \<and> TCst t = (TCst \<circ> f''\<circ> nn) (TAny 0)"
+      using wf_f_comp[OF prems(11) wf_nn]  apply (auto simp add:  comp_assoc o_assoc[of nn] nn_n ) by (auto simp add: o_assoc nn_def wf_f_def) 
+      then obtain fa' where fa_def: " wf_f fa'"  "TCst \<circ> (f'' \<circ> E) = fa' \<circ> (f \<circ> (new_type_symbol \<circ> E))"  "TCst t = fa' (f (TAny 0))" using prems(3,14) 
+        by blast
+      then obtain fb where fb_def: "wf_f fb" "TCst \<circ> (f'' \<circ> E) = fb \<circ> (fa \<circ> (f \<circ> (new_type_symbol \<circ> E)))" "TCst t = fb (fa (f (TAny 0)))" 
+        using prems(4,15) by blast
+      have "n \<in>  (fv_trm x1 \<union> fv_trm x2) \<Longrightarrow> (new_type_symbol \<circ> E) n = t \<Longrightarrow>  trm_f E2 (new_type_symbol \<circ> E) (fv_trm x1 \<union> fv_trm x2) t = E2 n" for n t 
+        unfolding f'_def trm_f_def
+        apply (rule trm_f_in_fv) using set_sorted_list_of_set[of "fv_trm x1 \<union> fv_trm x2" ] prems(10) by auto 
+      have "wf_f new_type_symbol" unfolding wf_f_def new_type_symbol_def by auto
+      then have "wf_f ( fa \<circ> f \<circ> new_type_symbol)" using wf_f_comp fb_def prems(5,6) by auto
+      (*then have num: " E n = TNum n' \<Longrightarrow> (case fb (TNum n2) of TCst t' \<Rightarrow>True | _ \<Rightarrow> False)" for n n' n2
+        using fb_def prems(11) apply auto apply (simp add: o_assoc) 
+        apply (drule fun_cong[of _ _ n'])  apply (auto simp add:  wf_f_def  split: tysym.splits ) 
+        subgoal for x2 
+          apply (drule spec[of "(\<lambda>n. (\<forall>x1. fa (f (new_type_symbol (TNum n))) \<noteq> TAny x1) \<and> (\<forall>x3. fa (f (new_type_symbol (TNum n))) = TCst x3 \<longrightarrow> x3 \<in> numeric_ty))" x2])
+          apply auto
+        sorry sorry find_theorems  *)
+       have wf: "wf_f (TCst \<circ> (\<lambda>t. case fb t of TCst t' \<Rightarrow> t' | _ \<Rightarrow> TInt))"   using fb_def unfolding wf_f_def by (auto simp add: numeric_ty_def split: tysym.splits)
+     (* then have wf: " wf_f (TCst \<circ> (\<lambda>t. if \<exists>n\<in>fv_trm x1 \<union> fv_trm x2. E n = t then case fb t of TCst t' \<Rightarrow> t' else f'' t))" 
+          using fb_def prems(11)   unfolding wf_f_def 
+          apply (auto simp add: prems(10) numeric_ty_def split: tysym.splits if_splits )  
+          subgoal for n x2 na using num[of na n n] by auto
+          subgoal for n x2 na using num[of na n n] by auto done *)
+        have tcst: "n \<in> fv_trm x1 \<union> fv_trm x2 \<Longrightarrow>  (TCst \<circ> (f'' \<circ> E)) n = fb ( f' (E n))" for n
+          using  prems(2) fb_def(2) by auto
+        have helper: "n \<in> fv_trm x1 \<union> fv_trm x2  \<Longrightarrow> case fb (f' (new_type_symbol (E n))) of TCst _ \<Rightarrow> True | _ \<Rightarrow> False" for n
+          using sym[OF fb_def(2)] tcst[of n] apply (auto split: tysym.splits) sorry
+       
+       have " \<exists>g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f'" 
+         apply (rule exI[of _ "(\<lambda>t. if (\<exists>n \<in>(fv_trm x1 \<union> fv_trm x2).  f' (E n) = t) then (case fb (f' t) of TCst t' \<Rightarrow>t' | _ \<Rightarrow> TInt)  else  (f'' (nn t)) )"])
+         using fb_def wf prems(2)
+         apply (auto split: tysym.splits ) subgoal sorry apply (rule ext)    apply (auto split: tysym.splits if_splits) subgoal for x x1a n
+           apply (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n]) sorry
+ subgoal for x x1a n
+   using helper[of n] sorry subgoal for x x2 using helper2[of x] 
+   by auto    subgoal for x x1a n 
+   using helper[of n] by auto subgoal for x x1a n
+   using helper[of n] by auto defer 1 defer 1 defer 1 defer 1 
+      
+         
+         subgoal for ta x1 by (auto dest:  bspec[of _ _ ta]fun_cong[of _ _ ta])
+         subgoal for ta x1 by (auto dest:  bspec[of _ _ ta]fun_cong[of _ _ ta])
+         subgoal for ta x1 by (auto dest:  bspec[of _ _ ta]fun_cong[of _ _ ta])
+         subgoal for ta x1 by (auto dest:  bspec[of _ _ ta]fun_cong[of _ _ ta])
+         subgoal for ta x1 by (auto dest:  bspec[of _ _ ta]fun_cong[of _ _ ta])
+         subgoal for ta x1 by (auto dest:  bspec[of _ _ ta]fun_cong[of _ _ ta]) done
+    qed oops
 
 lemma check_comparison_sound:
   assumes " check_comparison E x1 x2 = Some f'" 
@@ -2988,19 +3085,105 @@ proof - find_theorems tysenvless
     by (auto simp add: check_comparison_def split: option.splits)
   have wty1: "wty_result_trm x1 E1 t1 (new_type_symbol \<circ> E) (TAny 0)" apply (rule check_trm_sound) using E1_def by auto
   have wty2: "wty_result_trm x2 E2 t2 E1 t1" apply (rule check_trm_sound) using  E2_def by auto
-  have f'_def: "f' = trm_f E2 E (fv_trm x1 \<union> fv_trm x2)" using E2_def E1_def assms by (auto simp add: check_comparison_def split: option.splits)
-  have  "resultless_trm_f E2 E (TCst TInt) (TCst TInt) f' (fv_trm x1 \<union> fv_trm x2)" unfolding f'_def
-    apply (rule resultless_trm_f_correct[OF  resultless_trm_trans[where ?E'=E1 and ?type'="TCst TInt"]]) 
-     apply (rule tysenvless_resultless_trm[OF  resultless_trm_tysenvless[where ?t=t2 and t'=t1]]) 
-    using wty2 unfolding wty_result_trm_def apply auto 
-    apply (rule tysenvless_resultless_trm[OF tysenvless_trans[OF resultless_trm_tysenvless[where ?t=t1 and ?t'="TAny 0"]]])
-    using wty1 unfolding wty_result_trm_def apply (auto split: tysym.splits ty.splits)
-    using resless_newtype(1) resultless_trm_tysenvless by blast 
-  then have wf_f':"wf_f f'" unfolding resultless_trm_f_def by auto
+  have f'_def: "f' = trm_f E2 (new_type_symbol \<circ> E) (fv_trm x1 \<union> fv_trm x2) \<circ> new_type_symbol" using E2_def E1_def assms by (auto simp add: check_comparison_def split: option.splits)
+  have  "resultless_trm_f' E2 (new_type_symbol \<circ> E) (trm_f E2 (new_type_symbol \<circ> E) (fv_trm x1 \<union> fv_trm x2)) (fv_trm x1 \<union> fv_trm x2)"
+    unfolding f'_def
+    apply (rule resultless_trm_f'_correct[OF tysenvless_trans[where ?E'=E1]]) 
+    using wty2 wty1 unfolding wty_result_trm_def resultless_trm_def tysenvless_def by auto
+  moreover  have "resultless_trm_f' (new_type_symbol \<circ> E) E new_type_symbol  (fv_trm x1 \<union> fv_trm x2)"
+    unfolding resultless_trm_f'_def new_type_symbol_def wf_f_def by auto 
+  ultimately have  "resultless_trm_f' E2 E f' (fv_trm x1 \<union> fv_trm x2)" using resultless_trm_f'_trans by (fastforce simp add: f'_def )
+  then show "wty_result_f S E (form x1 x2) f'" using wty1 wty2 assms(2) 
+    unfolding wty_result_f_def wty_result_trm_def resultless_trm_def resultless_trm_f'_def 
+    apply (auto elim!: wty_formula.cases[of _ _ "Formula.Eq _ _"])
+    subgoal premises prems for f'' f fa t
+    proof -
+      define nn where "nn = (\<lambda>t'. case t' of TAny (Suc n) \<Rightarrow> TAny n  | TAny 0 \<Rightarrow> TCst t | TNum n \<Rightarrow> TNum (n-1) | _ \<Rightarrow> t' )"
+      have nn_n:"nn \<circ> new_type_symbol = id"  by (auto simp add: nn_def new_type_symbol_def split: tysym.splits nat.splits)
+      thm prems
+      have " wf_f (TCst \<circ> f''\<circ>nn) \<and> TCst \<circ> (f'' \<circ> E) = (TCst \<circ> f''\<circ> nn) \<circ> (new_type_symbol \<circ> E) \<and> TCst t = (TCst \<circ> f''\<circ> nn) (TAny 0)"
+        sorry
+      then obtain fa' where fa_def: " wf_f fa'"  "TCst \<circ> (f'' \<circ> E) = fa' \<circ> (f \<circ> (new_type_symbol \<circ> E))"  "TCst t = fa' (f (TAny 0))" using prems(3,14) 
+        by blast
+      then obtain fb where fb_def: "wf_f fb " "TCst \<circ> (f'' \<circ> E) = fb \<circ> (fa \<circ> (f \<circ> (new_type_symbol \<circ> E)))" " TCst t = fb (fa (f (TAny 0)))" 
+        using prems(4,15) by blast
+      have "\<exists>n. n \<in>fv_trm x1 \<union> fv_trm x2 \<and> (new_type_symbol \<circ>E) n  = new_type_symbol x \<Longrightarrow> (\<exists>n. n \<in>fv_trm x1 \<union> fv_trm x2 \<and> E n  =  x)" for x
+          unfolding new_type_symbol_def apply (auto split: tysym.splits nat.splits ) 
+          by (metis tysym.exhaust)+
+        moreover have "\<forall>n\<in>fv_trm x1 \<union> fv_trm x2. (new_type_symbol \<circ>E) n  \<noteq> new_type_symbol x\<Longrightarrow> f' (  x)= (new_type_symbol x)" for x
+          unfolding f'_def  
+          apply (auto simp add:  ) apply (rule trm_f_not_in_fv_high) by (auto ) 
+        ultimately have f'_n: "\<forall>n\<in>fv_trm x1 \<union> fv_trm x2. E n  \<noteq>  x\<Longrightarrow> f' (  x)= (new_type_symbol x)" for x
+          by meson
+        then have helper2: "\<forall>n\<in>fv_trm x1 \<union> fv_trm x2. E n \<noteq>  x \<Longrightarrow> f''( x) = f'' (nn (f' x))" for x 
+          using nn_n  by (auto simp add:pointfree_idE  ) 
+ 
+     
+       have wf: "wf_f (TCst \<circ> (\<lambda>t. case fb t of TCst t' \<Rightarrow> t' | _ \<Rightarrow> TInt))"   using fb_def unfolding wf_f_def by (auto simp add: numeric_ty_def split: tysym.splits)
+       find_theorems "(?f \<circ> ?g) ?x = ?f (?g ?x)"
+         have " \<exists>g. wf_f (TCst \<circ> g) \<and> (\<forall>t \<in> range  E . f'' t  = g (f' t ))" apply (rule exI[of _ "(\<lambda>t. if (\<exists>n \<in>(fv_trm x1 \<union> fv_trm x2).    f' (E n) = t) then (case fb  t of TCst t' \<Rightarrow>t' | _ \<Rightarrow> TInt)  else  (f'' (nn t)) )"]) using fb_def wf prems(2)
+         apply (auto split: tysym.splits)subgoal sorry subgoal for ta x1 n by (auto dest!:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1 n by (auto dest!:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1  using helper2[of "E ta" ] by metis
+         subgoal for ta x1 n by (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1 n by (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1  using helper2[of "E ta" ] by metis
+         subgoal for ta ty n 
+           apply (cases "\<exists>n' \<in> (fv_trm x1 \<union> fv_trm x2) . E n' = E ta") apply auto[1]
+           subgoal for m apply (rule iffD1[OF inj_eq[of TCst]])  using inj_def fun_cong[OF fb_def(2), of m]  apply (auto dest!:  bspec[of _ _ m]) 
+           by (metis comp_def tysym.inject(3))  
+         subgoal for m apply (rule iffD1[OF inj_eq[of TCst]])  using inj_def fun_cong[OF fb_def(2), of m]  apply (auto dest!:  bspec[of _ _ m]) 
+           by (metis comp_def tysym.inject(3)) 
+         using f'_n[of "E ta"] apply auto   using prems(11)  apply (auto simp add: wf_f_def new_type_symbol_def numeric_ty_def split: tysym.splits)  
+ 
+         sorry
+(*
+
+
+  have " \<exists>g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f'" apply (rule exI[of _ "(\<lambda>t. if (\<exists>n \<in>(fv_trm x1 \<union> fv_trm x2).   f' (E n) = t) then (case fb  t of TCst t' \<Rightarrow>t' | _ \<Rightarrow> TInt)  else  (f'' (nn t)) )"]) using fb_def wf prems(2)
+         apply (auto split: tysym.splits)subgoal sorry apply (rule ext) apply (auto split: tysym.splits) subgoal for ta x1 n by (auto dest!:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1 n by (auto dest!:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1  using helper2[of "ta" ] by auto
+         subgoal for ta x1 n by (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1 n by (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1  using helper2[of "ta" ] by auto
+         subgoal for ta ty n 
+           apply (cases "\<exists>n' \<in> (fv_trm x1 \<union> fv_trm x2) . E n' = ta") apply auto[1]
+           subgoal for m apply (rule iffD1[OF inj_eq[of TCst]]) subgoal sorry  using fun_cong[OF fb_def(2), of m]  apply (auto dest!:  bspec[of _ _ m]) sorry 
+         subgoal sorry
+         using helper2[of ta] apply auto   using prems(11)  apply (auto simp add: wf_f_def nn_def numeric_ty_def split: tysym.splits)  
+ 
+         sorry
+
+    have " \<exists>g. wf_f (TCst \<circ> g) \<and> (\<forall>t \<in> range  E . f'' t  = g (f' t ))" apply (rule exI[of _ "(\<lambda>t. if (\<exists>n \<in>(fv_trm x1 \<union> fv_trm x2).   f' (E n) = t) then (case fb  t of TCst t' \<Rightarrow>t' | _ \<Rightarrow> TInt)  else  (f'' (nn t)) )"]) using fb_def wf prems(2)
+         apply (auto split: tysym.splits)subgoal sorry subgoal for ta x1 n by (auto dest!:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1 n by (auto dest!:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1  using helper2[of "E ta" ] by metis
+         subgoal for ta x1 n by (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1 n by (auto dest:  bspec[of _ _ n]fun_cong[of _ _ n])
+         subgoal for ta x1  using helper2[of "E ta" ] by metis
+         subgoal for ta ty n 
+           apply (cases "\<exists>n' \<in> (fv_trm x1 \<union> fv_trm x2) . E n' = E ta") apply auto[1]
+           subgoal for m apply (rule iffD1[OF inj_eq[of TCst]]) subgoal sorry  using fun_cong[OF fb_def(2), of m]  apply (auto dest!:  bspec[of _ _ m]) sorry 
+         subgoal sorry
+         using helper2[of "E ta"] apply auto   using prems(11)  apply (auto simp add: wf_f_def  nn_def numeric_ty_def split: tysym.splits)
+          apply (auto dest!: bspec[of _ _ ta] fun_cong[of _ _ n]) 
+ 
+         sorry
+
+
+
+         
+
+*)
+
+         done find_theorems "inj ?f \<Longrightarrow> ?x = ?y "
+    qed thm trm_f_in_fv
+ (* then have wf_f':"wf_f f'" unfolding resultless_trm_f_def by auto
   have "resultless_trm E2 (new_type_symbol \<circ> E) ( t2) (TAny 0)" 
     apply (rule resultless_trm_trans[where ?E'=E1 and ?type'="t1"]) using wty1 wty2 unfolding wty_result_f_def wty_result_trm_def  
     by auto 
-  show "wty_result_f S E (form x1 x2) f'" using wty1 wf_f' wty2
+  show "wty_result_f S E (form x1 x2) f'" unfolding wty_result_f_def using wty1 wf_f' wty2
     unfolding wty_result_f_def wty_result_trm_def 
     apply auto 
     subgoal for f'' 
@@ -3022,7 +3205,7 @@ proof - find_theorems tysenvless
       then show ?thesis
         using f2 by (metis (no_types) finite_fvi_trm resultless_trm_f_correct resultless_trm_f_def trm_f_id)
     qed
-    done 
+    done *)
 qed
 
 lemma finite_bound_vars[simp]: "finite (formula.set_formula \<phi>)" by (induction \<phi>)  auto
@@ -3059,6 +3242,7 @@ definition pred_wty_result_f where
 "pred_wty_result_f E' E ts tys f \<equiv> wf_f f \<and> tysenvless E' E \<and>
 (\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> (list_all2 (\<lambda>tm ty. f'' \<circ> E \<turnstile> tm :: ty) ts (map (\<lambda>t. case t of TCst t' \<Rightarrow> t') tys)) = (\<exists> g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f)) "
 
+(*
 lemma check_pred_sound: assumes  "check_pred  E ts tys = Some E'" "\<forall>t \<in> set tys . case t of TCst _ \<Rightarrow> True | _ \<Rightarrow> False" 
   shows "pred_wty_result_f E' E ts tys (trm_f E' E (\<Union> (fv_trm ` set ts)))"
 (*"list_all2 (\<lambda>tm ty. E \<turnstile> tm :: ty) tms tys"*)
@@ -3094,9 +3278,85 @@ proof (induction E ts tys  arbitrary: E' rule: check_pred.induct)
      sorry
     show ?case using wf pred_wty wty tysenvless_trans[OF tysenv resultless_trm_tysenvless[where ?E'=E and ?t=ret_t and ?t'=ty]]
      unfolding pred_wty_result_f_def wty_result_trm_def wty_result_f_def  apply (simp add: f'_def)
-     apply auto subgoal for f''   sorry
+     apply auto subgoal for f''   sorry sorry
 
-qed (auto simp add: pred_wty_result_f_def trm_f_def id_simps(1) intro: wty_formula.intros)
+ qed (auto simp add: pred_wty_result_f_def trm_f_def tysenvless_def id_simps(1) intro: wty_formula.intros)*)
+  
+
+definition regex_wty_result_f where
+ "regex_wty_result_f S E r f \<longleftrightarrow> wf_f f \<and> 
+(\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> Regex.pred_regex (\<lambda>\<phi>. S, f'' \<circ> E \<turnstile> \<phi>) (regex.map_regex (formula.map_formula f'') r) = (\<exists> g. wf_f (TCst \<circ> g) \<and> f'' = g \<circ> f))"
+
+lemma pred_regex_wf_formula: "regex.pred_regex wf_formula s \<Longrightarrow> regex.pred_regex wf_formula (regex.map_regex (formula.map_formula f) s)"
+  by (induction s)  auto
+
+
+lemma size_regex_map_regex_map_formula[simp]: " regex.size_regex size (regex.map_regex (formula.map_formula f) s) = regex.size_regex size s"
+  by (induction s) auto
+
+lemma formula_map_comp_fun: "formula.map_formula f'' \<circ> formula.map_formula f = formula.map_formula (f'' \<circ> f) "
+  by (auto simp add:  formula.map_comp)
+
+lemma check_regex_sound_binary: assumes 
+ "\<And>f .check_regex check S E r = Some f \<Longrightarrow>
+    (\<And>\<phi>' Sa Ea f''. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check Sa Ea \<phi>' = Some f'' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f Sa Ea \<phi>' f'') \<Longrightarrow>
+    regex.pred_regex wf_formula r \<Longrightarrow> regex_wty_result_f S E r f"
+    "\<And>f f2. check_regex check S E r = Some f \<Longrightarrow>
+    check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s) = Some f2 \<Longrightarrow>
+    (\<And>\<phi>' Sa Ea f''.
+        size \<phi>' \<le> regex.size_regex size (regex.map_regex (formula.map_formula f) s) \<Longrightarrow>
+        check Sa Ea \<phi>' = Some f'' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f Sa Ea \<phi>' f'') \<Longrightarrow>
+    regex.pred_regex wf_formula (regex.map_regex (formula.map_formula f) s) \<Longrightarrow>
+    regex_wty_result_f S (f\<circ> E) (regex.map_regex (formula.map_formula f) s) f2"
+    " check_regex check S E (reg r s) = Some f'"
+    "\<And>\<phi>' Sa Ea f'' . size \<phi>' \<le> regex.size_regex size (reg r s) \<Longrightarrow> check Sa Ea \<phi>' = Some f'' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f Sa Ea \<phi>' f''"
+   " regex.pred_regex wf_formula (reg r s)" "reg \<in> {regex.Plus, regex.Times}"
+ shows  "regex_wty_result_f S E (reg r s) f'"
+proof -
+ obtain f where f_def: " Some f = check_regex check S E r " using assms(3,6) by (auto split: option.splits)
+  then obtain f2 where f2_def: " Some f2 = check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s)" using assms(3,6) by (auto split: option.splits)
+  have wty1: "regex_wty_result_f S E r f" apply (rule assms(1)) using f_def assms by (auto split: option.splits)
+  have wty2: "regex_wty_result_f S (f \<circ> E) (regex.map_regex (formula.map_formula f) s)  f2" apply (rule assms(2))
+    using pred_regex_wf_formula  f_def assms f2_def 
+    by (auto simp add: comp_def) 
+  have f'_comp: "f' = f2 \<circ> f" using f_def f2_def assms(3,6) by (auto split: option.splits)
+  then have "regex_wty_result_f S E (regex.Plus r s) f'" using wty1 wty2 wf_f_comp[of f2 f]    apply (simp add: comp_def)
+    apply (auto simp add:  sym[OF comp_def[of f2 f]] sym[OF comp_def[of f E]] 
+        regex.map_comp formula_map_comp_fun o_assoc regex_wty_result_f_def ) subgoal for g  apply (rule exI[of _ "g \<circ>f2"])
+      using wf_f_comp by (auto simp add: o_assoc)
+    subgoal for g apply (drule spec[of _ "g\<circ>f2"]) using wf_f_comp by (auto simp add: o_assoc) done
+  moreover have "regex_wty_result_f S E (regex.Times r s) f'" using f'_comp wty1 wty2 wf_f_comp[of f2 f]    apply (simp add: comp_def)
+    apply (auto simp add:  sym[OF comp_def[of f2 f]] sym[OF comp_def[of f E]] 
+        regex.map_comp formula_map_comp_fun o_assoc regex_wty_result_f_def ) subgoal for g  apply (rule exI[of _ "g \<circ>f2"])
+      using wf_f_comp by (auto simp add: o_assoc)
+    subgoal for g apply (drule spec[of _ "g\<circ>f2"]) using wf_f_comp by (auto simp add: o_assoc) done
+  ultimately show ?thesis using assms(6) by auto
+qed 
+
+lemma check_regex_sound: assumes "check_regex check S E r = Some f' "
+ "(\<And>\<phi>' Sa Ea f'. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check Sa Ea \<phi>' = Some f' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f Sa Ea \<phi>' f')"
+   "regex.pred_regex wf_formula r " shows "regex_wty_result_f S E r f'"
+  using assms proof (induction S E r arbitrary:  f' rule: check_regex.induct)
+ 
+  case (3 check S E r s)
+
+  have "\<And>f .check_regex check S E r = Some f \<Longrightarrow>
+    (\<And>\<phi>' Sa Ea f''. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check Sa Ea \<phi>' = Some f'' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f Sa Ea \<phi>' f'') \<Longrightarrow>
+    regex.pred_regex wf_formula r \<Longrightarrow> regex_wty_result_f S E r f" using 3(1) by blast
+  moreover have " \<And>f f2. check_regex check S E r = Some f \<Longrightarrow>
+    check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s) = Some f2 \<Longrightarrow>
+    (\<And>\<phi>' Sa Ea f''.
+        size \<phi>' \<le> regex.size_regex size (regex.map_regex (formula.map_formula f) s) \<Longrightarrow>
+        check Sa Ea \<phi>' = Some f'' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f Sa Ea \<phi>' f'') \<Longrightarrow>
+    regex.pred_regex wf_formula (regex.map_regex (formula.map_formula f) s) \<Longrightarrow>
+    regex_wty_result_f S (f\<circ> E) (regex.map_regex (formula.map_formula f) s) f2" using 3(2) by blast
+  ultimately show ?case apply (rule check_regex_sound_binary[where ?reg=regex.Plus and ?f'=f']) using 3(3-5) apply auto   
+    
+next
+  case (4 check S E r s)
+  then show ?case sorry
+qed (auto simp add: regex_wty_result_f_def wty_result_f_def )
+  oops
 
 lemma check_sound: "check S E \<phi> = Some f'  \<Longrightarrow> wf_formula \<phi>  \<Longrightarrow> wty_result_f S E \<phi> f'"
 (*\<and> (\<forall>t . t \<notin>  formula.set_formula \<phi> \<and> \<not>( \<exists>x \<in> fv \<phi>. t = E x) \<longrightarrow> f t = f' t)
@@ -3109,21 +3369,21 @@ lemma check_sound: "check S E \<phi> = Some f'  \<Longrightarrow> wf_formula \<p
     case (2 S E p \<phi> \<psi>)   
     then obtain f where f_def: "Some f = check S (E_empty \<phi>) \<phi> " by (auto split: option.splits)
     then have wty1: "wty_result_f S (E_empty \<phi>) \<phi> f " using 2(1,4) by auto
-    have "\<forall>x\<in>fv \<phi>. case f (E x) of TCst x \<Rightarrow> True | _ \<Rightarrow> False" using 2(3) f_def by (auto split: option.splits if_splits)
-    then have "  wf_f (TCst \<circ> f'') \<Longrightarrow> S, E' \<turnstile> formula.map_formula f'' \<phi> \<Longrightarrow> (\<forall> x \<in> fv \<phi> .(\<lambda>x. case f (E x) of TCst t \<Rightarrow> t) x = E' x)" for E' f'' 
+    have "\<forall>x\<in>fv \<phi>. case f (E_empty \<phi> x) of TCst x \<Rightarrow> True | _ \<Rightarrow> False" using 2(3) f_def  by (auto split: option.splits if_splits) 
+    then have "  wf_f (TCst \<circ> f'') \<Longrightarrow> S, E' \<turnstile> formula.map_formula f'' \<phi> \<Longrightarrow> (\<forall> x \<in> fv \<phi> .(\<lambda>x. case f (E_empty \<phi> x) of TCst t \<Rightarrow> t) x = E' x)" for E' f'' 
       using wty1   unfolding wty_result_f_def   E_empty_def highest_bound_TAny_def apply (auto split: tysym.splits) 
-      using comp_apply comp_assoc 
-    sorry 
+      using comp_apply comp_assoc sorry
+     
     find_theorems tabulate
      have "wty_result_f (S(p \<mapsto> tabulate (\<lambda>x. case f (E x) of TCst t \<Rightarrow> t) 0 (Formula.nfv \<phi>))) E \<psi> f'"
-       apply (rule 2(2)[of f]) using f_def 2 
+       apply (rule 2(3)) using f_def 2 
           by (auto simp add: fun_upd_def split: option.splits if_splits) 
         then show ?case using wty1 unfolding wty_result_f_def
           apply (auto  elim!: wty_formula.cases[of _ _ "Formula.Let _ _ _"] intro!: wty_formula.intros)
           subgoal for f'' E'
-            using E_empty_resultless_f[of f'' S E' \<phi> ] apply auto 
+            using E_empty_resultless_f[of f'' S E' \<phi> ] apply auto sorry
             subgoal for g
-          sorry
+          sorry sorry
         next
     case (3 S E x1 x2) 
     then show ?case using check_comparison_sound[where ?form=Formula.Eq and ?form_ty=Formula.Eq] by auto
@@ -3185,7 +3445,7 @@ next
     then show ?case by (rule check_binary_sound) auto 
   next
     case (16 S E I r)
-    then show ?case sorry
+    then show ?case unfolding wty_result_f_def apply (auto simp add:  ) sorry
   next
     case (17 S E I r)
     then show ?case sorry
