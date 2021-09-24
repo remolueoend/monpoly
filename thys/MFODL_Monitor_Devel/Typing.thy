@@ -1970,8 +1970,7 @@ fun check :: "sig \<Rightarrow> tysenv  \<Rightarrow> tysym Formula.formula  \<R
 | "check S E (Formula.Let p \<phi> \<psi>)  = (case check S (E_empty \<phi>)  \<phi> of 
   Some f \<Rightarrow> if \<forall>x \<in> Formula.fv \<phi> . case f ((E_empty \<phi>) x) of TCst _ \<Rightarrow> True | _ \<Rightarrow> False 
       then  check (S(p \<mapsto> tabulate (\<lambda>x. case f ((E_empty \<phi>) x) of TCst t \<Rightarrow> t ) 0 (Formula.nfv \<phi>))) E \<psi> 
-      else None
-  | None \<Rightarrow> None)"
+      else None  | None \<Rightarrow> None)"
 | "check S E  (Formula.Eq t1 t2)  = check_comparison E t1 t2 "
 | "check S E  (Formula.Less t1 t2)  = check_comparison  E t1 t2 "
 | "check S E  (Formula.LessEq t1 t2)  = check_comparison E t1 t2 "
@@ -2830,7 +2829,8 @@ lemma resultless_trm_f_resultless_trm: assumes "resultless_trm_f E' E typ' typ  
       
     have "((\<lambda>t. foldl (\<lambda>t' n. if E n = t then E' n else t') t (sorted_list_of_set W)) \<circ> E) n = E' n"
       using trm_f_in_fv
-      oops       
+      oops 
+
 (*
 lemma trm_f_comp: assumes "finite w1" "finite w2" "\<And> n n' . E n = E n' \<Longrightarrow> E1 n = E1 n' " 
   "\<And> n n' . E1 n = E1 n' \<Longrightarrow> E2 n = E2 n' "
@@ -2889,16 +2889,20 @@ lemma[simp]: " wf_formula (formula.map_formula f \<psi>) = wf_formula \<psi>" by
 
 lemma case_nat_comp: "f'' \<circ> case_nat t E =  case_nat (f'' t) (f'' \<circ> E)" unfolding comp_def by (rule ext) (auto split: nat.splits)
 
+definition used_tys where
+"used_tys E \<phi> \<equiv> E ` fv \<phi> \<union> formula.set_formula \<phi>"
+
+
 lemma check_binary_sound: assumes 
-  "\<And>\<phi>' S E f' . size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = Some f' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> wty_result_f S E \<phi>' f'"
-  "check S E form = Some f'" 
-  "wf_formula form" "form \<in> {formula.Or \<phi> \<psi>, formula.And \<phi> \<psi>, formula.Since \<phi> I \<psi>, formula.Until \<phi> I \<psi>}" shows " wty_result_f S E form f'"
+  "\<And>\<phi>' S E f' . size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = Some f' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> used_tys E \<phi>' \<subseteq> X \<Longrightarrow> wty_result_f S E \<phi>' f' \<and> f' `X \<inter> f' ` (-X) = {} "
+  "check S E form = Some f'" "used_tys E form \<subseteq> X"
+  "wf_formula form" "form \<in> {formula.Or \<phi> \<psi>, formula.And \<phi> \<psi>, formula.Since \<phi> I \<psi>, formula.Until \<phi> I \<psi>}" shows " wty_result_f S E form f'\<and> f' `X \<inter> f' ` (-X) = {}"
 proof -
   obtain  f where f_def: "check S E \<phi> = Some  f" using assms by (auto simp add: check_two_formulas_def split: option.splits)
-  then  have wty1: " wty_result_f S E \<phi> f"
-    using assms by auto
+  then  have wty1: " wty_result_f S E \<phi> f \<and> f `X \<inter> f ` (-X) = {}"
+    using assms unfolding used_tys_def by auto
   obtain f1 where  f1_def: "check S (f\<circ>E) (formula.map_formula f \<psi>) = Some  f1 \<and> f' = f1 \<circ> f " using assms(2,4) f_def by (auto simp add: check_two_formulas_def split: option.splits)
-  have wty2:" wty_result_f S (f\<circ>E) (formula.map_formula f \<psi>) f1"
+  have wty2:" wty_result_f S (f\<circ>E) (formula.map_formula f \<psi>) f1  \<and> f1 `X \<inter> f1 ` (-X) = {}"
     apply (rule assms(1)) using assms(3,4) f1_def by (auto simp add: comp_def)
   show ?thesis using wty1 wty2 unfolding wty_result_f_def using wf_f_comp f1_def
     using assms(4) 
@@ -3358,7 +3362,7 @@ next
 qed (auto simp add: regex_wty_result_f_def wty_result_f_def )
   oops
 
-lemma check_sound: "check S E \<phi> = Some f'  \<Longrightarrow> wf_formula \<phi>  \<Longrightarrow> wty_result_f S E \<phi> f'"
+lemma check_sound: "check S E \<phi> = Some f'  \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> used_tys E \<phi> \<subseteq> X \<Longrightarrow> wty_result_f S E \<phi> f' \<and> f' ` X \<inter> f' ` (-X) = {}"
 (*\<and> (\<forall>t . t \<notin>  formula.set_formula \<phi> \<and> \<not>( \<exists>x \<in> fv \<phi>. t = E x) \<longrightarrow> f t = f' t)
 \<and> (\<forall>t. \<forall>x \<in> fv \<phi> . f t = (E x) \<longrightarrow> f' t = f' (E x)  )
  \<and> (\<forall>t. f' t = f' (f t)) *)
