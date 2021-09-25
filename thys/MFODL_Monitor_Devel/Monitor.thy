@@ -655,52 +655,11 @@ end
 
 subsection \<open>The executable monitor\<close>
 
-typedef 'a mbuf_t = "UNIV :: 'a list set" ..
-
-setup_lifting type_definition_mbuf_t
-
-instantiation mbuf_t :: (type) size
-begin
-
-lift_definition size_mbuf_t :: "'a mbuf_t \<Rightarrow> nat" is "length" .
-
-instance ..
-
-end
-
-lift_definition mbuf_t_empty :: "'a mbuf_t" is "[]" .
-
-lift_definition mbuf_t_Cons :: "'a \<Rightarrow> 'a mbuf_t \<Rightarrow> 'a mbuf_t" is Cons .
-
-no_notation SCons (infixr "##" 65)
-notation mbuf_t_Cons (infixr "##" 65)
-
-lift_definition mbuf_t_append :: "'a mbuf_t \<Rightarrow> 'a list \<Rightarrow> 'a mbuf_t" is append .
-
-notation mbuf_t_append (infixr "@@" 65)
-
-lift_definition mbuf_t_is_empty :: "'a mbuf_t \<Rightarrow> bool" is "\<lambda>xs. xs = []" .
-
-lift_definition mbuf_t_cases :: "'a mbuf_t \<Rightarrow> 'a option \<times> 'a mbuf_t" is
-  "\<lambda>xs. case xs of [] \<Rightarrow> (None, xs) | y # ys \<Rightarrow> (Some y, ys)" .
-
-lemma Rep_mbuf_t_cases[simp]:
-  "mbuf_t_cases xs = (None, xs') \<Longrightarrow> Rep_mbuf_t xs = []"
-  "mbuf_t_cases xs = (None, xs') \<Longrightarrow> Rep_mbuf_t xs' = []"
-  "mbuf_t_cases xs = (Some x, xs') \<Longrightarrow> Rep_mbuf_t xs = x # Rep_mbuf_t xs'"
-  subgoal by transfer (auto split: option.splits list.splits)
-  subgoal by transfer (auto split: option.splits list.splits)
-  subgoal by transfer (auto split: option.splits list.splits)
-  done
-
-lemma mbuf_t_cases_size[termination_simp]: "(Some x, xs') = mbuf_t_cases xs \<Longrightarrow> size xs' < size xs"
-  by transfer (auto split: list.splits)
-
 type_synonym ts = nat
 
-type_synonym 'a mbuf2 = "'a table mbuf_t \<times> 'a table mbuf_t"
-type_synonym 'a mbufn = "'a table mbuf_t list"
-type_synonym 'a mbuf2S = "'a table mbuf_t \<times> 'a table mbuf_t \<times> ts mbuf_t \<times> bool"
+type_synonym 'a mbuf2 = "'a table list \<times> 'a table list"
+type_synonym 'a mbufn = "'a table list list"
+type_synonym 'a mbuf2S = "'a table list \<times> 'a table list \<times> ts list \<times> bool"
 type_synonym 'a msaux = "(ts \<times> 'a table) list"
 type_synonym 'a muaux = "(ts \<times> 'a table \<times> 'a table) list"
 type_synonym 'a mr\<delta>aux = "(ts \<times> (mregex, 'a table) mapping) list" \<comment> \<open> right and left derivs. aux \<close>
@@ -897,7 +856,7 @@ definition pred_mode_of :: "nat \<Rightarrow> Formula.trm list \<Rightarrow> pre
   "pred_mode_of n ts = (if is_copy_pattern n ts then Copy
     else if is_simple_pattern ts 0 then Simple else Match)"
 
-abbreviation (input) "init_mbuf2S \<equiv> (mbuf_t_empty, mbuf_t_empty, mbuf_t_empty, False)"
+abbreviation (input) "init_mbuf2S \<equiv> ([], [], [], False)"
 
 function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux) mformula" where
   "minit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (minit0 n \<phi>) else MRel empty_table)"
@@ -905,21 +864,22 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.Pred e ts) = MPred e ts (pred_mode_of n ts)"
 | "minit0 n (Formula.Let p \<phi> \<psi>) = MLet p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>)"
 | "minit0 n (Formula.LetPast p \<phi> \<psi>) = MLetPast p (Formula.nfv \<phi>) (minit0 (Formula.nfv \<phi>) \<phi>) (minit0 n \<psi>) 0 None"
-| "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)"
+| "minit0 n (Formula.Or \<phi> \<psi>) = MOr (minit0 n \<phi>) (minit0 n \<psi>) ([], [])"
 | "minit0 n (Formula.And \<phi> \<psi>) = (if safe_assignment (fv \<phi>) \<psi> then
       MAndAssign (minit0 n \<phi>) (split_assignment (fv \<phi>) \<psi>)
     else if safe_formula \<psi> then
-      MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)
+      MAnd (fv \<phi>) (minit0 n \<phi>) True (fv \<psi>) (minit0 n \<psi>) ([], [])
     else if is_constraint \<psi> then
       MAndRel (minit0 n \<phi>) (split_constraint \<psi>)
     else (case \<psi> of Formula.Neg \<psi> \<Rightarrow>
-      MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty)))"
+      MAnd (fv \<phi>) (minit0 n \<phi>) False (fv \<psi>) (minit0 n \<psi>) ([], [])
+      | _ \<Rightarrow> MRel empty_table))"
 | "minit0 n (Formula.Ands l) = (let (pos, neg) = partition safe_formula l in
     let mpos = map (minit0 n) pos in
     let mneg = map (minit0 n) (map remove_neg neg) in
     let vpos = map fv pos in
     let vneg = map fv neg in
-    MAnds vpos vneg (mpos @ mneg) (replicate (length l) mbuf_t_empty))"
+    MAnds vpos vneg (mpos @ mneg) (replicate (length l) []))"
 | "minit0 n (Formula.Exists \<phi>) = MExists (minit0 (Suc n) \<phi>)"
 | "minit0 n (Formula.Agg y \<omega> b f \<phi>) = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f (minit0 (b + n) \<phi>)"
 | "minit0 n (Formula.Prev I \<phi>) = MPrev I (minit0 n \<phi>) True [] []"
@@ -928,19 +888,19 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
     then MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) init_mbuf2S (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
     else (case \<phi> of
       Formula.Neg \<phi> \<Rightarrow> MSince (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) init_mbuf2S (init_msaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
-    | _ \<Rightarrow> undefined))"
+    | _ \<Rightarrow> MRel empty_table))"
 | "minit0 n (Formula.Until \<phi> I \<psi>) = (if safe_formula \<phi>
-    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
+    then MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) True))
     else (case \<phi> of
-      Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) (mbuf_t_empty, mbuf_t_empty) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
-    | _ \<Rightarrow> undefined))"
+      Formula.Neg \<phi> \<Rightarrow> MUntil (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False) (minit0 n \<phi>) (minit0 n \<psi>) ([], []) [] 0 (init_muaux (init_args I n (Formula.fv \<phi>) (Formula.fv \<psi>) False))
+    | _ \<Rightarrow> MRel empty_table))"
 | "minit0 n (Formula.MatchP I r) =
     (let (mr, \<phi>s) = to_mregex r
-    in MMatchP I mr (sorted_list_of_set (RPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) mbuf_t_empty) [] [])"
+    in MMatchP I mr (sorted_list_of_set (RPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) []) [] [])"
 | "minit0 n (Formula.MatchF I r) =
     (let (mr, \<phi>s) = to_mregex r
-    in MMatchF I mr (sorted_list_of_set (LPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) mbuf_t_empty) [] 0 [])"
-| "minit0 n _ = undefined"
+    in MMatchF I mr (sorted_list_of_set (LPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) []) [] 0 [])"
+| "minit0 n _ = MRel empty_table"
   by pat_completeness auto
 termination (in maux)
   by (relation "measure (\<lambda>(_, \<phi>). size \<phi>)")
@@ -961,120 +921,36 @@ fun mprev_next :: "\<I> \<Rightarrow> event_data table list \<Rightarrow> ts lis
     in ((if mem I ((t' - t)) then x else empty_table) # ys, zs))"
 
 fun mbuf2_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> event_data mbuf2 \<Rightarrow> event_data mbuf2" where
-  "mbuf2_add xs' ys' (xs, ys) = (xs @@ xs', ys @@ ys')"
+  "mbuf2_add xs' ys' (xs, ys) = (xs @ xs', ys @ ys')"
 
 fun mbuf2S_add :: "event_data table list \<Rightarrow> event_data table list \<Rightarrow> ts list \<Rightarrow> event_data mbuf2S \<Rightarrow> event_data mbuf2S" where
-  "mbuf2S_add xs' ys' ts' (xs, ys, ts, skew) = (xs @@ xs', ys @@ ys', ts @@ ts', skew)"
+  "mbuf2S_add xs' ys' ts' (xs, ys, ts, skew) = (xs @ xs', ys @ ys', ts @ ts', skew)"
 
 fun mbuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data mbuf2 \<Rightarrow> 'b list \<times> event_data mbuf2" where
-  "mbuf2_take f (xs, ys) = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> ([], (xs', ys)) | (Some x, xs') \<Rightarrow>
-    (case mbuf_t_cases ys of (None, ys') \<Rightarrow> ([], (x ## xs', ys')) | (Some y, ys') \<Rightarrow>
-    let (zs, buf) = mbuf2_take f (xs', ys') in (f x y # zs, buf)))"
-
-fun Rep_mbuf2_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> 'b) \<Rightarrow> event_data table list \<times> event_data table list \<Rightarrow> 'b list \<times> event_data table list \<times> event_data table list " where
-  "Rep_mbuf2_take f (x # xs, y # ys) = (let (zs, buf) = Rep_mbuf2_take f (xs, ys) in (f x y # zs, buf))"
-| "Rep_mbuf2_take f (xs, ys) = ([], (xs, ys))"
-
-lemma Rep_mbuf2_take_aux: "mbuf2_take f (xs, ys) = (zs, (xs', ys')) \<Longrightarrow>
-  Rep_mbuf2_take f (Rep_mbuf_t xs, Rep_mbuf_t ys) = (zs, (Rep_mbuf_t xs', Rep_mbuf_t ys'))"
-proof (induction f "(xs, ys)" arbitrary: xs ys zs xs' ys' rule: mbuf2_take.induct)
-  case (1 f xs ys)
-  obtain x xs'' where xs_def: "mbuf_t_cases xs = (x, xs'')"
-    by fastforce
-  obtain y ys'' where ys_def: "mbuf_t_cases ys = (y, ys'')"
-    by fastforce
-  show ?case
-    using 1 xs_def ys_def
-    by (cases x; cases y) (auto simp: mbuf_t_Cons.rep_eq split: prod.splits)
-qed
-
-lemma Rep_mbuf2_take: "mbuf2_take f buf = (zs, buf') \<Longrightarrow>
-  Rep_mbuf2_take f (map_prod Rep_mbuf_t Rep_mbuf_t buf) = (zs, (map_prod Rep_mbuf_t Rep_mbuf_t buf'))"
-  using Rep_mbuf2_take_aux
-  by (cases buf; cases buf') fastforce
+  "mbuf2_take f (x # xs, y # ys) = (let (zs, buf) = mbuf2_take f (xs, ys) in (f x y # zs, buf))"
+| "mbuf2_take f (xs, ys) = ([], (xs, ys))"
 
 fun mbuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
-    event_data mbuf2 \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbuf2 \<times> ts list" where
-  "mbuf2t_take f z (xs, ys) ts = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> (z, (xs', ys), ts) | (Some x, xs') \<Rightarrow>
-    (case mbuf_t_cases ys of (None, ys') \<Rightarrow> (z, (x ## xs', ys'), ts) | (Some y, ys') \<Rightarrow>
-    (case ts of [] \<Rightarrow> (z, (x ## xs', y ## ys'), ts) | t # ts' \<Rightarrow>
-    mbuf2t_take f (f x y t z) (xs', ys') ts')))"
-
-fun Rep_mbuf2t_take :: "(event_data table \<Rightarrow> event_data table \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow>
-    event_data table list \<times> event_data table list \<Rightarrow> ts list \<Rightarrow> 'b \<times> (event_data table list \<times> event_data table list) \<times> ts list" where
-  "Rep_mbuf2t_take f z (x # xs, y # ys) (t # ts) = Rep_mbuf2t_take f (f x y t z) (xs, ys) ts"
-| "Rep_mbuf2t_take f z (xs, ys) ts = (z, (xs, ys), ts)"
-
-lemma Rep_mbuf2t_take_aux: "mbuf2t_take f z (xs, ys) ts = (zs, (xs', ys'), nts') \<Longrightarrow>
-  Rep_mbuf2t_take f z (Rep_mbuf_t xs, Rep_mbuf_t ys) ts = (zs, (Rep_mbuf_t xs', Rep_mbuf_t ys'), nts')"
-proof (induction f z "(xs, ys)" ts arbitrary: xs ys zs xs' ys' rule: mbuf2t_take.induct)
-  case (1 f z xs ys ts)
-  obtain x xs'' where xs_def: "mbuf_t_cases xs = (x, xs'')"
-    by fastforce
-  obtain y ys'' where ys_def: "mbuf_t_cases ys = (y, ys'')"
-    by fastforce
-  show ?case
-    using 1 xs_def ys_def
-    by (cases x; cases y) (auto simp: mbuf_t_Cons.rep_eq split: prod.splits list.splits)
-qed
-
-lemma Rep_mbuf2t_take: "mbuf2t_take f z buf ts = (zs, buf',  nts') \<Longrightarrow>
-  Rep_mbuf2t_take f z (map_prod Rep_mbuf_t Rep_mbuf_t buf) ts = (zs, (map_prod Rep_mbuf_t Rep_mbuf_t buf'), nts')"
-  using Rep_mbuf2t_take_aux
-  by (cases buf; cases buf') fastforce
+    event_data mbuf2 \<Rightarrow> ts \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbuf2 \<times> ts \<times> ts list" where
+  "mbuf2t_take f z (x # xs, y # ys) t0 (t # ts) = mbuf2t_take f (f x y t z) (xs, ys) t ts"
+| "mbuf2t_take f z (xs, ys) t0 ts = (z, (xs, ys), (case ts of [] \<Rightarrow> t0 | t # _ \<Rightarrow> t), ts)"
 
 context maux begin
 context fixes args :: args begin
 
-fun Rep_eval_since :: "event_data table list \<Rightarrow> event_data table list \<times> event_data table list \<times> ts list \<times> bool \<Rightarrow> 'msaux \<Rightarrow>
-    event_data table list \<times> (event_data table list \<times> event_data table list \<times> ts list \<times> bool) \<times> 'msaux" where
-  "Rep_eval_since rs (x # xs, [], t # ts, skew) aux =
+fun eval_since :: "event_data table list \<Rightarrow> event_data mbuf2S \<Rightarrow> 'msaux \<Rightarrow>
+    event_data table list \<times> event_data mbuf2S \<times> 'msaux" where
+  "eval_since rs (x # xs, [], t # ts, skew) aux =
     (if skew \<or> memL (args_ivl args) 0
     then (rev rs, (x # xs, [], t # ts, skew), aux)
     else (let aux' = join_msaux args x (add_new_ts_msaux args t aux)
       in (rev (result_msaux args aux' # rs), (xs, [], ts, True), aux')))"
-| "Rep_eval_since rs (xs, y # ys, ts, True) aux =
-    Rep_eval_since rs (xs, ys, ts, False) (add_new_table_msaux args y aux)"
-| "Rep_eval_since rs (x # xs, y # ys, t # ts, False) aux =
+| "eval_since rs (xs, y # ys, ts, True) aux =
+    eval_since rs (xs, ys, ts, False) (add_new_table_msaux args y aux)"
+| "eval_since rs (x # xs, y # ys, t # ts, False) aux =
     (let aux' = add_new_table_msaux args y (join_msaux args x (add_new_ts_msaux args t aux))
-    in Rep_eval_since (result_msaux args aux' # rs) (xs, ys, ts, False) aux')"
-| "Rep_eval_since rs buf aux = (rev rs, buf, aux)"
-
-fun eval_since :: "event_data table list \<Rightarrow> event_data mbuf2S \<Rightarrow> 'msaux \<Rightarrow>
-    event_data table list \<times> event_data mbuf2S \<times> 'msaux" where
-  "eval_since rs (xs, ys, ts, skew) aux =
-    (case mbuf_t_cases ys of (None, ys') \<Rightarrow>
-      (case mbuf_t_cases xs of (Some x, xs') \<Rightarrow>
-        (case mbuf_t_cases ts of (Some t, ts') \<Rightarrow>
-    (if skew \<or> memL (args_ivl args) 0
-    then (rev rs, (x ## xs', mbuf_t_empty, t ## ts', skew), aux)
-    else (let aux' = join_msaux args x (add_new_ts_msaux args t aux)
-      in (rev (result_msaux args aux' # rs), (xs', mbuf_t_empty, ts', True), aux')))
-        | (None, ts') \<Rightarrow> (rev rs, (x ## xs', mbuf_t_empty, mbuf_t_empty, skew), aux))
-      | (None, xs') \<Rightarrow> (rev rs, (mbuf_t_empty, mbuf_t_empty, ts, skew), aux))
-    | (Some y, ys') \<Rightarrow>
-      if skew then eval_since rs (xs, ys', ts, False) (add_new_table_msaux args y aux) else
-      (case mbuf_t_cases xs of (Some x, xs') \<Rightarrow>
-        (case mbuf_t_cases ts of (Some t, ts') \<Rightarrow>
-    (let aux' = add_new_table_msaux args y (join_msaux args x (add_new_ts_msaux args t aux))
-    in eval_since (result_msaux args aux' # rs) (xs', ys', ts', False) aux')
-        | (None, ts') \<Rightarrow> (rev rs, (x ## xs', y ## ys', ts', skew), aux))
-      | (None, xs') \<Rightarrow> (rev rs, (mbuf_t_empty, y ## ys', ts, skew), aux)))"
-
-lemma Rep_eval_since: "eval_since rs (xs, ys, ts, skew) aux = (res, (xs', ys', ts', skew'), aux') \<Longrightarrow>
-  Rep_eval_since rs (Rep_mbuf_t xs, Rep_mbuf_t ys, Rep_mbuf_t ts, skew) aux = (res, (Rep_mbuf_t xs', Rep_mbuf_t ys', Rep_mbuf_t ts', skew'), aux')"
-proof (induction rs "(xs, ys, ts, skew)" aux arbitrary: xs ys ts skew res xs' ys' ts' skew' aux' rule: eval_since.induct)
-  case (1 rs xs ys ts skew aux)
-  obtain x xs'' where xs_def: "mbuf_t_cases xs = (x, xs'')"
-    by fastforce
-  obtain y ys'' where ys_def: "mbuf_t_cases ys = (y, ys'')"
-    by fastforce
-  obtain t ts'' where ts_def: "mbuf_t_cases ts = (t, ts'')"
-    by fastforce
-  show ?case
-    using 1 xs_def ys_def ts_def
-    by (cases x; cases y; cases t) (auto simp: mbuf_t_empty.rep_eq mbuf_t_Cons.rep_eq Let_def split: if_splits)
-qed
+    in eval_since (result_msaux args aux' # rs) (xs, ys, ts, False) aux')"
+| "eval_since rs buf aux = (rev rs, buf, aux)"
 
 end (* fixes args *)
 end (* maux *)
@@ -1089,99 +965,20 @@ proof (induct xs)
 qed simp
 
 fun mbufn_add :: "event_data table list list \<Rightarrow> event_data mbufn \<Rightarrow> event_data mbufn" where
-  "mbufn_add xs' xs = List.map2 (@@) xs xs'"
-
-fun Rep_mbufn_add :: "event_data table list list \<Rightarrow> event_data table list list \<Rightarrow> event_data table list list" where
-  "Rep_mbufn_add xs' xs = List.map2 (@) xs xs'"
-
-lemma Rep_mbufn_add: "Rep_mbufn_add xss (map Rep_mbuf_t buf) = map Rep_mbuf_t (mbufn_add xss buf)"
-  by (auto simp: comp_def zip_map1 mbuf_t_append.rep_eq)
-
-lemma size_snd_mbuf_t_cases: "\<not> mbuf_t_is_empty a \<Longrightarrow> size (snd (mbuf_t_cases a)) < size a"
-  by transfer (auto split: list.splits)
-
-lemma size_list_snd_mbuf_t_cases: assumes "buf \<noteq> []" "\<And>x. x \<in> set buf \<Longrightarrow> \<not> mbuf_t_is_empty x"
-  shows "size_list (\<lambda>x. size (snd (mbuf_t_cases x))) buf < size_list size buf"
-  using assms
-proof (induction buf)
-  case IH: (Cons a buf)
-  show ?case
-  proof (cases buf)
-    case Nil
-    show ?thesis
-      using IH(3) size_snd_mbuf_t_cases
-      by (auto simp: Nil)
-  next
-    case (Cons a' buf')
-    have "size_list (\<lambda>x. size (snd (mbuf_t_cases x))) buf < size_list size buf"
-      using IH(1,3)
-      by (auto simp: Cons)
-    then show ?thesis
-      using IH(3) size_snd_mbuf_t_cases
-      by force
-  qed
-qed auto
+  "mbufn_add xs' xs = List.map2 (@) xs xs'"
 
 function mbufn_take :: "(event_data table list \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow> event_data mbufn \<Rightarrow> 'b \<times> event_data mbufn" where
-  "mbufn_take f z buf = (if buf = [] \<or> (\<exists>x \<in> set buf. mbuf_t_is_empty x) then (z, buf)
-    else mbufn_take f (f (map (the \<circ> fst \<circ> mbuf_t_cases) buf) z) (map (snd \<circ> mbuf_t_cases) buf))"
-  by pat_completeness auto
-termination
-  using size_list_snd_mbuf_t_cases
-  by (relation "measure (\<lambda>(_, _, buf). size_list size buf)") (auto simp: comp_def Suc_le_eq size_list_length_diff1)
-
-function Rep_mbufn_take :: "(event_data table list \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'b \<Rightarrow> event_data table list list \<Rightarrow> 'b \<times> event_data table list list" where
-  "Rep_mbufn_take f z buf = (if buf = [] \<or> [] \<in> set buf then (z, buf)
-    else Rep_mbufn_take f (f (map hd buf) z) (map tl buf))"
+  "mbufn_take f z buf = (if buf = [] \<or> [] \<in> set buf then (z, buf)
+    else mbufn_take f (f (map hd buf) z) (map tl buf))"
   by pat_completeness auto
 termination by (relation "measure (\<lambda>(_, _, buf). size_list length buf)")
     (auto simp: comp_def Suc_le_eq size_list_length_diff1)
 
-lemma mbuf_t_is_empty_in_set: "[] \<in> set (map Rep_mbuf_t buf) \<longleftrightarrow> (\<exists>x \<in> set buf. mbuf_t_is_empty x)"
-  by transfer auto
-
-lemma hd_Rep_mbuf_t:
-  assumes "\<And>x. x \<in> set buf \<Longrightarrow> \<not> mbuf_t_is_empty x"
-  shows "map (hd \<circ> Rep_mbuf_t) buf = map (the \<circ> fst \<circ> mbuf_t_cases) buf"
-  using assms
-  by transfer (auto split: list.splits)
-
-lemma tl_Rep_mbuf_t:
-  assumes "\<And>x. x \<in> set buf \<Longrightarrow> \<not> mbuf_t_is_empty x"
-  shows "map (tl \<circ> Rep_mbuf_t) buf = map Rep_mbuf_t (map (snd \<circ> mbuf_t_cases) buf)"
-  using assms
-  by transfer (auto split: list.splits)
-
-lemma Rep_mbufn_take: "mbufn_take f z buf = (z', buf') \<Longrightarrow>
-  Rep_mbufn_take f z (map Rep_mbuf_t buf) = (z', map Rep_mbuf_t buf')"
-proof (induction f z buf arbitrary: z' buf' rule: mbufn_take.induct)
-  case (1 f z buf)
-  show ?case
-    using 1(1,2)
-    unfolding mbufn_take.simps[of _ _ buf] Rep_mbufn_take.simps[of _ _ "map Rep_mbuf_t buf"] mbuf_t_is_empty_in_set map_is_Nil_conv
-    by (auto simp del: Rep_mbufn_take.simps mbufn_take.simps simp: hd_Rep_mbuf_t tl_Rep_mbuf_t split: if_splits)
-qed
-
 fun mbufnt_take :: "(event_data table list \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow>
-    'b \<Rightarrow> event_data mbufn \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbufn \<times> ts list" where
-  "mbufnt_take f z buf ts =
-    (if (\<exists>x \<in> set buf. mbuf_t_is_empty x) \<or> ts = [] then (z, buf, ts)
-    else mbufnt_take f (f (map (the \<circ> fst \<circ> mbuf_t_cases) buf) (hd ts) z) (map (snd \<circ> mbuf_t_cases) buf) (tl ts))"
-
-fun Rep_mbufnt_take :: "(event_data table list \<Rightarrow> ts \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow>
-     'b \<Rightarrow> event_data table list list \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data table list list \<times> ts list" where
-  "Rep_mbufnt_take f z buf ts =
-    (if [] \<in> set buf \<or> ts = [] then (z, buf, ts)
-    else Rep_mbufnt_take f (f (map hd buf) (hd ts) z) (map tl buf) (tl ts))"
-
-lemma Rep_mbufnt_take: "mbufnt_take f z buf nts = (z', buf', nts') \<Longrightarrow>  Rep_mbufnt_take f z (map Rep_mbuf_t buf) nts = (z', map Rep_mbuf_t buf', nts')"
-proof (induction f z buf nts arbitrary: z' buf' nts' rule: mbufnt_take.induct)
-  case (1 f z buf)
-  show ?case
-    using 1(1,2)
-    unfolding mbufnt_take.simps[of _ _ buf] Rep_mbufnt_take.simps[of _ _ "map Rep_mbuf_t buf"] mbuf_t_is_empty_in_set map_is_Nil_conv
-    by (auto simp del: Rep_mbufnt_take.simps mbufnt_take.simps simp: hd_Rep_mbuf_t tl_Rep_mbuf_t split: if_splits)
-qed
+    'b \<Rightarrow> event_data mbufn \<Rightarrow> ts \<Rightarrow> ts list \<Rightarrow> 'b \<times> event_data mbufn \<times> ts \<times> ts list" where
+  "mbufnt_take f z buf t0 ts =
+    (if [] \<in> set buf \<or> ts = [] then (z, buf, (case ts of [] \<Rightarrow> t0 | t # _ \<Rightarrow> t), ts)
+    else mbufnt_take f (f (map hd buf) (hd ts) z) (map tl buf) (hd ts) (tl ts))"
 
 fun match :: "Formula.trm list \<Rightarrow> event_data tuple \<Rightarrow> (nat \<rightharpoonup> event_data) option" where
   "match [] [] = Some Map.empty"
@@ -1323,19 +1120,10 @@ fun eval_constraint0 :: "mconstraint \<Rightarrow> event_data \<Rightarrow> even
 fun eval_constraint :: "Formula.trm \<times> bool \<times> mconstraint \<times> Formula.trm \<Rightarrow> event_data tuple \<Rightarrow> bool" where
   "eval_constraint (t1, p, c, t2) x = (eval_constraint0 c (meval_trm t1 x) (meval_trm t2 x) = p)"
 
-definition "lookahead_ts nts' nts ts t = hd (nts' @ rev (nts @ ts) @ [t])"
-
-lemma lookahead_ts_code[code]: "lookahead_ts nts' nts ts t =
-   (case nts' of t # _ \<Rightarrow> t
-   | [] \<Rightarrow> (case ts of _ # _ \<Rightarrow> last ts
-           | [] \<Rightarrow> (case nts of _ # _ \<Rightarrow> last nts
-                   | [] \<Rightarrow> t)))"
-  by (auto simp: lookahead_ts_def hd_append hd_rev split: list.splits)
-
 function letpast_meval0 where
   "letpast_meval0 eval j i ys xs p ts db \<phi> =
      (let (ys', \<phi>') = eval ts (Mapping.update p xs db) \<phi>
-     in if size \<phi>' \<noteq> size \<phi> then undefined
+     in if size \<phi>' \<noteq> size \<phi> then ([], 0, None, \<phi>)
      else (case ys' of
        [] \<Rightarrow> (ys @ ys', i + length xs, None, \<phi>')
      | y # _ \<Rightarrow> (if Suc (i + length xs) \<ge> j then (ys @ ys', i + length xs, Some y, \<phi>')
@@ -1436,20 +1224,18 @@ function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> database
     in (zs, MSince args \<phi> \<psi> buf aux))"
 | "meval n ts db (MUntil args \<phi> \<psi> buf nts t aux) =
     (let (xs, \<phi>) = meval n ts db \<phi>; (ys, \<psi>) = meval n ts db \<psi>;
-      (aux, buf, nts') = mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) (nts @ ts);
-      nt = lookahead_ts nts' nts ts t;
+      (aux, buf, nt, nts') = mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) t (nts @ ts);
       (zs, aux) = eval_muaux args nt aux
     in (zs, MUntil args \<phi> \<psi> buf nts' nt aux))"
 | "meval n ts db (MMatchP I mr mrs \<phi>s buf nts aux) =
     (let (xss, \<phi>s) = map_split id (map (meval n ts db) \<phi>s);
-      ((zs, aux), buf, nts) = mbufnt_take (\<lambda>rels t (zs, aux).
+      ((zs, aux), buf, _, nts) = mbufnt_take (\<lambda>rels t (zs, aux).
         let (z, aux) = update_matchP n I mr mrs rels t aux
-        in (zs @ [z], aux)) ([], aux) (mbufn_add xss buf) (nts @ ts)
+        in (zs @ [z], aux)) ([], aux) (mbufn_add xss buf) 0 (nts @ ts)
     in (zs, MMatchP I mr mrs \<phi>s buf nts aux))"
 | "meval n ts db (MMatchF I mr mrs \<phi>s buf nts t aux) =
     (let (xss, \<phi>s) = map_split id (map (meval n ts db) \<phi>s);
-      (aux, buf, nts') = mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) (nts @ ts);
-      nt = lookahead_ts nts' nts ts t;
+      (aux, buf, nt, nts') = mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) t (nts @ ts);
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
   by pat_completeness auto
@@ -3191,17 +2977,7 @@ subsubsection \<open>Invariants\<close>
 definition wf_mbuf2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow>
     event_data mbuf2 \<Rightarrow> bool" where
   "wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
-    list_all2 P [i..<ja] (Rep_mbuf_t xs) \<and> list_all2 Q [i..<jb] (Rep_mbuf_t ys))"
-
-
-definition Rep_wf_mbuf2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) \<Rightarrow>
-    event_data table list \<times> event_data table list \<Rightarrow> bool" where
-  "Rep_wf_mbuf2 i ja jb P Q buf \<longleftrightarrow> i \<le> ja \<and> i \<le> jb \<and> (case buf of (xs, ys) \<Rightarrow>
     list_all2 P [i..<ja] xs \<and> list_all2 Q [i..<jb] ys)"
-
-lemma Rep_wf_mbuf2: "Rep_wf_mbuf2 i ja jb P Q (map_prod Rep_mbuf_t Rep_mbuf_t buf) \<longleftrightarrow>
-  wf_mbuf2 i ja jb P Q buf"
-  by (auto simp: Rep_wf_mbuf2_def wf_mbuf2_def)
 
 inductive list_all3 :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'b list \<Rightarrow> 'c list \<Rightarrow> bool" for P :: "('a \<Rightarrow> 'b \<Rightarrow> 'c \<Rightarrow> bool)" where
   "list_all3 P [] [] []"
@@ -3249,13 +3025,7 @@ lemma list_all3_refl [intro?]:
   by (simp add: list_all3_conv_all_nth)
 
 definition wf_mbufn :: "nat \<Rightarrow> nat list \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) list \<Rightarrow> event_data mbufn \<Rightarrow> bool" where
-  "wf_mbufn i js Ps buf \<longleftrightarrow> list_all3 (\<lambda>P j xs. i \<le> j \<and> list_all2 P [i..<j] (Rep_mbuf_t xs)) Ps js buf"
-
-definition Rep_wf_mbufn :: "nat \<Rightarrow> nat list \<Rightarrow> (nat \<Rightarrow> event_data table \<Rightarrow> bool) list \<Rightarrow> event_data table list list \<Rightarrow> bool" where
-  "Rep_wf_mbufn i js Ps buf \<longleftrightarrow> list_all3 (\<lambda>P j xs. i \<le> j \<and> list_all2 P [i..<j] xs) Ps js buf"
-
-lemma Rep_wf_mbufn: "Rep_wf_mbufn i js Ps (map Rep_mbuf_t buf) \<longleftrightarrow> wf_mbufn i js Ps buf"
-  by (auto simp: Rep_wf_mbufn_def wf_mbufn_def list_all3_conv_all_nth)
+  "wf_mbufn i js Ps buf \<longleftrightarrow> list_all3 (\<lambda>P j xs. i \<le> j \<and> list_all2 P [i..<j] xs) Ps js buf"
 
 definition wf_mbuf2' :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
   Formula.formula \<Rightarrow> Formula.formula \<Rightarrow> event_data mbuf2 \<Rightarrow> bool" where
@@ -3273,9 +3043,9 @@ definition wf_mbufn' :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightar
 
 lemma wf_mbuf2'_UNIV_alt: "wf_mbuf2' \<sigma> P V j n UNIV \<phi> \<psi> buf \<longleftrightarrow> (case buf of (xs, ys) \<Rightarrow>
   list_all2 (\<lambda>i. wf_table n (Formula.fv \<phi>) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
-    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<phi> j)] (Rep_mbuf_t xs) \<and>
+    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<phi> j)] xs \<and>
   list_all2 (\<lambda>i. wf_table n (Formula.fv \<psi>) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>))
-    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<psi> j)] (Rep_mbuf_t ys))"
+    [min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j) ..< (progress \<sigma> P \<psi> j)] ys)"
   unfolding wf_mbuf2'_def wf_mbuf2_def
   by (simp add: mem_restr_UNIV[THEN eqTrueI, abs_def] split: prod.split)
 
@@ -3289,25 +3059,11 @@ fun wf_mbuf2S :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> na
   Formula.formula \<Rightarrow> \<I> \<Rightarrow> Formula.formula \<Rightarrow> event_data mbuf2S \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
   "wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> (buf\<phi>, buf\<psi>, ts, skew) pIn pOut \<longleftrightarrow>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
-      [pOut ..< progress \<sigma> P \<phi> j] (Rep_mbuf_t buf\<phi>) \<and>
-    list_all2 (\<lambda>i. qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>))
-      [pIn ..< progress \<sigma> P \<psi> j] (Rep_mbuf_t buf\<psi>) \<and>
-    list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [pOut ..< j] (Rep_mbuf_t ts) \<and>
-    pOut = (if skew then Suc pIn else pIn)"
-
-fun Rep_wf_mbuf2S :: "Formula.trace \<Rightarrow> _ \<Rightarrow> _ \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> event_data list set \<Rightarrow>
-  Formula.formula \<Rightarrow> \<I> \<Rightarrow> Formula.formula \<Rightarrow> event_data table list \<times> event_data table list \<times> ts list \<times> bool \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool" where
-  "Rep_wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> (buf\<phi>, buf\<psi>, ts, skew) pIn pOut \<longleftrightarrow>
-    list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
       [pOut ..< progress \<sigma> P \<phi> j] buf\<phi> \<and>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>))
       [pIn ..< progress \<sigma> P \<psi> j] buf\<psi> \<and>
     list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [pOut ..< j] ts \<and>
     pOut = (if skew then Suc pIn else pIn)"
-
-lemma Rep_wf_mbuf2S: "Rep_wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> (Rep_mbuf_t buf\<phi>, Rep_mbuf_t buf\<psi>, Rep_mbuf_t ts, skew) pIn pOut \<longleftrightarrow>
-  wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> (buf\<phi>, buf\<psi>, ts, skew) pIn pOut"
-  by auto
 
 definition "sat_since_point pos \<sigma> V \<phi> \<psi> pIn i t x \<longleftrightarrow>
   (\<exists>j<pIn. \<tau> \<sigma> j = t \<and> Formula.sat \<sigma> V x j \<psi> \<and>
@@ -4005,13 +3761,12 @@ lemma (in maux) letpast_meval_ys: "(ys', i', buf', \<phi>f) = letpast_meval m j 
 
 subsubsection \<open>Initialisation\<close>
 
-lemma wf_mbuf2'_0: "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbuf2' \<sigma> P V 0 n R \<phi> \<psi> (mbuf_t_empty, mbuf_t_empty)"
-  unfolding wf_mbuf2'_def wf_mbuf2_def
-  by transfer simp
+lemma wf_mbuf2'_0: "pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbuf2' \<sigma> P V 0 n R \<phi> \<psi> ([], [])"
+  unfolding wf_mbuf2'_def wf_mbuf2_def by simp
 
-lemma wf_mbufn'_0: "to_mregex r = (mr, \<phi>s) \<Longrightarrow> pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbufn' \<sigma> P V 0 n R r (replicate (length \<phi>s) mbuf_t_empty)"
+lemma wf_mbufn'_0: "to_mregex r = (mr, \<phi>s) \<Longrightarrow> pred_mapping (\<lambda>x. x = 0) P \<Longrightarrow> wf_mbufn' \<sigma> P V 0 n R r (replicate (length \<phi>s) [])"
   unfolding wf_mbufn'_def wf_mbufn_def map_replicate_const[symmetric]
-  by (auto simp: list_all3_map mbuf_t_empty.rep_eq intro: list_all3_refl simp: Min_eq_iff progress_regex_def)
+  by (auto simp: list_all3_map intro: list_all3_refl simp: Min_eq_iff progress_regex_def)
 
 lemma wf_ts_0: "wf_ts \<sigma> P 0 \<phi> \<psi> []"
   unfolding wf_ts_def by simp
@@ -4114,7 +3869,7 @@ next
     by (cases l) (auto simp: Min_eq_iff)
   ultimately show ?case using Ands.hyps Ands.prems(2)
     by (auto simp: wf_mbufn_def list_all3_map list.rel_map map_replicate_const[symmetric] subset_eq
-        map_map[symmetric] map_append[symmetric] mbuf_t_empty.rep_eq simp del: map_map map_append
+        map_map[symmetric] map_append[symmetric] simp del: map_map map_append
         intro!: wf_mformula.Ands list_all2_appendI)
 next
   case (Neg \<phi>)
@@ -4139,12 +3894,12 @@ next
   case (Since \<phi> I \<psi>)
   then show ?case
     using wf_since_aux_Nil
-    by (auto simp add: init_args_def mbuf_t_empty.rep_eq intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
 next
   case (Not_Since \<phi> I \<psi>)
   then show ?case
     using wf_since_aux_Nil
-    by (auto simp add: init_args_def mbuf_t_empty.rep_eq intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
+    by (auto simp add: init_args_def intro!: wf_mformula.Since wf_mbuf2'_0 wf_ts_0)
 next
   case (Until \<phi> I \<psi>)
   then show ?case
@@ -4837,41 +4592,41 @@ proof -
   let ?pOut = "progress \<sigma> P (Sincep pos \<phi> I \<psi>) j"
   obtain buf\<phi> buf\<psi> ts skew where buf_eq: "buf = (buf\<phi>, buf\<psi>, ts, skew)"
     by (metis surj_pair)
-  then have result_eq: "mbuf2S_add xs ys ?nts buf = (buf\<phi> @@ xs, buf\<psi> @@ ys, ts @@ ?nts, skew)"
+  then have result_eq: "mbuf2S_add xs ys ?nts buf = (buf\<phi> @ xs, buf\<psi> @ ys, ts @ ?nts, skew)"
     by simp
   show ?thesis
-    unfolding result_eq wf_mbuf2S.simps mbuf_t_append.rep_eq
+    unfolding result_eq wf_mbuf2S.simps
   proof (intro conjI)
     show "list_all2 (\<lambda>i. qtable n (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>))
-        [?pOut..<progress \<sigma> P' \<phi> (j + \<delta>)] (Rep_mbuf_t buf\<phi> @ xs)" (is "?P [?pOut..<?p\<phi>'] (Rep_mbuf_t buf\<phi> @ xs)")
-      unfolding mbuf_t_append.rep_eq list_all2_append2
+        [?pOut..<progress \<sigma> P' \<phi> (j + \<delta>)] (buf\<phi> @ xs)" (is "?P [?pOut..<?p\<phi>'] (buf\<phi> @ xs)")
+      unfolding list_all2_append2
     proof (intro exI)
       let ?p\<phi> = "progress \<sigma> P \<phi> j"
       show "[?pOut..<?p\<phi>'] = [?pOut..<?p\<phi>] @ [?p\<phi>..<?p\<phi>'] \<and>
-          length [?pOut..<?p\<phi>] = length (Rep_mbuf_t buf\<phi>) \<and> length [?p\<phi>..<?p\<phi>'] = length xs \<and>
-          ?P [?pOut..<?p\<phi>] (Rep_mbuf_t buf\<phi>) \<and> ?P [?p\<phi>..<?p\<phi>'] xs"
+          length [?pOut..<?p\<phi>] = length buf\<phi> \<and> length [?p\<phi>..<?p\<phi>'] = length xs \<and>
+          ?P [?pOut..<?p\<phi>] buf\<phi> \<and> ?P [?p\<phi>..<?p\<phi>'] xs"
         using wf xs by (auto simp: buf_eq progress_Sincep upt_add_eq_append' progress_mono_gen[OF _ bounded rm]
             dest: list_all2_lengthD)
     qed
     show "list_all2 (\<lambda>i. qtable n (fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<psi>))
-        [?pIn..<progress \<sigma> P' \<psi> (j + \<delta>)] (Rep_mbuf_t buf\<psi> @ ys)" (is "?P [?pIn..<?p\<psi>'] (Rep_mbuf_t buf\<psi> @ ys)")
+        [?pIn..<progress \<sigma> P' \<psi> (j + \<delta>)] (buf\<psi> @ ys)" (is "?P [?pIn..<?p\<psi>'] (buf\<psi> @ ys)")
       unfolding list_all2_append2
     proof (intro exI)
       let ?p\<psi> = "progress \<sigma> P \<psi> j"
       show "[?pIn..<?p\<psi>'] = [?pIn..<?p\<psi>] @ [?p\<psi>..<?p\<psi>'] \<and>
-          length [?pIn..<?p\<psi>] = length (Rep_mbuf_t buf\<psi>) \<and> length [?p\<psi>..<?p\<psi>'] = length ys \<and>
-          ?P [?pIn..<?p\<psi>] (Rep_mbuf_t buf\<psi>) \<and> ?P [?p\<psi>..<?p\<psi>'] ys"
+          length [?pIn..<?p\<psi>] = length buf\<psi> \<and> length [?p\<psi>..<?p\<psi>'] = length ys \<and>
+          ?P [?pIn..<?p\<psi>] buf\<psi> \<and> ?P [?p\<psi>..<?p\<psi>'] ys"
         using wf ys by (auto simp: buf_eq progress_Sincep upt_add_eq_append' progress_mono_gen[OF _ bounded rm]
             dest: list_all2_lengthD)
     qed
-    show "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [?pOut..<j + \<delta>] (Rep_mbuf_t ts @ ?nts)"
+    show "list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [?pOut..<j + \<delta>] (ts @ ?nts)"
       unfolding list_all2_append2
     proof (intro exI)
       have "?pOut \<le> j"
         by (rule progress_le_gen[OF bounded(1)])
       then show "[?pOut..<j + \<delta>] = [?pOut..<j] @ [j..<j + \<delta>] \<and>
-          length [?pOut..<j] = length (Rep_mbuf_t ts) \<and> length [j..<j + \<delta>] = length ?nts \<and>
-          list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [?pOut..<j] (Rep_mbuf_t ts) \<and> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [j..<j + \<delta>] ?nts"
+          length [?pOut..<j] = length ts \<and> length [j..<j + \<delta>] = length ?nts \<and>
+          list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [?pOut..<j] ts \<and> list_all2 (\<lambda>i t. t = \<tau> \<sigma> i) [j..<j + \<delta>] ?nts"
         using wf by (auto simp add: buf_eq list.rel_map list.rel_refl simp flip: upt_add_eq_append'
               dest: list_all2_lengthD)
     qed
@@ -5078,16 +4833,16 @@ lemma (in msaux) wf_since_aux_result:
     done
   done
 
-lemma (in maux) Rep_eval_since_gen:
+lemma (in maux) eval_since_gen:
   assumes pre:
       "list_all2 (\<lambda>i. qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Sincep pos \<phi> I \<psi>)))
         [start..<pOut] (rev zs)" (is "?A pOut (rev zs)")
-      "Rep_wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> buf pIn pOut" (is "?B buf pIn pOut")
+      "wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> buf pIn pOut" (is "?B buf pIn pOut")
       "wf_since_aux \<sigma> V R args \<phi> \<psi> aux pIn pOut" (is "?C aux pIn pOut")
       "pIn \<le> progress \<sigma> P \<phi> j" "pIn \<le> progress \<sigma> P \<psi> j"
       "pOut \<le> progress \<sigma> P (Sincep pos \<phi> I \<psi>) j"
       "start \<le> pOut"
-      "(zs', buf', aux') = Rep_eval_since args zs buf aux"
+      "(zs', buf', aux') = eval_since args zs buf aux"
     and bounded: "pred_mapping (\<lambda>x. x \<le> j) P"
     and fvi_subset: "fv \<phi> \<subseteq> fv \<psi>"
     and args_ivl: "args_ivl args = I"
@@ -5100,7 +4855,7 @@ lemma (in maux) Rep_eval_since_gen:
       ?B buf' (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)) (progress \<sigma> P (Sincep pos \<phi> I \<psi>) j) \<and>
       ?C aux' (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)) (progress \<sigma> P (Sincep pos \<phi> I \<psi>) j)"
   using pre
-proof (induction zs buf aux arbitrary: pIn pOut zs' buf' aux' taking: args rule: Rep_eval_since.induct)
+proof (induction zs buf aux arbitrary: pIn pOut zs' buf' aux' taking: args rule: eval_since.induct)
   case (1 zs x xs t ts skew aux)
   note wf_result = "1.prems"(1)
   note wf_buf = "1.prems"(2)
@@ -5108,8 +4863,7 @@ proof (induction zs buf aux arbitrary: pIn pOut zs' buf' aux' taking: args rule:
   note leqs = "1.prems"(4-7)
   note result_eq = "1.prems"(8)
   have pIn_eq: "pIn = progress \<sigma> P \<psi> j" and \<psi>_before_\<phi>: "progress \<sigma> P \<psi> j \<le> progress \<sigma> P \<phi> j"
-    using wf_buf leqs
-    by (auto dest: list_all2_lengthD split: if_splits)
+    using wf_buf leqs by (auto dest: list_all2_lengthD)
   show ?case proof (cases "skew \<or> memL (args_ivl args) 0")
     case True
     then have eqs: "zs' = rev zs" "buf' = (x # xs, [], t # ts, skew)" "aux' = aux"
@@ -5157,7 +4911,7 @@ next
   note result_eq = "2.prems"(8)
   let ?arg_aux = "add_new_table_msaux args y aux"
   show ?case proof (rule "2.IH")
-    show "(zs', buf', aux') = Rep_eval_since args zs (xs, ys, ts, False) ?arg_aux"
+    show "(zs', buf', aux') = eval_since args zs (xs, ys, ts, False) ?arg_aux"
       using result_eq by (simp add: Let_def)
     show "?A pOut (rev zs)" by fact
     show "?B (xs, ys, ts, False) (Suc pIn) pOut"
@@ -5203,7 +4957,7 @@ next
     ultimately show "Suc pOut \<le> progress \<sigma> P (Sincep pos \<phi> I \<psi>) j"
       using wf_buf by (simp add: progress_Sincep)
     show "start \<le> Suc pOut" using leqs by simp
-    show "(zs', buf', aux') = Rep_eval_since args (result_msaux args ?arg_aux # zs)
+    show "(zs', buf', aux') = eval_since args (result_msaux args ?arg_aux # zs)
          (xs, ys, ts, False) ?arg_aux"
       using result_eq by (simp add: Let_def)
   qed
@@ -5231,7 +4985,7 @@ next
     apply (simp add: progress_Sincep)
     by (smt (z3) calculation list.rel_distinct(1) min_def upt_eq_Nil_conv)
   ultimately show ?case
-    using "4_4" by (simp only: Rep_eval_since.simps prod.inject)
+    using "4_4" by (simp only: eval_since.simps prod.inject)
 next
   case ("4_5" zs v ve aux)
   then have "pIn = min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)"
@@ -5241,7 +4995,7 @@ next
     apply (simp add: progress_Sincep)
     by (smt (z3) bot_nat_0.extremum_uniqueI bounded dual_order.trans min.commute min_def pred_mapping_mono_strong progress_le_gen)
   ultimately show ?case
-    using "4_5" by (simp only: Rep_eval_since.simps prod.inject)
+    using "4_5" by (simp only: eval_since.simps prod.inject)
 next
   case ("4_6" zs v vb aux)
   then have "pIn = min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)"
@@ -5252,37 +5006,7 @@ next
     apply (simp add: progress_Sincep)
     by (smt (z3) bot_nat_0.extremum_uniqueI bounded dual_order.trans min.commute min_def pred_mapping_mono_strong progress_le_gen)
   ultimately show ?case
-    using "4_6" by (simp only: Rep_eval_since.simps prod.inject)
-qed
-
-lemma (in maux) eval_since_gen:
-  assumes pre:
-      "list_all2 (\<lambda>i. qtable n (Formula.fv \<psi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i (Sincep pos \<phi> I \<psi>)))
-        [start..<pOut] (rev zs)" (is "?A pOut (rev zs)")
-      "wf_mbuf2S \<sigma> P V j n R \<phi> I \<psi> buf pIn pOut" (is "?B buf pIn pOut")
-      "wf_since_aux \<sigma> V R args \<phi> \<psi> aux pIn pOut" (is "?C aux pIn pOut")
-      "pIn \<le> progress \<sigma> P \<phi> j" "pIn \<le> progress \<sigma> P \<psi> j"
-      "pOut \<le> progress \<sigma> P (Sincep pos \<phi> I \<psi>) j"
-      "start \<le> pOut"
-      "(zs', buf', aux') = eval_since args zs buf aux"
-    and bounded: "pred_mapping (\<lambda>x. x \<le> j) P"
-    and fvi_subset: "fv \<phi> \<subseteq> fv \<psi>"
-    and args_ivl: "args_ivl args = I"
-    and args_n: "args_n args = n"
-    and args_L: "args_L args = Formula.fv \<phi>"
-    and args_R: "args_R args = Formula.fv \<psi>"
-    and args_pos: "args_pos args = pos"
-  shows
-      "?A (progress \<sigma> P (Sincep pos \<phi> I \<psi>) j) zs' \<and>
-      ?B buf' (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)) (progress \<sigma> P (Sincep pos \<phi> I \<psi>) j) \<and>
-      ?C aux' (min (progress \<sigma> P \<phi> j) (progress \<sigma> P \<psi> j)) (progress \<sigma> P (Sincep pos \<phi> I \<psi>) j)"
-proof -
-  obtain xs ys ts skew where buf_def: "buf = (xs, ys, ts, skew)"
-    by (cases buf) auto
-  obtain xs' ys' ts' skew' where buf'_def: "buf' = (xs', ys', ts', skew')"
-    by (cases buf') auto
-  show ?thesis
-    by (rule Rep_eval_since_gen[OF assms(1) assms(2)[unfolded buf_def, folded Rep_wf_mbuf2S] assms(3-7) Rep_eval_since[OF pre(8)[unfolded buf_def buf'_def, symmetric], symmetric] assms(9-), unfolded Rep_wf_mbuf2S, folded buf'_def])
+    using "4_6" by (simp only: eval_since.simps prod.inject)
 qed
 
 lemma (in maux) eval_since:
@@ -6134,60 +5858,41 @@ lemma wf_mbuf2_add:
     and "ja \<le> ja'" "jb \<le> jb'"
   shows "wf_mbuf2 i ja' jb' P Q (mbuf2_add xs ys buf)"
   using assms unfolding wf_mbuf2_def
-  apply transfer'
-  subgoal for i ja jb P Q buf ja' xs jb' ys
-    by (auto 0 3 simp: list_all2_append2 upt_append mbuf_t_append.rep_eq dest: list_all2_lengthD
-        intro: exI[where x="[i..<ja]"] exI[where x="[ja..<ja']"]
-        exI[where x="[i..<jb]"] exI[where x="[jb..<jb']"] split: prod.splits)
-  done
-
-lemma Rep_wf_mbufn_add:
-  assumes "Rep_wf_mbufn i js Ps buf"
-    and "list_all3 list_all2 Ps (List.map2 (\<lambda>j j'. [j..<j']) js js') xss"
-    and "list_all2 (\<le>) js js'"
-  shows "Rep_wf_mbufn i js' Ps (Rep_mbufn_add xss buf)"
-  unfolding Rep_wf_mbufn_def list_all3_conv_all_nth
-proof safe
-  show "length Ps = length js'" "length js' = length (Rep_mbufn_add xss buf)"
-    using assms unfolding Rep_wf_mbufn_def list_all3_conv_all_nth list_all2_conv_all_nth by auto
-next
-  fix k assume k: "k < length Ps"
-  then show "i \<le> js' ! k"
-    using assms unfolding Rep_wf_mbufn_def list_all3_conv_all_nth list_all2_conv_all_nth
-    by (auto 0 4 dest: spec[of _ i])
-  from k have " [i..<js' ! k] =  [i..<js ! k] @ [js ! k ..<js' ! k]" and
-    "length [i..<js ! k] = length (buf ! k)"
-    using assms(1,3) unfolding Rep_wf_mbufn_def list_all3_conv_all_nth list_all2_conv_all_nth
-    by (auto simp: upt_append)
-  with k show "list_all2 (Ps ! k) [i..<js' ! k] (Rep_mbufn_add xss buf ! k)"
-    using assms[unfolded Rep_wf_mbufn_def list_all3_conv_all_nth]
-    by (auto simp add: list_all2_append)
-qed
+  by (auto 0 3 simp: list_all2_append2 upt_append dest: list_all2_lengthD
+      intro: exI[where x="[i..<ja]"] exI[where x="[ja..<ja']"]
+      exI[where x="[i..<jb]"] exI[where x="[jb..<jb']"] split: prod.splits)
 
 lemma wf_mbufn_add:
   assumes "wf_mbufn i js Ps buf"
     and "list_all3 list_all2 Ps (List.map2 (\<lambda>j j'. [j..<j']) js js') xss"
     and "list_all2 (\<le>) js js'"
   shows "wf_mbufn i js' Ps (mbufn_add xss buf)"
-  unfolding Rep_wf_mbufn[symmetric] Rep_mbufn_add[symmetric]
-  by (rule Rep_wf_mbufn_add[OF assms(1)[folded Rep_wf_mbufn] assms(2-)])
-
-lemma Rep_mbuf2_take_eqD:
-  assumes "Rep_mbuf2_take f buf = (zs, buf')"
-    and "Rep_wf_mbuf2 i ja jb P Q buf"
-  shows "Rep_wf_mbuf2 (min ja jb) ja jb P Q buf'"
-    and "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] zs"
-  using assms unfolding Rep_wf_mbuf2_def
-  by (induction f buf arbitrary: i zs buf' rule: Rep_mbuf2_take.induct)
-     (fastforce simp add: list_all2_Cons2 upt_eq_Cons_conv min_absorb1 min_absorb2 split: prod.splits)+
+  unfolding wf_mbufn_def list_all3_conv_all_nth
+proof safe
+  show "length Ps = length js'" "length js' = length (mbufn_add xss buf)"
+    using assms unfolding wf_mbufn_def list_all3_conv_all_nth list_all2_conv_all_nth by auto
+next
+  fix k assume k: "k < length Ps"
+  then show "i \<le> js' ! k"
+    using assms unfolding wf_mbufn_def list_all3_conv_all_nth list_all2_conv_all_nth
+    by (auto 0 4 dest: spec[of _ i])
+  from k have " [i..<js' ! k] =  [i..<js ! k] @ [js ! k ..<js' ! k]" and
+    "length [i..<js ! k] = length (buf ! k)"
+    using assms(1,3) unfolding wf_mbufn_def list_all3_conv_all_nth list_all2_conv_all_nth
+    by (auto simp: upt_append)
+  with k show "list_all2 (Ps ! k) [i..<js' ! k] (mbufn_add xss buf ! k)"
+    using assms[unfolded wf_mbufn_def list_all3_conv_all_nth]
+    by (auto simp add: list_all2_append)
+qed
 
 lemma mbuf2_take_eqD:
-  assumes "mbuf2_take f buf = (zs, buf')"
+  assumes "mbuf2_take f buf = (xs, buf')"
     and "wf_mbuf2 i ja jb P Q buf"
   shows "wf_mbuf2 (min ja jb) ja jb P Q buf'"
-    and "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] zs"
-  using Rep_mbuf2_take_eqD[OF Rep_mbuf2_take[OF assms(1)] assms(2)[folded Rep_wf_mbuf2]]
-  by (auto simp: Rep_wf_mbuf2[symmetric])
+    and "list_all2 (\<lambda>i z. \<exists>x y. P i x \<and> Q i y \<and> z = f x y) [i..<min ja jb] xs"
+  using assms unfolding wf_mbuf2_def
+  by (induction f buf arbitrary: i xs buf' rule: mbuf2_take.induct)
+    (fastforce simp add: list_all2_Cons2 upt_eq_Cons_conv min_absorb1 min_absorb2 split: prod.splits)+
 
 lemma list_all3_Nil[simp]:
   "list_all3 P xs ys [] \<longleftrightarrow> xs = [] \<and> ys = []"
@@ -6210,91 +5915,62 @@ lemma list_all3_mono_strong: "list_all3 P xs ys zs \<Longrightarrow>
 definition Mini where
   "Mini i js = (if js = [] then i else Min (set js))"
 
-lemma Rep_wf_mbufn_in_set_Mini:
-  assumes "Rep_wf_mbufn i js Ps buf"
+lemma wf_mbufn_in_set_Mini:
+  assumes "wf_mbufn i js Ps buf"
   shows "[] \<in> set buf \<Longrightarrow> Mini i js = i"
   unfolding in_set_conv_nth
 proof (elim exE conjE)
   fix k
   have "i \<le> j" if "j \<in> set js" for j
-    using that assms unfolding Rep_wf_mbufn_def list_all3_conv_all_nth in_set_conv_nth by auto
+    using that assms unfolding wf_mbufn_def list_all3_conv_all_nth in_set_conv_nth by auto
   moreover assume "k < length buf" "buf ! k = []"
   ultimately show ?thesis using assms
-    unfolding Mini_def Rep_wf_mbufn_def list_all3_conv_all_nth
+    unfolding Mini_def wf_mbufn_def list_all3_conv_all_nth
     by (auto 0 4 dest!: spec[of _ k] intro: Min_eqI simp: in_set_conv_nth)
 qed
 
-lemma wf_mbufn_in_set_Mini:
-  assumes "wf_mbufn i js Ps buf"
-  shows "(\<exists>x \<in> set buf. mbuf_t_is_empty x) \<Longrightarrow> Mini i js = i"
-  using Rep_wf_mbufn_in_set_Mini[OF assms[folded Rep_wf_mbufn]]
-  by transfer auto
-
-lemma Rep_wf_mbufn_notin_set:
-  assumes "Rep_wf_mbufn i js Ps buf"
-  shows "[] \<notin> set buf \<Longrightarrow> j \<in> set js \<Longrightarrow> i < j"
-  using assms unfolding Rep_wf_mbufn_def list_all3_conv_all_nth
-  by (cases "i \<in> set js") (auto intro: le_neq_implies_less simp: in_set_conv_nth)
-
 lemma wf_mbufn_notin_set:
   assumes "wf_mbufn i js Ps buf"
-  shows "\<not>(\<exists>x \<in> set buf. mbuf_t_is_empty x) \<Longrightarrow> j \<in> set js \<Longrightarrow> i < j"
-  using Rep_wf_mbufn_notin_set[OF assms[folded Rep_wf_mbufn]]
-  by transfer auto
-
-lemma Rep_wf_mbufn_map_tl:
-  "Rep_wf_mbufn i js Ps buf \<Longrightarrow> [] \<notin> set buf \<Longrightarrow> Rep_wf_mbufn (Suc i) js Ps (map tl buf)"
-  by (auto simp: Rep_wf_mbufn_def list_all3_map Suc_le_eq
-      dest: rel_funD[OF tl_transfer]  elim!: list_all3_mono_strong le_neq_implies_less)
-
-lemma map_tl_aux: assumes "[] \<notin> set buf"
-  shows "map (\<lambda>x. snd (case x of [] \<Rightarrow> (None, x) | y # x \<Rightarrow> (Some y, x))) buf = map tl buf"
-  using assms
-  by (auto split: list.splits)
+  shows "[] \<notin> set buf \<Longrightarrow> j \<in> set js \<Longrightarrow> i < j"
+  using assms unfolding wf_mbufn_def list_all3_conv_all_nth
+  by (cases "i \<in> set js") (auto intro: le_neq_implies_less simp: in_set_conv_nth)
 
 lemma wf_mbufn_map_tl:
-  "wf_mbufn i js Ps buf \<Longrightarrow> \<not>(\<exists>x \<in> set buf. mbuf_t_is_empty x) \<Longrightarrow> wf_mbufn (Suc i) js Ps (map (snd \<circ> mbuf_t_cases) buf)"
-  unfolding Rep_wf_mbufn[symmetric]
-  by (drule Rep_wf_mbufn_map_tl; transfer) (auto simp: comp_def map_tl_aux)
+  "wf_mbufn i js Ps buf \<Longrightarrow> [] \<notin> set buf \<Longrightarrow> wf_mbufn (Suc i) js Ps (map tl buf)"
+  by (auto simp: wf_mbufn_def list_all3_map Suc_le_eq
+      dest: rel_funD[OF tl_transfer]  elim!: list_all3_mono_strong le_neq_implies_less)
 
 lemma list_all3_list_all2I: "list_all3 (\<lambda>x y z. Q x z) xs ys zs \<Longrightarrow> list_all2 Q xs zs"
   by (induct xs ys zs rule: list_all3.induct) auto
 
-lemma Rep_mbuf2t_take_eqD:
-  assumes "Rep_mbuf2t_take f z buf nts = (z', buf', nts')"
-    and "Rep_wf_mbuf2 i ja jb P Q buf"
-    and "list_all2 R [i..<j] nts"
-    and "ja \<le> j" "jb \<le> j"
-  shows "Rep_wf_mbuf2 (min ja jb) ja jb P Q buf'"
-    and "list_all2 R [min ja jb..<j] nts'"
-  using assms unfolding Rep_wf_mbuf2_def
-  by (induction f z buf nts arbitrary: i z' buf' nts' rule: Rep_mbuf2t_take.induct)
-     (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
-      split: prod.split)
+lemma hd_app: "hd (xs @ ys) = (case xs of [] \<Rightarrow> hd ys | x # _ \<Rightarrow> x)"
+  by (cases xs) auto
+
+lemma mbuf2t_take_nt:
+  assumes "mbuf2t_take f z buf t nts = (z', buf', nt, nts')"
+  shows "nt = hd (nts' @ rev nts @ [t])"
+  using assms
+  by (induction f z buf t nts arbitrary: z' buf' nt nts' rule: mbuf2t_take.induct)
+     (auto simp add: hd_app split: list.splits)
 
 lemma mbuf2t_take_eqD:
-  assumes "mbuf2t_take f z buf nts = (z', buf', nts')"
+  assumes "mbuf2t_take f z buf t nts = (z', buf', nt, nts')"
     and "wf_mbuf2 i ja jb P Q buf"
     and "list_all2 R [i..<j] nts"
     and "ja \<le> j" "jb \<le> j"
   shows "wf_mbuf2 (min ja jb) ja jb P Q buf'"
     and "list_all2 R [min ja jb..<j] nts'"
-proof -
-  obtain xs ys where buf_def: "buf = (xs, ys)"
-    by fastforce
-  obtain xs' ys' where buf'_def: "buf' = (xs', ys')"
-    by fastforce
-  show "wf_mbuf2 (min ja jb) ja jb P Q buf'" "list_all2 R [min ja jb..<j] nts'"
-    using Rep_mbuf2t_take_eqD[OF Rep_mbuf2t_take[OF assms(1)[unfolded buf_def buf'_def]], OF assms(2)[unfolded buf_def, folded Rep_wf_mbuf2] assms(3-)]
-    by (auto simp: buf'_def Rep_wf_mbuf2[symmetric])
-qed
+  using assms unfolding wf_mbuf2_def
+  by (induction f z buf t nts arbitrary: i z' buf' nt nts' rule: mbuf2t_take.induct)
+     (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
+      split: prod.split)
 
-lemma Rep_wf_mbufn_take:
-  assumes "Rep_mbufn_take f z buf = (z', buf')"
-    and "Rep_wf_mbufn i js Ps buf"
-  shows "Rep_wf_mbufn (Mini i js) js Ps buf'"
-  using assms unfolding Rep_wf_mbufn_def
-proof (induction f z buf arbitrary: i z' buf' rule: Rep_mbufn_take.induct)
+lemma wf_mbufn_take:
+  assumes "mbufn_take f z buf = (z', buf')"
+    and "wf_mbufn i js Ps buf"
+  shows "wf_mbufn (Mini i js) js Ps buf'"
+  using assms unfolding wf_mbufn_def
+proof (induction f z buf arbitrary: i z' buf' rule: mbufn_take.induct)
   case rec: (1 f z buf)
   show ?case proof (cases "buf = []")
     case True
@@ -6322,79 +5998,54 @@ proof (induction f z buf arbitrary: i z' buf' rule: Rep_mbufn_take.induct)
         show "list_all3 (\<lambda>P j xs. Suc i \<le> j \<and> list_all2 P [Suc i..<j] xs) Ps js (map tl buf)"
           using False rec.prems(2)
           by (auto simp: list_all3_map elim!: list_all3_mono_strong dest: list.rel_sel[THEN iffD1])
-        show "Rep_mbufn_take f (f (map hd buf) z) (map tl buf) = (z', buf')"
+        show "mbufn_take f (f (map hd buf) z) (map tl buf) = (z', buf')"
           using nonempty False rec.prems(1) by simp
       qed
     qed
   qed
 qed
 
-lemma wf_mbufn_take:
-  assumes "mbufn_take f z buf = (z', buf')"
-    and "wf_mbufn i js Ps buf"
-  shows "wf_mbufn (Mini i js) js Ps buf'"
-  unfolding Rep_wf_mbufn[symmetric]
-  by (rule Rep_wf_mbufn_take[OF Rep_mbufn_take[OF assms(1)] assms(2)[folded Rep_wf_mbufn]])
-
-lemma Rep_mbufnt_take_eqD:
-  assumes "Rep_mbufnt_take f z buf nts = (z', buf', nts')"
-    and "Rep_wf_mbufn i js Ps buf"
-    and "list_all2 R [i..<j] nts"
-    and "\<And>k. k \<in> set js \<Longrightarrow> k \<le> j"
-    and "k = Mini (i + length nts) js"
-  shows "Rep_wf_mbufn k js Ps buf'"
-    and "list_all2 R [k..<j] nts'"
-  using assms(1-4) unfolding assms(5)
-proof (induction f z buf nts arbitrary: i z' buf' nts' rule: Rep_mbufnt_take.induct)
-  case IH: (1 f z buf nts)
-  note Rep_mbufnt_take.simps[simp del]
-  case 1
-  then have *: "list_all2 R [Suc i..<j] (tl nts)"
-    by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
-  from 1 show ?case
-    using Rep_wf_mbufn_in_set_Mini[OF 1(2)]
-    by (subst (asm) Rep_mbufnt_take.simps)
-      (force simp: Mini_def Rep_wf_mbufn_def split: if_splits prod.splits elim!: list_all3_mono_strong
-        dest!: IH(1)[rotated, OF _ Rep_wf_mbufn_map_tl[OF 1(2)] *])
-  case 2
-  then have *: "list_all2 R [Suc i..<j] (tl nts)"
-    by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
-  have [simp]: "Suc (i + (length nts - Suc 0)) = i + length nts" if "nts \<noteq> []"
-    using that by (fastforce simp flip: length_greater_0_conv)
-  with 2 show ?case
-    using Rep_wf_mbufn_in_set_Mini[OF 2(2)] Rep_wf_mbufn_notin_set[OF 2(2)]
-    by (subst (asm) Rep_mbufnt_take.simps) (force simp: Mini_def Rep_wf_mbufn_def
-        dest!: IH(2)[rotated, OF _ Rep_wf_mbufn_map_tl[OF 2(2)] *]
-        split: if_splits prod.splits)
-qed
+lemma mbufnt_take_nt:
+  assumes "mbufnt_take f z buf t nts = (z', buf', nt, nts')"
+  shows "nt = hd (nts' @ rev nts @ [t])"
+  using assms
+  by (induction f z buf t nts arbitrary: z' buf' nt nts' rule: mbufnt_take.induct)
+     (auto simp add: hd_app split: list.splits if_splits)
 
 lemma mbufnt_take_eqD:
-  assumes "mbufnt_take f z buf nts = (z', buf', nts')"
+  assumes "mbufnt_take f z buf t nts = (z', buf', nt, nts')"
     and "wf_mbufn i js Ps buf"
     and "list_all2 R [i..<j] nts"
     and "\<And>k. k \<in> set js \<Longrightarrow> k \<le> j"
     and "k = Mini (i + length nts) js"
   shows "wf_mbufn k js Ps buf'"
     and "list_all2 R [k..<j] nts'"
-  using Rep_mbufnt_take_eqD[OF Rep_mbufnt_take[OF assms(1)] assms(2)[folded Rep_wf_mbufn] assms(3-)]
-  by (auto simp: Rep_wf_mbufn[symmetric])
-
-lemma Rep_mbuf2t_take_induct:
-  assumes "Rep_mbuf2t_take f z buf nts = (z', buf', nts')"
-    and "Rep_wf_mbuf2 i ja jb P Q buf"
-    and "list_all2 R [i..<j] nts"
-    and "ja \<le> j" "jb \<le> j"
-    and "U i z"
-    and "\<And>k x y t z. i \<le> k \<Longrightarrow> Suc k \<le> ja \<Longrightarrow> Suc k \<le> jb \<Longrightarrow>
-      P k x \<Longrightarrow> Q k y \<Longrightarrow> R k t \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f x y t z)"
-  shows "U (min ja jb) z'"
-  using assms unfolding Rep_wf_mbuf2_def
-  by (induction f z buf nts arbitrary: i z' buf' nts' rule: Rep_mbuf2t_take.induct)
-     (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
-      elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated] split: prod.split)
+  using assms(1-4) unfolding assms(5)
+proof (induction f z buf t nts arbitrary: i z' buf' nt nts' rule: mbufnt_take.induct)
+  case IH: (1 f z buf t nts)
+  note mbufnt_take.simps[simp del]
+  case 1
+  then have *: "list_all2 R [Suc i..<j] (tl nts)"
+    by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
+  from 1 show ?case
+    using wf_mbufn_in_set_Mini[OF 1(2)]
+    by (subst (asm) mbufnt_take.simps)
+      (force simp: Mini_def wf_mbufn_def split: if_splits prod.splits elim!: list_all3_mono_strong
+        dest!: IH(1)[rotated, OF _ wf_mbufn_map_tl[OF 1(2)] *])
+  case 2
+  then have *: "list_all2 R [Suc i..<j] (tl nts)"
+    by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
+  have [simp]: "Suc (i + (length nts - Suc 0)) = i + length nts" if "nts \<noteq> []"
+    using that by (fastforce simp flip: length_greater_0_conv)
+  with 2 show ?case
+    using wf_mbufn_in_set_Mini[OF 2(2)] wf_mbufn_notin_set[OF 2(2)]
+    by (subst (asm) mbufnt_take.simps) (force simp: Mini_def wf_mbufn_def
+        dest!: IH(2)[rotated, OF _ wf_mbufn_map_tl[OF 2(2)] *]
+        split: if_splits prod.splits)
+qed
 
 lemma mbuf2t_take_induct[consumes 5, case_names base step]:
-  assumes "mbuf2t_take f z buf nts = (z', buf', nts')"
+  assumes "mbuf2t_take f z buf t nts = (z', buf', nt, nts')"
     and "wf_mbuf2 i ja jb P Q buf"
     and "list_all2 R [i..<j] nts"
     and "ja \<le> j" "jb \<le> j"
@@ -6402,15 +6053,10 @@ lemma mbuf2t_take_induct[consumes 5, case_names base step]:
     and "\<And>k x y t z. i \<le> k \<Longrightarrow> Suc k \<le> ja \<Longrightarrow> Suc k \<le> jb \<Longrightarrow>
       P k x \<Longrightarrow> Q k y \<Longrightarrow> R k t \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f x y t z)"
   shows "U (min ja jb) z'"
-proof -
-  obtain xs ys where buf_def: "buf = (xs, ys)"
-    by fastforce
-  obtain xs' ys' where buf'_def: "buf' = (xs', ys')"
-    by fastforce
-  show "U (min ja jb) z'"
-    using Rep_mbuf2t_take_induct[OF Rep_mbuf2t_take[OF assms(1)[unfolded buf_def buf'_def]], OF assms(2)[unfolded buf_def, folded Rep_wf_mbuf2] assms(3-)]
-    by (auto simp: buf'_def Rep_wf_mbuf2[symmetric])
-qed
+  using assms unfolding wf_mbuf2_def
+  by (induction f z buf t nts arbitrary: i z' buf' nt nts' rule: mbuf2t_take.induct)
+    (auto simp add: list_all2_Cons2 upt_eq_Cons_conv less_eq_Suc_le min_absorb1 min_absorb2
+      elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated] split: prod.split)
 
 lemma list_all2_hdD:
   assumes "list_all2 P [i..<j] xs" "xs \<noteq> []"
@@ -6424,15 +6070,15 @@ lemma list_all2_lastD:
   using assms list_all2_hdD(2)[OF assms, THEN less_imp_add_positive] unfolding list_all2_conv_all_nth
   by (auto dest!: spec[of _ "length xs - 1"] simp: last_conv_nth Suc_le_eq)
 
-lemma Rep_mbufn_take_induct[consumes 3, case_names base step]:
-  assumes "Rep_mbufn_take f z buf = (z', buf')"
-    and "Rep_wf_mbufn i js Ps buf"
+lemma mbufn_take_induct[consumes 3, case_names base step]:
+  assumes "mbufn_take f z buf = (z', buf')"
+    and "wf_mbufn i js Ps buf"
     and "U i z"
     and "\<And>k xs z. i \<le> k \<Longrightarrow> Suc k \<le> Mini i js \<Longrightarrow>
       list_all2 (\<lambda>P x. P k x) Ps xs \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f xs z)"
   shows "U (Mini i js) z'"
-  using assms unfolding Rep_wf_mbufn_def
-proof (induction f z buf arbitrary: i z' buf' rule: Rep_mbufn_take.induct)
+  using assms unfolding wf_mbufn_def
+proof (induction f z buf arbitrary: i z' buf' rule: mbufn_take.induct)
   case rec: (1 f z buf)
   show ?case proof (cases "buf = []")
     case True
@@ -6459,7 +6105,7 @@ proof (induction f z buf arbitrary: i z' buf' rule: Rep_mbufn_take.induct)
         unfolding \<open>Mini i js = Mini (Suc i) js\<close>
       proof (rule rec.IH)
         show "\<not> (buf = [] \<or> [] \<in> set buf)" using nonempty False by simp
-        show "Rep_mbufn_take f (f (map hd buf) z) (map tl buf) = (z', buf')"
+        show "mbufn_take f (f (map hd buf) z) (map tl buf) = (z', buf')"
           using nonempty False rec.prems by simp
         show "list_all3 (\<lambda>P j xs. Suc i \<le> j \<and> list_all2 P [Suc i..<j] xs) Ps js (map tl buf)"
           using False rec.prems
@@ -6476,19 +6122,9 @@ proof (induction f z buf arbitrary: i z' buf' rule: Rep_mbufn_take.induct)
   qed
 qed
 
-lemma mbufn_take_induct[consumes 3, case_names base step]:
-  assumes "mbufn_take f z buf = (z', buf')"
+lemma mbufnt_take_induct[consumes 5, case_names base step]:
+  assumes "mbufnt_take f z buf t nts = (z', buf', nt, nts')"
     and "wf_mbufn i js Ps buf"
-    and "U i z"
-    and "\<And>k xs z. i \<le> k \<Longrightarrow> Suc k \<le> Mini i js \<Longrightarrow>
-      list_all2 (\<lambda>P x. P k x) Ps xs \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f xs z)"
-  shows "U (Mini i js) z'"
-  using Rep_mbufn_take_induct[OF Rep_mbufn_take[OF assms(1)] assms(2)[folded Rep_wf_mbufn] assms(3-)]
-  by auto
-
-lemma Rep_mbufnt_take_induct[consumes 5, case_names base step]:
-  assumes "Rep_mbufnt_take f z buf nts = (z', buf', nts')"
-    and "Rep_wf_mbufn i js Ps buf"
     and "list_all2 R [i..<j] nts"
     and "\<And>k. k \<in> set js \<Longrightarrow> k \<le> j"
     and "U i z"
@@ -6496,34 +6132,22 @@ lemma Rep_mbufnt_take_induct[consumes 5, case_names base step]:
       list_all2 (\<lambda>P x. P k x) Ps xs \<Longrightarrow> R k t \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f xs t z)"
   shows "U (Mini (i + length nts) js) z'"
   using assms
-proof (induction f z buf nts arbitrary: i z' buf' nts' rule: Rep_mbufnt_take.induct)
-  case (1 f z buf nts)
+proof (induction f z buf t nts arbitrary: i z' buf' nt nts' rule: mbufnt_take.induct)
+  case (1 f z buf t nts)
   then have *: "list_all2 R [Suc i..<j] (tl nts)"
     by (auto simp: list.rel_sel[of R "[i..<j]" nts, simplified])
   note mbufnt_take.simps[simp del]
   from 1(2-6) have "i = Min (set js)" if "js \<noteq> []" "nts = []"
-    using that unfolding Rep_wf_mbufn_def using Rep_wf_mbufn_in_set_Mini[OF 1(3)]
+    using that unfolding wf_mbufn_def using wf_mbufn_in_set_Mini[OF 1(3)]
     by (fastforce simp: Mini_def list_all3_Cons neq_Nil_conv)
   with 1(2-7) list_all2_hdD[OF 1(4)] show ?case
-    unfolding Rep_wf_mbufn_def using Rep_wf_mbufn_in_set_Mini[OF 1(3)] Rep_wf_mbufn_notin_set[OF 1(3)]
-    by (subst (asm) Rep_mbufnt_take.simps) (auto simp add: Mini_def list.rel_map Suc_le_eq
-        simp del: Rep_mbufnt_take.simps
+    unfolding wf_mbufn_def using wf_mbufn_in_set_Mini[OF 1(3)] wf_mbufn_notin_set[OF 1(3)]
+    by (subst (asm) mbufnt_take.simps)
+      (auto simp add: Mini_def list.rel_map Suc_le_eq
         elim!: arg_cong2[of _ _ _ _ U, OF _ refl, THEN iffD1, rotated]
         list_all3_mono_strong[THEN list_all3_list_all2I[of _ _ js]] list_all2_hdD
-        dest!: 1(1)[rotated, OF _ Rep_wf_mbufn_map_tl[OF 1(3)] * _ 1(7)] split: prod.split if_splits)
+        dest!: 1(1)[rotated, OF _ wf_mbufn_map_tl[OF 1(3)] * _ 1(7)] split: prod.split if_splits)
 qed
-
-lemma mbufnt_take_induct[consumes 5, case_names base step]:
-  assumes "mbufnt_take f z buf nts = (z', buf', nts')"
-    and "wf_mbufn i js Ps buf"
-    and "list_all2 R [i..<j] nts"
-    and "\<And>k. k \<in> set js \<Longrightarrow> k \<le> j"
-    and "U i z"
-    and "\<And>k xs t z. i \<le> k \<Longrightarrow> Suc k \<le> Mini j js \<Longrightarrow>
-      list_all2 (\<lambda>P x. P k x) Ps xs \<Longrightarrow> R k t \<Longrightarrow> U k z \<Longrightarrow> U (Suc k) (f xs t z)"
-  shows "U (Mini (i + length nts) js) z'"
-  using Rep_mbufnt_take_induct[OF Rep_mbufnt_take[OF assms(1)] assms(2)[folded Rep_wf_mbufn] assms(3-)]
-  by auto
 
 lemma mbuf2_take_add':
   assumes eq: "mbuf2_take f (mbuf2_add xs ys buf) = (zs, buf')"
@@ -6545,7 +6169,7 @@ lemma mbuf2_take_add':
   by (force intro!: mbuf2_take_eqD[OF eq] wf_mbuf2_add[OF _ xs ys] progress_mono_gen[OF \<open>j \<le> j'\<close> bounded rm])+
 
 lemma mbuf2t_take_add':
-  assumes eq: "mbuf2t_take f z (mbuf2_add xs ys buf) nts = (z', buf', nts')"
+  assumes eq: "mbuf2t_take f z (mbuf2_add xs ys buf) t nts = (z', buf', nt, nts')"
     and bounded: "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'"
     and rm: "rel_mapping (\<le>) P P'"
     and pre_buf: "wf_mbuf2' \<sigma> P V j n R \<phi> \<psi> buf"
@@ -6600,7 +6224,7 @@ lemma to_mregex_progress: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr,
   using to_mregex_nonempty_progress to_mregex_empty_progress unfolding progress_regex_def by auto
 
 lemma mbufnt_take_add':
-  assumes eq: "mbufnt_take f z (mbufn_add xss buf) nts = (z', buf', nts')"
+  assumes eq: "mbufnt_take f z (mbufn_add xss buf) t nts = (z', buf', nt, nts')"
     and bounded: "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'"
     and rm: "rel_mapping (\<le>) P P'"
     and safe: "safe_regex m g r"
@@ -6618,8 +6242,9 @@ lemma mbufnt_take_add':
   by (auto 0 3 simp: list.rel_map to_mregex_empty_progress to_mregex_nonempty_progress Mini_def
       intro: progress_mono_gen[OF \<open>j \<le> j'\<close> bounded rm] list.rel_refl_strong progress_le_gen
       dest: list_all2_lengthD elim!: mbufnt_take_eqD[OF eq wf_mbufn_add])
+
 lemma mbuf2t_take_add_induct'[consumes 6, case_names base step]:
-  assumes eq: "mbuf2t_take f z (mbuf2_add xs ys buf) nts = (z', buf', nts')"
+  assumes eq: "mbuf2t_take f z (mbuf2_add xs ys buf) t nts = (z', buf', nt, nts')"
     and bounded: "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'"
     and rm: "rel_mapping (\<le>) P P'"
 
@@ -6642,7 +6267,7 @@ lemma mbuf2t_take_add_induct'[consumes 6, case_names base step]:
       progress_le_gen base step)
 
 lemma mbufnt_take_add_induct'[consumes 6, case_names base step]:
-  assumes eq: "mbufnt_take f z (mbufn_add xss buf) nts = (z', buf', nts')"
+  assumes eq: "mbufnt_take f z (mbufn_add xss buf) t nts = (z', buf', nt, nts')"
     and bounded: "pred_mapping (\<lambda>x. x \<le> j) P" "pred_mapping (\<lambda>x. x \<le> j') P'"
     and rm: "rel_mapping (\<le>) P P'"
     and safe: "safe_regex m g r"
@@ -7748,10 +7373,10 @@ next
     fix xs ys zs aux' aux'' buf' nts' nt
     assume eval_\<phi>: "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi>) = xs"
       and eval_\<psi>: "fst (meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<psi>) = ys"
-      and nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
-      and eq1: "mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
-        (aux', buf', nts')"
+      and eq1: "mbuf2t_take (add_new_muaux args) aux (mbuf2_add xs ys buf) t (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
+        (aux', buf', nt, nts')"
       and eq2: "eval_muaux args nt aux' = (zs, aux'')"
+    note nt_def = mbuf2t_take_nt[OF eq1]
     define ne where "ne \<equiv> progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j"
     have update1: "wf_until_aux \<sigma> V R args \<phi>'' \<psi>'' aux' (progress \<sigma> P (Formula.Until \<phi>''' I \<psi>'') j) \<and>
       ne + length_muaux args aux' = min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>))"
@@ -7772,8 +7397,8 @@ next
       unfolding wf_ts_def
       by (intro mbuf2t_take_eqD(2)[OF eq1]) (auto intro: wf_mbuf2_add buf[unfolded wf_mbuf2'_def])
     have nt: "nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))))"
-      using nts nts' unfolding nt0 t
-      apply (auto simp: hd_append hd_rev last_map wf_ts_def lookahead_ts_def)
+      using nts nts' unfolding nt_def t
+      apply (auto simp: hd_append hd_rev last_map wf_ts_def)
       using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
       using list_all2_lastD  apply fastforce
         apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
@@ -7899,7 +7524,7 @@ next
       using wf_aux'' valid_aux'' fvi_subset
       unfolding wf_until_aux_def length_aux'' args_ivl args_n args_pos nt by (auto simp only: length_aux'')
   }
-  note update = this[OF refl refl refl, rotated]
+  note update = this[OF refl refl, rotated]
   from MUntil.IH(1)[OF \<phi> MUntil.prems(2)] MUntil.IH(2)[OF \<psi> MUntil.prems(2)] pos pos_eq fvi_subset show ?case
     unfolding meval.simps Let_def
     by (auto simp: args_ivl args_n args_pos Until_eq \<phi>''' progress.simps(7) Let_def
@@ -7931,8 +7556,8 @@ next
     if eval: "map (fst o meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db) \<phi>s = xss"
       and eq: "mbufnt_take (\<lambda>rels t (zs, aux).
         case update_matchP n I mr mrs rels t aux of (z, x) \<Rightarrow> (zs @ [z], x))
-        ([], aux) (mbufn_add xss buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) = ((zs, aux'), buf', nts')"
-    for xss zs aux' buf' nts'
+        ([], aux) (mbufn_add xss buf) 0 (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) = ((zs, aux'), buf', nt, nts')"
+    for xss zs aux' buf' nt nts'
     unfolding progress_simps
   proof (rule mbufnt_take_add_induct'[where j'="j + \<delta>" and z'="(zs, aux')", OF eq wf_envs_P_simps[OF MMatchP.prems(2)] safe mr buf nts_snoc],
       goal_cases xss _ base step)
@@ -7980,10 +7605,10 @@ next
   {
     fix xss zs aux' aux'' buf' nts' nt
     assume eval: "map (fst o meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db) \<phi>s = xss"
-      and nt0: "nt = lookahead_ts nts' nts (map (\<tau> \<sigma>) [j ..< j + \<delta>]) t"
-      and eq1: "mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
-        (aux', buf', nts')"
+      and eq1: "mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) t (nts @ map (\<tau> \<sigma>) [j ..< j + \<delta>]) =
+        (aux', buf', nt, nts')"
       and eq2: "eval_matchF I mr nt aux' = (zs, aux'')"
+    note nt_def = mbufnt_take_nt[OF eq1]
     have update1: "wf_matchF_aux \<sigma> V n R I r aux' (progress \<sigma> P (Formula.MatchF I r) j) 0 \<and>
       progress \<sigma> P (Formula.MatchF I r) j + length aux' = progress_regex \<sigma> P' r (j + \<delta>)"
       using eval nts_snoc nts_snoc length_aux aux \<psi>s
@@ -8004,8 +7629,8 @@ next
       apply (auto simp: list_all2_conv_all_nth)
       done
     have nt: "nt = (if j + \<delta> = 0 then 0 else \<tau> \<sigma> (min (j + \<delta> - 1) (progress_regex \<sigma> P' r (j + \<delta>))))"
-      using nts nts' unfolding nt0 t
-      apply (auto simp: hd_append hd_rev last_map wf_ts_regex_def lookahead_ts_def)
+      using nts nts' unfolding nt_def t
+      apply (auto simp: hd_append hd_rev last_map wf_ts_regex_def)
       using list_all2_hdD(1) list_all2_hdD(2) apply fastforce
       using list_all2_lastD apply fastforce
         apply (metis (mono_tags) list_all2_hdD(1) list_all2_hdD(2) min.absorb2 Suc_diff_Suc diff_zero less_Suc_eq_le)
@@ -8082,7 +7707,7 @@ next
     qed
     note conjI[OF nt this[OF progress_mono_gen[OF le_add1] conjunct1[OF update1] conjunct2[OF update1]]]
   }
-  note update = this[OF refl refl, rotated]
+  note update = this[OF refl, rotated]
   from MMatchF.prems(2) show ?case using \<psi>s
     by (auto simp: eq mr mrs safe map_split_alt list.rel_flip[symmetric, of _ \<psi>s \<phi>s]
         list_all3_map map2_map_map list_all3_list_all2_conv list.rel_map Let_def

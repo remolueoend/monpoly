@@ -2,10 +2,11 @@
 theory Regex
   imports
     "MFOTL_Monitor_Devel.Trace"
-    "HOL-Library.Lattice_Syntax"
     "HOL-Library.Extended_Nat"
 begin
 (*>*)
+
+unbundle lattice_syntax
 
 section \<open>Regular expressions\<close>
 
