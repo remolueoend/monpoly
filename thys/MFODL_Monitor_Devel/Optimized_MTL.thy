@@ -2112,7 +2112,7 @@ proof -
   have id: "\<And>x. x \<in> {tp - (len - 1) + 1..tp} \<Longrightarrow>
     Mapping.lookup a2_map'' x = Mapping.lookup a2_map x"
     unfolding a2_map''_def a2_map'_def Mapping_lookup_delete Mapping_lookup_update tp_len_assoc
-    using len_tp apply auto by (metis Mapping_lookup_update One_nat_def Suc_diff_eq_diff_pred Suc_n_not_le_n len_pos)
+    using len_tp by auto
   have list_all2: "list_all2 (\<lambda>x y. triple_eq_pair x y (\<lambda>tp'. filter_a1_map pos tp' a1_map)
     (\<lambda>ts' tp'. filter_a2_map I ts' tp' a2_map))
     (drop (length done) auxlist) (zip (linearize tss) [tp - len..<tp])"
@@ -2295,8 +2295,7 @@ proof -
       then have f_mc: "f = (if len = 1 then Mapping.empty else mc)"
         using f_def Mapping.lookup_update'[of _ _ a2_map]
         unfolding a2_map''_def a2_map'_def Mapping_lookup_delete Mapping_lookup_update tp_len_assoc
-        apply (auto split: if_splits) apply (metis One_nat_def True f_def handy_if_lemma lookup''_tp_minus)
-        by (metis lookup_update option.inject)
+        by (auto split: if_splits)
       have "table n R (Mapping.keys f)"
         unfolding f_mc
         using mc_keys m_def m'_def m_inst m'_inst
@@ -2445,8 +2444,6 @@ proof -
           then show ?thesis using some_m'' aux Some unfolding ts_tp_lt_def by(cases a'; cases a''; auto)
         qed
       qed
-      show "case Mapping.lookup Mapping.empty xs of None \<Rightarrow> True
-          | Some x \<Rightarrow> ts_tp_lt I a (tp - (Suc 0 - 1)) x" by (simp add: Mapping.lookup_empty)
     qed
     then have split1: "list_all (\<lambda>(ts', tp'). ivl_restr_a2_map I ts' tp' a2_map'') (zip (tl (linearize tss)) [tp - (len - 1)..<tp])" 
       using list_all_eq_1 Cons tp_len_eq by auto
