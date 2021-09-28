@@ -985,21 +985,21 @@ let rec eval f crt discard =
           let j2,tsj2,rel2 = Dllist.get_data !crt2_j in
           if j2 < q || not (MFOTL.in_right_ext (MFOTL.ts_minus tsj2 tsq) intv) then
             begin (* clean up from previous evaluation *)
-              ignore(Dllist.pop_first inf.listrel2);
               if not (Dllist.is_last inf.listrel2 !crt2_j) then
                 begin
+                  ignore(Dllist.pop_first inf.listrel2);
                   crt2_j := Dllist.get_next inf.listrel2 !crt2_j;
                   iter2 ()
                 end
             end
           else
             begin
-              let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
-              assert(j1 = j2);
               if MFOTL.in_left_ext (MFOTL.ts_minus tsj2 tsq) intv then
                 begin
                   let resj = comp rel2 !f1union in
                   res := Relation.union !res resj;
+                  let j1,tsj1,rel1 = Dllist.get_data !crt1_j in
+                  assert(j1 = j2);
                   f1union := Relation.union !f1union rel1;
                   let is_last1 = Dllist.is_last inf.listrel1 !crt1_j in
                   let is_last2 = Dllist.is_last inf.listrel2 !crt2_j in
