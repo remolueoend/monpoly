@@ -2763,6 +2763,12 @@ definition wty_result_f :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula
 (\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> 
   (S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and>(\<forall>t \<in> E `fv \<phi> \<union> formula.set_formula \<phi> . f'' t = (g \<circ> f) t)))"
 
+definition wty_result_fX :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> tysym set \<Rightarrow> bool" where
+  "wty_result_fX S E \<phi> f X \<longleftrightarrow> wf_f f \<and> 
+(\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> 
+  (S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and>(\<forall>t \<in> X. f'' t = (g \<circ> f) t)))"
+
+
 definition wty_result_f2 :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
 "wty_result_f2 S E \<phi> f \<longleftrightarrow> wf_f f \<and> 
 (\<forall>f'' .  wf_f (TCst \<circ> f'') \<and>  
@@ -2892,32 +2898,74 @@ lemma case_nat_comp: "f'' \<circ> case_nat t E =  case_nat (f'' t) (f'' \<circ> 
 definition used_tys where
 "used_tys E \<phi> \<equiv> E ` fv \<phi> \<union> formula.set_formula \<phi>"
 
+lemma used_tys_map[simp]: "used_tys (f \<circ> E) (formula.map_formula f \<psi>) = f ` used_tys E \<psi>"
+  by (auto simp: used_tys_def formula.set_map)
+
+lemma map_formula_f_cong: "(\<And>t. t \<in> X \<Longrightarrow> f t = g t) \<Longrightarrow> formula.set_formula \<psi> \<subseteq> X \<Longrightarrow>
+  formula.map_formula f \<psi> = formula.map_formula g \<psi>"
+  apply (induction \<psi>)
+                  apply auto
+  subgoal for r
+    by (induction r) auto
+  subgoal for r
+    by (induction r) auto
+  done
+
+lemma wty_map_formula_cong: "S, f \<circ> E \<turnstile> formula.map_formula f \<psi> \<Longrightarrow> used_tys E \<psi> \<subseteq> X \<Longrightarrow>
+       (\<And>t. t \<in> X \<Longrightarrow> f t = g t) \<Longrightarrow> S, g \<circ> E \<turnstile> formula.map_formula g \<psi>"
+  apply (rule iffD1[OF wty_formula_fv_cong, where ?E1="f \<circ> E"])
+   apply (auto simp: used_tys_def)[1]
+  using map_formula_f_cong[of X f g]
+  by (auto simp: used_tys_def)
 
 lemma check_binary_sound: assumes 
-  "\<And>\<phi>' S E f' . size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = Some f' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> used_tys E \<phi>' \<subseteq> X \<Longrightarrow> wty_result_f S E \<phi>' f' \<and> f' `X \<inter> f' ` (-X) = {} "
+  "\<And>\<phi>' S E f' X. size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = Some f' \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> used_tys E \<phi>' \<subseteq> X \<Longrightarrow> wty_result_fX S E \<phi>' f' X"
   "check S E form = Some f'" "used_tys E form \<subseteq> X"
-  "wf_formula form" "form \<in> {formula.Or \<phi> \<psi>, formula.And \<phi> \<psi>, formula.Since \<phi> I \<psi>, formula.Until \<phi> I \<psi>}" shows " wty_result_f S E form f'\<and> f' `X \<inter> f' ` (-X) = {}"
+  "wf_formula form" "form \<in> {formula.Or \<phi> \<psi>, formula.And \<phi> \<psi>, formula.Since \<phi> I \<psi>, formula.Until \<phi> I \<psi>}" shows " wty_result_fX S E form f' X"
 proof -
   obtain  f where f_def: "check S E \<phi> = Some  f" using assms by (auto simp add: check_two_formulas_def split: option.splits)
-  then  have wty1: " wty_result_f S E \<phi> f \<and> f `X \<inter> f ` (-X) = {}"
-    using assms unfolding used_tys_def by auto
-  obtain f1 where  f1_def: "check S (f\<circ>E) (formula.map_formula f \<psi>) = Some  f1 \<and> f' = f1 \<circ> f " using assms(2,4) f_def by (auto simp add: check_two_formulas_def split: option.splits)
-  have wty2:" wty_result_f S (f\<circ>E) (formula.map_formula f \<psi>) f1  \<and> f1 `X \<inter> f1 ` (-X) = {}"
-    apply (rule assms(1)) using assms(3,4) f1_def by (auto simp add: comp_def)
-  show ?thesis using wty1 wty2 unfolding wty_result_f_def using wf_f_comp f1_def
-    using assms(4) 
-    apply (auto simp add: comp_assoc formula.map_comp
-        elim!: wty_formula.cases[where ?a3.0="formula.Or _ _"] wty_formula.cases[where ?a3.0="formula.And _ _"]
-        wty_formula.cases[where ?a3.0="formula.Since _ _ _"] wty_formula.cases[where ?a3.0="formula.Until _  _ _"] intro! :wty_formula.intros)
-    subgoal premises prems for f'' g1
+  have wty1: " wty_result_fX S E \<phi> f X"
+    using assms(2-) assms(1)[OF _ f_def, where ?X=X] unfolding used_tys_def
+    by (fastforce simp: check_two_formulas_def split: option.splits)
+  obtain f1 where  f1_def: "check S (f\<circ>E) (formula.map_formula f \<psi>) = Some  f1 \<and> f' = f1 \<circ> f "
+    using assms(2,4,5) f_def
+    by (auto simp add: check_two_formulas_def split: option.splits)
+  have used_tys_form: "used_tys E form = used_tys E \<phi> \<union> used_tys E \<psi>"
+    using assms(5)
+    by (auto simp: used_tys_def)
+  then have aux: "used_tys (f \<circ> E) (formula.map_formula f \<psi>) \<subseteq> f ` X"
+    using assms(3,5)
+    by (auto)
+  have wty2:" wty_result_fX S (f\<circ>E) (formula.map_formula f \<psi>) f1 (f ` X)"
+    apply (rule assms(1)) using assms(3,4,5) f1_def aux
+    by (auto simp add: comp_def)
+  have f'_def: "f' = f1 \<circ> f"
+    by (auto simp: f1_def)
+  have wty_form_iff: "S, f'' \<circ> E \<turnstile> formula.map_formula f'' form \<longleftrightarrow>
+    S, f'' \<circ> E \<turnstile> formula.map_formula f'' \<phi> \<and> S, f'' \<circ> E \<turnstile> formula.map_formula f'' \<psi>" for f''
+    using assms(5)
+    by (auto elim: wty_formula.cases intro: wty_formula.intros)
+  show ?thesis
+    using wty1 wty2 assms(3) wty_map_formula_cong[of S _ E]
+    apply (auto simp: f'_def used_tys_form wty_form_iff wty_result_fX_def formula.set_map
+        formula.map_comp intro: wf_f_comp)
+      apply (smt (z3) comp_apply comp_assoc)
+     apply (metis comp_apply comp_assoc wf_f_comp)
+    subgoal premises prems for f'' g
     proof -
-      thm prems
-      have " (\<exists>g. wf_f (TCst \<circ> g) \<and> (\<forall>t\<in>(\<lambda>x. f (E x)) ` fv \<psi> \<union> formula.set_formula (formula.map_formula f \<psi>). f'' t = g (f1 t)))"
-        using prems(5,10) apply (auto simp add: o_assoc) apply (drule spec[of _ g1])
+      have "wf_f (TCst \<circ> (g \<circ> f1))"
+        using prems(4,9) wf_f_comp[OF prems(9,4)]
+        by (auto simp: comp_assoc)
+      then have "(S, (g \<circ> f1 \<circ> f) \<circ> E \<turnstile> formula.map_formula (g \<circ> f1 \<circ> f) \<psi>)"
+        using prems(9) spec[OF prems(5), where ?x="g \<circ> f1"]
+        by (auto simp: comp_assoc)
+      then show ?thesis
+        using prems(7)
+        apply (rule wty_map_formula_cong)
+        using prems(10)
+        by auto
     qed
-     sorry
-           apply fastforce apply (auto simp add: o_assoc intro!: wty_formula.intros)
-    by (metis (no_types, lifting) comp_assoc)+
+    done
 qed
 
 lemma[simp]:  "foldl
