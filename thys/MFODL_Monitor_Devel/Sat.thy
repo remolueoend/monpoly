@@ -258,9 +258,6 @@ lemma M_alt: "Sat.M \<pi> = M (punconvert \<pi>)"
   using ex_prefix_of prefix_of_unconvert progress_sat_cong apply blast
   done
 
-thm wf_mstate_minit_safe
-thm wf_mstate_mstep
-
 lemma last_ts_punconvert[simp]: "last_ts (punconvert \<pi>) = last_ts \<pi>"
   unfolding punconvert_def by transfer (auto simp: last_map split: list.splits prod.splits)
 
@@ -274,6 +271,8 @@ lemma punconvert_psnoc[simp]: "punconvert (psnoc \<pi> tdb) = psnoc (punconvert 
 
 abbreviation invar where "invar \<equiv> \<lambda>\<phi> \<pi>. wf_mstate \<phi> (punconvert \<pi>)"
 abbreviation monitor_step where "monitor_step \<equiv> \<lambda>db t. mstep (apfst mk_db (to_db db, t))"
+
+text \<open>Main Results\<close>
 
 lemmas monitor_specification =
   Sat.mono_monitor
