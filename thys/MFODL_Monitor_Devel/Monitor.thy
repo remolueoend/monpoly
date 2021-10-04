@@ -6850,8 +6850,8 @@ next
     case True
     hence "?en \<in> Mapping.keys db" "?en \<in> dom P'" "?en \<in> dom V" and
       "list_all2 (\<lambda>i X. X = map Some ` {v. length v = length ts \<and> the (V ?en) v i}) [the (P ?en)..<the (P'?en)]
-         (the (Mapping.lookup db ?en))" 
-      using MPred(2) unfolding wf_envs_def 
+         (the (Mapping.lookup db ?en))"
+      using MPred(2) unfolding wf_envs_def
       by (auto simp: dom_def rel_mapping_alt dest: bspec[where x="?en"])
     moreover have "wf_mformula \<sigma> (j + \<delta>) P' V n R (MPred e ts (pred_mode_of n ts)) (Formula.Pred e ts)"
       using MPred(1)
