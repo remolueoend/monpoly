@@ -269,7 +269,7 @@ lemma punconvert_psnoc[simp]: "punconvert (psnoc \<pi> tdb) = psnoc (punconvert 
   unfolding punconvert_def
   by transfer (auto simp: last_map split: list.splits prod.splits)
 
-abbreviation invar where "invar \<equiv> \<lambda>\<phi> \<pi>. wf_mstate \<phi> (punconvert \<pi>)"
+abbreviation monitor_invar where "monitor_invar \<equiv> \<lambda>\<phi> \<pi>. wf_mstate \<phi> (punconvert \<pi>)"
 abbreviation monitor_step where "monitor_step \<equiv> \<lambda>db t. mstep (apfst mk_db (to_db db, t))"
 
 text \<open>Main Results\<close>
@@ -280,17 +280,17 @@ lemmas monitor_specification =
   Sat.complete_monitor
 
 theorem invar_minit_safe:
-  "mmonitorable \<phi> \<Longrightarrow> invar \<phi> pnil R (minit_safe \<phi>)"
+  "mmonitorable \<phi> \<Longrightarrow> monitor_invar \<phi> pnil R (minit_safe \<phi>)"
   by (auto elim: wf_mstate_minit_safe)
 
 theorem invar_mstep:
-  assumes "invar \<phi>' \<pi> R st" "last_ts \<pi> \<le> t"
-  shows "invar \<phi>' (psnoc \<pi> (db, t)) R (snd (monitor_step db t st))"
+  assumes "monitor_invar \<phi>' \<pi> R st" "last_ts \<pi> \<le> t"
+  shows "monitor_invar \<phi>' (psnoc \<pi> (db, t)) R (snd (monitor_step db t st))"
   using wf_mstate_mstep[OF assms(1), of "(to_db db, t)", simplified, OF assms(2)]
   by auto
 
 theorem mstep_mverdicts:
-  assumes "invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "mem_restr R v"
+  assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "mem_restr R v"
   shows "((i, v) \<in> flatten_verdicts (fst (monitor_step db t st))) =
          ((i, v) \<in> Sat.M (psnoc \<pi> (db, t)) - Sat.M \<pi>)"
   using mstep_mverdicts[OF assms(1), of "(to_db db, t)" v i, simplified, OF assms(2,3)]
