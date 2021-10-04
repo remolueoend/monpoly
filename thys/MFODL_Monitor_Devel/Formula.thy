@@ -136,8 +136,9 @@ subsection \<open>Syntax and semantics\<close>
 
 qualified type_synonym name = string8
 qualified type_synonym event = "(name \<times> event_data list)"
-qualified type_synonym prefix = "(name \<times> event_data list) prefix"
-qualified type_synonym trace = "(name \<times> event_data list) trace"
+qualified type_synonym database = "event set"
+qualified type_synonym prefix = "database prefix"
+qualified type_synonym trace = "database trace"
 
 qualified type_synonym env = "event_data list"
 
@@ -147,8 +148,8 @@ qualified datatype trm = is_Var: Var nat | is_Const: Const event_data
   | Plus trm trm | Minus trm trm | UMinus trm | Mult trm trm | Div trm trm | Mod trm trm
   | F2i trm | I2f trm
 
-text \<open> In this implementation of MFODL, to use De Bruijn indices, binding operators increase the 
-value of the bounding number @{term b} (that starts at $0$) and this number is subtracted from 
+text \<open> In this implementation of MFODL, to use De Bruijn indices, binding operators increase the
+value of the bounding number @{term b} (that starts at $0$) and this number is subtracted from
 all free variables (type @{typ nat}) greater than @{term b}. For instance, the free variable of
 $\exists.\ P\, (Var 0) \land Q\, (Var 1)$ is @{term "Var 0"} because the existential makes $b=1$
 and this value is subtracted from $Q$s argument while that of $P$ is not even taken into account. \<close>
@@ -186,7 +187,7 @@ lemma eval_trm_fv_cong: "\<forall>x\<in>fv_trm t. v ! x = v' ! x \<Longrightarro
 
 subsubsection \<open>Formulas\<close>
 
-text \<open> Aggregation operators @{term "Agg nat agg_op nat trm formula"} are special 
+text \<open> Aggregation operators @{term "Agg nat agg_op nat trm formula"} are special
 formulas with five parameters:
 \begin{itemize}
 \item Variable @{term "y::nat"} that saves the value of the aggregation operation.
