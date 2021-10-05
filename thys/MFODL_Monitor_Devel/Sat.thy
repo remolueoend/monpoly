@@ -49,6 +49,28 @@ translations
 
 context begin
 
+fun preds :: "Formula.formula \<Rightarrow> (Formula.name \<times> nat) set" where
+   "preds (Formula.Eq t1 t2) = {}"
+|  "preds (Formula.Less t1 t2) = {}"
+|  "preds (Formula.LessEq t1 t2) = {}"
+|  "preds (Formula.Pred e ts) = {(e, length ts)}"
+|  "preds (Formula.Let e \<phi> \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+     \<comment> \<open>(let en = (e, Formula.nfv \<phi>); p\<psi> = preds \<psi> in (p\<psi> - {en} \<union> (if en \<in> p\<psi> then preds \<phi> else {})))\<close>
+|  "preds (Formula.LetPast e \<phi> \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+     \<comment> \<open>(let en = (e, Formula.nfv \<phi>); p\<psi> = preds \<psi> in (p\<psi> \<union> (if en \<in> p\<psi> then preds \<phi> else {})) - {en})\<close>
+|  "preds (Formula.Neg \<phi>) = preds \<phi>"
+|  "preds (Formula.Or \<phi> \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+|  "preds (Formula.And \<phi> \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+|  "preds (Formula.Ands l) = (\<Union>\<phi>\<in>set l. preds \<phi>)"
+|  "preds (Formula.Exists \<phi>) = preds \<phi>"
+|  "preds (Formula.Agg y \<omega> b' f \<phi>) = preds \<phi>"
+|  "preds (Formula.Prev I \<phi>) = preds \<phi>"
+|  "preds (Formula.Next I \<phi>) = preds \<phi>"
+|  "preds (Formula.Since \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+|  "preds (Formula.Until \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
+|  "preds (Formula.MatchP I r) = (\<Union>\<phi>\<in>Regex.atms r. preds \<phi>)"
+|  "preds (Formula.MatchF I r) =  (\<Union>\<phi>\<in>Regex.atms r. preds \<phi>)"
+
 subsection \<open>Syntax and semantics\<close>
 
 qualified type_synonym database = "Formula.name \<times> nat \<Rightarrow> Formula.env set"
@@ -106,28 +128,28 @@ end
 
 definition "convert \<sigma> V = map_\<Gamma>i (\<lambda>i db pn. case V pn of None \<Rightarrow> {w. (fst pn, w) \<in> db \<and> length w = snd pn} | Some X \<Rightarrow> {w. X w i}) \<sigma>"
 
-abbreviation to_db where "to_db db \<equiv> {(a, v). v \<in> db (a, length v)}"
-definition "unconvert \<sigma> = map_\<Gamma> to_db \<sigma>"
-definition "punconvert \<pi> = pmap_\<Gamma> to_db \<pi>"
+abbreviation to_db where "to_db A db \<equiv> \<Union>(p,n) \<in> A. Pair p ` {v \<in> db (p, n). length v = n}"
+definition "unconvert A \<sigma> = map_\<Gamma> (to_db A) \<sigma>"
+definition "punconvert A \<pi> = pmap_\<Gamma> (to_db A) \<pi>"
 
-lemma prefix_of_unconvert: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of (punconvert \<pi>) (unconvert \<sigma>)"
+lemma prefix_of_unconvert: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of (punconvert A \<pi>) (unconvert A \<sigma>)"
   unfolding unconvert_def punconvert_def by transfer auto
 
-lemma plen_punconvert[simp]: "plen (punconvert \<pi>) = plen \<pi>"
+lemma plen_punconvert[simp]: "plen (punconvert A \<pi>) = plen \<pi>"
   unfolding punconvert_def by transfer auto
 
-abbreviation fix_length where "fix_length X \<equiv> (\<lambda>(a, n). X (a, n) \<inter> {w. length w = n})"
+abbreviation fix_length where "fix_length A X \<equiv> (\<lambda>(a, n). if (a, n) \<in> A then X (a, n) \<inter> {w. length w = n} else {})"
 
-lemma unconvert_convert: "unconvert (convert \<sigma> Map.empty) = \<sigma>"
-  unfolding convert_def unconvert_def by (auto simp: o_def)
+lemma unconvert_convert: "unconvert UNIV (convert \<sigma> Map.empty) = \<sigma>"
+  unfolding convert_def unconvert_def by (force simp: o_def intro!: trans[OF map_\<Gamma>i_map_\<Gamma>_cong[of _ _ id]])
 
-lemma convert_unconvert: "convert (unconvert \<sigma>) Map.empty = map_\<Gamma> fix_length \<sigma>"
-  unfolding convert_def unconvert_def by (auto intro!: map_\<Gamma>i_map_\<Gamma>_cong)
+lemma convert_unconvert: "convert (unconvert A \<sigma>) Map.empty = map_\<Gamma> (fix_length A) \<sigma>"
+  unfolding convert_def unconvert_def by (force intro!: map_\<Gamma>i_map_\<Gamma>_cong simp: fun_eq_iff)
 
 lemma \<tau>_convert[simp]: "\<tau> (convert \<sigma> V) = \<tau> \<sigma>"
   unfolding convert_def by simp
 
-lemma \<tau>_unconvert[simp]: "\<tau> (unconvert \<sigma>) = \<tau> \<sigma>"
+lemma \<tau>_unconvert[simp]: "\<tau> (unconvert A \<sigma>) = \<tau> \<sigma>"
   unfolding unconvert_def by auto
 
 lemma map_\<Gamma>_update_\<Gamma>: "(map_\<Gamma> f \<sigma>)(pn \<Rrightarrow> X) = map_\<Gamma>i (\<lambda>i x. (f x)(pn := X i)) \<sigma>"
@@ -152,29 +174,32 @@ next
     by (simp del: fun_upd_apply add: Let_def convert_update_\<Gamma> letpast_sat_alt)
 qed (auto split: nat.splits cong: match_cong)
 
-lemma sat_fix_length: "sat (map_\<Gamma> fix_length \<sigma>) v i \<phi> = sat \<sigma> v i \<phi>"
+lemma sat_fix_length: "preds \<phi> \<subseteq> A \<Longrightarrow> sat (map_\<Gamma> (fix_length A) \<sigma>) v i \<phi> = sat \<sigma> v i \<phi>"
 proof (induct \<phi> arbitrary: \<sigma> v i)
   case (Pred e ts)
   then show ?case
     by (auto split: option.splits)
 next
   case (Let p \<phi> \<psi>)
+
   show ?case
-    unfolding sat.simps Let_def Let(1)
+    unfolding sat.simps Let_def using Let(1,3)
     by (subst (1 2) Let(2)[symmetric])
-      (auto simp add: fun_eq_iff intro!: map_\<Gamma>i_map_\<Gamma>i_cong arg_cong[of _ _ "\<lambda>X. sat X v i \<psi>"])
+      (auto simp add: Let_def intro!: map_\<Gamma>i_map_\<Gamma>i_cong arg_cong[of _ _ "\<lambda>X. sat X v i \<psi>"] split: if_splits)
 next
   case (LetPast p \<phi> \<psi>)
   show ?case
-    unfolding sat.simps Let_def
+    unfolding sat.simps Let_def using LetPast(3)
     apply (subst (1 2) LetPast(2)[symmetric])
+     apply simp
     apply (rule arg_cong[of _ _ "\<lambda>X. sat X v i \<psi>"])
     apply (simp add: o_def)
     apply (rule map_\<Gamma>i_map_\<Gamma>i_cong)
     apply (rule ext)
     apply (simp only: split_beta)
+    apply (rule if_cong[OF refl _ refl])
     apply (rule set_eqI)
-    apply (simp only: Int_iff conj_commute)
+    apply (simp only: Int_iff conj_commute fun_upd_def)
     apply (rule conj_cong[OF refl])
     apply (unfold if_split_mem2)
     apply (rule conj_cong)
@@ -183,22 +208,23 @@ next
      apply (rule subst_letpast_sat)
      apply (rule Collect_cong)
      apply (subst (1 2) LetPast(1)[symmetric])
+      apply simp
      apply (rule arg_cong[where f="\<lambda>X. sat X _ _ \<phi>"])
      apply (auto simp: fun_eq_iff intro!: map_\<Gamma>i_map_\<Gamma>i_cong) []
     apply auto
     done
-qed (auto split: nat.splits cong: match_cong)
+qed (auto simp: subset_eq split: nat.splits cong: match_cong)
 
-lemma sat_unconvert: "sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat (unconvert \<sigma>) Map.empty v i \<phi>"
-  unfolding sat_convert convert_unconvert sat_fix_length ..
+lemma sat_unconvert: "sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat (unconvert (preds \<phi>) \<sigma>) Map.empty v i \<phi>"
+  unfolding sat_convert convert_unconvert sat_fix_length[OF subset_refl] ..
 
 subsection \<open>Collected correctness results\<close>
 
 definition pprogress :: "Formula.formula \<Rightarrow> Sat.prefix \<Rightarrow> nat" where
-  "pprogress \<phi> \<pi> = (THE n. \<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> progress (unconvert \<sigma>) Map.empty \<phi> (plen \<pi>) = n)"
+  "pprogress \<phi> \<pi> = (THE n. \<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>) = n)"
 
-lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi> \<pi> = progress (unconvert \<sigma>) Map.empty \<phi> (plen \<pi>)"
-  unfolding pprogress_def plen_punconvert[symmetric]
+lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi> \<pi> = progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>)"
+  unfolding pprogress_def plen_punconvert[where A="preds \<phi>", symmetric]
   using progress_prefix_conv prefix_of_unconvert by blast
 
 sublocale future_bounded_mfodl \<subseteq> Sat: timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>"
@@ -220,14 +246,14 @@ next
     by (simp add: pprogress_eq plen_mono Monitor.progress_mono)
 next
   case (4 \<sigma> x)
-  obtain j where "x \<le> progress (unconvert \<sigma>) Map.empty \<phi> j"
+  obtain j where "x \<le> progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> j"
     using future_bounded progress_ge by blast
   then have "x \<le> pprogress \<phi> (take_prefix j \<sigma>)"
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
 next
   case (5 \<pi> \<sigma> \<sigma>' i v)
-  then have "i < progress (unconvert \<sigma>) Map.empty \<phi> (plen \<pi>)"
+  then have "i < progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
   with 5 show ?case
     unfolding sat_unconvert
@@ -242,35 +268,36 @@ next
     using 6 calculation
     by transfer (simp add: list_eq_iff_nth_eq)
   ultimately show ?case
-    by (simp add: pprogress_eq Monitor.progress_time_conv[where j="plen (punconvert _)", simplified])
+    by (simp add: pprogress_eq Monitor.progress_time_conv[where j="plen (punconvert (preds \<phi>) _)", simplified])
 qed
 
 context verimon
 begin
 
-lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<phi> (punconvert \<pi>)"
+lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<phi> (punconvert (preds \<phi>) \<pi>)"
   by (metis Monitor.pprogress_eq Sat.pprogress_eq ex_prefix_of plen_punconvert prefix_of_unconvert)
 
-lemma M_alt: "Sat.M \<pi> = M (punconvert \<pi>)"
+lemma M_alt: "Sat.M \<pi> = M (punconvert (preds \<phi>) \<pi>)"
   unfolding Sat.M_def M_def
   unfolding pprogress_punconvert sat_unconvert
   apply (auto simp: prefix_of_unconvert)
   using ex_prefix_of prefix_of_unconvert progress_sat_cong apply blast
   done
 
-lemma last_ts_punconvert[simp]: "last_ts (punconvert \<pi>) = last_ts \<pi>"
+lemma last_ts_punconvert[simp]: "last_ts (punconvert A \<pi>) = last_ts \<pi>"
   unfolding punconvert_def by transfer (auto simp: last_map split: list.splits prod.splits)
 
-lemma punconvert_pnil[simp]: "punconvert pnil = pnil"
+lemma punconvert_pnil[simp]: "punconvert A pnil = pnil"
   unfolding punconvert_def
   by transfer auto
 
-lemma punconvert_psnoc[simp]: "punconvert (psnoc \<pi> tdb) = psnoc (punconvert \<pi>) (apfst to_db tdb)"
+lemma punconvert_psnoc[simp]: "punconvert A (psnoc \<pi> tdb) = psnoc (punconvert A \<pi>) (apfst (to_db A) tdb)"
   unfolding punconvert_def
   by transfer (auto simp: last_map split: list.splits prod.splits)
 
-abbreviation monitor_invar where "monitor_invar \<equiv> \<lambda>\<phi> \<pi>. wf_mstate \<phi> (punconvert \<pi>)"
-abbreviation monitor_step where "monitor_step \<equiv> \<lambda>db t. mstep (apfst mk_db (to_db db, t))"
+definition monitor_invar where "monitor_invar \<equiv> \<lambda>\<phi> \<pi> R (st, P). wf_mstate \<phi> (punconvert P \<pi>) R st \<and> P = preds \<phi>"
+definition monitor_init where "monitor_init \<equiv> \<lambda>\<phi>. (minit_safe \<phi>, preds \<phi>)"
+definition monitor_step where "monitor_step \<equiv> \<lambda>db t (st, P). apsnd (\<lambda>st. (st, P)) (mstep (apfst mk_db (to_db P db, t)) st)"
 
 text \<open>Main Results\<close>
 
@@ -280,20 +307,22 @@ lemmas monitor_specification =
   Sat.complete_monitor
 
 theorem invar_minit_safe:
-  "mmonitorable \<phi> \<Longrightarrow> monitor_invar \<phi> pnil R (minit_safe \<phi>)"
-  by (auto elim: wf_mstate_minit_safe)
+  "mmonitorable \<phi> \<Longrightarrow> monitor_invar \<phi> pnil R (monitor_init \<phi>)"
+  by (auto elim: wf_mstate_minit_safe simp: monitor_invar_def monitor_init_def)
 
 theorem invar_mstep:
-  assumes "monitor_invar \<phi>' \<pi> R st" "last_ts \<pi> \<le> t"
-  shows "monitor_invar \<phi>' (psnoc \<pi> (db, t)) R (snd (monitor_step db t st))"
-  using wf_mstate_mstep[OF assms(1), of "(to_db db, t)", simplified, OF assms(2)]
-  by auto
+  assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t"
+  shows "monitor_invar \<phi> (psnoc \<pi> (db, t)) R (snd (monitor_step db t st))"
+  using assms wf_mstate_mstep[of \<phi> "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
+  by (auto simp: monitor_invar_def monitor_step_def)
 
 theorem mstep_mverdicts:
   assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "mem_restr R v"
   shows "((i, v) \<in> flatten_verdicts (fst (monitor_step db t st))) =
          ((i, v) \<in> Sat.M (psnoc \<pi> (db, t)) - Sat.M \<pi>)"
-  using mstep_mverdicts[OF assms(1), of "(to_db db, t)" v i, simplified, OF assms(2,3)]
-  by (auto simp: M_alt)
+  using assms mstep_mverdicts[of "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
+  by (auto simp: M_alt monitor_invar_def monitor_step_def)
+
+end
 
 end
