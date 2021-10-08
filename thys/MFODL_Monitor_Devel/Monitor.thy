@@ -1334,7 +1334,7 @@ definition (in maux) mstep :: "database \<times> ts \<Rightarrow> ('msaux, 'muau
 
 subsection \<open>Verdict delay\<close>
 
-context fixes \<sigma> :: Formula.trace begin
+context fixes \<sigma> :: "'a trace" begin
 
 fun progress :: "(Formula.name \<times> nat \<rightharpoonup> nat) \<Rightarrow> Formula.formula \<Rightarrow> nat \<Rightarrow> nat" where
   "progress P (Formula.Pred e ts) j = (case P (e, length ts) of None \<Rightarrow> j | Some k \<Rightarrow> k)"
@@ -1645,7 +1645,9 @@ lemma not_contains_pred_progress[simp]: "\<not> contains_pred p \<phi> \<Longrig
   apply (erule disjE_Not2)
    apply auto []
   using letpast_progress_def apply auto[1]
-  by (smt (z3) Collect_cong fun_upd_twist letpast_progress_def)
+  apply (smt (z3) Collect_cong fun_upd_upd letpast_progress_def)
+  apply (smt (z3) Collect_cong fun_upd_twist letpast_progress_def)
+  done
 
 lemma not_contains_letpast_progress[simp]: "\<not> contains_pred p \<phi> \<Longrightarrow> letpast_progress \<sigma> (P(p \<mapsto> x)) q \<phi> j = letpast_progress \<sigma> P q \<phi> j"
   by (cases "p = q") (simp_all add: letpast_progress_def fun_upd_twist[of p q])
@@ -1702,6 +1704,7 @@ lemma letpast_progress_mono:
   unfolding letpast_progress_def
   apply (intro cInf_mono)
   using progress_fixpoint_ex[OF assms(2)] apply simp
+  apply blast
    apply simp
   subgoal for k
     apply clarify
@@ -2086,7 +2089,8 @@ lemma letpast_progress_PastRec:
   unfolding letpast_progress_def
   apply (rule cInf_greatest)
   using progress_fixpoint_ex[OF Pj] apply simp
-  apply clarify
+  apply blast
+   apply clarify
   apply (rule ssubst, assumption)
   apply (frule safe_letpast_progress_upd[OF assms, of _ \<sigma>])
   by simp
@@ -2643,7 +2647,7 @@ next
       with 2 have "i < letpast_progress \<sigma> P ?pn \<phi> (plen \<pi>)"
         unfolding letpast_progress_def by simp
       then have i_less: "i < progress \<sigma> (P(?pn \<mapsto>letpast_progress \<sigma> P ?pn \<phi> (plen \<pi>))) \<phi> (plen \<pi>)"
-        using letpast_progress_fixpoint[OF LetPast(6)] by simp
+        using letpast_progress_fixpoint[OF LetPast(6)] by metis
       have P': "pred_mapping (\<lambda>x. x \<le> plen \<pi>) (P(?pn \<mapsto> letpast_progress \<sigma> P ?pn \<phi> (plen \<pi>)))"
         using LetPast.prems(4) by (auto simp: letpast_progress_le)
 
@@ -6217,11 +6221,13 @@ lemma atms_nonempty_progress:
 
 lemma to_mregex_nonempty_progress: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, \<phi>s) \<Longrightarrow> \<phi>s \<noteq> [] \<Longrightarrow>
   progress_regex \<sigma> P r j = (MIN \<phi>\<in>set \<phi>s. progress \<sigma> P \<phi> j)"
-  using atms_nonempty_progress to_mregex_ok unfolding progress_regex_def by fastforce
+  using atms_nonempty_progress[of m g r \<sigma> P] to_mregex_ok[of r mr \<phi>s]
+  unfolding progress_regex_def by fastforce
 
 lemma to_mregex_progress: "safe_regex m g r \<Longrightarrow> to_mregex r = (mr, \<phi>s) \<Longrightarrow>
   progress_regex \<sigma> P r j = (if \<phi>s = [] then j else (MIN \<phi>\<in>set \<phi>s. progress \<sigma> P \<phi> j))"
-  using to_mregex_nonempty_progress to_mregex_empty_progress unfolding progress_regex_def by auto
+  using to_mregex_nonempty_progress[of m g r mr \<phi>s \<sigma> P] to_mregex_empty_progress[of m g r mr \<sigma> P]
+  unfolding progress_regex_def by auto
 
 lemma mbufnt_take_add':
   assumes eq: "mbufnt_take f z (mbufn_add xss buf) t nts = (z', buf', nt, nts')"
@@ -6694,7 +6700,7 @@ proof (induction i ys xs "(p, m)" ts db \<phi> arbitrary: p i' buf' ys' \<phi>f 
   let ?V = "V((p, m) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>'))"
 
   have i'_j: "i + length xs \<le> j - length ts"
-    using invar letpast_progress_le[OF PP'(1)]
+    using invar letpast_progress_le[OF PP'(1), of \<sigma>]
     unfolding letpast_meval_invar_def Let_def
     by (auto elim: order_trans)
   have "list_all2
