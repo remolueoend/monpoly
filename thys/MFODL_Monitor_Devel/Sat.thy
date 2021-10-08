@@ -143,8 +143,14 @@ abbreviation fix_length where "fix_length A X \<equiv> (\<lambda>(a, n). if (a, 
 lemma unconvert_convert: "unconvert UNIV (convert \<sigma> Map.empty) = \<sigma>"
   unfolding convert_def unconvert_def by (force simp: o_def intro!: trans[OF map_\<Gamma>i_map_\<Gamma>_cong[of _ _ id]])
 
-lemma convert_unconvert: "convert (unconvert A \<sigma>) Map.empty = map_\<Gamma> (fix_length A) \<sigma>"
-  unfolding convert_def unconvert_def by (force intro!: map_\<Gamma>i_map_\<Gamma>_cong simp: fun_eq_iff)
+definition "unconvertV X \<sigma> p = (if p \<in> X then Some (\<lambda>v i. v \<in> \<Gamma> \<sigma> i p \<and> length v = snd p) else None)"
+
+lemma unconvertV_empty[simp]: "unconvertV {} \<sigma> = Map.empty"
+  unfolding unconvertV_def by auto
+
+lemma convert_unconvert: "convert (unconvert A \<sigma>) (unconvertV X \<sigma>) = map_\<Gamma> (fix_length (A \<union> X)) \<sigma>"
+  unfolding convert_def unconvert_def unconvertV_def
+  by (force intro!: map_\<Gamma>i_map_\<Gamma>_cong simp: fun_eq_iff)
 
 lemma \<tau>_convert[simp]: "\<tau> (convert \<sigma> V) = \<tau> \<sigma>"
   unfolding convert_def by simp
@@ -181,7 +187,6 @@ proof (induct \<phi> arbitrary: \<sigma> v i)
     by (auto split: option.splits)
 next
   case (Let p \<phi> \<psi>)
-
   show ?case
     unfolding sat.simps Let_def using Let(1,3)
     by (subst (1 2) Let(2)[symmetric])
@@ -215,8 +220,11 @@ next
     done
 qed (auto simp: subset_eq split: nat.splits cong: match_cong)
 
-lemma sat_unconvert: "sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat (unconvert (preds \<phi>) \<sigma>) Map.empty v i \<phi>"
-  unfolding sat_convert convert_unconvert sat_fix_length[OF subset_refl] ..
+lemma sat_unconvert:
+  "preds \<phi> \<subseteq> X \<union> A \<Longrightarrow> sat \<sigma> v i \<phi> \<longleftrightarrow> Formula.sat (unconvert X \<sigma>) (unconvertV A \<sigma>) v i \<phi>"
+  unfolding sat_convert convert_unconvert by (rule sat_fix_length[symmetric]) simp
+
+lemmas sat_unconvert' = sat_unconvert[where A="{}" and X="preds \<phi>" and \<phi>=\<phi> for \<phi>, simplified]
 
 subsection \<open>Collected correctness results\<close>
 
@@ -235,7 +243,7 @@ proof (unfold_locales, goal_cases)
 next
   case (2 v v' \<sigma> i)
   then show ?case
-    unfolding sat_unconvert by (simp cong: sat_fv_cong[rule_format])
+    unfolding sat_unconvert' by (auto intro!: sat_fv_cong)
 next
   case (3 \<pi> \<pi>')
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
@@ -256,7 +264,7 @@ next
   then have "i < progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
   with 5 show ?case
-    unfolding sat_unconvert
+    unfolding sat_unconvert' unconvertV_empty
     by (intro sat_prefix_conv) (auto elim!: prefix_of_unconvert)
 next
   case (6 \<pi> \<pi>')
@@ -279,7 +287,7 @@ lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<ph
 
 lemma M_alt: "Sat.M \<pi> = M (punconvert (preds \<phi>) \<pi>)"
   unfolding Sat.M_def M_def
-  unfolding pprogress_punconvert sat_unconvert
+  unfolding pprogress_punconvert sat_unconvert'
   apply (auto simp: prefix_of_unconvert)
   using ex_prefix_of prefix_of_unconvert progress_sat_cong apply blast
   done
@@ -322,6 +330,63 @@ theorem mstep_mverdicts:
          ((i, v) \<in> Sat.M (psnoc \<pi> (db, t)) - Sat.M \<pi>)"
   using assms mstep_mverdicts[of "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
   by (auto simp: M_alt monitor_invar_def monitor_step_def)
+
+end
+
+context maux begin
+
+definition wf_envs where "wf_envs \<sigma> j \<delta> P P' db =
+  (Mapping.keys db \<supseteq> dom P \<union> (\<Union>k \<in> {j ..< j + \<delta>}. {(p, n). \<exists>x. x \<in> \<Gamma> \<sigma> k (p, n) \<and> n = length x}) \<and>
+   rel_mapping (\<le>) P P' \<and>
+   pred_mapping (\<lambda>i. i \<le> j) P \<and>
+   pred_mapping (\<lambda>i. i \<le> j + \<delta>) P' \<and>
+   (\<forall>pn \<in> Mapping.keys db. the (Mapping.lookup db pn) = map (\<lambda>k. map Some ` {ts. ts \<in> \<Gamma> \<sigma> k pn \<and> length ts = snd pn})
+     (if pn \<in> dom P then [the (P pn)..<the (P' pn)] else [j ..< j + \<delta>])))"
+
+definition invar_mformula where
+  "invar_mformula \<sigma> j P n R \<phi> \<phi>' =
+     wf_mformula (unconvert UNIV \<sigma>) j P (unconvertV (dom P) \<sigma>) n R \<phi> \<phi>'"
+
+lemma progress_unconvert: "progress (unconvert A \<sigma>) P \<phi> j = progress \<sigma> P \<phi> j"
+  by (simp add: progress_time_conv)
+
+lemma dom_unconvertV[simp]: "dom (unconvertV X \<sigma>) = X"
+  by (auto simp: unconvertV_def split: if_splits)
+
+lemma in_\<Gamma>_unconvert[simp]:
+  "(p, v) \<in> \<Gamma> (unconvert X \<sigma>) k \<longleftrightarrow> v \<in> \<Gamma> \<sigma> k (p, length v) \<and> (p, length v) \<in> X"
+  by (auto simp: unconvert_def)
+
+lemma meval:
+  assumes "invar_mformula \<sigma> j P n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' db"
+  shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> invar_mformula \<sigma> (j + \<delta>) P' n R \<phi>\<^sub>n \<phi>' \<and>
+    list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Sat.sat \<sigma> (map the v) i \<phi>'))
+    [progress \<sigma> P \<phi>' j..<progress \<sigma> P' \<phi>' (j + \<delta>)] xs"
+proof -
+  from assms have *: "dom P' = dom P"
+    unfolding wf_envs_def by (simp add: rel_mapping_alt)
+  from assms(1) have "wf_mformula (unconvert UNIV \<sigma>) j P (unconvertV (dom P) \<sigma>) n R \<phi> \<phi>'"
+    unfolding invar_mformula_def by simp
+  moreover
+  from assms(2) have "Monitor.wf_envs (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
+    unfolding wf_envs_def Monitor.wf_envs_def
+    apply clarsimp
+    apply safe
+    apply blast
+    apply force
+    apply force
+    apply (drule bspec)
+     apply (erule set_mp)
+    apply blast
+    apply (auto simp: list.rel_eq[symmetric] list.rel_map domIff unconvertV_def
+        elim!: list.rel_flip[THEN iffD1, OF list.rel_mono_strong])
+    done
+  ultimately show ?thesis
+    unfolding invar_mformula_def *
+      sat_unconvert[where A = "dom P" and X = UNIV, simplified]
+    by (subst (1 2) progress_unconvert[symmetric, where A = UNIV])
+      (rule meval[of "(unconvert UNIV \<sigma>)", unfolded \<tau>_unconvert])
+qed
 
 end
 
