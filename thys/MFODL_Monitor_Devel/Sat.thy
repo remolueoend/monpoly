@@ -154,20 +154,22 @@ lemma convert_fun_upd: "convert \<sigma> (V(pn \<mapsto> X)) = (convert \<sigma>
   by (auto simp: fun_eq_iff intro!: arg_cong[of _ _ "\<lambda>f. map_\<Gamma>i f \<sigma>"])
 
 lemma letpast_sat_alt:
-  "letpast_sat (\<lambda>X j. {w. sat ((convert \<sigma> V)(pn \<Rrightarrow> X)) w j \<phi> \<and> length w = snd pn}) i
-  = {v. Formula.letpast_sat (\<lambda>X w j. sat (convert \<sigma> (V(pn \<mapsto> X))) w j \<phi>) v i \<and> length v = snd pn}"
-  apply (induction i rule: less_induct)
-  apply (subst Sat.letpast_sat.simps)
-  apply (subst Formula.letpast_sat.simps)
-  apply (intro Collect_cong conj_cong[OF _ refl])
-  apply (subst ext[where f="\<lambda>j db. db(pn := if j < _ then _ j else {})"])
-   apply (rule ext)
-   apply (rule arg_cong[where f="fun_upd _ pn"])
-   apply (rule if_cong[OF refl _ refl])
-   apply assumption
-  apply (subst (2) convert_fun_upd)
-  apply (rule arg_cong[where f="\<lambda>g. sat (_(pn \<Rrightarrow> g)) _ _ _"])
-  by (simp add: fun_eq_iff)
+  "snd pn = n \<Longrightarrow> letpast_sat (\<lambda>X j. {w. sat (\<sigma>(pn \<Rrightarrow> X)) w j \<phi> \<and> length w = n})
+  = (\<lambda>i. {v. Formula.letpast_sat (\<lambda>X w j. sat (\<sigma>(pn \<Rrightarrow> \<lambda>k. {u. X u k \<and> length u = n})) w j \<phi>) v i \<and> length v = n})"
+  apply (rule ext)
+  subgoal for i
+    apply (induction i rule: less_induct)
+    apply (subst Sat.letpast_sat.simps)
+    apply (subst Formula.letpast_sat.simps)
+    apply (intro Collect_cong conj_cong[OF _ refl])
+    apply (subst ext[where f="\<lambda>j db. db(pn := if j < _ then _ j else {})"])
+     apply (rule ext)
+     apply (rule arg_cong[where f="fun_upd _ pn"])
+     apply (rule if_cong[OF refl _ refl])
+     apply assumption
+    apply (rule arg_cong[where f="\<lambda>g. sat (_(pn \<Rrightarrow> g)) _ _ _"])
+    by (simp add: fun_eq_iff)
+  done
 
 lemma sat_convert: "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (convert \<sigma> V) v i \<phi>"
 proof (induct \<phi> arbitrary: V v i)
@@ -500,15 +502,21 @@ next
 qed (auto intro!: wf_mformula.intros)
 
 lemma convert_unconvert_shadow: "convert (unconvert UNIV \<sigma>) ((unconvertV A \<sigma>)(pn \<mapsto> R))
-  = convert (unconvert UNIV (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j}))) (unconvertV (insert pn A) (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j})))"
+  = convert (unconvert UNIV (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j \<and> length w = snd pn})))
+    (unconvertV (insert pn A) (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j \<and> length w = snd pn})))"
   unfolding convert_def unconvert_def unconvertV_def
   apply simp
   apply (rule arg_cong[where f="\<lambda>g. map_\<Gamma>i g \<sigma>"])
   by (auto simp add: fun_eq_iff \<Gamma>_map_\<Gamma>i split: option.split)
 
+lemma sat_unconvert_shadow: "Formula.sat (unconvert UNIV \<sigma>) ((unconvertV A \<sigma>)(pn \<mapsto> R)) v i \<phi>
+  = Formula.sat (unconvert UNIV (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j \<and> length w = snd pn})))
+    (unconvertV (insert pn A) (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j \<and> length w = snd pn}))) v i \<phi>"
+  by (intro sat_convert_cong convert_unconvert_shadow)
+
 lemma invar_mformula_Let:
   "invar_mformula \<sigma> j P m UNIV \<phi> \<phi>' \<Longrightarrow>
-   invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>'})) j (P((p, m) \<mapsto> Monitor.progress \<sigma> P \<phi>' j)) n
+   invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>' \<and> length w = m})) j (P((p, m) \<mapsto> Monitor.progress \<sigma> P \<phi>' j)) n
    R \<psi> \<psi>' \<Longrightarrow> {0..<m} \<subseteq> fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
    invar_mformula \<sigma> j P n R (MLet p m \<phi> \<psi>) (formula.Let p \<phi>' \<psi>')"
   unfolding invar_mformula_def
@@ -516,6 +524,38 @@ lemma invar_mformula_Let:
   apply (simp add: progress_unconvert)
   apply (erule wf_mformula_convert_cong_aux)
   by (simp add: convert_unconvert_shadow flip: sat_unconvert)
+
+lemma invar_mformula_LetPast:
+  "invar_mformula (\<sigma>((p, m) \<Rrightarrow> letpast_sat (\<lambda>R j. {w. Sat.sat (\<sigma>((p, m) \<Rrightarrow> R)) w j \<phi>' \<and> length w = m}))) j
+     (P((p, m) \<mapsto> i)) m UNIV \<phi> \<phi>' \<Longrightarrow>
+   invar_mformula (\<sigma>((p, m) \<Rrightarrow> letpast_sat (\<lambda>R j. {w. Sat.sat (\<sigma>((p, m) \<Rrightarrow> R)) w j \<phi>' \<and> length w = m}))) j
+     (P((p, m) \<mapsto> letpast_progress \<sigma> P (p, m) \<phi>' j)) n R \<psi> \<psi>' \<Longrightarrow>
+   (case buf of
+      None \<Rightarrow> i = letpast_progress \<sigma> P (p, m) \<phi>' j
+    | Some Z \<Rightarrow> Suc i = letpast_progress \<sigma> P (p, m) \<phi>' j \<and>
+        qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. map the v \<in>
+          letpast_sat (\<lambda>R j. {w. Sat.sat (\<sigma>((p, m) \<Rrightarrow> R)) w j \<phi>' \<and> length w = m}) i) Z) \<Longrightarrow>
+   safe_letpast (p, m) \<phi>' \<le> PastRec \<Longrightarrow>
+   {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+   invar_mformula \<sigma> j P n R (MLetPast p m \<phi> \<psi> i buf) (formula.LetPast p \<phi>' \<psi>')"
+  unfolding invar_mformula_def
+  apply (rule wf_mformula.LetPast; assumption?)
+    apply (simp_all add: letpast_progress_def progress_unconvert cong: option.case_cong)
+    apply (erule wf_mformula_convert_cong_aux)
+    apply (simp add: convert_unconvert_shadow letpast_sat_alt sat_unconvert_shadow)
+    apply (subst sat_unconvert[symmetric], blast)+
+    apply simp
+   apply (erule wf_mformula_convert_cong_aux)
+   apply (simp add: convert_unconvert_shadow letpast_sat_alt sat_unconvert_shadow)
+   apply (subst sat_unconvert[symmetric], blast)+
+   apply simp
+  apply (erule option.case_cong[OF refl refl, THEN iffD1, rotated])
+  apply (rule conj_cong[OF refl])
+  apply (rule fun_cong[of "qtable _ _ _ _"])
+  apply (intro qtable_cong_strong refl)
+  apply (simp add: letpast_sat_alt sat_unconvert_shadow del: fun_upd_apply)
+  apply (subst sat_unconvert[symmetric], blast)
+  by (simp add: wf_tuple_def)
 
 end
 
