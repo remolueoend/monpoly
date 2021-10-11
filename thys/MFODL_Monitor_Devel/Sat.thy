@@ -85,27 +85,14 @@ lemma subst_letpast_sat:
   "(\<And>X v j. j \<le> i \<Longrightarrow> f X j = g X j) \<Longrightarrow> letpast_sat f i = letpast_sat g i"
   by (induct f i rule: letpast_sat.induct) (subst (1 2) letpast_sat.simps, auto cong: if_cong)
 
-lemma letpast_sat_alt:
-  "letpast_sat sat i = {v. Formula.letpast_sat (\<lambda>X v i. v \<in> sat (\<lambda>j. {w. X w j}) i) v i}"
-  apply (induct sat i rule: letpast_sat.induct)
-  subgoal for sat i
-  apply (subst letpast_sat.simps)
-    apply (subst Formula.letpast_sat.simps)
-    apply (rule set_eqI)
-    apply (unfold mem_Collect_eq)
-    apply (rule arg_cong[of _ _ "\<lambda>X. x \<in> sat X i" for x])
-    apply (auto simp: fun_eq_iff)
-    done
-  done
-
 fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> Formula.formula \<Rightarrow> bool" where
   "sat \<sigma> v i (Formula.Pred r ts) = (map (Formula.eval_trm v) ts \<in> \<Gamma> \<sigma> i (r, length ts))"
 | "sat \<sigma> v i (Formula.Let p \<phi> \<psi>) =
     (let pn = (p, Formula.nfv \<phi>) in
-    sat (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. sat \<sigma> w j \<phi>})) v i \<psi>)"
+    sat (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. sat \<sigma> w j \<phi> \<and> length w = snd pn})) v i \<psi>)"
 | "sat \<sigma> v i (Formula.LetPast p \<phi> \<psi>) =
     (let pn = (p, Formula.nfv \<phi>) in
-    sat (\<sigma>(pn \<Rrightarrow> letpast_sat (\<lambda>X k. {u. sat (\<sigma>(pn \<Rrightarrow> X)) u k \<phi>}))) v i \<psi>)"
+    sat (\<sigma>(pn \<Rrightarrow> letpast_sat (\<lambda>X k. {u. sat (\<sigma>(pn \<Rrightarrow> X)) u k \<phi> \<and> length u = snd pn}))) v i \<psi>)"
 | "sat \<sigma> v i (Formula.Eq t1 t2) = (Formula.eval_trm v t1 = Formula.eval_trm v t2)"
 | "sat \<sigma> v i (Formula.Less t1 t2) = (Formula.eval_trm v t1 < Formula.eval_trm v t2)"
 | "sat \<sigma> v i (Formula.LessEq t1 t2) = (Formula.eval_trm v t1 \<le> Formula.eval_trm v t2)"
@@ -126,7 +113,8 @@ fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> Form
 
 end
 
-definition "convert \<sigma> V = map_\<Gamma>i (\<lambda>i db pn. case V pn of None \<Rightarrow> {w. (fst pn, w) \<in> db \<and> length w = snd pn} | Some X \<Rightarrow> {w. X w i}) \<sigma>"
+definition "convert \<sigma> V = map_\<Gamma>i (\<lambda>i db pn. case V pn of None \<Rightarrow> {w. (fst pn, w) \<in> db \<and> length w = snd pn}
+  | Some X \<Rightarrow> {w. X w i \<and> length w = snd pn}) \<sigma>"
 
 abbreviation to_db where "to_db A db \<equiv> \<Union>(p,n) \<in> A. Pair p ` {v \<in> db (p, n). length v = n}"
 definition "unconvert A \<sigma> = map_\<Gamma> (to_db A) \<sigma>"
@@ -161,9 +149,25 @@ lemma \<tau>_unconvert[simp]: "\<tau> (unconvert A \<sigma>) = \<tau> \<sigma>"
 lemma map_\<Gamma>_update_\<Gamma>: "(map_\<Gamma> f \<sigma>)(pn \<Rrightarrow> X) = map_\<Gamma>i (\<lambda>i x. (f x)(pn := X i)) \<sigma>"
   by (auto simp: o_def)
 
-lemma convert_update_\<Gamma>: "(convert \<sigma> V)(pn \<Rrightarrow> X) = convert \<sigma> (V(pn \<mapsto> \<lambda>v i. v \<in> X i))"
+lemma convert_fun_upd: "convert \<sigma> (V(pn \<mapsto> X)) = (convert \<sigma> V)(pn \<Rrightarrow> \<lambda>j. {w. X w j \<and> length w = snd pn})"
   unfolding convert_def
   by (auto simp: fun_eq_iff intro!: arg_cong[of _ _ "\<lambda>f. map_\<Gamma>i f \<sigma>"])
+
+lemma letpast_sat_alt:
+  "letpast_sat (\<lambda>X j. {w. sat ((convert \<sigma> V)(pn \<Rrightarrow> X)) w j \<phi> \<and> length w = snd pn}) i
+  = {v. Formula.letpast_sat (\<lambda>X w j. sat (convert \<sigma> (V(pn \<mapsto> X))) w j \<phi>) v i \<and> length v = snd pn}"
+  apply (induction i rule: less_induct)
+  apply (subst Sat.letpast_sat.simps)
+  apply (subst Formula.letpast_sat.simps)
+  apply (intro Collect_cong conj_cong[OF _ refl])
+  apply (subst ext[where f="\<lambda>j db. db(pn := if j < _ then _ j else {})"])
+   apply (rule ext)
+   apply (rule arg_cong[where f="fun_upd _ pn"])
+   apply (rule if_cong[OF refl _ refl])
+   apply assumption
+  apply (subst (2) convert_fun_upd)
+  apply (rule arg_cong[where f="\<lambda>g. sat (_(pn \<Rrightarrow> g)) _ _ _"])
+  by (simp add: fun_eq_iff)
 
 lemma sat_convert: "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat (convert \<sigma> V) v i \<phi>"
 proof (induct \<phi> arbitrary: V v i)
@@ -173,11 +177,11 @@ proof (induct \<phi> arbitrary: V v i)
 next
   case (Let p \<phi> \<psi>)
   then show ?case
-    by (simp del: fun_upd_apply add: convert_update_\<Gamma>)
+    by (simp del: fun_upd_apply add: convert_fun_upd)
 next
   case (LetPast p \<phi> \<psi>)
   then show ?case
-    by (simp del: fun_upd_apply add: Let_def convert_update_\<Gamma> letpast_sat_alt)
+    by (simp del: fun_upd_apply add: Let_def convert_fun_upd letpast_sat_alt)
 qed (auto split: nat.splits cong: match_cong)
 
 lemma sat_fix_length: "preds \<phi> \<subseteq> A \<Longrightarrow> sat (map_\<Gamma> (fix_length A) \<sigma>) v i \<phi> = sat \<sigma> v i \<phi>"
@@ -214,6 +218,7 @@ next
      apply (rule Collect_cong)
      apply (subst (1 2) LetPast(1)[symmetric])
       apply simp
+     apply (rule conj_cong[OF refl])
      apply (rule arg_cong[where f="\<lambda>X. sat X _ _ \<phi>"])
      apply (auto simp: fun_eq_iff intro!: map_\<Gamma>i_map_\<Gamma>i_cong) []
     apply auto
@@ -387,6 +392,130 @@ proof -
     by (subst (1 2) progress_unconvert[symmetric, where A = UNIV])
       (rule meval[of "(unconvert UNIV \<sigma>)", unfolded \<tau>_unconvert])
 qed
+
+lemma progress_convert_cong:
+  "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
+  by (auto simp add: progress_time_conv dest!: arg_cong[where f=\<tau>])
+
+lemma sat_convert_cong:
+  "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>"
+  by (simp add: sat_convert)
+
+lemma wf_mformula_convert_cong_aux:
+  "wf_mformula \<sigma> j P V m R \<phi> \<phi>' \<Longrightarrow> convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> wf_mformula \<sigma>' j P V' m R \<phi> \<phi>'"
+proof (induction arbitrary: V' rule: wf_mformula.induct)
+  case (Let P V m \<phi> \<phi>' p n R \<psi> \<psi>' b)
+  show ?case
+    apply (rule wf_mformula.Let)
+        apply (rule Let.IH(1); fact)
+       apply (rule Let.IH(2)[unfolded progress_convert_cong[OF Let.prems]])
+       apply (simp add: convert_fun_upd Let.prems del: fun_upd_apply cong: sat_convert_cong)
+    by fact+
+next
+  case (LetPast P p m i V \<phi>' \<phi> n R \<psi> \<psi>' buf b)
+  show ?case
+    apply (rule wf_mformula.LetPast)
+          apply (rule LetPast.IH(1))
+    subgoal 1
+      apply (simp add: convert_fun_upd LetPast.prems del: fun_upd_apply)
+      apply (rule arg_cong[where f="\<lambda>g. map_\<Gamma>i (\<lambda>i db. db(_ := g i)) _"])
+      apply (intro ext Collect_cong)
+      apply (rule arg_cong[where f="\<lambda>g. Formula.letpast_sat g _ _ \<and> _"])
+      apply (simp add: fun_eq_iff LetPast.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
+      done
+         apply (simp only: letpast_progress_def)
+         apply (rule LetPast.IH(2)[unfolded letpast_progress_def progress_convert_cong[OF LetPast.prems]])
+         apply (rule 1)
+    subgoal
+      apply (insert LetPast.hyps(3))
+      apply (simp only: letpast_progress_def progress_convert_cong[OF LetPast.prems])
+      apply (erule option.case_cong[OF refl refl, THEN iffD1, rotated])
+      apply (rule arg_cong[of "\<lambda>a b c. Formula.sat \<sigma> (_ (Some a)) b c _" "\<lambda>a b c. Formula.sat \<sigma>' (_ (Some a)) b c _"])
+      apply (simp add: fun_eq_iff LetPast.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
+      done
+    by fact+
+next
+  case (And P V n R \<phi> \<phi>' \<psi> \<psi>' pos \<chi> buf)
+  then show ?case
+    by (auto simp add: wf_mbuf2'_def progress_convert_cong[of \<sigma> V \<sigma>' V'] cong: sat_convert_cong
+        intro!: wf_mformula.intros)
+next
+  case (Ands P V n R l l_pos l_neg l' buf A_pos A_neg)
+  have 1: "progress \<sigma> = progress \<sigma>'"
+    "Formula.sat \<sigma> V = Formula.sat \<sigma>' V'"
+    by (simp_all add: fun_eq_iff progress_convert_cong[of \<sigma> V \<sigma>' V'] Ands.prems
+        sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
+  show ?case
+    apply (rule wf_mformula.Ands[where l_pos=l_pos and l_neg=l_neg])
+           apply (rule list.rel_mono_strong[OF Ands.IH])
+           apply (simp add: Ands.prems)
+    using Ands.hyps(1) apply (simp add: wf_mbufn_def 1)
+    by fact+
+next
+  case (Or P V n R \<phi> \<phi>' \<psi> \<psi>' buf)
+  then show ?case
+    by (auto simp add: wf_mbuf2'_def progress_convert_cong[of \<sigma> V \<sigma>' V'] cong: sat_convert_cong
+        intro!: wf_mformula.intros)
+next
+  case (Prev P V n R \<phi> \<phi>' first buf nts I)
+  then show ?case
+    by (auto simp add: progress_convert_cong[of \<sigma> V \<sigma>' V'] cong: sat_convert_cong
+        intro!: wf_mformula.intros elim!: list.rel_mono_strong dest!: arg_cong[where f=\<tau>])
+next
+  case (Next P V n R \<phi> \<phi>' first nts I)
+  then show ?case
+    by (auto simp add: progress_convert_cong[of \<sigma> V \<sigma>' V'] cong: sat_convert_cong
+        intro!: wf_mformula.intros elim!: list.rel_mono_strong dest!: arg_cong[where f=\<tau>])
+next
+  case (Since P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I buf aux)
+  moreover obtain buf\<phi> buf\<psi> ts skew where "buf = (buf\<phi>, buf\<psi>, ts, skew)"
+    by (cases buf)
+  moreover have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
+    "Formula.sat \<sigma> V v i \<psi>' = Formula.sat \<sigma>' V' v i \<psi>'" for v i
+    by (simp_all add: fun_eq_iff Since.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
+  moreover have "\<tau> \<sigma> = \<tau> \<sigma>'"
+    by (metis Since.prems \<tau>_convert)
+  ultimately show ?case
+    apply (intro wf_mformula.Since)
+              apply (simp_all add: wf_since_aux_def sat_since_point_def
+        progress_convert_cong[of \<sigma> V \<sigma>' V'] split del: if_split cong: if_cong) (* SLOW 20s *)
+    by force
+next
+  case (Until P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I buf nts t aux)
+  moreover have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
+    "Formula.sat \<sigma> V v i \<psi>' = Formula.sat \<sigma>' V' v i \<psi>'" for v i
+    by (simp_all add: fun_eq_iff Until.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
+  moreover have "\<tau> \<sigma> = \<tau> \<sigma>'"
+    by (metis Until.prems \<tau>_convert)
+  ultimately show ?case
+    apply (intro wf_mformula.Until)
+    by (simp_all add: wf_mbuf2'_def wf_until_aux_def wf_until_auxlist_def wf_ts_def
+        progress_convert_cong[of \<sigma> V \<sigma>' V'] split del: if_split cong: if_cong) (* SLOW 30s *)
+next
+  case (MatchP r P V n R \<phi>s mr mrs buf nts I aux)
+  then show ?case sorry
+next
+  case (MatchF r P V n R \<phi>s mr mrs buf nts t I aux)
+  then show ?case sorry
+qed (auto intro!: wf_mformula.intros)
+
+lemma convert_unconvert_shadow: "convert (unconvert UNIV \<sigma>) ((unconvertV A \<sigma>)(pn \<mapsto> R))
+  = convert (unconvert UNIV (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j}))) (unconvertV (insert pn A) (\<sigma>(pn \<Rrightarrow> \<lambda>j. {w. R w j})))"
+  unfolding convert_def unconvert_def unconvertV_def
+  apply simp
+  apply (rule arg_cong[where f="\<lambda>g. map_\<Gamma>i g \<sigma>"])
+  by (auto simp add: fun_eq_iff \<Gamma>_map_\<Gamma>i split: option.split)
+
+lemma invar_mformula_Let:
+  "invar_mformula \<sigma> j P m UNIV \<phi> \<phi>' \<Longrightarrow>
+   invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>'})) j (P((p, m) \<mapsto> Monitor.progress \<sigma> P \<phi>' j)) n
+   R \<psi> \<psi>' \<Longrightarrow> {0..<m} \<subseteq> fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+   invar_mformula \<sigma> j P n R (MLet p m \<phi> \<psi>) (formula.Let p \<phi>' \<psi>')"
+  unfolding invar_mformula_def
+  apply (rule wf_mformula.Let; assumption?)
+  apply (simp add: progress_unconvert)
+  apply (erule wf_mformula_convert_cong_aux)
+  by (simp add: convert_unconvert_shadow flip: sat_unconvert)
 
 end
 
