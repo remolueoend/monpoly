@@ -395,6 +395,16 @@ proof -
       (rule meval[of "(unconvert UNIV \<sigma>)", unfolded \<tau>_unconvert])
 qed
 
+corollary meval_Map_empty:
+  assumes "invar_mformula \<sigma> j Map.empty n R \<phi> \<phi>'"
+    "Mapping.keys db \<supseteq> (\<Union>k \<in> {j ..< j + \<delta>}. {(p, n). \<exists>x. x \<in> \<Gamma> \<sigma> k (p, n) \<and> n = length x})"
+    "\<forall>pn \<in> Mapping.keys db. the (Mapping.lookup db pn)
+      = map (\<lambda>k. map Some ` {ts. ts \<in> \<Gamma> \<sigma> k pn \<and> length ts = snd pn}) [j ..< j + \<delta>]"
+  shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> invar_mformula \<sigma> (j + \<delta>) Map.empty n R \<phi>\<^sub>n \<phi>' \<and>
+    list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Sat.sat \<sigma> (map the v) i \<phi>'))
+    [progress \<sigma> Map.empty \<phi>' j..<progress \<sigma> Map.empty \<phi>' (j + \<delta>)] xs"
+  using assms by (intro meval) (auto simp add: wf_envs_def rel_mapping_reflp reflp_def)
+
 lemma progress_convert_cong:
   "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
   by (auto simp add: progress_time_conv dest!: arg_cong[where f=\<tau>])
