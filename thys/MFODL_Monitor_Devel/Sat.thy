@@ -527,7 +527,7 @@ lemma sat_unconvert_shadow: "Formula.sat (unconvert UNIV \<sigma>) ((unconvertV 
 lemma invar_mformula_Let:
   "invar_mformula \<sigma> j P m UNIV \<phi> \<phi>' \<Longrightarrow>
    invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>' \<and> length w = m})) j (P((p, m) \<mapsto> Monitor.progress \<sigma> P \<phi>' j)) n
-   R \<psi> \<psi>' \<Longrightarrow> {0..<m} \<subseteq> fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+   R \<psi> \<psi>' \<Longrightarrow> {0..<m} \<subseteq> fv \<phi>' \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
    invar_mformula \<sigma> j P n R (MLet p m \<phi> \<psi>) (formula.Let p \<phi>' \<psi>')"
   unfolding invar_mformula_def
   apply (rule wf_mformula.Let; assumption?)
@@ -546,7 +546,7 @@ lemma invar_mformula_LetPast:
         qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. map the v \<in>
           letpast_sat (\<lambda>R j. {w. Sat.sat (\<sigma>((p, m) \<Rrightarrow> R)) w j \<phi>' \<and> length w = m}) i) Z) \<Longrightarrow>
    safe_letpast (p, m) \<phi>' \<le> PastRec \<Longrightarrow>
-   {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> b \<le> m \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+   {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
    invar_mformula \<sigma> j P n R (MLetPast p m \<phi> \<psi> i buf) (formula.LetPast p \<phi>' \<psi>')"
   unfolding invar_mformula_def
   apply (rule wf_mformula.LetPast; assumption?)
