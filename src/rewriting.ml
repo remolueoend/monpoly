@@ -1472,7 +1472,7 @@ let rec type_check_formula (sch, vars) f =
     let new_typed_vars = 
       List.fold_left 
         (fun vrs vr -> (vr,new_type_symbol TAny sch (List.append vars vrs))::vrs) [] new_vars in
-    let new_sig = List.map (fun (_,t) -> t) new_typed_vars in
+    let new_sig = List.rev_map (fun (_,t) -> t) new_typed_vars in
     let (s1,v1,f1) = type_check_formula (((n,a),new_sig)::sch, new_typed_vars) f1 in
     assert((List.length v1) = (List.length new_typed_vars));
     let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
