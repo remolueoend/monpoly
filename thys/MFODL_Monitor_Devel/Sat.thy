@@ -569,4 +569,23 @@ lemma invar_mformula_LetPast:
 
 end
 
+lemma letpast_progress_alt: "pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow>
+  letpast_progress \<sigma> P p \<phi> j = \<Sqinter>{i. i = progress \<sigma> (P(p \<mapsto> i)) \<phi> j}"
+  unfolding letpast_progress_def
+  apply (rule antisym)
+   apply (rule cInf_greatest)
+  apply (blast dest: progress_fixpoint_ex)
+  subgoal for x
+    apply (cases "x \<le> j")
+     apply (blast intro!: cInf_lower)
+    apply (drule progress_fixpoint_ex)
+   apply clarsimp
+    apply (intro cInf_lower2 CollectI conjI)
+    apply assumption+
+    by auto
+  apply (rule cInf_mono)
+  apply (blast dest: progress_fixpoint_ex)
+    apply simp
+  by auto
+
 end
