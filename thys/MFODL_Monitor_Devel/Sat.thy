@@ -409,6 +409,10 @@ lemma progress_convert_cong:
   "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> progress \<sigma> P \<phi> j = progress \<sigma>' P \<phi> j"
   by (auto simp add: progress_time_conv dest!: arg_cong[where f=\<tau>])
 
+lemma progress_regex_convert_cong:
+  "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> progress_regex \<sigma> P r j = progress_regex \<sigma>' P r j"
+  by (metis progress_convert_cong progress_simps(17))
+
 lemma sat_convert_cong:
   "convert \<sigma> V = convert \<sigma>' V' \<Longrightarrow> Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>"
   by (simp add: sat_convert)
@@ -505,10 +509,26 @@ next
         progress_convert_cong[of \<sigma> V \<sigma>' V'] split del: if_split cong: if_cong) (* SLOW 30s *)
 next
   case (MatchP r P V n R \<phi>s mr mrs buf nts I aux)
-  then show ?case sorry
+  moreover have "Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>" for v i \<phi>
+    by (simp_all add: MatchP.prems sat_convert_cong[of \<sigma> _ \<sigma>'])
+  moreover have "\<tau> \<sigma> = \<tau> \<sigma>'"
+    by (metis MatchP.prems \<tau>_convert)
+  ultimately show ?case
+    by (intro wf_mformula.MatchP)
+      (auto simp add: wf_mbufn'_def wf_mbufn_def list_all3_map wf_ts_regex_def wf_matchP_aux_def
+            progress_convert_cong[of \<sigma> V \<sigma>' V'] progress_regex_convert_cong[of \<sigma> V \<sigma>' V']
+            elim!: list.rel_mono_strong list_all3_mono_strong cong: match_cong)
 next
   case (MatchF r P V n R \<phi>s mr mrs buf nts t I aux)
-  then show ?case sorry
+  moreover have "Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>" for v i \<phi>
+    by (simp_all add: MatchF.prems sat_convert_cong[of \<sigma> _ \<sigma>'])
+  moreover have "\<tau> \<sigma> = \<tau> \<sigma>'"
+    by (metis MatchF.prems \<tau>_convert)
+  ultimately show ?case
+    by (intro wf_mformula.MatchF)
+      (auto simp add: wf_mbufn'_def wf_mbufn_def list_all3_map wf_ts_regex_def wf_matchF_aux_def
+            progress_convert_cong[of \<sigma> V \<sigma>' V'] progress_regex_convert_cong[of \<sigma> V \<sigma>' V']
+            elim!: list.rel_mono_strong list_all3_mono_strong cong: match_cong)
 qed (auto intro!: wf_mformula.intros)
 
 lemma convert_unconvert_shadow: "convert (unconvert UNIV \<sigma>) ((unconvertV A \<sigma>)(pn \<mapsto> R))
