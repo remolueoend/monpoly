@@ -278,7 +278,7 @@ lemma sorted_foldl_max:
   assumes "sorted (x # xs)"
   and "length (x # xs) = n"
   shows "foldl max x xs = (x # xs) ! (n - 1)"
-  using assms by(induction xs arbitrary:x n) (auto simp: linorder_class.max.absorb2)
+  using assms by(induction xs arbitrary:x n) auto
 
 lemma set_insert_flatten_mset:
   assumes "ID ccompare = Some (c :: (event_data \<times> enat) comparator)" 
@@ -527,14 +527,14 @@ lemma mset_del_list:
 lemma valid_list_aux_remove:
   assumes "valid_list_aux' l s"
   shows "valid_list_aux' (((remove_treelist t) ^^ n) l) (s - replicate_mset n t)"
-  using assms apply (induction n) by(simp add: valid_list_aux'_def)+ (transfer; simp add:mset_del_list) 
+  using assms by (induction n; simp add: valid_list_aux'_def) (transfer; simp add:mset_del_list) 
 
 lemma sort_remove_eq:
   shows "sort_treelist (remove_treelist t l) = remove_treelist t (sort_treelist l)"
   apply(transfer) 
 proof -
   fix t l
-  show "sort (del_list t l) = del_list t (sort l)"
+  show "sort (del_list (t :: 'a) l) = del_list t (sort l)"
     by(induction l; auto simp add: insort_del_inverse) (metis insort_del_comm sorted_sort)
 qed
 
@@ -545,7 +545,7 @@ lemma insort_remove_comm:
   using assms apply(transfer)
 proof -
   fix t l i
-  assume "t \<in> set l" and "sorted l"
+  assume "(t :: 'a) \<in> set l" and "sorted l"
   then show "(insort t ^^ i) (del_list t l) = del_list t ((insort t ^^ i) l)"
   proof(induction l)
     case Nil
@@ -562,7 +562,7 @@ lemma bulk_remove_in_set:
   using assms unfolding comp_def apply(transfer)
 proof -
   fix i l t
-  assume "Suc i \<le> count (mset l) t"
+  assume "Suc i \<le> count (mset l) (t :: 'a)"
   then show "t \<in> set ((del_list t ^^ i) l)"
   proof(induction i arbitrary: l)
   case 0
@@ -606,7 +606,7 @@ next
   show ?case using Suc(1)[OF *] unfolding simp1 insort_remove_comm[OF in_set, OF sorted] apply(transfer) 
   proof -
     fix l t i
-    assume "sort l = (Sorting.insort t ^^ i) (sort ((del_list t ^^ i) l))"
+    assume "sort (l :: 'a list) = (Sorting.insort t ^^ i) (sort ((del_list t ^^ i) l))"
     then show "sort l = del_list t ((Sorting.insort t ^^ Suc i) (sort ((del_list t ^^ i) l)))"
       using insort_del_inverse[of t, unfolded insort_eq2[symmetric]] by auto
   qed
@@ -856,7 +856,7 @@ lemma delete_rank_comm':
   shows "(delete_rank args type x \<circ> delete_rank args type y) (v, m) = (delete_rank args type y \<circ> delete_rank args type x) (v, m)"
   apply(cases type; auto split:event_data.splits option.splits; auto split:list_aux.splits; auto split:event_data.splits)
   apply(auto simp:lookup_update' lookup_delete mapping_eqI delete_update update_update)
-  by(auto simp:remove_comm aux1) (smt (z3) auxa remove_comm)+
+  apply(auto simp:remove_comm aux1) by (smt (z3) auxa remove_comm)+
  
                      
 lemma delete_rank_comm: 
@@ -1350,7 +1350,7 @@ proof -
             have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = sum + i"
               using M_def Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def a_def(2)
               by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
-            show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def lookup_update)
+            show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def)
           next
             case False
             then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
@@ -1368,7 +1368,7 @@ proof -
             moreover have valid_fold: "fold_mset (+) 0 (int_mset_conv ?M) = sum + i"
               using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def a_def(2)
               by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
-            ultimately show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def lookup_update)
+            ultimately show ?thesis using valid_size valid_fold new_map_def Some by (simp add: k_def)
           qed
         qed
       next
@@ -1452,7 +1452,7 @@ proof -
           then have valid_size: "size (mset_conv Some ?M) = a + 1"
             using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some] _ finite_old_M not_in] a_def
             by(simp add: mset_conv_def one_enat_def)
-          then show ?thesis using new_map_def Some by (simp add: k_def lookup_update)
+          then show ?thesis using new_map_def Some by (simp add: k_def)
         next
           case False
           then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
@@ -1466,7 +1466,7 @@ proof -
           have valid_size: "size (mset_conv Some ?M) = a + 1"
             using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some] _ finite_old_M not_in] a_def
             by(simp add:mset_conv_def one_enat_def)
-          then show ?thesis using new_map_def Some by (simp add: k_def lookup_update)
+          then show ?thesis using new_map_def Some by (simp add: k_def)
         qed
       qed
     next
@@ -1550,7 +1550,7 @@ proof -
           then show ?thesis using None k_in new_map_def meval_def mset_treelist_insert[of s empty_treelist] mset_treelist_insert[of i empty_treelist]
             Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int]] y0_restr
             Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_string]]
-            by(auto simp:mset_treelist_empty k_def lookup_update valid_list_aux_def valid_list_aux'_def int_mset_conv_def 
+            by(auto simp:mset_treelist_empty k_def valid_list_aux_def valid_list_aux'_def int_mset_conv_def 
                   unpack_int_def the_enat_one type_restr_mset_def str_mset_conv_def unpack_string_def type_restr_def mset_conv_def
                   split:event_data.splits list_aux.splits type.splits)
         next
@@ -1566,7 +1566,7 @@ proof -
             then show ?thesis using Some k_in new_map_def meval_def valid_old list_elem_restr mset_treelist_insert[of i] mset_treelist_insert[of s]
                 Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] y0_restr
                 Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_string] _ finite_old_M not_in]
-              by(auto simp:k_def lookup_update valid_list_aux_def valid_list_aux'_def int_mset_conv_def insort_mset
+              by(auto simp:k_def valid_list_aux_def valid_list_aux'_def int_mset_conv_def insort_mset
                   unpack_int_def the_enat_one type_restr_mset_def str_mset_conv_def unpack_string_def type_restr_def mset_conv_def
                   split:list_aux.splits event_data.splits type.splits) (* Slow *)
           next
@@ -1584,7 +1584,7 @@ proof -
                 using EInt M_insert_remove_def mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of unpack_int]
                 by(simp add:int_mset_conv_def unpack_int_def)
               then show ?thesis using Some k_in meval_def EInt valid_old filter_insert[of "(\<lambda>x. drop b x = k)"] mset_treelist_insert[of i]
-                apply(auto simp:k_def new_map_def  lookup_update valid_list_aux_def valid_list_aux'_def 
+                apply(auto simp:k_def new_map_def  valid_list_aux_def valid_list_aux'_def 
                       insort_mset split:option.splits)
                 by(simp add:type_restr_mset_def k_def) blast
             next
@@ -1597,7 +1597,7 @@ proof -
                 using EString M_insert_remove_def mset_conv_insert_remove[OF n_def _ not_in finite_old_M, of unpack_string]
                 by(simp add:str_mset_conv_def unpack_string_def)
               then show ?thesis using Some k_in meval_def EString valid_old filter_insert[of "(\<lambda>x. drop b x = k)"] mset_treelist_insert[of s]
-                apply(auto simp:k_def new_map_def  lookup_update valid_list_aux_def valid_list_aux'_def 
+                apply(auto simp:k_def new_map_def valid_list_aux_def valid_list_aux'_def 
                       insort_mset split:option.splits)
                 by(simp add:type_restr_mset_def k_def) blast
             qed
@@ -1845,11 +1845,12 @@ proof -
           then have mset_conv_eq: "int_mset_conv ?old_M = add_mset i (int_mset_conv ?M)"
             using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_M not_in] i_def
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
-          have "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
-          moreover have "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
+          have op1: "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
+          have op2: "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
             using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M _] i_def vals(2)
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
-          ultimately show ?thesis using new_map_def k_def k_in by(auto) (metis * Pair_inject local.lookup_def lookup_update option.inject)
+          show ?thesis using k_in lookup_def * unfolding Let_def op1[unfolded group_multiset_def Let_def group_def] op2[unfolded group_multiset_def Let_def group_def] new_map_def k_def
+            by auto 
         next
           case False
           then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
@@ -1862,11 +1863,12 @@ proof -
             using multiset_multiple_term_remove[OF k_def False n'_def in_set finite_X] by simp 
           then have mset_conv_eq: "int_mset_conv ?old_M = add_mset i (int_mset_conv ?M)" 
             using mset_conv_insert_remove'[OF n'_def _ not_in finite_old_M, of unpack_int] i_def by(simp add:int_mset_conv_def unpack_int_def) 
-          have "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
-          moreover have "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
+          have op1: "size (int_mset_conv ?M) = len - 1" using mset_conv_eq vals(1) by simp
+          have op2: "fold_mset (+) 0 (int_mset_conv ?M) = sum - i"
             using mset_conv_eq Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of unpack_int] _ finite_old_M not_in] i_def vals(2)
             by(simp add:int_mset_conv_def mset_conv_def unpack_int_def one_enat_def)
-          ultimately show ?thesis using new_map_def k_def k_in by(auto) (metis "*" Pair_inject local.lookup_def lookup_update option.inject)
+          show ?thesis using k_in lookup_def * unfolding Let_def op1[unfolded group_multiset_def Let_def group_def] op2[unfolded group_multiset_def Let_def group_def] new_map_def k_def
+            by auto 
         qed
       next
         case False
@@ -1977,7 +1979,7 @@ proof -
             using Finite_Set.comp_fun_commute_on.fold_insert[OF mset_conv_comm[of Some] _ finite_M not_in] 
             by(simp add:mset_conv_def one_enat_def)
           have "size (mset_conv Some ?M) = len - 1" using mset_conv_eq vals(1) by simp
-          then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def lookup_update option.inject)
+          then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def option.inject)
         next
           case False
           then obtain n where n_def: "(meval_trm f elem, enat n) \<in> ?old_M" 
@@ -1991,7 +1993,7 @@ proof -
           then have mset_conv_eq: "mset_conv Some ?old_M = add_mset (meval_trm f elem) (mset_conv Some ?M)" 
             using mset_conv_insert_remove'[OF n'_def _ not_in finite_old_M, of Some] by simp
           have "size (mset_conv Some ?M) = len - 1" using mset_conv_eq vals(1) by simp
-          then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def lookup_update option.inject)
+          then show ?thesis using new_map_def k_def k_in by(auto) (metis "*" local.lookup_def option.inject)
         qed
       next
         case False
@@ -2043,7 +2045,7 @@ lemma treelist_del2: "length_treelist l > 1 \<Longrightarrow> remove_treelist x 
   apply(transfer)
 proof -
   fix l x
-  assume "length l > 1"
+  assume "length (l::'a list) > 1"
   then show "del_list x l \<noteq> []" by(induction l; auto)
 qed
 
@@ -2079,7 +2081,8 @@ proof -
                                                            else Mapping.empty |
                             (LInt t', EInt term') \<Rightarrow> if term' \<in> set_treelist t' then let l' = remove_treelist term' t' in if l' = empty_treelist then Mapping.delete (drop b elem) m else Mapping.update (drop b elem) (LInt l') m
                                                      else Mapping.empty)"
-      using del_def valid meval_def True apply(auto simp:lookup_def split:event_data.splits option.splits list_aux.splits list.splits type.splits) 
+      using del_def valid meval_def True
+      apply(auto simp:lookup_def split:event_data.splits option.splits list_aux.splits list.splits type.splits) 
       by (metis finite_X in_mset_in_list_int in_mset_in_list_str  in_set l_def meval_in_set)+ 
     have restr: "l \<in> range LInt \<longleftrightarrow> meval_trm f elem \<in> range EInt" 
       using True del_def valid lookup_def by(auto split: list_aux.splits event_data.splits list.splits)
@@ -2181,7 +2184,7 @@ proof -
         then have k_def: "drop b elem = k" by auto
         have leq: "l = laux" using lookup_def(1) lookup_old k_def by auto
         then have "get_length l \<noteq> 1" using lookup_new[unfolded new_map_def] meval_def restr treelist_del1[of _ i] treelist_del1[of _ s]
-          by(auto simp:get_length_def Mapping.lookup_empty lookup_delete k_def lookup_update split:list_aux.splits list.splits if_splits) 
+          by(auto simp:get_length_def Mapping.lookup_empty lookup_delete k_def split:list_aux.splits list.splits if_splits) 
         moreover have "get_length l \<noteq> 0"using lookup_new[unfolded new_map_def] meval_def restr treelist_empty
           apply(auto simp:get_length_def Mapping.lookup_empty lookup_delete k_def lookup_update split:list_aux.splits list.splits if_splits)
           by(blast) (metis empty_iff neq0_conv treelist_empty)
@@ -2193,7 +2196,7 @@ proof -
                             (LString t', EString term') \<Rightarrow> LString (remove_treelist term' t') |
                             (LInt t', EInt term') \<Rightarrow> LInt (remove_treelist term' t'))"
           using lookup_def(1) True restr meval_def lookup_new[unfolded new_map_def]  treelist_del2 geq1
-          by(auto simp:get_length_def lookup_update' Mapping.lookup_empty lookup_delete split:list_aux.splits event_data.splits list.splits if_splits) 
+          by(auto simp:get_length_def split:list_aux.splits event_data.splits list.splits if_splits) 
         have "valid_list_aux laux' ?M type"
         proof(cases "Set.filter (\<lambda>x. meval_trm f x = meval_trm f elem) (group k b X) = {elem}")
           case True

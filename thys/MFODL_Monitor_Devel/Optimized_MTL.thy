@@ -249,7 +249,7 @@ lemma not_empty_head_q:
   using assms apply(transfer) apply(auto) 
 proof -
   fix xs ys
-  assume "queue_invariant (xs, ys)" "\<not> (case xs of [] \<Rightarrow> (case ys of [] \<Rightarrow> True | a # list \<Rightarrow> False) | aa # list \<Rightarrow> False)"
+  assume "queue_invariant ((xs :: 'a list), ys)" "\<not> (case xs of [] \<Rightarrow> (case ys of [] \<Rightarrow> True | a # list \<Rightarrow> False) | aa # list \<Rightarrow> False)"
   then obtain y ys' where "ys = y#ys'" unfolding queue_invariant_def by(auto split:list.splits)
   then show "\<exists>ts aa ba. queue_invariant (aa, ba) \<and> safe_hd_t (xs, ys) = (Some ts, aa, ba) " 
     by(cases xs; cases ys') (auto simp:queue_invariant_def Let_def list.case_eq_if) 
@@ -412,7 +412,7 @@ fun init_mmsaux :: "args \<Rightarrow> 'a mmsaux" where
 lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_args I n L R b agg) 0
   (init_mmsaux (init_args I n L R b agg)) []"
   by (auto simp add: init_args_def empty_queue_rep ts_tuple_rel_def join_mask_def
-      Mapping.lookup_empty safe_max_def table_def)
+       safe_max_def table_def)
 
 abbreviation "filter_cond X' ts t' \<equiv> (\<lambda>as _. \<not> (as \<in> X' \<and> Mapping.lookup ts as = Some t'))"
 
@@ -993,13 +993,13 @@ next
       tuple_in) as = Mapping.lookup (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X)
       then tuple_in else Mapping.empty) as"
       using proj_rep[OF keys_wf_in]
-      by (auto simp add: Mapping.lookup_filter Mapping.lookup_empty proj_tuple_in_join_def
+      by (auto simp add: Mapping.lookup_filter proj_tuple_in_join_def
           Mapping_keys_intro split: option.splits)
     moreover have "\<And>as. Mapping.lookup (Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X)
       tuple_since) as = Mapping.lookup (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X)
       then tuple_since else Mapping.empty) as"
       using proj_rep[OF keys_wf_since]
-      by (auto simp add: Mapping.lookup_filter Mapping.lookup_empty proj_tuple_in_join_def
+      by (auto simp add: Mapping.lookup_filter proj_tuple_in_join_def
           Mapping_keys_intro split: option.splits)
     ultimately show ?thesis
       using False True by (auto simp add: mapping_eqI Let_def pos_def)
@@ -1950,7 +1950,7 @@ proof -
   have id: "\<And>x. x \<in> {tp - (len - 1) + 1..tp} \<Longrightarrow>
     Mapping.lookup a2_map'' x = Mapping.lookup a2_map x"
     unfolding a2_map''_def a2_map'_def Mapping_lookup_delete Mapping_lookup_update tp_len_assoc
-    using len_tp apply auto by (metis Mapping_lookup_update One_nat_def Suc_diff_eq_diff_pred Suc_n_not_le_n len_pos)
+    using len_tp by auto
   have list_all2: "list_all2 (\<lambda>x y. triple_eq_pair x y (\<lambda>tp'. filter_a1_map pos tp' a1_map)
     (\<lambda>ts' tp'. filter_a2_map I ts' tp' a2_map))
     (drop (length done) auxlist) (zip (linearize tss) [tp - len..<tp])"
@@ -2133,8 +2133,7 @@ proof -
       then have f_mc: "f = (if len = 1 then Mapping.empty else mc)"
         using f_def Mapping.lookup_update'[of _ _ a2_map]
         unfolding a2_map''_def a2_map'_def Mapping_lookup_delete Mapping_lookup_update tp_len_assoc
-        apply (auto split: if_splits) apply (metis One_nat_def True f_def handy_if_lemma lookup''_tp_minus)
-        by (metis lookup_update option.inject)
+        by (auto split: if_splits)
       have "table n R (Mapping.keys f)"
         unfolding f_mc
         using mc_keys m_def m'_def m_inst m'_inst
@@ -2283,9 +2282,6 @@ proof -
           then show ?thesis using some_m'' aux Some unfolding ts_tp_lt_def by(cases a'; cases a''; auto)
         qed
       qed
-      fix xs
-      show "case Mapping.lookup Mapping.empty xs of None \<Rightarrow> True
-          | Some x \<Rightarrow> ts_tp_lt I a (tp - (Suc 0 - 1)) x" by (simp add: Mapping.lookup_empty)
     qed
     then have split1: "list_all (\<lambda>(ts', tp'). ivl_restr_a2_map I ts' tp' a2_map'') (zip (tl (linearize tss)) [tp - (len - 1)..<tp])" 
       using list_all_eq_1 Cons tp_len_eq by auto
@@ -3582,7 +3578,7 @@ proof -
             upd_nested_lookup by (auto split: if_splits)
         then have "tstp = new_tstp"
           using lassms(3)[unfolded m'_alt upd_set'_lookup]
-          by (auto simp add: Mapping.lookup_empty split: if_splits)
+          by (auto split: if_splits)
         then show ?thesis
           using False by (auto simp add: ts_tp_lt_def new_tstp_def split: if_splits sum.splits)
       next
@@ -3705,7 +3701,7 @@ proof -
       fix xs
       show "case Mapping.lookup (upd_set' m new_tstp (max_tstp new_tstp) {b. (tp, b) \<in> tmp'}) xs of
           None \<Rightarrow> True | Some x \<Rightarrow> ts_tp_lt I nt tp x"
-        unfolding upd_set'_lookup new_tstp_def ts_tp_lt_def using True m_empty by(auto simp:Mapping.lookup_empty split:option.splits)
+        unfolding upd_set'_lookup new_tstp_def ts_tp_lt_def using True m_empty by(auto split:option.splits)
     qed
   next
     case False
@@ -3717,7 +3713,7 @@ proof -
        then show "case Mapping.lookup (upd_set' m new_tstp (max_tstp new_tstp) {b. (tp, b) \<in> tmp'}) xs of
           None \<Rightarrow> True | Some x \<Rightarrow> ts_tp_lt I nt tp x"
          unfolding upd_set'_lookup new_tstp_def ts_tp_lt_def tmp'_def 
-         using False m_empty by(auto simp:Mapping.lookup_empty)
+         using False m_empty by auto
      qed
   qed
   moreover have "valid_tstp_map nt tp tstp_map'"
@@ -3863,7 +3859,7 @@ definition init_mmuaux :: "args \<Rightarrow> event_data mmuaux" where
 lemma valid_init_mmuaux: "L \<subseteq> R \<Longrightarrow> valid_mmuaux (init_args I n L R b agg) 0
   (init_mmuaux (init_args I n L R b agg)) []"
   unfolding init_mmuaux_def valid_mmuaux_def
-  by (auto simp add: init_args_def empty_queue_rep table_def Mapping.lookup_update)
+  by (auto simp add: init_args_def empty_queue_rep table_def)
 
 fun length_mmuaux :: "args \<Rightarrow> event_data mmuaux \<Rightarrow> nat" where
   "length_mmuaux args (tp, tss, tables, len, maskL, maskR, a1_map, a2_map, tstp_map, done, done_length) =

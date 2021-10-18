@@ -46,7 +46,7 @@ lemma insert_treelist_code[code]: "insert_treelist x (Collapse y) = Collapse (tr
   by transfer (simp add: inorder_insert)
 
 lemma sorted_sort_inv: "sorted xs \<Longrightarrow> sort xs = xs"
-  by (simp add: sorted_sort_id sorted_sorted_wrt)
+  by (simp add: sorted_sort_id)
 
 lemma get_treelist_code[code]: "get_treelist (Collapse y) n = tree_select y n"
   by transfer (simp add: sorted_sort_inv valid_select_wbt)

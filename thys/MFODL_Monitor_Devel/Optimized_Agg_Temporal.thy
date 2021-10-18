@@ -577,7 +577,7 @@ proof -
   proof (cases "agg")
     case None
     then show ?thesis using valid_mmuaux
-      by(simp only:init_args_def init_mmauaux.simps; simp add: init_mmuaux_def valid_mmauaux_def valid_mmuaux_def) fastforce
+      by(simp only:init_args_def init_mmauaux.simps; simp add: init_mmuaux_def valid_mmauaux_def valid_mmuaux_def)
   next
     case (Some a)
     then show ?thesis using valid_mmuaux Some valid_init_maggaux[of a]
