@@ -79,7 +79,7 @@ dune build
 
 # Compile the project in release mode:
 dune build --release
-d
+
 # Run automatic tests:
 dune test
 
