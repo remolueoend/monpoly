@@ -223,7 +223,7 @@ fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Righta
       [] \<Rightarrow> y0
     | xs \<Rightarrow> EFloat (let u = length xs; u' = u div 2 in
       if even u then
-        (double_of_event_data (xs ! (u' - 1)) + double_of_event_data (xs ! u') / double_of_int 2)
+        (double_of_event_data (xs ! (u' - 1)) + double_of_event_data (xs ! u')) / double_of_int 2
       else double_of_event_data (xs ! u')))"
 
 qualified datatype (discs_sels) formula = Pred name "trm list"
