@@ -82,7 +82,7 @@ lemma soundness:
   case (Pred e tms)
   from Pred(2)  obtain p  tys where obt: "S p = Some tys \<and> list_all2 (\<lambda>tm ty. E \<turnstile> tm :: ty) tms tys" by cases auto
    from this  Pred  have tms_wty: "x \<in> set tms \<Longrightarrow> \<exists>t \<in> set tys. E \<turnstile> x :: t " for x 
-     by (metis in_set_conv_nth list_all2_conv_all_nth)
+     by (metis in_set_conv_nth list_all2_conv_all_nth) 
    have eval_tms_eq: "map (Formula.eval_trm v) tms = map (eval_trm' v) tms" using tms_wty Pred(3) by (auto dest!: eval_trm_sound)
   then show ?case using Pred(1)  apply (auto simp add: trm.is_Var_def trm.is_Const_def)
     by (metis eval_tms_eq )+
@@ -295,5 +295,12 @@ next
   then show ?case  using match_cong[OF refl other_IH, where ?r=r] by auto 
 qed (auto elim: wty_formula.cases split: nat.splits)
 
+lemma soundness2:
+  assumes   "safe_formula \<phi>"  "S,E \<turnstile> \<phi>"  "wty_envs S \<sigma> V"
+   "Formula.nfv \<phi> \<le> length v"
+ shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
+  using  soundness[OF assms(1-2) _ assms(3-4)] ty_of_sat_safe[OF assms(1-3) _ _ assms(4)]
+    ty_of_sat'_safe[OF assms(1-3) _ _ assms(4)] 
+  by auto  
 end
 end
