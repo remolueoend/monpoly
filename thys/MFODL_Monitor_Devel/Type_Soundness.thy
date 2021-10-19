@@ -72,7 +72,7 @@ double_of_event_data_agg (xs!i) = undef_double_of_event_data_agg (xs!i) " for xs
       by (smt (z3) Suc_less_eq diff_Suc_1 div2_less_self even_Suc length_nth_simps(2) less_Suc_eq odd_Suc_div_two)
   qed 
 
-lemma soundness:
+lemma soundness: (*Theorem 3.12 helper*)
   assumes   "safe_formula \<phi>"  "S,E \<turnstile> \<phi>" "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y" "wty_envs S \<sigma> V"
    "Formula.nfv \<phi> \<le> length v"
  shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
@@ -295,7 +295,7 @@ next
   then show ?case  using match_cong[OF refl other_IH, where ?r=r] by auto 
 qed (auto elim: wty_formula.cases split: nat.splits)
 
-lemma soundness2:
+lemma soundness2: (*Theorem 3.12*)
   assumes   "safe_formula \<phi>"  "S,E \<turnstile> \<phi>"  "wty_envs S \<sigma> V"
    "Formula.nfv \<phi> \<le> length v"
  shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
