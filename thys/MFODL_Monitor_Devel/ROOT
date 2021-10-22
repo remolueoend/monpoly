@@ -4,6 +4,7 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
   sessions
     IEEE_Floating_Point
     Generic_Join_Devel
+    "HOL-Data_Structures"
   theories
     Code_Double
     Event_Data
