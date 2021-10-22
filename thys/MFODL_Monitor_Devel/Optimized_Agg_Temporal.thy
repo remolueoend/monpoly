@@ -98,10 +98,10 @@ fun add_new_ts_mmasaux' :: "args \<Rightarrow> ts \<Rightarrow> mmasaux \<Righta
     (let I = args_ivl args; 
     (data_prev, move) = takedropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev;
     data_in = fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in) move data_in;
-    (tuple_in, add) = fold (upd_set_keys (\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)})) move (tuple_in, {});
-    aggaux = insert_maggaux' aggargs (add - table_in) aggaux in
+    (tuple_in', add) = fold (upd_set_keys (\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)})) move (tuple_in, {});
+    aggaux = insert_maggaux' aggargs (add - Mapping.keys tuple_in) aggaux in
     
-    ((nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, tuple_in, tuple_since), aggaux)))"
+    ((nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, tuple_in', tuple_since), aggaux)))"
 
 definition add_new_ts_mmasaux :: "args \<Rightarrow> ts \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
   "add_new_ts_mmasaux args nt aux = add_new_ts_mmasaux' args nt (shift_end_mmasaux args nt aux)"
@@ -403,7 +403,7 @@ proof -
     obtain add where *: "(tuple_in', add) = fold ?lambda move (tuple_in, empty)" "table_in' = table_in \<union> add"
       using split updated_def Some takedrop_def by(auto simp: empty_def split:prod.splits)
     then have agg': "aggaux' = insert_maggaux' aggargs (add - table_in) aggaux"
-      using split updated_def Some takedrop_def by(auto simp: empty_def split:prod.splits)
+      using split updated_def Some takedrop_def tbl by(auto simp: empty_def split:prod.splits)
     have "msaux' = add_new_ts_mmsaux' args nt (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
       using valid_before Some split updated_def takedrop_def
       by(auto simp del: valid_mmsaux.simps dropWhile_queue.simps takedropWhile_queue.simps split:prod.splits)

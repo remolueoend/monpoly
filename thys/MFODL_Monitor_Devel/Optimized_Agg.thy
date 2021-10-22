@@ -204,7 +204,7 @@ fun result_maggaux :: "aggargs \<Rightarrow> aggaux \<Rightarrow> event_data tab
      Formula.Agg_Max \<Rightarrow> get_map_result m y (\<lambda>k. get_edata_list k (get_length k - 1)) |
      Formula.Agg_Med \<Rightarrow> get_map_result m y (\<lambda>k. let u = get_length k;
                                   u' = u div 2;
-                                  aggval = (if even u then (double_of_event_data (get_edata_list k (u' - 1)) + double_of_event_data (get_edata_list k u') / double_of_int 2)
+                                  aggval = (if even u then (double_of_event_data (get_edata_list k (u' - 1)) + double_of_event_data (get_edata_list k u')) / double_of_int 2
                                             else double_of_event_data (get_edata_list k u')) in
                                             EFloat aggval))))"
 
@@ -2727,10 +2727,45 @@ next
         then obtain k l where x_def: "Mapping.lookup m k = Some l" 
           "x = k[y:= Some(let u = get_length l;
                               u' = u div 2;
-                              aggval = (if even u then (double_of_event_data (get_edata_list l (u' - 1)) + double_of_event_data (get_edata_list l u') / double_of_int 2)
-                                        else double_of_event_data (get_edata_list l u')) in
+                              aggval = if even u then ((double_of_event_data (get_edata_list l (u' - 1)) + double_of_event_data (get_edata_list l u')) / double_of_int 2)
+                                        else double_of_event_data (get_edata_list l u') in
                               EFloat aggval)]"
-          using valid_rank_aux_lookup RankAux not_singleton_map by(simp add:agg_type get_map_result_def) (smt (z3) RankAux.prems \<open>aux = (m, type)\<close> imageE option.simps(5))
+          using not_singleton_map RankAux
+          apply(simp add:agg_type get_map_result_def)
+        proof -
+          assume assm: "(\<And>k l. Mapping.lookup m k = Some l \<Longrightarrow>
+            x = k
+            [y := Some
+                   (EFloat
+                     (if even (get_length l)
+                      then (double_of_event_data (get_edata_list l (get_length l div 2 - 1)) +
+                            double_of_event_data (get_edata_list l (get_length l div 2))) /
+                           double_of_int 2
+                      else double_of_event_data (get_edata_list l (get_length l div 2))))] \<Longrightarrow>
+            thesis)" "x \<in> (\<lambda>x. case Mapping.lookup m x of None \<Rightarrow> x
+              | Some i \<Rightarrow> x
+                  [y := Some
+                         (EFloat
+                           (if even (get_length i)
+                            then (double_of_event_data
+                                   (get_edata_list i (get_length i div 2 - 1)) +
+                                  double_of_event_data (get_edata_list i (get_length i div 2))) /
+                                 double_of_int 2
+                            else double_of_event_data
+                                  (get_edata_list i (get_length i div 2))))]) `
+         Mapping.keys m"
+          obtain l k where *: "Mapping.lookup m k = Some l" "k \<in> Mapping.keys m" "x = k[y := Some
+                         (EFloat
+                           (if even (get_length l)
+                            then (double_of_event_data
+                                   (get_edata_list l (get_length l div 2 - 1)) +
+                                  double_of_event_data (get_edata_list l (get_length l div 2))) /
+                                 double_of_int 2
+                            else double_of_event_data
+                                  (get_edata_list l (get_length l div 2))))]"
+            using assm(2) by (smt (verit, best) image_iff in_keysD option.simps(5))
+          show thesis using assm(1)[OF *(1) *(3)] by auto
+        qed
         let ?list = "flatten_multiset (group_multiset k b f X)"
         have valid_list_aux: "valid_list_aux l (group_multiset k b f X) type" using x_def RankAux by(auto simp:keys_is_none_rep split:option.splits) 
         have k_in: "k \<in> (drop b) ` X" using RankAux x_def by (simp add: keys_is_none_rep) 
@@ -2760,7 +2795,7 @@ next
         then have *: "get_length l div 2 < get_length l" by auto
         then have "x = k[y:= Some(let u = get_length l;
                               u' = u div 2;
-                              aggval = (if even u then (double_of_event_data (get_edata_list l (u' - 1)) + double_of_event_data (get_edata_list l u') / double_of_int 2)
+                              aggval = (if even u then (double_of_event_data (get_edata_list l (u' - 1)) + double_of_event_data (get_edata_list l u')) / double_of_int 2
                                         else double_of_event_data (get_edata_list l u')) in
                               EFloat aggval)]"
           using RankAux agg_type x_def(1) not_empty 

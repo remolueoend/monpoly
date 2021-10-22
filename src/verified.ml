@@ -4508,12 +4508,12 @@ let rec eval_agg_op
                let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
                 (if dvd (equal_nat, semidom_modulo_nat)
                       (nat_of_integer (Z.of_int 2)) u
-                  then Stdlib.(+.)
-                         (double_of_event_data
-                           (nth (a :: lista) (minus_nata ua one_nata)))
-                         (Stdlib.(/.)
-                           (double_of_event_data (nth (a :: lista) ua))
-                           (double_of_int (Int_of_integer (Z.of_int 2))))
+                  then Stdlib.(/.)
+                         (Stdlib.(+.)
+                           (double_of_event_data
+                             (nth (a :: lista) (minus_nata ua one_nata)))
+                           (double_of_event_data (nth (a :: lista) ua)))
+                         (double_of_int (Int_of_integer (Z.of_int 2)))
                   else double_of_event_data (nth (a :: lista) ua))));;
 
 let rec uminus_event_data = function EInt x -> EInt (Z.neg x)
@@ -6045,15 +6045,14 @@ let rec result_maggaux
                         let a =
                           (if dvd (equal_nat, semidom_modulo_nat)
                                 (nat_of_integer (Z.of_int 2)) u
-                            then Stdlib.(+.)
-                                   (double_of_event_data
-                                     (get_edata_list k
-                                       (minus_nata ua one_nata)))
-                                   (Stdlib.(/.)
+                            then Stdlib.(/.)
+                                   (Stdlib.(+.)
                                      (double_of_event_data
-                                       (get_edata_list k ua))
-                                     (double_of_int
-                                       (Int_of_integer (Z.of_int 2))))
+                                       (get_edata_list k
+ (minus_nata ua one_nata)))
+                                     (double_of_event_data
+                                       (get_edata_list k ua)))
+                                   (double_of_int (Int_of_integer (Z.of_int 2)))
                             else double_of_event_data (get_edata_list k ua))
                           in
                          EFloat a)))));;

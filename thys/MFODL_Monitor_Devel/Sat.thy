@@ -483,30 +483,33 @@ next
     by (auto simp add: progress_convert_cong[of \<sigma> V \<sigma>' V'] cong: sat_convert_cong
         intro!: wf_mformula.intros elim!: list.rel_mono_strong dest!: arg_cong[where f=\<tau>])
 next
-  case (Since P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I buf aux)
-  moreover obtain buf\<phi> buf\<psi> ts skew where "buf = (buf\<phi>, buf\<psi>, ts, skew)"
+  case (Since P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I R' buf aux)
+  then have mr: "mem_restr (lift_envs' (agg_b args) R') = mem_restr R" by auto
+  obtain buf\<phi> buf\<psi> ts skew where "buf = (buf\<phi>, buf\<psi>, ts, skew)"
     by (cases buf)
   moreover have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
     "Formula.sat \<sigma> V v i \<psi>' = Formula.sat \<sigma>' V' v i \<psi>'" for v i
     by (simp_all add: fun_eq_iff Since.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
   moreover have "\<tau> \<sigma> = \<tau> \<sigma>'"
     by (metis Since.prems \<tau>_convert)
-  ultimately show ?case
+  ultimately show ?case using Since
     apply (intro wf_mformula.Since)
-              apply (simp_all add: wf_since_aux_def sat_since_point_def
+              apply (simp_all add: wf_since_aux_def sat_since_point_def mr
         progress_convert_cong[of \<sigma> V \<sigma>' V'] split del: if_split cong: if_cong) (* SLOW 20s *)
-    by force
+    apply (smt (z3)) by blast
 next
-  case (Until P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I buf nts t aux)
-  moreover have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
+  case (Until P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I R' buf nts t aux)
+  then have mr: "mem_restr (lift_envs' (agg_b args) R') = mem_restr R" by auto
+  have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
     "Formula.sat \<sigma> V v i \<psi>' = Formula.sat \<sigma>' V' v i \<psi>'" for v i
     by (simp_all add: fun_eq_iff Until.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
   moreover have "\<tau> \<sigma> = \<tau> \<sigma>'"
     by (metis Until.prems \<tau>_convert)
-  ultimately show ?case
+  ultimately show ?case using Until
     apply (intro wf_mformula.Until)
-    by (simp_all add: wf_mbuf2'_def wf_until_aux_def wf_until_auxlist_def wf_ts_def
+    apply (simp_all add: mr wf_mbuf2'_def wf_until_aux_def wf_until_auxlist_def wf_ts_def
         progress_convert_cong[of \<sigma> V \<sigma>' V'] split del: if_split cong: if_cong) (* SLOW 30s *)
+    by presburger
 next
   case (MatchP r P V n R \<phi>s mr mrs buf nts I aux)
   moreover have "Formula.sat \<sigma> V v i \<phi> = Formula.sat \<sigma>' V' v i \<phi>" for v i \<phi>

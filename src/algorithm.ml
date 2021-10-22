@@ -339,15 +339,12 @@ let update_old_until q tsq i intv inf discard  =
       if k=q-1 then
         begin
           ignore(Sk.pop_first rels);
-          if not (Sk.is_empty rels) then
+          if not (Sk.is_empty rels) && fst (Sk.get_first rels) = q then
             let (k',relk') = Sk.pop_first rels in
-            assert(k'>=q && j>=q);
+            assert(k'=q && j>=q);
             let newrelk' = Relation.union relk relk' in
             Sk.add_first (k',newrelk') rels;
-            if k'=q then
-              newrelk'
-            else
-              relk
+            newrelk'
           else
           if (j>q-1) then
             begin
