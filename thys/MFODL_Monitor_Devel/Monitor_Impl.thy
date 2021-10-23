@@ -1339,14 +1339,6 @@ lift_definition upd_nested_max_tstp_cfi ::
     (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
       update_update max_tstp_d_d max_tstp_idem' split: option.splits)
 
-definition "filter_join' pos X m = (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m))"
-
-declare [[code drop: join_mmasaux]]
-declare join_mmasaux.simps[folded filter_join'_def, code]
-
-declare [[code drop: join_mmsaux]]
-declare join_mmsaux.simps[folded filter_join'_def, code]
-
 lemma filter_join'_False_empty: "filter_join' False {} m = (m, {})"
   unfolding filter_join'_def filter_join_def
   by transfer (auto split: option.splits)

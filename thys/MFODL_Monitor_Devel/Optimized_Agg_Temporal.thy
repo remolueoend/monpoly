@@ -55,7 +55,7 @@ fun join_mmasaux :: "args \<Rightarrow> event_data table \<Rightarrow> mmasaux \
       Some aggargs \<Rightarrow>
     (let pos = args_pos args in
     (if maskL = maskR then       
-      (let (tuple_in', to_del) = (filter_join pos X tuple_in, Mapping.keys tuple_in - Mapping.keys (filter_join pos X tuple_in));
+      (let (tuple_in', to_del) = filter_join' pos X tuple_in;
       table_in = table_in - to_del;   
       tuple_since = filter_join pos X tuple_since in
       ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in', tuple_since), delete_maggaux' aggargs to_del aggaux))

@@ -1058,11 +1058,13 @@ lemma valid_add_new_ts_mmsaux:
 
 definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
 
+definition [simp]: "filter_join' pos X m = (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m))"
+
 fun join_mmsaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
   "join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
     (let pos = args_pos args in
     (if maskL = maskR then
-      (let (tuple_in', to_del) = (filter_join pos X tuple_in, Mapping.keys tuple_in - Mapping.keys (filter_join pos X tuple_in));
+      (let (tuple_in', to_del) = filter_join' pos X tuple_in;
       table_in = table_in - to_del;   
       tuple_since = filter_join pos X tuple_since in
       (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in', tuple_since))
