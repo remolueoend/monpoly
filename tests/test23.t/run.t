@@ -6,7 +6,7 @@
   At time point 0:
   @0. (time point 0): false
   At time point 1:
-  @1. (time point 1): false
+  @1. (time point 1): true
   At time point 2:
   @2. (time point 2): true
 

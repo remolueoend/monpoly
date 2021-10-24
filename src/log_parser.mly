@@ -291,10 +291,22 @@ table:
                                     else
                                       raise e
                                 }
+      | STR                     { f "table";
+                                  try
+                                    make_table $1 [[]]
+                                  with (Failure str) as e ->
+                                    if !Misc.ignore_parse_errors then
+                                      begin
+                                        prerr_endline str;
+                                        raise Parsing.Parse_error
+                                      end
+                                    else
+                                      raise e
+                                }
 
 relation:
       | tuple relation          { f "relation(list)"; $1::$2 }
-      |                         { f "relation(end)"; [] }
+      | tuple                   { f "relation(list)"; [$1] }
 
 tuple:
       | LPA fields RPA          { f "tuple"; $2 }
