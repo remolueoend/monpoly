@@ -1,61 +1,50 @@
-open MFOTL
-open Verified_adapter
-open Verified
-open Helper
-open Misc
-
 let no_mw = ref false
 
 module IntMap = Map.Make(struct type t = int let compare = Stdlib.compare end)
-open IntMap
+
+module Monitor = struct
+  type ctxt = {
+    c_fv_pos: int list;
+    mutable c_tp: int;
+    mutable c_tpts: MFOTL.timestamp IntMap.t;
+    mutable c_ts: MFOTL.timestamp;
+    mutable c_vst: Verified_adapter.state;
+  }
+
+  let begin_tp c ts =
+    c.c_ts <- ts;
+    c.c_tpts <- IntMap.add c.c_tp ts c.c_tpts
+
+  let observe c e t =
+    c.c_vst <- Verified_adapter.observe e t c.c_vst
+
+  let end_tp c =
+    let (vs, new_state) = Verified_adapter.conclude c.c_ts c.c_vst in
+    List.iter (fun (qtp, rel) ->
+        let qts = IntMap.find qtp c.c_tpts in
+        if qts < MFOTL.ts_max then
+          Helper.show_results c.c_fv_pos c.c_tp qtp qts rel
+      ) vs;
+    c.c_tpts <- List.fold_left (fun m (qtp,_) -> IntMap.remove qtp m) c.c_tpts vs;
+    c.c_vst <- new_state;
+    c.c_tp <- c.c_tp + 1
+end
+
+module P = Simple_log_parser.Make (Monitor)
 
 let monitor dbschema logfile fv f =
   (* compute permutation for output tuples *)
   let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
   assert (List.length fv_pos = List.length fv);
 
-  let cf = convert_formula dbschema f in
-  let cf = if !no_mw then cf else Monitor.convert_multiway cf in
-  let init_state = Monitor.minit_safe cf in
+  let cf = Verified_adapter.convert_formula dbschema f in
+  let cf = if !no_mw then cf else Verified.Monitor.convert_multiway cf in
+  let ctxt = Monitor.{
+    c_fv_pos = fv_pos;
+    c_tp = 0;
+    c_tpts = IntMap.empty;
+    c_ts = MFOTL.ts_invalid;
+    c_vst = Verified_adapter.init cf;
+  } in
   let lexbuf = Log.log_open logfile in
-  let init_i = 0 in
-  let init_ts = MFOTL.ts_invalid in
-  let rec loop state tpts tp ts =
-    let finish () =
-      if Misc.debugging Dbg_perf then
-        Perf.check_log_end tp ts
-    in
-    if Misc.debugging Dbg_perf then
-      Perf.check_log tp ts;
-    match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c; parameters} -> finish ()
-    | MonpolyTestTuple st -> finish ()
-    | MonpolyError s -> finish ()
-    | MonpolyData d ->
-    if d.ts >= ts then
-      begin
-        (* let _ = Printf.printf "Last: %b TS: %f TP: %d !Log.TP: %d d.TP: %d\n" !Log.last d.ts tp !Log.tp d.tp in *)
-        if !Misc.verbose then
-          Printf.printf "At time point %d:\n%!" d.tp;
-        let tpts = add d.tp d.ts tpts in
-        let (vs, new_state) = Monitor.mstep (convert_db d) state in
-        let vs = convert_violations vs in
-        List.iter (fun (qtp, rel) ->
-            let qts = find qtp tpts in
-            if qts < MFOTL.ts_max then
-              show_results fv_pos d.tp qtp qts rel
-          ) vs;
-        let tpts = List.fold_left (fun map (qtp,_) -> remove qtp map) tpts vs in
-        loop new_state tpts d.tp d.ts
-      end
-    else
-      if !Misc.stop_at_out_of_order_ts then
-        let msg = Printf.sprintf "[Algorithm.check_log] Error: OUT OF ORDER TIMESTAMP: %s \
-                                  (last_ts: %s)" (MFOTL.string_of_ts d.ts) (MFOTL.string_of_ts ts) in
-        failwith msg
-      else
-        let _ = Printf.eprintf "[Algorithm.check_log] skipping OUT OF ORDER TIMESTAMP: %s \
-                          (last_ts: %s)\n%!" (MFOTL.string_of_ts d.ts) (MFOTL.string_of_ts ts) in
-        loop state tpts tp ts
-  in
-  loop init_state empty init_i init_ts
+  ignore (P.parse dbschema lexbuf ctxt)

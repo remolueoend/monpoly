@@ -11,11 +11,11 @@ export_code convert_multiway vminit_safe minit_safe vmstep mstep mmonitorable_ex
 export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
-  interval mk_db RBT_set rbt_empty rbt_insert rbt_fold
+  interval RBT_set rbt_empty rbt_insert rbt_fold
   (*term, formula, and regex constructors*)
   EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild
   (*main functions*)
-  convert_multiway vminit_safe minit_safe vmstep mstep mmonitorable_exec
+  convert_multiway mmonitorable_exec minit_incr mobserve mconclude
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

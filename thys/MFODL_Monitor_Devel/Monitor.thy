@@ -1436,6 +1436,30 @@ definition (in maux) mstep :: "database \<times> ts \<Rightarrow> ('msaux, 'muau
      in (List.enumerate (mstate_i st) xs,
       \<lparr>mstate_i = mstate_i st + length xs, mstate_j = mstate_j st + 1, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
 
+
+subsubsection \<open>Ingesting single events\<close>
+
+record ('msaux, 'muaux) mistate =
+  mistate_s :: "('msaux, 'muaux) mstate"
+  mistate_db :: database
+
+definition (in maux) minit_incr :: "Formula.formula \<Rightarrow> ('msaux, 'muaux) mistate" where
+  "minit_incr \<phi> = \<lparr>mistate_s = minit_safe \<phi>, mistate_db = Mapping.empty\<rparr>"
+
+definition mobserve :: "Formula.name \<Rightarrow> event_data list \<Rightarrow> ('msaux, 'muaux) mistate \<Rightarrow> ('msaux, 'muaux) mistate" where
+  "mobserve e xs st =
+    (let pn = (e, length xs) in
+     let tbl' = (case Mapping.lookup (mistate_db st) pn of
+         Some [tbl] \<Rightarrow> [insert (map Some xs) tbl]
+       | _ \<Rightarrow> [{map Some xs}]) in
+     st\<lparr>mistate_db := Mapping.update pn tbl' (mistate_db st)\<rparr>)"
+
+definition (in maux) mconclude :: "ts \<Rightarrow> ('msaux, 'muaux) mistate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mistate" where
+  "mconclude ts st =
+    (let (xs, st') = mstep (mistate_db st, ts) (mistate_s st) in
+    (xs, \<lparr>mistate_s = st', mistate_db = Mapping.empty\<rparr>))"
+
+
 subsection \<open>Verdict delay\<close>
 
 context fixes \<sigma> :: "'a trace" begin
@@ -8493,6 +8517,52 @@ lemma (in verimon) monitor_mverdicts: "flatten_verdicts (monitor \<phi> \<pi>) =
   unfolding monitor_def using monitorable
   by (subst wf_mstate_msteps_stateless_UNIV[OF wf_mstate_minit_safe, simplified])
     (auto simp: mmonitorable_def mverdicts_Nil)
+
+
+subsubsection \<open>Ingesting single events\<close>
+
+lemma mk_db_empty[simp]: "mk_db {} = Mapping.empty"
+  by transfer auto
+
+lemma mk_db_insert: "mk_db (insert (e, xs) E) =
+  (case Mapping.lookup (mk_db E) (e, length xs) of
+      Some [tbl] \<Rightarrow> Mapping.update (e, length xs) [insert (map Some xs) tbl] (mk_db E)
+    | _ \<Rightarrow> Mapping.update (e, length xs) [{map Some xs}] (mk_db E))"
+  by (transfer fixing: e xs) (auto simp add: fun_eq_iff)
+
+context verimon begin
+
+inductive mistate_rel :: "('a, 'b) mistate \<Rightarrow> Formula.event set \<Rightarrow> Formula.prefix \<Rightarrow>
+    (nat \<times> event_data table) list \<Rightarrow> bool" where
+  init: "mistate_rel (minit_incr \<phi>) {} pnil []"
+| observe: "mistate_rel st E \<pi> out \<Longrightarrow> mistate_rel (mobserve e xs st) (insert (e, xs) E) \<pi> out"
+| conclude: "mistate_rel st E \<pi> out \<Longrightarrow> ts \<ge> last_ts \<pi> \<Longrightarrow> mconclude ts st = (out', st') \<Longrightarrow>
+    mistate_rel st' {} (psnoc \<pi> (E, ts)) (out @ out')"
+
+lemma mistate_relD: "mistate_rel st E \<pi> out \<Longrightarrow> 
+  wf_mstate \<phi> \<pi> UNIV (mistate_s st) \<and> mistate_db st = mk_db E \<and> flatten_verdicts out = M \<pi>"
+proof (induction rule: mistate_rel.induct)
+  case init
+  then show ?case
+    unfolding minit_incr_def flatten_verdicts_def
+    by (simp add: wf_mstate_minit_safe monitorable mverdicts_Nil)
+next
+  case (observe st E \<pi> out e xs)
+  then show ?case
+    unfolding mobserve_def
+    by (auto simp add: Let_def mk_db_insert split: option.split list.split)
+next
+  case (conclude st E \<pi> out ts out' st')
+  then show ?case
+    unfolding mconclude_def
+    using wf_mstate_mstep[of \<phi> \<pi> UNIV "mistate_s st" "(E, ts)"]
+      mstep_mverdicts[of \<pi> UNIV "mistate_s st" "(E, ts)"]
+      mono_monitor[of \<pi> "psnoc \<pi> (E, ts)"]
+    by (fastforce split: prod.splits intro!: le_psnocI)
+qed
+
+end \<comment> \<open>context\<close>
+
 
 subsection \<open>Collected correctness results\<close>
 

@@ -230,7 +230,7 @@ let make_key str = match Misc.nsplit str ":" with
 %}
 
 
-%token AT LPA RPA LCB RCB COM TR
+%token AT LPA RPA LCB RCB COM SEP
 %token <string> STR
 %token EOF
 %token CMD
@@ -261,7 +261,7 @@ tsdb:
       | CMD STR EOC             { CommandTuple { c = $2; parameters = None    } }
       | CMD STR parameters EOC  { CommandTuple { c = $2; parameters = Some $3 } }
       | CMD slicing_test EOC    { $2 }
-      | AT STR db TR            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; complete = true } }
+      | AT STR db SEP           { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; complete = true } }
       | AT STR db AT            { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; complete = false} }
       | AT STR db CMD           { f "tsdb(next)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; complete = false} }
       | AT STR db EOF           { f "tsdb(last)";   DataTuple { ts = MFOTL.ts_of_string "Log_parser" $2; db = make_db $3; complete = false} }
@@ -269,7 +269,7 @@ tsdb:
       | CMD EOF                 { f "tsdb(cmd eof)"; ErrorTuple "end of file" }
       | EOF                     { f "tsdb(eof)";    ErrorTuple "enf of file" }
 
-      | AT STR error TR         { f "tsdb(tr-err)";   invalid_db true }
+      | AT STR error SEP        { f "tsdb(tr-err)";   invalid_db true }
       | AT STR error AT         { f "tsdb(next-err)"; invalid_db false }
       | AT STR error CMD        { f "tsdb(next-err)"; invalid_db false }
       | AT STR error EOF        { f "tsdb(last-err)"; invalid_db false }

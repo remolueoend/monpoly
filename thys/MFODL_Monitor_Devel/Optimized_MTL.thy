@@ -752,8 +752,6 @@ lemma valid_shift_end_mmsaux: "valid_mmsaux args cur aux auxlist \<Longrightarro
   (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
   using valid_shift_end_mmsaux_unfolded by (cases aux) fast
 
-setup_lifting type_definition_mapping
-
 lift_definition upd_set :: "('a, 'b) mapping \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'a set \<Rightarrow> ('a, 'b) mapping" is
   "\<lambda>m f X a. if a \<in> X then Some (f a) else m a" .
 

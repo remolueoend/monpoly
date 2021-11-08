@@ -757,6 +757,9 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   and vmsteps0_stateless = "maux.msteps0_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmsteps_stateless = "maux.msteps_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmonitor = "maux.monitor init_vmsaux add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) init_vmuaux add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
+  and vminit_incr = "maux.minit_incr (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: Formula.formula \<Rightarrow> _"
+  and vmobserve = "mobserve :: _ \<Rightarrow> _ \<Rightarrow>  (event_data vmsaux, event_data vmuaux) mistate \<Rightarrow> _"
+  and vmconclude = "maux.mconclude add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   unfolding valid_vmsaux_def init_vmsaux_def add_new_ts_vmsaux_def join_vmsaux_def
     add_new_table_vmsaux_def result_vmsaux_def valid_vmuaux_def init_vmuaux_def add_new_vmuaux_def
     length_vmuaux_def eval_vmuaux_def
@@ -777,6 +780,9 @@ global_interpretation default_maux: maux valid_mmasaux "init_mmasaux :: _ \<Righ
   and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
   and msteps_stateless = "maux.msteps_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
   and monitor = "maux.monitor init_mmasaux add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) init_mmauaux add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
+  and minit_incr = "maux.minit_incr (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) :: Formula.formula \<Rightarrow> _"
+  and mobserve = "mobserve :: _ \<Rightarrow> _ \<Rightarrow>  (mmasaux, mmauaux) mistate \<Rightarrow> _"
+  and mconclude = "maux.mconclude add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -933,7 +939,7 @@ lemma upd_set'_insert: "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Lon
 lemma upd_set'_aux1: "upd_set' Mapping.empty d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k d (upd_set' Mapping.empty d f {b. (a, b) \<in> A})"
   by (rule mapping_eqI) (auto simp add: Let_def upd_set'_lookup Mapping.lookup_update'
-      Mapping.lookup_empty split: option.splits)
+      split: option.splits)
 
 lemma upd_set'_aux2: "Mapping.lookup m k = None \<Longrightarrow> upd_set' m d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k d (upd_set' m d f {b. (a, b) \<in> A})"
@@ -1319,7 +1325,7 @@ lemma upd_nested_insert:
   using upd_set'_aux1[of d f _ _ A] upd_set'_aux2[of _ _ d f _ A] upd_set'_aux3[of _ _ _ d f _ A]
     upd_set'_aux4[of _ A d f]
   by (auto simp add: Let_def upd_nested_lookup upd_set'_lookup Mapping.lookup_update'
-      Mapping.lookup_empty split: option.splits prod.splits if_splits intro!: mapping_eqI)
+      split: option.splits prod.splits if_splits intro!: mapping_eqI)
 
 definition upd_nested_max_tstp where
   "upd_nested_max_tstp m d X = upd_nested m d (max_tstp d) X"
@@ -1330,7 +1336,7 @@ lemma upd_nested_max_tstp_fold:
 proof -
   interpret comp_fun_idem "upd_nested_step d (max_tstp d)"
     by (unfold_locales; rule ext)
-      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update'
        update_update max_tstp_d_d max_tstp_idem' split: option.splits)
   note upd_nested_insert' = upd_nested_insert[of d "max_tstp d",
     OF max_tstp_d_d[symmetric] max_tstp_idem']
@@ -1344,7 +1350,7 @@ lift_definition upd_nested_max_tstp_cfi ::
   "ts + tp \<Rightarrow> ('a \<times> 'b, ('a, ('b, ts + tp) mapping) mapping) comp_fun_idem"
   is "\<lambda>d. upd_nested_step d (max_tstp d)"
   by (unfold_locales; rule ext)
-    (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+    (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update'
       update_update max_tstp_d_d max_tstp_idem' split: option.splits)
 
 lemma filter_join'_False_empty: "filter_join' False {} m = (m, {})"
@@ -1389,7 +1395,7 @@ lemma filter_join'_code[code]:
     (if \<not>pos \<and> finite X then set_fold_cfi filter_not_in_cfi' (m, {}) X
     else (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m)))"
   unfolding filter_join'_def
-  by (transfer fixing: m) (use filter_join'_False in \<open>auto simp add: filter_join'_def\<close>)
+  by (transfer fixing: m) (use filter_join'_False in auto)
 
 lemma upd_nested_max_tstp_code[code]:
   "upd_nested_max_tstp m d X = (if finite X then set_fold_cfi (upd_nested_max_tstp_cfi d) m X
@@ -1447,6 +1453,42 @@ lemma [code]:
     ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done, done_length), aggaux)))"
   by(auto simp del: add_new_mmuaux.simps simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
 
+
+lift_definition update_mapping_with :: "('b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping \<Rightarrow> ('a, 'b) mapping" is
+  "\<lambda>f k v m. case m k of None \<Rightarrow> m(k \<mapsto> v) | Some v' \<Rightarrow> m(k \<mapsto> f v')" .
+
+lemma update_mapping_with_alt: "update_mapping_with f k v m =
+  (case Mapping.lookup m k of
+      None \<Rightarrow> Mapping.update k v m
+    | Some v' \<Rightarrow> Mapping.update k (f v') m)"
+  by transfer (simp add: Map_To_Mapping.map_apply_def)
+
+declare [[code drop: update_mapping_with]]
+
+lift_definition mapping_rbt_insert_with_key :: "('a::ccompare \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping_rbt \<Rightarrow> ('a, 'b) mapping_rbt" is
+  "rbt_comp_insert_with_key ccomp"
+  by (auto 0 3 intro: linorder.rbt_insertwk_is_rbt ID_ccompare simp: rbt_comp_insert_with_key[OF ID_ccompare'])
+
+lemma update_mapping_with_code[code]:
+  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
+  "update_mapping_with f k v (RBT_Mapping t) =
+  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''update_mapping_with RBT_Mapping: ccompare = None'') (\<lambda>_. update_mapping_with f k v (RBT_Mapping t))
+  | Some _ \<Rightarrow> RBT_Mapping (mapping_rbt_insert_with_key (\<lambda>_ v' _. f v') k v t))"
+  by (clarsimp split: option.split, transfer fixing: f k v)
+    (auto simp add: rbt_comp_lookup[OF ID_ccompare'] rbt_comp_insert_with_key[OF ID_ccompare'] fun_eq_iff
+      linorder.rbt_lookup_rbt_insertwk[OF ID_ccompare] ord.is_rbt_rbt_sorted
+      split: option.split)
+
+lemma mobserve_code[code]:
+  "mobserve e xs st =
+    (let pn = (e, length xs);
+         ys = map Some xs;
+         db = update_mapping_with (\<lambda>xs. case xs of [tbl] \<Rightarrow> [Set.insert ys tbl] | _ \<Rightarrow> [{ys}])
+                pn [{ys}] (mistate_db st)
+     in st\<lparr>mistate_db := db\<rparr>)"
+  unfolding mobserve_def Monitor.mobserve_def Let_def
+  by (simp add: fun_eq_iff update_mapping_with_alt split: option.split)
+  
 (*<*)
 end
 (*>*)

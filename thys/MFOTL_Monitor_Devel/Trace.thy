@@ -222,6 +222,9 @@ lemma prefix_of_psnocE: "prefix_of (psnoc p x) s \<Longrightarrow> last_ts p \<l
 lemma le_pnil[simp]: "pnil \<le> \<pi>"
   by transfer auto
 
+lemma le_psnocI: "last_ts \<pi> \<le> snd x \<Longrightarrow> \<pi> \<le> psnoc \<pi> x"
+  by transfer (simp split: list.split)
+
 lift_definition take_prefix :: "nat \<Rightarrow> 'a trace \<Rightarrow> 'a prefix" is stake
   by (auto dest: sorted_stake)
 
