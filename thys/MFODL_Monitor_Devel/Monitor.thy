@@ -50,6 +50,8 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Futu Strict r \<and> bounded I)"
+| "mmonitorable_exec (Formula.TP t) = (Formula.is_Var t \<or> Formula.is_Const t)"
+| "mmonitorable_exec (Formula.TS t) = (Formula.is_Var t \<or> Formula.is_Const t)"
 | "mmonitorable_exec _ = False"
 
 lemma cases_Neg_iff:
@@ -686,6 +688,8 @@ record args =
 
 datatype pred_mode = Copy | Simple | Match
 
+datatype mtrm = MVar nat | MConst event_data
+
 datatype (dead 'msaux, dead 'muaux) mformula =                                   
   MRel "event_data table"
   | MPred Formula.name "Formula.trm list" pred_mode
@@ -705,6 +709,8 @@ datatype (dead 'msaux, dead 'muaux) mformula =
   | MUntil args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" ts "'muaux"
   | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
   | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" ts "event_data ml\<delta>aux"
+  | MTP mtrm nat
+  | MTS mtrm
 
 record ('msaux, 'muaux) mstate =
   mstate_i :: nat
@@ -962,6 +968,11 @@ lemma (in maux) init_until_cong[fundef_cong]:
   using assms
   by (auto simp: init_until_def split: formula.splits)
 
+fun mtrm_of_trm :: "Formula.trm \<Rightarrow> mtrm" where
+  "mtrm_of_trm (Formula.Var x) = MVar x"
+| "mtrm_of_trm (Formula.Const x) = MConst x"
+| "mtrm_of_trm _ = undefined"
+
 function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux) mformula" where
   "minit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (minit0 n \<phi>) else MRel empty_table)"
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
@@ -1004,6 +1015,8 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.MatchF I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchF I mr (sorted_list_of_set (LPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) []) [] 0 [])"
+| "minit0 n (Formula.TP t) = MTP (mtrm_of_trm t) 0"
+| "minit0 n (Formula.TS t) = MTS (mtrm_of_trm t)"
 | "minit0 n _ = MRel empty_table"
   by pat_completeness auto
 termination (in maux)
@@ -1240,6 +1253,10 @@ fun list_of_option :: "'a option \<Rightarrow> 'a list" where
   "list_of_option None = []"
 | "list_of_option (Some x) = [x]"
 
+fun eval_mtrm :: "nat \<Rightarrow> mtrm \<Rightarrow> event_data \<Rightarrow> event_data table" where
+  "eval_mtrm n (MVar v) x = singleton_table n v x"
+| "eval_mtrm n (MConst c) x = (if c = x then unit_table n else empty_table)"
+
 type_synonym database = "(Formula.name \<times> nat, event_data table list) mapping"
 
 context maux
@@ -1321,6 +1338,8 @@ function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> database
       (aux, buf, nt, nts') = mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) t (nts @ ts);
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
+| "meval n ts db (MTP mt i) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) [i..<j], MTP mt j)"
+| "meval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EFloat (double_of_int x))) ts, MTS mt)"
   by pat_completeness auto
 
 lemma size_list_cong: "xs = ys \<Longrightarrow> (\<And>x. x \<in> set xs \<Longrightarrow> f x = g x) \<Longrightarrow> size_list f xs = size_list g ys"
@@ -1351,7 +1370,7 @@ termination meval
 end
 
 lemma mformula_induct[case_names MRel MPred MLet MLetPast MAnd MAndAssign MAndRel MAnds MOr MNeg
-   MExists MAgg MPrev MNext MSince MUntil MMatchP MMatchF]:
+   MExists MAgg MPrev MNext MSince MUntil MMatchP MMatchF MTP MTS]:
   "(\<And>rel. P (MRel rel)) \<Longrightarrow>
    (\<And>e ts mode. P (MPred e ts mode)) \<Longrightarrow>
    (\<And>p m \<phi> \<psi>. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MLet p m \<phi> \<psi>)) \<Longrightarrow>
@@ -1370,6 +1389,8 @@ lemma mformula_induct[case_names MRel MPred MLet MLetPast MAnd MAndAssign MAndRe
    (\<And>args \<phi> \<psi> buf nts t aux. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MUntil args \<phi> \<psi> buf nts t aux)) \<Longrightarrow>
    (\<And>I mr mrs \<phi>s buf nts aux. (\<And>\<phi>. \<phi> \<in> set \<phi>s \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MMatchP I mr mrs \<phi>s buf nts aux)) \<Longrightarrow>
    (\<And>I mr mrs \<phi>s buf nts t aux. (\<And>\<phi>. \<phi> \<in> set \<phi>s \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MMatchF I mr mrs \<phi>s buf nts t aux)) \<Longrightarrow>
+   (\<And>mt i. P (MTP mt i)) \<Longrightarrow>
+   (\<And>mt. P (MTS mt)) \<Longrightarrow>
    P mf"
   apply (induct "size mf" arbitrary: mf rule: less_induct)
   subgoal for mf
@@ -1443,6 +1464,8 @@ fun progress :: "(Formula.name \<times> nat \<rightharpoonup> nat) \<Rightarrow>
 | "progress P (Formula.MatchP I r) j = min_regex_default (progress P) r j"
 | "progress P (Formula.MatchF I r) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress P) r j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+| "progress P (Formula.TP t) j = j"
+| "progress P (Formula.TS t) j = j"
 
 definition "progress_regex P = min_regex_default (progress P)"
 definition "letpast_progress P p \<phi> j = \<Sqinter>{i. i \<le> j \<and> i = progress (P(p \<mapsto> i)) \<phi> j}"
@@ -2585,6 +2608,14 @@ next
           simp: ac_simps Suc_le_eq trans_le_add2 Max_mapping_coboundedI progress_regex_def
           dest: spec[of _ "i'"] spec[of _ ?j])
   qed
+next
+  case (TP t)
+  show ?case
+    by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
+next
+  case (TS t)
+  show ?case
+    by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 qed (auto split: option.splits)
 
 lemma progress_ge: "Formula.future_bounded \<phi> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> Map.empty \<phi> j"
@@ -2924,6 +2955,10 @@ next
           (subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21]; auto simp: diff_le_mono memR_antimono elim!: contrapos_np[of _ False])
     qed
   qed
+next
+  case (TS t)
+  with \<tau>_prefix_conv[OF assms] show ?case
+    by simp
 qed auto
 
 lemma sat_prefix_conv:
@@ -3379,6 +3414,10 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_matchF_aux \<sigma> V n R I r aux (progress \<sigma> P (Formula.MatchF I r) j) 0 \<Longrightarrow>
     progress \<sigma> P (Formula.MatchF I r) j + length aux = progress_regex \<sigma> P r j \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MMatchF I mr mrs \<phi>s buf nts t aux) (Formula.MatchF I r)"
+  | MTP: "\<forall>x\<in>Formula.fv_trm t. x < n \<Longrightarrow> Formula.is_Var t \<or> Formula.is_Const t \<Longrightarrow> mtrm_of_trm t = mt \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MTP mt j) (Formula.TP t)"
+  | MTS: "\<forall>x\<in>Formula.fv_trm t. x < n \<Longrightarrow> Formula.is_Var t \<or> Formula.is_Const t \<Longrightarrow> mtrm_of_trm t = mt \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MTS mt) (Formula.TS t)"
 
 definition (in maux) wf_mstate :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> bool" where
   "wf_mstate \<phi> \<pi> R st \<longleftrightarrow> mstate_j st = plen \<pi> \<and> mstate_n st = Formula.nfv \<phi> \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow>
@@ -3563,15 +3602,6 @@ next
       by (simp add: Let_def fun_upd_twist[of p, OF False] del: fun_upd_apply)
   qed
 next
-  case (Eq x1 x2)
-  then show ?case by simp
-next
-  case (Less x1 x2)
-  then show ?case by simp
-next
-  case (LessEq x1 x2)
-  then show ?case by simp
-next
   case (Neg \<phi>)
   show ?case
     using Neg.IH[of p i f g V v] Neg.prems
@@ -3650,7 +3680,7 @@ next
       apply (erule meta_mp)
       by simp
     done
-qed
+qed simp_all
 
 lemma V_subst_letpast:
   "safe_letpast p \<phi> \<le> PastRec \<Longrightarrow>
@@ -4119,6 +4149,12 @@ next
         simp del: progress_simps split: prod.split
         intro!: wf_mformula.MatchF list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchF_aux_Nil
         dest!: to_mregex_atms)
+next
+  case (TP t)
+  then show ?case by (auto intro!: wf_mformula.MTP)
+next
+  case (TS t)
+  then show ?case by (auto intro!: wf_mformula.MTS)
 qed
 
 lemma (in maux) wf_mstate_minit: "safe_formula \<phi> \<Longrightarrow> wf_mstate \<phi> pnil R (minit \<phi>)"
@@ -7343,6 +7379,16 @@ qed
 lemma progress_packagg[simp]: "Monitor.progress \<sigma> P (packagg args \<phi>) j = Monitor.progress \<sigma> P \<phi> j"
   by (auto simp: packagg_def split: option.splits)
 
+lemma qtable_singleton_table: "i < n \<Longrightarrow> qtable n {i} R (\<lambda>v. map the v ! i = x) (singleton_table n i x)"
+  unfolding qtable_def singleton_table_def table_def wf_tuple_def
+  by (auto simp add: list_eq_iff_nth_eq)
+
+lemma qtable_eval_mtrm:
+  assumes "\<forall>x\<in>fv_trm t. x < n" and "trm.is_Var t \<or> trm.is_Const t"
+  shows "qtable n (fv_trm t) R (\<lambda>v. Formula.eval_trm (map the v) t = x) (eval_mtrm n (mtrm_of_trm t) x)"
+  using assms unfolding table_def Formula.is_Var_def Formula.is_Const_def
+  by (auto split: if_splits intro!: qtable_singleton_table qtable_unit_table qtable_empty)
+
 lemma (in maux) meval:
   assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' V db"
   shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
@@ -8269,6 +8315,20 @@ next
         elim!: list.rel_mono_strong mbufnt_take_add'(1)[OF _ wf_envs_P_simps[OF MMatchF.prems(2)] safe mr buf nts_snoc]
         mbufnt_take_add'(2)[OF _ wf_envs_P_simps[OF MMatchF.prems(2)] safe mr buf nts_snoc]
         dest!: MMatchF.IH[OF _ _ MMatchF.prems(2)] update split: prod.splits)
+next
+  case (MTP mt i)
+  then obtain t where "\<forall>x\<in>fv_trm t. x < n" "Formula.is_Var t \<or> Formula.is_Const t"
+    "mt = mtrm_of_trm t" "\<phi>' = Formula.TP t" "i = j"
+    by (cases rule: wf_mformula.cases) simp
+  then show ?case
+    by (auto simp add: list.rel_map intro!: wf_mformula.MTP list.rel_refl qtable_eval_mtrm)
+next
+  case (MTS mt)
+  then obtain t where "\<forall>x\<in>fv_trm t. x < n" "Formula.is_Var t \<or> Formula.is_Const t"
+    "mt = mtrm_of_trm t" "\<phi>' = Formula.TS t"
+    by (cases rule: wf_mformula.cases) simp
+  then show ?case
+    by (auto simp add: list.rel_map intro!: wf_mformula.MTS list.rel_refl qtable_eval_mtrm)
 qed
 
 

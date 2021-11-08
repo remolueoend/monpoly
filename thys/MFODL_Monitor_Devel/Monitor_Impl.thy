@@ -108,6 +108,8 @@ datatype (dead 'msaux, dead 'muaux) meformula =
   | MUntil args "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2" "ts mbuf_t" ts "'muaux"
   | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) meformula list" "event_data mebufn" "ts mbuf_t" "event_data mr\<delta>aux"
   | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) meformula list" "event_data mebufn" "ts mbuf_t" ts "event_data ml\<delta>aux"
+  | MTP mtrm nat
+  | MTS mtrm
 
 fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) mformula" where
   "Rep_meformula (MRel rel) = mformula.MRel rel"
@@ -132,6 +134,8 @@ fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) 
     (map Rep_mbuf_t buf) (Rep_mbuf_t nts) aux"
 | "Rep_meformula (MMatchF I mr mrs \<phi>s buf nts t aux) = mformula.MMatchF I mr mrs (map Rep_meformula \<phi>s)
     (map Rep_mbuf_t buf) (Rep_mbuf_t nts) t aux"
+| "Rep_meformula (MTP mt i) = mformula.MTP mt i"
+| "Rep_meformula (MTS mt) = mformula.MTS mt"
 
 lemma size_list_cong: "xs = ys \<Longrightarrow> (\<And>x. x \<in> set xs \<Longrightarrow> f x = g x) \<Longrightarrow> size_list f xs = size_list g ys"
   by (induct xs arbitrary: ys) auto
@@ -205,6 +209,8 @@ function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> Formula.formula \<
 | "meinit0 n (Formula.MatchF I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchF I mr (sorted_list_of_set (LPDs mr)) (map (meinit0 n) \<phi>s) (replicate (length \<phi>s) mbuf_t_empty) mbuf_t_empty 0 [])"
+| "meinit0 n (Formula.TP t) = MTP (mtrm_of_trm t) 0"
+| "meinit0 n (Formula.TS t) = MTS (mtrm_of_trm t)"
 | "meinit0 n _ = MRel empty_table"
   by pat_completeness auto 
 termination (in maux)
@@ -578,6 +584,8 @@ function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> databas
       (aux, buf, nt, nts') = mebufnt_take (update_matchF n I mr mrs) aux (mebufn_add xss buf) t (nts @@ ts);
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
+| "meeval n ts db (MTP mt i) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) [i..<j], MTP mt j)"
+| "meeval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EFloat (double_of_int x))) ts, MTS mt)"
   by pat_completeness auto
 
 lemma psize_snd_meeval: "meeval_dom (n, t, db, \<phi>) \<Longrightarrow> size (snd (meeval n t db \<phi>)) = size \<phi>"
