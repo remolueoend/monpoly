@@ -5538,6 +5538,41 @@ let rec to_mregex_exec
 
 let rec to_mregex r = to_mregex_exec r [];;
 
+let rec rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+  (Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod x) =
+    x;;
+
+let rec sel12
+  xa = Abs_queue
+         (let (_, x2) =
+            rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+              xa
+            in
+           x2);;
+
+let rec sel11
+  xa = (let (x1, _) =
+          rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+            xa
+          in
+         x1);;
+
+let rec rep_isom x = (sel11 x, sel12 x);;
+
+let rec rep_queue (Abs_queue x) = x;;
+
+let rec pop_t
+  = function ([], []) -> (None, ([], []))
+    | ([], [y]) -> (Some y, ([], []))
+    | ([], y :: v :: va) -> (let z :: ys = rev (v :: va) in (Some z, (ys, [y])))
+    | (x :: xs, ys) -> (Some x, (xs, ys));;
+
+let rec pop_aux
+  xa = Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
+         (pop_t (rep_queue xa));;
+
+let rec pop x = rep_isom (pop_aux x);;
+
 let rec comp_fun_commute_apply (Abs_comp_fun_commute x) = x;;
 
 let rec set_fold_cfc (_A1, _A2)
@@ -6434,35 +6469,12 @@ let rec init_maggauxa
     (match init_maggaux args with (true, aux) -> Some aux
       | (false, _) -> None);;
 
-let rec rep_queue (Abs_queue x) = x;;
-
 let rec tl_queue_t = function ([], []) -> ([], [])
                      | ([], [l]) -> ([], [])
                      | ([], l :: v :: va) -> (tla (rev (v :: va)), [l])
                      | (a :: asa, fs) -> (asa, fs);;
 
 let rec tl_queue xa = Abs_queue (tl_queue_t (rep_queue xa));;
-
-let rec rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-  (Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod x) =
-    x;;
-
-let rec sel12
-  xa = Abs_queue
-         (let (_, x2) =
-            rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-              xa
-            in
-           x2);;
-
-let rec sel11
-  xa = (let (x1, _) =
-          rep_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod
-            xa
-          in
-         x1);;
-
-let rec rep_isom x = (sel11 x, sel12 x);;
 
 let rec safe_hd_t
   = function ([], []) -> (None, ([], []))
@@ -10795,21 +10807,21 @@ let rec minit
 
 let rec annotate_verdicts
   i tq x2 acc = match i, tq, x2, acc with i, tq, [], acc -> (i, (tq, rev acc))
-    | i, tq, x :: xs, acc ->
-        (match safe_hd tq
+    | i, tq, v :: vs, acc ->
+        (match pop tq
           with (None, tqa) ->
-            (plus_nata (plus_nata i one_nata) (size_lista xs),
-              (funpow (plus_nata one_nata (size_lista xs)) tl_queue tqa,
+            (plus_nata (plus_nata i one_nata) (size_lista vs),
+              (funpow (plus_nata one_nata (size_lista vs)) tl_queue tqa,
                 rev acc))
           | (Some t, tqa) ->
-            annotate_verdicts (plus_nata i one_nata) (tl_queue tqa) xs
-              ((i, (t, x)) :: acc));;
+            annotate_verdicts (plus_nata i one_nata) tqa vs
+              ((i, (t, v)) :: acc));;
 
 let rec mstep
   (db, t) (Mestate (i, j, m, n, tq, zeta)) =
-    (let (xs, ma) = meval (plus_nata j one_nata) n [t] db m in
-     let (ia, (ts, xsa)) = annotate_verdicts i (append_queue t tq) xs [] in
-      (xsa, Mestate (ia, plus_nata j one_nata, ma, n, ts, zeta)));;
+    (let (vs, ma) = meval (plus_nata j one_nata) n [t] db m in
+     let (ia, (ts, vsa)) = annotate_verdicts i (append_queue t tq) vs [] in
+      (vsa, Mestate (ia, plus_nata j one_nata, ma, n, ts, zeta)));;
 
 let rec get_and_list = function Ands l -> (if null l then [Ands l] else l)
                        | Pred (v, va) -> [Pred (v, va)]
@@ -11200,13 +11212,12 @@ let rec update_mapping_with _A
 let rec insert_into_db
   p xs db =
     update_mapping_with (ccompare_prod ccompare_string8 ccompare_nat)
-      (fun _ xsa ys ->
-        mapa (fun (a, b) ->
-               sup_seta
-                 ((ceq_list (ceq_option ceq_event_data)),
-                   (ccompare_list (ccompare_option ccompare_event_data)))
-                 a b)
-          (zip xsa ys))
+      (fun _ tbl _ ->
+        mapa (insert
+               ((ceq_list (ceq_option ceq_event_data)),
+                 (ccompare_list (ccompare_option ccompare_event_data)))
+               xs)
+          tbl)
       p [insert
            ((ceq_list (ceq_option ceq_event_data)),
              (ccompare_list (ccompare_option ccompare_event_data)))
