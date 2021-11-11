@@ -6,34 +6,28 @@ open Helper
 
 exception UnsupportedFragment of string
 
-let (<<) f g x = f(g(x))
-let nat_of_int = nat_of_integer << Z.of_int
-let nat_of_int64 = nat_of_integer << Z.of_int64
-let nat_of_float = nat_of_integer << Z.of_float
+let unsupported msg = raise (UnsupportedFragment msg)
+
+let nat_of_int i = nat_of_integer (Z.of_int i)
+let nat_of_int64 i = nat_of_integer (Z.of_int64 i)
+let nat_of_float f = nat_of_integer (Z.of_float f)
 let enat_of_float f = Enat (nat_of_float f)
-let int_of_nat = Z.to_int << integer_of_nat (* Problem? *)
-let float_of_nat = Z.to_float << integer_of_nat (* Problem? *)
+let int_of_nat n = Z.to_int (integer_of_nat n) (* Problem? *)
+let float_of_nat n = Z.to_float (integer_of_nat n) (* Problem? *)
 let int_of_enat = function
   | Enat n -> Z.to_int (integer_of_nat n)
   | Infinity_enat -> failwith "[int_of_enat] Infinity"
-
-let index_of x =
-  let rec index_of_rec c = function
-    | [] -> raise(Failure "Not Found")
-    | hd::tl -> if (hd=x) then c else index_of_rec (c+1) tl
-  in
-  index_of_rec 0
 
 let convert_cst = function
   | Int x -> EInt (Z.of_int x)
   | Str x -> EString x
   | Float x -> EFloat x
   | ZInt x -> EInt x
-  | Regexp _ -> raise (UnsupportedFragment "Unsupported regular expression constant")
+  | Regexp _ -> unsupported "Regular expression constant are not supported"
 
-let convert_var fvl bvl a = nat_of_int (try (index_of a bvl)
-    with Failure s -> (List.length bvl) + (try index_of a fvl
-        with Failure s -> List.length fvl))
+let convert_var fvl bvl a = nat_of_int (try (Misc.get_pos a bvl)
+    with Not_found -> (List.length bvl) + (try Misc.get_pos a fvl
+        with Not_found -> List.length fvl))
 
 let convert_term fvl bvl =
   let rec convert = function
@@ -47,7 +41,7 @@ let convert_term fvl bvl =
     | Mult (t1, t2) -> Mult (convert t1, convert t2)
     | Div (t1, t2) -> Div (convert t1, convert t2)
     | Mod (t1, t2) -> Mod (convert t1, convert t2)
-    | _ -> failwith "[convert_term] unsupported term"
+    | t -> unsupported ("Unsupported term " ^ string_of_term t)
   in
   convert
 
@@ -55,18 +49,18 @@ let convert_interval (l,r) =
     let lm = match l with
     | OBnd a -> (a+.1.)
     | CBnd a -> a
-    | Inf -> let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
-              raise (UnsupportedFragment msg) in
+    | Inf -> unsupported ("Unsupported interval " ^ (string_of_interval (l,r)))
+    in
     let um = match r with
     | OBnd a -> Some (a-.1.)
     | CBnd a ->  Some a
     | Inf -> None in
     match um with
     | None -> interval (nat_of_float lm) Infinity_enat
-    | Some um ->  if lm <= um then
-                  interval (nat_of_float lm) (enat_of_float um)
-                  else let msg = "Unsupported interval " ^ (string_of_interval (l,r)) in
-                  raise (UnsupportedFragment msg)
+    | Some um ->
+        if lm <= um
+        then interval (nat_of_float lm) (enat_of_float um)
+        else unsupported ("Unsupported interval " ^ (string_of_interval (l,r)))
 
 let convert_agg_op = function
   | Cnt -> Agg_Cnt
@@ -98,10 +92,9 @@ let convert_formula dbschema f =
   | LessEq (t1,t2) -> LessEq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Pred p ->
       let (n, a, tl) = p in
-      if List.mem n special_predicates && not (List.mem (n, a) lets) then
-        convert_special_predicate fvl bvl p
-      else
-        Pred (n, List.map (convert_term fvl bvl) tl)
+      if List.mem n special_predicates && not (List.mem (n, a) lets)
+      then convert_special_predicate fvl bvl p
+      else Pred (n, List.map (convert_term fvl bvl) tl)
   | Let (p,f1,f2) ->
       let (n,a,ts) = Predicate.get_info p in
       let fvl1 = List.flatten (List.map Predicate.tvars ts) in
@@ -139,7 +132,7 @@ let convert_formula dbschema f =
   | PastAlways (intv,f) -> convert_formula_vars fvl bvl lets (Neg (Once (intv,(Neg f))))
   | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars fvl bvl lets r)
   | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars fvl bvl lets r)
-  | _ -> failwith "[convert_term] unsupported formula"
+  | f -> unsupported (string_of_formula "Unsupported formula " f)
 and convert_re_vars fvl bvl lets = function
   | Wild -> wild
   | Test f -> Test (convert_formula_vars fvl bvl lets f)
@@ -148,24 +141,25 @@ and convert_re_vars fvl bvl lets = function
   | Star r -> Star (convert_re_vars fvl bvl lets r)
   in convert_formula_vars free_vars [] [] f
 
-let make_tuple tl sl =
+let convert_tuple (pname, tl) sl =
   let pos = ref 0 in
+  let type_error tname =
+    let msg = Printf.sprintf ("[convert_tuple] Expected type %s for \
+      \ predicate %s, field number %d") tname pname !pos in
+    failwith msg
+  in
   List.map2
     (fun (_, t) s ->
       incr pos;
       Some (match t with
       | TInt ->
         (try EInt (Z.of_string s)
-         with Invalid_argument _ ->
-           raise (Tuple.Type_error ("Expected type int for field number "
-                                    ^ (string_of_int !pos))))
+         with Invalid_argument _ -> type_error "int")
       | TStr -> EString s
       | TFloat ->
         (try EFloat (float_of_string s)
-         with Failure _ ->
-           raise (Tuple.Type_error ("Expected type float for field number "
-                                    ^ (string_of_int !pos))))
-      | TRegexp -> raise (Tuple.Type_error "Unsupported regular expression type")
+         with Failure _ -> type_error "float")
+      | TRegexp -> unsupported "Regular expressions constants are not supported"
       )
     )
     tl sl
@@ -174,9 +168,9 @@ type db = ((string * nat), (((event_data option) list) set list)) mapping
 
 let empty_db = empty_db
 
-let insert_into_db (n, tl) sl db =
+let insert_into_db ((pname, tl) as schema) sl db =
   let a = nat_of_int (List.length tl) in
-  insert_into_db (n, a) (make_tuple tl sl) db
+  insert_into_db (pname, a) (convert_tuple schema sl) db
 
 type state =
   (((nat *
@@ -214,20 +208,23 @@ let cst_of_event_data = function
   | EFloat x -> Float x
   | EString x -> Str x
 
-let convert_tuple l = Tuple.make_tuple (List.filter_map (Option.map cst_of_event_data) l)
+let unconvert_tuple l =
+  List.filter_map (Option.map cst_of_event_data) l |> Tuple.make_tuple
 
-let rbt_set_fold f s x = match s with
+let set_fold f s x = match s with
   | RBT_set r -> rbt_fold f r x
-  | _ -> failwith "[rbt_set_fold] unexpected set representation"
+  | _ -> failwith "[set_fold] unexpected set representation"
 
-let convert_violations =
-  List.map (fun (tp, (ts, v)) -> (int_of_nat tp, float_of_nat ts,
-    rbt_set_fold (fun t rel -> Relation.add (convert_tuple t) rel) v Relation.empty))
+let unconvert_violations =
+  let add_tuple t = Relation.add (unconvert_tuple t) in
+  let ucv_rel rel = set_fold add_tuple rel Relation.empty in
+  let ucv (tp, (ts, v)) = (int_of_nat tp, float_of_nat ts, ucv_rel v) in
+  List.map ucv
 
 let step t db st =
   let (vs, st') = mstep (db, nat_of_float t) st in
-  (convert_violations vs, st')
+  (unconvert_violations vs, st')
 
 let is_monitorable dbschema f =
-  let s = (mmonitorable_exec << convert_formula dbschema) f in
+  let s = mmonitorable_exec (convert_formula dbschema f) in
   (s, (if s then None else Some (f, "MFODL formula is not monitorable")))
