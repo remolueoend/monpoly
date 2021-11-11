@@ -131,7 +131,9 @@ module Make(C: Consumer) = struct
       | RPA ->
           next pb;
           C.tuple ctxt pb.pb_schema (List.rev l);
-          parse_db ()
+          (match pb.pb_token with
+          | LPA -> next pb; parse_tuple ()
+          | _ -> parse_db ())
       | COM ->
           next pb;
           (match pb.pb_token with
