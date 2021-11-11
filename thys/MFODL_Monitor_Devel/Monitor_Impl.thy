@@ -83,7 +83,7 @@ lemma mbuf_t_append_code[code]: "mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold a
 
 lemma mbuf_t_cases_code[code]: "mbuf_t_cases (MBuf2_t xs) = (case safe_hd xs of (None, xs') \<Rightarrow> (None, MBuf2_t xs')
   | (Some x, xs') \<Rightarrow> (Some x, MBuf2_t (tl_queue xs')))"
-  by transfer' (auto simp: tl_queue_rep[unfolded is_empty_alt, OF list.discI] split: list.splits prod.splits option.splits dest: safe_hd_rep)
+  by transfer' (auto simp: tl_queue_rep split: list.splits prod.splits option.splits dest: safe_hd_rep)
 
 type_synonym 'a mebuf2 = "'a table mbuf_t \<times> 'a table mbuf_t"
 type_synonym 'a mebufn = "'a table mbuf_t list"
@@ -659,34 +659,24 @@ end
 fun annotate_verdicts :: "nat \<Rightarrow> ts queue \<Rightarrow> event_data table list \<Rightarrow>
   (nat \<times> ts \<times> event_data table) list \<Rightarrow> nat \<times> ts queue \<times> (nat \<times> ts \<times> event_data table) list" where
   "annotate_verdicts i tq [] acc = (i, tq, rev acc)"
-| "annotate_verdicts i tq (X # xs) acc = (case safe_hd tq of
-      (None, tq') \<Rightarrow> (i + 1 + length xs, (tl_queue^^(1 + length xs)) tq', rev acc)  \<comment> \<open>unreachable due to invariant\<close>
-    | (Some t, tq') \<Rightarrow> annotate_verdicts (i + 1) (tl_queue tq') xs ((i, t, X) # acc))"
-
-lemma tl_queue_rep': "linearize (tl_queue q) = tl (linearize q)"
-proof (cases "Optimized_MTL.is_empty q")
-  case True
-  then show ?thesis
-    by transfer (auto split: prod.splits list.splits)
-next
-  case False
-  then show ?thesis by (simp add: tl_queue_rep)
-qed
+| "annotate_verdicts i tq (v # vs) acc = (case pop tq of
+      (None, tq') \<Rightarrow> (i + 1 + length vs, (tl_queue^^(1 + length vs)) tq', rev acc)  \<comment> \<open>unreachable due to invariant\<close>
+    | (Some t, tq') \<Rightarrow> annotate_verdicts (i + 1) tq' vs ((i, t, v) # acc))"
 
 lemma linearize_funpow_tl_queue: "linearize ((tl_queue^^n) q) = drop n (linearize q)"
-  by (induction n) (auto simp add: tl_queue_rep' drop_Suc tl_drop)
+  by (induction n) (auto simp add: tl_queue_rep drop_Suc tl_drop)
 
 lemma annotate_verdicts_alt: "annotate_verdicts i tq xs acc = (i', tq', xs') \<Longrightarrow>
   i' = i + length xs \<and> linearize tq' = drop (length xs) (linearize tq) \<and>
     xs' = rev acc @ List.enumerate i (zip (linearize tq) xs)"
   by (induction i tq xs acc rule: annotate_verdicts.induct)
-    (auto simp add: linearize_funpow_tl_queue tl_queue_rep' drop_Suc neq_Nil_conv
-      simp del: funpow.simps split: prod.splits option.splits dest!: safe_hd_rep)
+    (auto simp add: linearize_funpow_tl_queue tl_queue_rep drop_Suc neq_Nil_conv
+      simp del: funpow.simps split: prod.splits option.splits dest!: pop_rep)
 
 lemma mstep_code[code]: "mstep (db, t) (mestate i j m n tq \<zeta>) =
   (case meval (j + 1) n [t] db m of
-    (xs, m') \<Rightarrow> (case annotate_verdicts i (append_queue t tq) xs [] of
-      (i', ts', xs') \<Rightarrow> (xs', mestate i' (j + 1) m' n ts' \<zeta>)))"
+    (vs, m') \<Rightarrow> (case annotate_verdicts i (append_queue t tq) vs [] of
+      (i', ts', vs') \<Rightarrow> (vs', mestate i' (j + 1) m' n ts' \<zeta>)))"
   unfolding mstep_def mestate_def
   by (auto simp add: append_queue_rep split: prod.split dest!: annotate_verdicts_alt)
 
@@ -1506,7 +1496,7 @@ lemma update_mapping_with_code[code]:
 definition empty_db :: database where "empty_db = Mapping.empty"
 
 definition insert_into_db :: "string8 \<times> nat \<Rightarrow> event_data tuple \<Rightarrow> database \<Rightarrow> database" where
-  "insert_into_db p xs db = update_mapping_with (\<lambda>_. map2 (\<union>)) p [{xs}] db"
+  "insert_into_db p xs db = update_mapping_with (\<lambda>_ tbl _. map (Set.insert xs) tbl) p [{xs}] db"
 
 definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"

@@ -390,6 +390,15 @@ lift_definition pts :: "'a prefix \<Rightarrow> nat list" is "map snd" .
 lemma pts_pmap_\<Gamma>[simp]: "pts (pmap_\<Gamma> f \<pi>) = pts \<pi>"
   by (transfer fixing: f) (simp add: split_beta)
 
+lemma pts_psnoc: "last_ts \<pi> \<le> snd x \<Longrightarrow> pts (psnoc \<pi> x) = pts \<pi> @ [snd x]"
+  by transfer (simp split: list.split)
+
+lemma length_pts_eq_plen: "length (pts \<pi>) = plen \<pi>"
+  by transfer simp
+
+lemma nth_pts_eq_\<tau>: "prefix_of \<pi> \<sigma> \<Longrightarrow> i < plen \<pi> \<Longrightarrow> pts \<pi> ! i = \<tau> \<sigma> i"
+  by transfer (metis nth_map stake_nth)
+
 (*<*)
 end
 (*>*)

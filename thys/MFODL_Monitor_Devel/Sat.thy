@@ -296,8 +296,6 @@ qed
 context verimon
 begin
 
-definition "Mt' \<pi> = (\<lambda>(i, v). (i, pts \<pi> ! i, v)) ` Sat.M \<pi>"
-
 lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<phi> (punconvert (preds \<phi>) \<pi>)"
   by (metis Monitor.pprogress_eq Sat.pprogress_eq ex_prefix_of plen_punconvert prefix_of_unconvert)
 
@@ -308,8 +306,8 @@ lemma M_alt: "Sat.M \<pi> = M (punconvert (preds \<phi>) \<pi>)"
   using ex_prefix_of prefix_of_unconvert progress_sat_cong apply blast
   done
 
-lemma Mt'_alt: "Mt' \<pi> = Mt (punconvert (preds \<phi>) \<pi>)"
-  unfolding Mt'_def Mt_def M_alt by simp
+lemma Mt_alt: "Sat.Mt \<pi> = Mt (punconvert (preds \<phi>) \<pi>)"
+  unfolding Sat.Mt_def Mt_def M_alt by simp
 
 lemma last_ts_punconvert[simp]: "last_ts (punconvert A \<pi>) = last_ts \<pi>"
   unfolding punconvert_def by transfer (auto simp: last_map split: list.splits prod.splits)
@@ -346,9 +344,9 @@ theorem invar_mstep:
 theorem mstep_mverdicts:
   assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "mem_restr R v"
   shows "((i, t, v) \<in> flatten_verdicts (fst (monitor_step db t st))) =
-         ((i, t, v) \<in> Mt' (psnoc \<pi> (db, t)) - Mt' \<pi>)"
+         ((i, t, v) \<in> Sat.Mt (psnoc \<pi> (db, t)) - Sat.Mt \<pi>)"
   using assms mstep_mverdicts[of "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
-  by (auto simp: Mt'_alt monitor_invar_def monitor_step_def)
+  by (auto simp: Mt_alt monitor_invar_def monitor_step_def)
 
 end
 

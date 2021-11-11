@@ -8344,15 +8344,6 @@ qed
 
 subsubsection \<open>Monitor step\<close>
 
-lemma pts_psnoc: "last_ts \<pi> \<le> snd x \<Longrightarrow> pts (psnoc \<pi> x) = pts \<pi> @ [snd x]"
-  by transfer (simp split: list.split)
-
-lemma length_pts_eq_plen: "length (pts \<pi>) = plen \<pi>"
-  by transfer simp
-
-lemma nth_pts_eq_\<tau>: "i < plen \<pi> \<Longrightarrow> prefix_of \<pi> \<sigma> \<Longrightarrow> pts \<pi> ! i = \<tau> \<sigma> i"
-  by transfer (metis nth_map stake_nth)
-
 lemma (in maux) wf_mstate_mstep:
   assumes "wf_mstate \<phi> \<pi> R st" and "last_ts \<pi> \<le> snd tdb"
   shows "wf_mstate \<phi> (psnoc \<pi> tdb) R (snd (mstep (apfst mk_db tdb) st))"
@@ -8412,7 +8403,7 @@ proof -
     with that(2) have "i < plen \<pi>"
       by (metis less_trans_Suc linorder_not_less nat_neq_iff progress_le)
     with that(1) show ?thesis
-      by (auto simp add: nth_append length_pts_eq_plen nth_pts_eq_\<tau>[OF _ \<open>prefix_of \<pi> \<sigma>\<close>])
+      by (auto simp add: nth_append length_pts_eq_plen nth_pts_eq_\<tau>[OF \<open>prefix_of \<pi> \<sigma>\<close>])
   qed
   show ?thesis
   proof
@@ -8437,8 +8428,6 @@ subsubsection \<open>Monitor function\<close>
 
 locale verimon = verimon_spec + maux
 
-definition (in verimon) "Mt \<pi> = (\<lambda>(i, v). (i, pts \<pi> ! i, v)) ` M \<pi>"
-
 lemma (in verimon) mstep_mverdicts:
   assumes wf: "wf_mstate \<phi> \<pi> R st"
     and le[simp]: "last_ts \<pi> \<le> snd tdb"
@@ -8454,7 +8443,7 @@ proof -
   then show ?thesis
     unfolding Mt_def M_def
     by (auto 0 3 simp: p2 progress_prefix_conv[OF _ p1] sat_prefix_conv[OF _ p1] not_less
-        pprogress_eq[OF p1] pprogress_eq[OF p2] nth_pts_eq_\<tau>[OF _ p1] nth_pts_eq_\<tau>[OF _ p2]
+        pprogress_eq[OF p1] pprogress_eq[OF p2] nth_pts_eq_\<tau>[OF p1] nth_pts_eq_\<tau>[OF p2]
         image_iff less_Suc_eq cong: conj_cong
         dest: mstep_output_iff[OF wf le p2 restrict, THEN iffD1] spec[of _ \<sigma>]
         mstep_output_iff[OF wf le _ restrict, THEN iffD1] progress_sat_cong[OF p1]
