@@ -1,0 +1,13 @@
+@100 S 
+(10,8,0) # only satisfied by 1st formula
+(10,7,0) # only satisfied by 2nd formula
+(10,10,1) # only satisfied by 3rd formula
+(10,4,6)  # only satisfied by 4th formula
+(10,3,3)  # only satisfied by 5th formula
+(10,1,2)  # no formula satisfies this one
+
+@200 S
+(10,0,1)
+
+
+

@@ -19,6 +19,8 @@ module Monitor = struct
     ctxt.cur_db <- Verified_adapter.empty_db;
     let (vs, new_state) = Verified_adapter.step ctxt.cur_ts db ctxt.cur_state in
     ctxt.cur_state <- new_state;
+    if !Misc.verbose then
+      Printf.printf "At time point %d:\n%!" ctxt.cur_tp;
     List.iter (fun (q, tsq, rel) ->
       Helper.show_results ctxt.fv_pos ctxt.cur_tp q tsq rel) vs;
     ctxt.cur_tp <- ctxt.cur_tp + 1
