@@ -70,6 +70,8 @@ fun preds :: "Formula.formula \<Rightarrow> (Formula.name \<times> nat) set" whe
 |  "preds (Formula.Until \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
 |  "preds (Formula.MatchP I r) = (\<Union>\<phi>\<in>Regex.atms r. preds \<phi>)"
 |  "preds (Formula.MatchF I r) =  (\<Union>\<phi>\<in>Regex.atms r. preds \<phi>)"
+|  "preds (Formula.TP t) = {}"
+|  "preds (Formula.TS t) = {}"
 
 subsection \<open>Syntax and semantics\<close>
 
@@ -110,6 +112,8 @@ fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> Form
 | "sat \<sigma> v i (Formula.Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> v k \<phi>))"
 | "sat \<sigma> v i (Formula.MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat \<sigma> v) r j i)"
 | "sat \<sigma> v i (Formula.MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat \<sigma> v) r i j)"
+| "sat \<sigma> v i (Formula.TP t) = (Formula.eval_trm v t = EInt (integer_of_nat i))"
+| "sat \<sigma> v i (Formula.TS t) = (Formula.eval_trm v t = EFloat (double_of_int (\<tau> \<sigma> i)))"
 
 end
 
@@ -124,6 +128,9 @@ lemma prefix_of_unconvert: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of
   unfolding unconvert_def punconvert_def by transfer auto
 
 lemma plen_punconvert[simp]: "plen (punconvert A \<pi>) = plen \<pi>"
+  unfolding punconvert_def by transfer auto
+
+lemma pts_punconvert[simp]: "pts (punconvert A \<pi>) = pts \<pi>"
   unfolding punconvert_def by transfer auto
 
 abbreviation fix_length where "fix_length A X \<equiv> (\<lambda>(a, n). if (a, n) \<in> A then X (a, n) \<inter> {w. length w = n} else {})"
@@ -289,6 +296,8 @@ qed
 context verimon
 begin
 
+definition "Mt' \<pi> = (\<lambda>(i, v). (i, pts \<pi> ! i, v)) ` Sat.M \<pi>"
+
 lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<phi> (punconvert (preds \<phi>) \<pi>)"
   by (metis Monitor.pprogress_eq Sat.pprogress_eq ex_prefix_of plen_punconvert prefix_of_unconvert)
 
@@ -298,6 +307,9 @@ lemma M_alt: "Sat.M \<pi> = M (punconvert (preds \<phi>) \<pi>)"
   apply (auto simp: prefix_of_unconvert)
   using ex_prefix_of prefix_of_unconvert progress_sat_cong apply blast
   done
+
+lemma Mt'_alt: "Mt' \<pi> = Mt (punconvert (preds \<phi>) \<pi>)"
+  unfolding Mt'_def Mt_def M_alt by simp
 
 lemma last_ts_punconvert[simp]: "last_ts (punconvert A \<pi>) = last_ts \<pi>"
   unfolding punconvert_def by transfer (auto simp: last_map split: list.splits prod.splits)
@@ -333,10 +345,10 @@ theorem invar_mstep:
 
 theorem mstep_mverdicts:
   assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "mem_restr R v"
-  shows "((i, v) \<in> flatten_verdicts (fst (monitor_step db t st))) =
-         ((i, v) \<in> Sat.M (psnoc \<pi> (db, t)) - Sat.M \<pi>)"
+  shows "((i, t, v) \<in> flatten_verdicts (fst (monitor_step db t st))) =
+         ((i, t, v) \<in> Mt' (psnoc \<pi> (db, t)) - Mt' \<pi>)"
   using assms mstep_mverdicts[of "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
-  by (auto simp: M_alt monitor_invar_def monitor_step_def)
+  by (auto simp: Mt'_alt monitor_invar_def monitor_step_def)
 
 end
 
