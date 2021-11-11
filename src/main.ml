@@ -171,7 +171,7 @@ let main () =
               else if !Misc.verified then
                 Algorithm_verified.monitor sign !logfile fv pf
               else
-                Algorithm.monitor !logfile fv pf
+                Algorithm.monitor sign !logfile fv pf
           end
       end
 

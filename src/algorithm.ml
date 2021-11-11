@@ -1823,7 +1823,7 @@ let monitor_string log fv f =
    monitor_lexbuf lexbuf fv f;
    Lexing.flush_input lexbuf;)
 
-let monitor logfile =
+let monitor _schema logfile =
   let lexbuf = Log.log_open logfile in
   monitor_lexbuf lexbuf
 
@@ -1948,3 +1948,63 @@ let run_test testfile formula =
   let extf, _ = add_ext neval formula in
   Printf.printf "Testing slicing configurations\n";
   test_log lexbuf extf (Dllist.empty())
+
+
+(* module Monitor = struct
+  type t = {
+    m_fv_pos: int list;
+    m_extf: extformula;
+    m_neval: Neval.queue;
+    m_last: Neval.cell ref;
+    m_db: (string, Table.schema * relation) Hashtbl.t;
+    mutable m_tp: int;
+    mutable m_ts: timestamp;
+  }
+
+  let init schema extf fv_pos neval last = {
+    m_fv_pos = fv_pos;
+    m_extf = extf;
+    m_neval = neval;
+    m_last = last;
+    m_db = Hashtbl.create (List.length schema);
+    m_tp = 0;
+    m_ts = MFOTL.ts_invalid;
+  }
+
+  let begin_tp ctxt ts = ctxt.m_ts <- ts
+
+  let tuple ctxt ((pname, tl) as schema) sl =
+    let t = Tuple.make_tuple2 sl tl in
+    try
+      let (s, rel) = Hashtbl.find ctxt.m_db pname in
+      Hashtbl.replace ctxt.m_db pname (s, Relation.add t rel)
+    with Not_found -> Hashtbl.add ctxt.m_db pname (schema, Relation.singleton t)
+
+  let end_tp ctxt =
+    let tbls = Hashtbl.fold
+      (fun _ (s, r) l -> make_table s r :: l) ctxt.m_db [] in
+    Hashtbl.clear ctxt.m_db;
+    let db = Db.make_db tbls in
+    add_index ctxt.m_extf ctxt.m_tp ctxt.m_ts db;
+    ignore (Neval.append (ctxt.m_tp, ctxt.m_ts) ctxt.m_neval);
+    let cont = process_index ctxt.m_extf ctxt.m_fv_pos ctxt.m_last ctxt.m_tp in
+    if cont then
+      ctxt.m_tp <- ctxt.m_tp + 1
+    else
+      raise Simple_log_parser.Stop_parser
+end
+
+module P = Simple_log_parser.Make (Monitor)
+
+let monitor_lexbuf_simple schema lexbuf fv f =
+  (* compute permutation for output tuples *)
+  let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
+  assert (List.length fv_pos = List.length fv);
+  let neval = Neval.create () in
+  let extf, last = add_ext neval f in
+  let ctxt = Monitor.init schema extf fv_pos neval last in
+  ignore (P.parse schema lexbuf ctxt)
+
+let monitor schema logfile =
+  let lexbuf = Log.log_open logfile in
+  monitor_lexbuf_simple schema lexbuf *)

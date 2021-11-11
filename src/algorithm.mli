@@ -62,7 +62,7 @@ val monitor_string: string -> var list -> formula -> unit
     the tuples satisfying formula [f]. The tuples are sorted according to
     the variable list [fv]. *)
 
-val monitor: string -> var list -> formula -> unit
+val monitor: Db.schema -> string -> var list -> formula -> unit
 (** [monitor log f] monitors the log [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
     the tuples satisfying formula [f]. The tuples are sorted according to
