@@ -220,8 +220,14 @@ termination (in maux)
 lemma (in maux) minit0_code[code]: "minit0 n \<phi> = Rep_meformula (meinit0 n \<phi>)"
   by (induction n \<phi> rule: meinit0.induct) (auto simp: init_since_def init_until_def mbuf_t_empty.rep_eq Let_def split: formula.splits prod.splits)
 
-lemma (in maux) minit_code[code]: "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_j = 0, mstate_m = Rep_meformula (meinit0 n \<phi>), mstate_n = n\<rparr>)"
-  by (auto simp: minit_def Let_def minit0_code)
+definition mestate :: "nat \<Rightarrow> nat \<Rightarrow> ('a, 'b) mformula \<Rightarrow> nat \<Rightarrow> ts queue \<Rightarrow> 'c \<Rightarrow> ('a, 'b, 'c) mstate_ext" where
+  "mestate i j m n t \<zeta> =
+    \<lparr>mstate_i = i, mstate_j = j, mstate_m = m, mstate_n = n, mstate_t = linearize t, \<dots> = \<zeta>\<rparr>"
+
+code_datatype mestate
+
+lemma (in maux) minit_code[code]: "minit \<phi> = (let n = Formula.nfv \<phi> in mestate 0 0 (minit0 n \<phi>) n empty_queue ())"
+  by (auto simp: minit_def Let_def mestate_def empty_queue_rep)
 
 fun meprev_next :: "\<I> \<Rightarrow> event_data table mbuf_t \<Rightarrow> ts mbuf_t \<Rightarrow> event_data table list \<times> event_data table mbuf_t \<times> ts mbuf_t" where
   "meprev_next I xs ts = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> ([], mbuf_t_empty, ts)
@@ -648,6 +654,42 @@ qed (auto simp: mbuf2_add mbuf_t_empty.rep_eq mbuf_t_append.rep_eq
     split: prod.splits dest!: mebuf2_take mebuf2t_take meprev_next eeval_since)
 
 end
+
+
+fun annotate_verdicts :: "nat \<Rightarrow> ts queue \<Rightarrow> event_data table list \<Rightarrow>
+  (nat \<times> ts \<times> event_data table) list \<Rightarrow> nat \<times> ts queue \<times> (nat \<times> ts \<times> event_data table) list" where
+  "annotate_verdicts i tq [] acc = (i, tq, rev acc)"
+| "annotate_verdicts i tq (X # xs) acc = (case safe_hd tq of
+      (None, tq') \<Rightarrow> (i + 1 + length xs, (tl_queue^^(1 + length xs)) tq', rev acc)  \<comment> \<open>unreachable due to invariant\<close>
+    | (Some t, tq') \<Rightarrow> annotate_verdicts (i + 1) (tl_queue tq') xs ((i, t, X) # acc))"
+
+lemma tl_queue_rep': "linearize (tl_queue q) = tl (linearize q)"
+proof (cases "Optimized_MTL.is_empty q")
+  case True
+  then show ?thesis
+    by transfer (auto split: prod.splits list.splits)
+next
+  case False
+  then show ?thesis by (simp add: tl_queue_rep)
+qed
+
+lemma linearize_funpow_tl_queue: "linearize ((tl_queue^^n) q) = drop n (linearize q)"
+  by (induction n) (auto simp add: tl_queue_rep' drop_Suc tl_drop)
+
+lemma annotate_verdicts_alt: "annotate_verdicts i tq xs acc = (i', tq', xs') \<Longrightarrow>
+  i' = i + length xs \<and> linearize tq' = drop (length xs) (linearize tq) \<and>
+    xs' = rev acc @ List.enumerate i (zip (linearize tq) xs)"
+  by (induction i tq xs acc rule: annotate_verdicts.induct)
+    (auto simp add: linearize_funpow_tl_queue tl_queue_rep' drop_Suc neq_Nil_conv
+      simp del: funpow.simps split: prod.splits option.splits dest!: safe_hd_rep)
+
+lemma mstep_code[code]: "mstep (db, t) (mestate i j m n tq \<zeta>) =
+  (case meval (j + 1) n [t] db m of
+    (xs, m') \<Rightarrow> (case annotate_verdicts i (append_queue t tq) xs [] of
+      (i', ts', xs') \<Rightarrow> (xs', mestate i' (j + 1) m' n ts' \<zeta>)))"
+  unfolding mstep_def mestate_def
+  by (auto simp add: append_queue_rep split: prod.split dest!: annotate_verdicts_alt)
+
 end
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
@@ -757,9 +799,6 @@ global_interpretation verimon_maux: maux valid_vmsaux init_vmsaux add_new_ts_vms
   and vmsteps0_stateless = "maux.msteps0_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmsteps_stateless = "maux.msteps_stateless add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   and vmonitor = "maux.monitor init_vmsaux add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) init_vmuaux add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
-  and vminit_incr = "maux.minit_incr (init_vmsaux :: _ \<Rightarrow> event_data vmsaux) (init_vmuaux :: _ \<Rightarrow> event_data vmuaux) :: Formula.formula \<Rightarrow> _"
-  and vmobserve = "mobserve :: _ \<Rightarrow> _ \<Rightarrow>  (event_data vmsaux, event_data vmuaux) mistate \<Rightarrow> _"
-  and vmconclude = "maux.mconclude add_new_ts_vmsaux join_vmsaux add_new_table_vmsaux (result_vmsaux :: _ \<Rightarrow> event_data vmsaux \<Rightarrow> _) add_new_vmuaux (eval_vmuaux :: _ \<Rightarrow> _ \<Rightarrow> event_data vmuaux \<Rightarrow> _)"
   unfolding valid_vmsaux_def init_vmsaux_def add_new_ts_vmsaux_def join_vmsaux_def
     add_new_table_vmsaux_def result_vmsaux_def valid_vmuaux_def init_vmuaux_def add_new_vmuaux_def
     length_vmuaux_def eval_vmuaux_def
@@ -780,9 +819,6 @@ global_interpretation default_maux: maux valid_mmasaux "init_mmasaux :: _ \<Righ
   and msteps0_stateless = "maux.msteps0_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
   and msteps_stateless = "maux.msteps_stateless add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
   and monitor = "maux.monitor init_mmasaux add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) init_mmauaux add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
-  and minit_incr = "maux.minit_incr (init_mmasaux :: _ \<Rightarrow> mmasaux) (init_mmauaux :: _ \<Rightarrow> mmauaux) :: Formula.formula \<Rightarrow> _"
-  and mobserve = "mobserve :: _ \<Rightarrow> _ \<Rightarrow>  (mmasaux, mmauaux) mistate \<Rightarrow> _"
-  and mconclude = "maux.mconclude add_new_ts_mmasaux gc_join_mmasaux add_new_table_mmasaux (result_mmasaux :: _ \<Rightarrow> mmasaux \<Rightarrow> _) add_new_mmauaux (eval_mmauaux' :: _ \<Rightarrow> _ \<Rightarrow> mmauaux \<Rightarrow> _)"
   by unfold_locales
 
 lemma image_these: "f ` Option.these X = Option.these (map_option f ` X)"
@@ -818,18 +854,6 @@ lemma vmeeval_MPred: "vmeeval lookahead n ts db (meformula.MPred e tms mode) =
 declare [[code drop: meeval vmeeval]]
 lemmas meeval_code[code] = default_maux.meeval.simps(1) meeval_MPred default_maux.meeval.simps(3-)
 lemmas vmeeval_code[code] = verimon_maux.meeval.simps(1) vmeeval_MPred verimon_maux.meeval.simps(3-)
-
-definition mk_db :: "((Formula.name \<times> nat) \<times> event_data option list set) list \<Rightarrow> database" where
-  "mk_db m = Mapping.of_alist (map (\<lambda>(p, X). (p, [X])) m)"
-
-definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
-  "rbt_fold = RBT_Set2.fold"
-
-definition rbt_empty :: "event_data option list set_rbt" where
-  "rbt_empty = RBT_Set2.empty"
-
-definition rbt_insert :: "_ \<Rightarrow> _ \<Rightarrow> event_data option list set_rbt" where
-  "rbt_insert = RBT_Set2.insert"
 
 lemma saturate_commute:
   assumes "\<And>s. r \<in> g s" "\<And>s. g (Set.insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
@@ -1454,41 +1478,39 @@ lemma [code]:
   by(auto simp del: add_new_mmuaux.simps simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
 
 
-lift_definition update_mapping_with :: "('b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping \<Rightarrow> ('a, 'b) mapping" is
-  "\<lambda>f k v m. case m k of None \<Rightarrow> m(k \<mapsto> v) | Some v' \<Rightarrow> m(k \<mapsto> f v')" .
+lift_definition update_mapping_with :: "('a \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping \<Rightarrow> ('a, 'b) mapping" is
+  "\<lambda>f k v m. case m k of None \<Rightarrow> m(k \<mapsto> v) | Some v' \<Rightarrow> m(k \<mapsto> f k v' v)" .
 
 lemma update_mapping_with_alt: "update_mapping_with f k v m =
   (case Mapping.lookup m k of
       None \<Rightarrow> Mapping.update k v m
-    | Some v' \<Rightarrow> Mapping.update k (f v') m)"
+    | Some v' \<Rightarrow> Mapping.update k (f k v' v) m)"
   by transfer (simp add: Map_To_Mapping.map_apply_def)
 
-declare [[code drop: update_mapping_with]]
-
-lift_definition mapping_rbt_insert_with_key :: "('a::ccompare \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping_rbt \<Rightarrow> ('a, 'b) mapping_rbt" is
+lift_definition mapping_rbt_insertwk :: "('a::ccompare \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping_rbt \<Rightarrow> ('a, 'b) mapping_rbt" is
   "rbt_comp_insert_with_key ccomp"
   by (auto 0 3 intro: linorder.rbt_insertwk_is_rbt ID_ccompare simp: rbt_comp_insert_with_key[OF ID_ccompare'])
+
+declare [[code drop: update_mapping_with]]
 
 lemma update_mapping_with_code[code]:
   fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
   "update_mapping_with f k v (RBT_Mapping t) =
   (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''update_mapping_with RBT_Mapping: ccompare = None'') (\<lambda>_. update_mapping_with f k v (RBT_Mapping t))
-  | Some _ \<Rightarrow> RBT_Mapping (mapping_rbt_insert_with_key (\<lambda>_ v' _. f v') k v t))"
+  | Some _ \<Rightarrow> RBT_Mapping (mapping_rbt_insertwk f k v t))"
   by (clarsimp split: option.split, transfer fixing: f k v)
-    (auto simp add: rbt_comp_lookup[OF ID_ccompare'] rbt_comp_insert_with_key[OF ID_ccompare'] fun_eq_iff
+    (auto simp add: rbt_comp_lookup[OF ID_ccompare'] rbt_comp_insert_with_key[OF ID_ccompare']
       linorder.rbt_lookup_rbt_insertwk[OF ID_ccompare] ord.is_rbt_rbt_sorted
       split: option.split)
 
-lemma mobserve_code[code]:
-  "mobserve e xs st =
-    (let pn = (e, length xs);
-         ys = map Some xs;
-         db = update_mapping_with (\<lambda>xs. case xs of [tbl] \<Rightarrow> [Set.insert ys tbl] | _ \<Rightarrow> [{ys}])
-                pn [{ys}] (mistate_db st)
-     in st\<lparr>mistate_db := db\<rparr>)"
-  unfolding mobserve_def Monitor.mobserve_def Let_def
-  by (simp add: fun_eq_iff update_mapping_with_alt split: option.split)
-  
+definition empty_db :: database where "empty_db = Mapping.empty"
+
+definition insert_into_db :: "string8 \<times> nat \<Rightarrow> event_data tuple \<Rightarrow> database \<Rightarrow> database" where
+  "insert_into_db p xs db = update_mapping_with (\<lambda>_. map2 (\<union>)) p [{xs}] db"
+
+definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
+  "rbt_fold = RBT_Set2.fold"
+
 (*<*)
 end
 (*>*)

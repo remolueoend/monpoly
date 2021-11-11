@@ -37,26 +37,22 @@ type token = Log_parser.token
 exception Stop_parser
 
 module type Consumer = sig
-  type ctxt
-  val begin_tp: ctxt -> MFOTL.timestamp -> unit
-  val observe: ctxt -> string -> Tuple.tuple -> unit
-  val end_tp: ctxt -> unit
+  type t
+  val begin_tp: t -> MFOTL.timestamp -> unit
+  val tuple: t -> Table.schema -> string list -> unit
+  val end_tp: t -> unit
 end
 
 type parsebuf = {
   pb_lexbuf: Lexing.lexbuf;
   mutable pb_token: token;
-  mutable pb_cur_rel: string;
-  mutable pb_cur_schema: (string * Predicate.tcst) list;
-  mutable pb_cur_ar: int;
+  mutable pb_schema: Table.schema;
 }
 
 let init_parsebuf lexbuf = {
   pb_lexbuf = lexbuf;
   pb_token = Log_lexer.token lexbuf;
-  pb_cur_rel = "";
-  pb_cur_schema = [];
-  pb_cur_ar = 0;
+  pb_schema = ("", []);
 }
 
 let next pb = pb.pb_token <- Log_lexer.token pb.pb_lexbuf
@@ -79,14 +75,6 @@ module Make(C: Consumer) = struct
   let parse dbs lexbuf ctxt =
     let pb = init_parsebuf lexbuf in
     let fail () = failwith "[Simple_log_parser] Parse error" in
-    let process_tuple t =
-      if List.length t = pb.pb_cur_ar then
-        let t = try Tuple.make_tuple2 t pb.pb_cur_schema
-          with Tuple.Type_error str_err -> fail () in
-        C.observe ctxt pb.pb_cur_rel t
-      else
-        fail ()
-    in
     let debug msg =
       if Misc.debugging Misc.Dbg_log then
         Printf.eprintf "[Simple_log_parser] %s with token=%s\n" msg
@@ -112,12 +100,10 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | STR s ->
           next pb;
-          pb.pb_cur_rel <- s;
-          pb.pb_cur_schema <- (try List.assoc s dbs with Not_found -> fail ());
-          pb.pb_cur_ar <- List.length pb.pb_cur_schema;
+          pb.pb_schema <- (s, try List.assoc s dbs with Not_found -> fail ());
           (match pb.pb_token with
           | LPA -> next pb; parse_tuple ()
-          | _ -> process_tuple []; parse_db ())
+          | _ -> C.tuple ctxt pb.pb_schema []; parse_db ())
       | AT ->
           next pb;
           C.end_tp ctxt;
@@ -133,7 +119,7 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | RPA ->
           next pb;
-          process_tuple [];
+          C.tuple ctxt pb.pb_schema [];
           parse_db ()
       | STR s ->
           next pb;
@@ -144,7 +130,7 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | RPA ->
           next pb;
-          process_tuple (List.rev l);
+          C.tuple ctxt pb.pb_schema (List.rev l);
           parse_db ()
       | COM ->
           next pb;

@@ -15,17 +15,13 @@ let int_of_nat = Z.to_int << integer_of_nat (* Problem? *)
 let float_of_nat = Z.to_float << integer_of_nat (* Problem? *)
 let int_of_enat = function
   | Enat n -> Z.to_int (integer_of_nat n)
-  | Infinity_enat -> failwith "[int_of_enat] internal error"
+  | Infinity_enat -> failwith "[int_of_enat] Infinity"
 
-let filterWith f p = List.map f << List.filter p
-let deoptionalize  =
-  let is_some = function Some _ -> true | _ -> false in
-  List.map (function | Some x -> x | None -> assert false) << List.filter (is_some)
-
-let index_of =
-  let rec index_of_rec c x lst = match lst with
-      | [] -> raise(Failure "Not Found")
-      | hd::tl -> if (hd=x) then c else index_of_rec (c+1) x tl  in
+let index_of x =
+  let rec index_of_rec c = function
+    | [] -> raise(Failure "Not Found")
+    | hd::tl -> if (hd=x) then c else index_of_rec (c+1) tl
+  in
   index_of_rec 0
 
 let convert_cst = function
@@ -33,6 +29,7 @@ let convert_cst = function
   | Str x -> EString x
   | Float x -> EFloat x
   | ZInt x -> EInt x
+  | Regexp _ -> raise (UnsupportedFragment "Unsupported regular expression constant")
 
 let convert_var fvl bvl a = nat_of_int (try (index_of a bvl)
     with Failure s -> (List.length bvl) + (try index_of a fvl
@@ -151,6 +148,36 @@ and convert_re_vars fvl bvl lets = function
   | Star r -> Star (convert_re_vars fvl bvl lets r)
   in convert_formula_vars free_vars [] [] f
 
+let make_tuple tl sl =
+  let pos = ref 0 in
+  List.map2
+    (fun (_, t) s ->
+      incr pos;
+      Some (match t with
+      | TInt ->
+        (try EInt (Z.of_string s)
+         with Invalid_argument _ ->
+           raise (Tuple.Type_error ("Expected type int for field number "
+                                    ^ (string_of_int !pos))))
+      | TStr -> EString s
+      | TFloat ->
+        (try EFloat (float_of_string s)
+         with Failure _ ->
+           raise (Tuple.Type_error ("Expected type float for field number "
+                                    ^ (string_of_int !pos))))
+      | TRegexp -> raise (Tuple.Type_error "Unsupported regular expression type")
+      )
+    )
+    tl sl
+
+type db = ((string * nat), (((event_data option) list) set list)) mapping
+
+let empty_db = empty_db
+
+let insert_into_db (n, tl) sl db =
+  let a = nat_of_int (List.length tl) in
+  insert_into_db (n, a) (make_tuple tl sl) db
+
 type state =
   (((nat *
       (nat *
@@ -178,31 +205,27 @@ type state =
                            nat))))))))))) *
       aggaux option),
     unit)
-    mistate_ext
+    mstate_ext
 
-let init cf = minit_incr cf
-
-let observe e t st = mobserve e (List.map convert_cst t) st
+let init cf = minit_safe cf
 
 let cst_of_event_data = function
   | EInt x -> (try Int (Z.to_int x) with Z.Overflow -> ZInt x)
   | EFloat x -> Float x
   | EString x -> Str x
 
-let convert_tuple xs = Tuple.make_tuple (List.map cst_of_event_data (deoptionalize xs))
+let convert_tuple l = Tuple.make_tuple (List.filter_map (Option.map cst_of_event_data) l)
 
-(* (Verified.nat * Verified.event_data option list Verified.set) list -> (int * relation) list *)
+let rbt_set_fold f s x = match s with
+  | RBT_set r -> rbt_fold f r x
+  | _ -> failwith "[rbt_set_fold] unexpected set representation"
+
 let convert_violations =
-  List.map (fun (tp, rbt) ->
-  let v = match rbt with
-    | RBT_set r -> r
-    | _ -> failwith "Impossible!" in
-    ((int_of_nat tp),
-     Relation.make_relation
-      (rbt_fold (fun t l -> (convert_tuple t) :: l) v [] )))
+  List.map (fun (tp, (ts, v)) -> (int_of_nat tp, float_of_nat ts,
+    rbt_set_fold (fun t rel -> Relation.add (convert_tuple t) rel) v Relation.empty))
 
-let conclude ts st =
-  let (vs, st') = mconclude (nat_of_float ts) st in
+let step t db st =
+  let (vs, st') = mstep (db, nat_of_float t) st in
   (convert_violations vs, st')
 
 let is_monitorable dbschema f =

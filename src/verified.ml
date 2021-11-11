@@ -106,74 +106,14 @@ module Monitor : sig
     Prev of i * formula | Next of i * formula | Since of formula * i * formula |
     Until of formula * i * formula | MatchF of i * formula regex |
     MatchP of i * formula regex | TP of trm | TS of trm
+  type ('a, 'b) mformula
   type aggaux
   type ('a, 'b, 'c) mstate_ext
-  type ('a, 'b, 'c) mistate_ext
   val wild : 'a regex
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
-  val mobserve :
-    string ->
-      event_data list ->
-        (((nat *
-            (nat *
-              (bool list *
-                (bool list *
-                  ((nat * ((event_data option) list) set) queue *
-                    ((nat * ((event_data option) list) set) queue *
-                      (((event_data option) list) set *
-                        ((((event_data option) list), nat) mapping *
-                          (((event_data option) list), nat) mapping)))))))) *
-           aggaux option),
-          ((nat *
-             (nat queue *
-               ((((event_data option) list) set * (nat, nat) sum) queue *
-                 (nat *
-                   (bool list *
-                     (bool list *
-                       (((event_data option) list) set *
-                         ((((event_data option) list), nat) mapping *
-                           ((nat, (((event_data option) list), (nat, nat) sum)
-                                    mapping)
-                              mapping *
-                             ((nat, nat) mapping *
-                               (((event_data option) list) set list *
-                                 nat))))))))))) *
-            aggaux option),
-          unit)
-          mistate_ext ->
-          (((nat *
-              (nat *
-                (bool list *
-                  (bool list *
-                    ((nat * ((event_data option) list) set) queue *
-                      ((nat * ((event_data option) list) set) queue *
-                        (((event_data option) list) set *
-                          ((((event_data option) list), nat) mapping *
-                            (((event_data option) list), nat) mapping)))))))) *
-             aggaux option),
-            ((nat *
-               (nat queue *
-                 ((((event_data option) list) set * (nat, nat) sum) queue *
-                   (nat *
-                     (bool list *
-                       (bool list *
-                         (((event_data option) list) set *
-                           ((((event_data option) list), nat) mapping *
-                             ((nat, (((event_data option) list), (nat, nat) sum)
-                                      mapping)
-                                mapping *
-                               ((nat, nat) mapping *
-                                 (((event_data option) list) set list *
-                                   nat))))))))))) *
-              aggaux option),
-            unit)
-            mistate_ext
-  val rbt_fold :
-    ((event_data option) list -> 'a -> 'a) ->
-      (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
-  val mconclude :
-    nat ->
+  val mstep :
+    ((string * nat), (((event_data option) list) set list)) mapping * nat ->
       (((nat *
           (nat *
             (bool list *
@@ -200,8 +140,8 @@ module Monitor : sig
                                nat))))))))))) *
           aggaux option),
         unit)
-        mistate_ext ->
-        (nat * ((event_data option) list) set) list *
+        mstate_ext ->
+        (nat * (nat * ((event_data option) list) set)) list *
           (((nat *
               (nat *
                 (bool list *
@@ -228,10 +168,13 @@ module Monitor : sig
                                    nat))))))))))) *
               aggaux option),
             unit)
-            mistate_ext
-  val rbt_empty : (((event_data option) list), unit) mapping_rbt
+            mstate_ext
+  val empty_db : ((string * nat), (((event_data option) list) set list)) mapping
+  val rbt_fold :
+    ((event_data option) list -> 'a -> 'a) ->
+      (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
   val mmonitorable_exec : formula -> bool
-  val minit_incr :
+  val minit_safe :
     formula ->
       (((nat *
           (nat *
@@ -259,12 +202,13 @@ module Monitor : sig
                                nat))))))))))) *
           aggaux option),
         unit)
-        mistate_ext
-  val rbt_insert :
-    (event_data option) list ->
-      (((event_data option) list), unit) mapping_rbt ->
-        (((event_data option) list), unit) mapping_rbt
+        mstate_ext
   val convert_multiway : formula -> formula
+  val insert_into_db :
+    string * nat ->
+      (event_data option) list ->
+        ((string * nat), (((event_data option) list) set list)) mapping ->
+          ((string * nat), (((event_data option) list) set list)) mapping
 end = struct
 
 let ceq_funa : (('a -> 'b) -> ('a -> 'b) -> bool) option = None;;
@@ -3517,14 +3461,9 @@ type ('b, 'a) comp_fun_idem = Abs_comp_fun_idem of ('b -> 'a -> 'a);;
 type 'a semilattice_set = Abs_semilattice_set of ('a -> 'a -> 'a);;
 
 type ('a, 'b, 'c) mstate_ext =
-  Mstate_ext of nat * nat * ('a, 'b) mformula * nat * 'c;;
+  Mestate of nat * nat * ('a, 'b) mformula * nat * nat queue * 'c;;
 
 type ('b, 'a) comp_fun_commute = Abs_comp_fun_commute of ('b -> 'a -> 'a);;
-
-type ('a, 'b, 'c) mistate_ext =
-  Mistate_ext of
-    ('a, 'b, unit) mstate_ext *
-      ((string * nat), (((event_data option) list) set list)) mapping * 'c;;
 
 type 'a x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod =
   Abs_x_a_queue_x_a_option_prod_x_x_x_a_list_x_a_list_prod_x_a_option_prod of
@@ -3821,6 +3760,10 @@ let rec map_of _A
   x0 k = match x0, k with
     (l, v) :: ps, k -> (if eq _A l k then Some v else map_of _A ps k)
     | [], k -> None;;
+
+let rec funpow
+  n f = (if equal_nata n zero_nata then id
+          else comp f (funpow (minus_nata n one_nata) f));;
 
 let wild : 'a regex = Skip one_nata;;
 
@@ -4296,10 +4239,6 @@ let rec matcha
 
 let rec inorder = function Leaf -> []
                   | Node (l, (a, uu), r) -> inorder l @ a :: inorder r;;
-
-let rec enumerate
-  n x1 = match n, x1 with n, x :: xs -> (n, x) :: enumerate (suc n) xs
-    | n, [] -> [];;
 
 let rec partition
   p x1 = match p, x1 with p, [] -> ([], [])
@@ -10848,33 +10787,29 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                  (ccompare_list (ccompare_option ccompare_event_data)),
                  set_impl_list));;
 
+let rec minit0 n phi = Rep_meformula (meinit0 n phi);;
+
 let rec minit
   phi = (let n = nfv phi in
-          Mstate_ext
-            (zero_nata, zero_nata, Rep_meformula (meinit0 n phi), n, ()));;
+          Mestate (zero_nata, zero_nata, minit0 n phi, n, empty_queue, ()));;
 
-let rec mstate_n
-  (Mstate_ext (mstate_i, mstate_j, mstate_m, mstate_n, more)) = mstate_n;;
-
-let rec mstate_m
-  (Mstate_ext (mstate_i, mstate_j, mstate_m, mstate_n, more)) = mstate_m;;
-
-let rec mstate_j
-  (Mstate_ext (mstate_i, mstate_j, mstate_m, mstate_n, more)) = mstate_j;;
-
-let rec mstate_i
-  (Mstate_ext (mstate_i, mstate_j, mstate_m, mstate_n, more)) = mstate_i;;
+let rec annotate_verdicts
+  i tq x2 acc = match i, tq, x2, acc with i, tq, [], acc -> (i, (tq, rev acc))
+    | i, tq, x :: xs, acc ->
+        (match safe_hd tq
+          with (None, tqa) ->
+            (plus_nata (plus_nata i one_nata) (size_lista xs),
+              (funpow (plus_nata one_nata (size_lista xs)) tl_queue tqa,
+                rev acc))
+          | (Some t, tqa) ->
+            annotate_verdicts (plus_nata i one_nata) (tl_queue tqa) xs
+              ((i, (t, x)) :: acc));;
 
 let rec mstep
-  tdb st =
-    (let (xs, m) =
-       meval (plus_nata (mstate_j st) one_nata) (mstate_n st) [snd tdb]
-         (fst tdb) (mstate_m st)
-       in
-      (enumerate (mstate_i st) xs,
-        Mstate_ext
-          (plus_nata (mstate_i st) (size_lista xs),
-            plus_nata (mstate_j st) one_nata, m, mstate_n st, ())));;
+  (db, t) (Mestate (i, j, m, n, tq, zeta)) =
+    (let (xs, ma) = meval (plus_nata j one_nata) n [t] db m in
+     let (ia, (ts, xsa)) = annotate_verdicts i (append_queue t tq) xs [] in
+      (xsa, Mestate (ia, plus_nata j one_nata, ma, n, ts, zeta)));;
 
 let rec get_and_list = function Ands l -> (if null l then [Ands l] else l)
                        | Pred (v, va) -> [Pred (v, va)]
@@ -10901,70 +10836,6 @@ let rec is_simple_eq
   t1 t2 =
     is_Const t1 && (is_Const t2 || is_Var t2) || is_Var t1 && is_Const t2;;
 
-let rec mistate_db_update
-  mistate_dba (Mistate_ext (mistate_s, mistate_db, more)) =
-    Mistate_ext (mistate_s, mistate_dba mistate_db, more);;
-
-let rec mapping_rbt_insert_with_key _A
-  xc xd xe xf =
-    Mapping_RBTa
-      (rbt_comp_insert_with_key (the (ccompare _A)) xc xd xe (impl_ofa _A xf));;
-
-let rec update_mapping_with _B
-  f k v (RBT_Mapping t) =
-    (match ccompare _B
-      with None ->
-        failwith "update_mapping_with RBT_Mapping: ccompare = None"
-          (fun _ -> update_mapping_with _B f k v (RBT_Mapping t))
-      | Some _ ->
-        RBT_Mapping
-          (mapping_rbt_insert_with_key _B (fun _ va _ -> f va) k v t));;
-
-let rec mistate_db (Mistate_ext (mistate_s, mistate_db, more)) = mistate_db;;
-
-let rec mobserve
-  e xs st =
-    (let pn = (e, size_lista xs) in
-     let ys = mapa (fun a -> Some a) xs in
-     let db =
-       update_mapping_with (ccompare_prod ccompare_string8 ccompare_nat)
-         (fun a ->
-           (match a
-             with [] ->
-               [insert
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)))
-                  ys (set_empty
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)))
-                       (of_phantom set_impl_lista))]
-             | [tbl] ->
-               [insert
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)))
-                  ys tbl]
-             | _ :: _ :: _ ->
-               [insert
-                  ((ceq_list (ceq_option ceq_event_data)),
-                    (ccompare_list (ccompare_option ccompare_event_data)))
-                  ys (set_empty
-                       ((ceq_list (ceq_option ceq_event_data)),
-                         (ccompare_list (ccompare_option ccompare_event_data)))
-                       (of_phantom set_impl_lista))]))
-         pn [insert
-               ((ceq_list (ceq_option ceq_event_data)),
-                 (ccompare_list (ccompare_option ccompare_event_data)))
-               ys (set_empty
-                    ((ceq_list (ceq_option ceq_event_data)),
-                      (ccompare_list (ccompare_option ccompare_event_data)))
-                    (of_phantom set_impl_lista))]
-         (mistate_db st)
-       in
-      mistate_db_update (fun _ -> db) st);;
-
-let rec rbt_fold
-  x = foldb (ccompare_list (ccompare_option ccompare_event_data)) x;;
-
 let rec mapping_impl_choose2
   x y = match x, y with Mapping_RBT, Mapping_RBT -> Mapping_RBT
     | Mapping_Assoc_List, Mapping_Assoc_List -> Mapping_Assoc_List
@@ -10976,20 +10847,12 @@ let rec mapping_impl_prod _A _B
       (mapping_impl_choose2 (of_phantom (mapping_impl _A))
         (of_phantom (mapping_impl _B)));;
 
-let rec mistate_s (Mistate_ext (mistate_s, mistate_db, more)) = mistate_s;;
+let empty_db : ((string * nat), (((event_data option) list) set list)) mapping
+  = mapping_empty (ccompare_prod ccompare_string8 ccompare_nat)
+      (of_phantom (mapping_impl_prod mapping_impl_string8 mapping_impl_nat));;
 
-let rec mconclude
-  ts st =
-    (let (xs, sta) = mstep (mistate_db st, ts) (mistate_s st) in
-      (xs, Mistate_ext
-             (sta, mapping_empty (ccompare_prod ccompare_string8 ccompare_nat)
-                     (of_phantom
-                       (mapping_impl_prod mapping_impl_string8
-                         mapping_impl_nat)),
-               ())));;
-
-let rbt_empty : (((event_data option) list), unit) mapping_rbt
-  = emptyc (ccompare_list (ccompare_option ccompare_event_data));;
+let rec rbt_fold
+  x = foldb (ccompare_list (ccompare_option ccompare_event_data)) x;;
 
 let rec mmonitorable_exec
   = function Eq (t1, t2) -> is_simple_eq t1 t2
@@ -11288,19 +11151,6 @@ let rec mmonitorable_exec
 let rec minit_safe
   phi = (if mmonitorable_exec phi then minit phi else failwith "undefined");;
 
-let rec minit_incr
-  phi = Mistate_ext
-          (minit_safe phi,
-            mapping_empty (ccompare_prod ccompare_string8 ccompare_nat)
-              (of_phantom
-                (mapping_impl_prod mapping_impl_string8 mapping_impl_nat)),
-            ());;
-
-let rec rbt_insert
-  x = (fun k ->
-        insertb (ccompare_list (ccompare_option ccompare_event_data)) k ())
-        x;;
-
 let rec convert_multiway
   = function Pred (p, ts) -> Pred (p, ts)
     | Eq (t, u) -> Eq (t, u)
@@ -11333,5 +11183,37 @@ let rec convert_multiway
     | MatchF (i, r) -> MatchF (i, map_regex convert_multiway r)
     | TP t -> TP t
     | TS t -> TS t;;
+
+let rec mapping_rbt_insertwk _A
+  xc xd xe xf =
+    Mapping_RBTa
+      (rbt_comp_insert_with_key (the (ccompare _A)) xc xd xe (impl_ofa _A xf));;
+
+let rec update_mapping_with _A
+  f k v (RBT_Mapping t) =
+    (match ccompare _A
+      with None ->
+        failwith "update_mapping_with RBT_Mapping: ccompare = None"
+          (fun _ -> update_mapping_with _A f k v (RBT_Mapping t))
+      | Some _ -> RBT_Mapping (mapping_rbt_insertwk _A f k v t));;
+
+let rec insert_into_db
+  p xs db =
+    update_mapping_with (ccompare_prod ccompare_string8 ccompare_nat)
+      (fun _ xsa ys ->
+        mapa (fun (a, b) ->
+               sup_seta
+                 ((ceq_list (ceq_option ceq_event_data)),
+                   (ccompare_list (ccompare_option ccompare_event_data)))
+                 a b)
+          (zip xsa ys))
+      p [insert
+           ((ceq_list (ceq_option ceq_event_data)),
+             (ccompare_list (ccompare_option ccompare_event_data)))
+           xs (set_empty
+                ((ceq_list (ceq_option ceq_event_data)),
+                  (ccompare_list (ccompare_option ccompare_event_data)))
+                (of_phantom set_impl_lista))]
+      db;;
 
 end;; (*struct Monitor*)

@@ -35,12 +35,12 @@
 exception Stop_parser
 
 module type Consumer = sig
-  type ctxt
-  val begin_tp: ctxt -> MFOTL.timestamp -> unit
-  val observe: ctxt -> string -> Predicate.cst list -> unit
-  val end_tp: ctxt -> unit
+  type t
+  val begin_tp: t -> MFOTL.timestamp -> unit
+  val tuple: t -> Table.schema -> string list -> unit
+  val end_tp: t -> unit
 end
 
 module Make(C: Consumer): sig
-  val parse: Db.schema -> Lexing.lexbuf -> C.ctxt -> bool
+  val parse: Db.schema -> Lexing.lexbuf -> C.t -> bool
 end
