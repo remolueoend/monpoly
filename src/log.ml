@@ -148,7 +148,9 @@ let log_open logfile =
     else
       open_in logfile
   in
-  Lexing.from_channel ic
+  let lexbuf = Lexing.from_channel ic in
+  Lexing.set_filename lexbuf logfile;
+  lexbuf
 
 let update lexbuf =
   if Misc.debugging Dbg_log then

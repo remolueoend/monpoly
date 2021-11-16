@@ -169,7 +169,9 @@ let main () =
               else if !Algorithm.combine_files <> "" then
                 Algorithm.combine !logfile
               else if !Misc.verified then
-                Algorithm_verified.monitor sign !logfile fv pf
+                (match Algorithm_verified.monitor sign !logfile fv pf with
+                | Algorithm_verified.OK -> ()
+                | _ -> exit 1)
               else
                 Algorithm.monitor sign !logfile fv pf
           end

@@ -32,8 +32,6 @@
  * covered by the GNU Lesser General Public License.
  *)
 
-type token = Log_parser.token
-
 exception Stop_parser
 
 module type Consumer = sig
@@ -41,7 +39,30 @@ module type Consumer = sig
   val begin_tp: t -> MFOTL.timestamp -> unit
   val tuple: t -> Table.schema -> string list -> unit
   val end_tp: t -> unit
+  val parse_error: t -> Lexing.position -> string -> unit
 end
+
+let string_of_position p = Lexing.(
+  Printf.sprintf "%s:%d:%d" p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol))
+
+(*type token = AT | LPA | RPA | LCB | RCB | COM | SEP | CMD | EOC | EOF | ERR
+  | STR of string*)
+type token = Log_parser.token
+
+let string_of_token (t: token) =
+  match t with
+  | AT -> "'@'"
+  | LPA -> "'('"
+  | RPA -> "')'"
+  | LCB -> "'{'"
+  | RCB -> "'}'"
+  | COM -> "','"
+  | SEP -> "';'"
+  | STR s -> "\"" ^ String.escaped s ^ "\""
+  | EOF -> "<EOF>"
+  | CMD -> "'>'"
+  | EOC -> "'<'"
+  | ERR -> "<unrecognized>"
 
 type parsebuf = {
   pb_lexbuf: Lexing.lexbuf;
@@ -57,28 +78,13 @@ let init_parsebuf lexbuf = {
 
 let next pb = pb.pb_token <- Log_lexer.token pb.pb_lexbuf
 
-let str_of_token = Log_parser.(function
-  | AT -> "AT"
-  | LPA -> "LPA"
-  | RPA -> "RPA"
-  | LCB -> "LCB"
-  | RCB -> "RCB"
-  | COM -> "COM"
-  | SEP -> "SEP"
-  | STR s -> "STR(" ^ s ^ ")"
-  | EOF -> "EOF"
-  | CMD -> "CMD"
-  | EOC -> "EOC"
-  | ERR -> "ERR")
-
 module Make(C: Consumer) = struct
-  let parse dbs lexbuf ctxt =
+  let parse db_schema lexbuf ctxt =
     let pb = init_parsebuf lexbuf in
-    let fail () = failwith "[Simple_log_parser] Parse error" in
     let debug msg =
       if Misc.debugging Misc.Dbg_log then
-        Printf.eprintf "[Simple_log_parser] %s with token=%s\n" msg
-          (str_of_token pb.pb_token)
+        Printf.eprintf "[Simple_log_parser] state %s with token=%s\n" msg
+          (string_of_token pb.pb_token)
       else ()
     in
     let rec parse_init () =
@@ -86,24 +92,31 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | EOF -> ()
       | AT -> next pb; parse_ts ()
-      | _ -> fail ()
+      | t -> fail ("Expected '@' but saw " ^ string_of_token t)
     and parse_ts () =
       debug "ts";
       match pb.pb_token with
       | STR s ->
-          next pb;
-          C.begin_tp ctxt (MFOTL.ts_of_string "Simple_log_parser" s);
-          parse_db ()
-      | _ -> fail ()
+          (try
+            let ts = float_of_string s in
+            C.begin_tp ctxt ts;
+            next pb;
+            parse_db ()
+          with Failure _ -> fail ("Cannot convert " ^ s ^ " into a timestamp"))
+      | t -> fail ("Expected a time-stamp but saw " ^ string_of_token t)
     and parse_db () =
       debug "db";
       match pb.pb_token with
       | STR s ->
-          next pb;
-          pb.pb_schema <- (s, try List.assoc s dbs with Not_found -> fail ());
-          (match pb.pb_token with
-          | LPA -> next pb; parse_tuple ()
-          | _ -> C.tuple ctxt pb.pb_schema []; parse_db ())
+          (try
+            let tl = List.assoc s db_schema in
+            pb.pb_schema <- (s, tl);
+            next pb;
+            (match pb.pb_token with
+            | LPA -> next pb; parse_tuple ()
+            | _ -> C.tuple ctxt pb.pb_schema []; parse_db ())
+          with Not_found -> fail ("Predicate " ^ s
+            ^ " was not defined in the signature."))
       | AT ->
           next pb;
           C.end_tp ctxt;
@@ -113,7 +126,8 @@ module Make(C: Consumer) = struct
           C.end_tp ctxt;
           parse_init ()
       | EOF -> C.end_tp ctxt
-      | _ -> fail ()
+      | t -> fail ("Expected a predicate, '@', or ';' but saw "
+          ^ string_of_token t)
     and parse_tuple () =
       debug "tuple";
       match pb.pb_token with
@@ -124,7 +138,7 @@ module Make(C: Consumer) = struct
       | STR s ->
           next pb;
           parse_tuple_cont [s]
-      | _ -> fail ()
+      | t -> fail ("Expected a tuple field or ')' but saw " ^ string_of_token t)
     and parse_tuple_cont l =
       debug "tuple_cont";
       match pb.pb_token with
@@ -140,8 +154,18 @@ module Make(C: Consumer) = struct
           | STR s ->
               next pb;
               parse_tuple_cont (s::l)
-          | _ -> fail ())
-      | _ -> fail ()
+          | t -> fail ("Expected a tuple field but saw " ^ string_of_token t))
+      | t -> fail ("Expected ',' or ')' but saw " ^ string_of_token t)
+    and fail msg =
+      C.parse_error ctxt pb.pb_lexbuf.Lexing.lex_start_p msg;
+      recover ()
+    and recover () =
+      next pb;
+      match pb.pb_token with
+      | AT -> parse_init ()
+      | SEP -> next pb; parse_init ()
+      | EOF -> ()
+      | _ -> next pb; recover ()
     in
     try parse_init (); true with Stop_parser -> false
 end

@@ -39,7 +39,11 @@ module type Consumer = sig
   val begin_tp: t -> MFOTL.timestamp -> unit
   val tuple: t -> Table.schema -> string list -> unit
   val end_tp: t -> unit
+  val parse_error: t -> Lexing.position -> string -> unit
 end
+
+(*TODO(JS): move to Misc*)
+val string_of_position: Lexing.position -> string
 
 module Make(C: Consumer): sig
   val parse: Db.schema -> Lexing.lexbuf -> C.t -> bool
