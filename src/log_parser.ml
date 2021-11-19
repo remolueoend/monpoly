@@ -126,7 +126,7 @@ let get_type = function
 let convert_types l = List.map
   (fun str ->
     match Misc.nsplit str ":" with
-    | [] -> failwith "[Simple_log_parser.convert_types] internal error"
+    | [] -> failwith "[Log_parser.convert_types] internal error"
     | [type_str] -> "", get_type type_str
     | var_name :: type_str :: _ -> var_name, get_type type_str
   ) l
@@ -232,7 +232,7 @@ module Make(C: Consumer) = struct
     let pb = init_parsebuf lexbuf in
     let debug msg =
       if Misc.debugging Misc.Dbg_log then
-        Printf.eprintf "[Simple_log_parser] state %s with token=%s\n" msg
+        Printf.eprintf "[Log_parser] state %s with token=%s\n" msg
           (string_of_token pb.pb_token)
       else ()
     in

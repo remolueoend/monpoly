@@ -1723,7 +1723,7 @@ module Monitor = struct
         add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
         Hashtbl.clear ctxt.s_db;
         if not (process_index ctxt) then
-          raise Simple_log_parser.Stop_parser
+          raise Log_parser.Stop_parser
       end
 
   let command ctxt name params =
@@ -1733,12 +1733,12 @@ module Monitor = struct
         print_newline ()
     | "terminate" ->
         Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
-        raise Simple_log_parser.Stop_parser
+        raise Log_parser.Stop_parser
     | "print_and_exit" ->
         print_extf "Current extended formula:\n" ctxt.s_extf;
         print_newline ();
         Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
-        raise Simple_log_parser.Stop_parser
+        raise Log_parser.Stop_parser
     | "get_pos" ->
         Printf.printf "Current timepoint: %d\n%!" ctxt.s_log_tp;
     | "save_state" ->
@@ -1754,7 +1754,7 @@ module Monitor = struct
         | Some (Argument filename) ->
             marshal filename ctxt;
             Printf.printf "%s\n%!" saved_state_msg;
-            raise Simple_log_parser.Stop_parser
+            raise Log_parser.Stop_parser
         | _ ->
             prerr_endline "Error: Bad arguments for save_and_exit command";
             exit 1)
@@ -1785,12 +1785,12 @@ module Monitor = struct
 
   let parse_error ctxt pos msg =
     prerr_endline "Error while parsing log:";
-    prerr_endline (Simple_log_parser.string_of_position pos ^ ": " ^ msg);
+    prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
     if not !Misc.ignore_parse_errors then exit 1
 
 end
 
-module Parser = Simple_log_parser.Make (Monitor)
+module Parser = Log_parser.Make (Monitor)
 
 let init_monitor_state dbschema fv f =
   (* compute permutation for output tuples *)

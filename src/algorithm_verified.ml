@@ -32,7 +32,7 @@ module Monitor = struct
     List.iter (fun (q, tsq, rel) ->
       Helper.show_results ctxt.fv_pos ctxt.cur_tp q tsq rel;
       if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then
-        raise Simple_log_parser.Stop_parser
+        raise Log_parser.Stop_parser
       ) vs;
     ctxt.cur_tp <- ctxt.cur_tp + 1
 
@@ -49,11 +49,11 @@ module Monitor = struct
 
   let parse_error ctxt pos msg =
     prerr_endline "Error while parsing log:";
-    prerr_endline (Simple_log_parser.string_of_position pos ^ ": " ^ msg);
+    prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
     if not !Misc.ignore_parse_errors then exit 1
 end
 
-module P = Simple_log_parser.Make (Monitor)
+module P = Log_parser.Make (Monitor)
 
 let monitor dbschema logfile fv f =
   (* compute permutation for output tuples *)
