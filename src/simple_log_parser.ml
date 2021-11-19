@@ -39,17 +39,15 @@ module type Consumer = sig
   val begin_tp: t -> MFOTL.timestamp -> unit
   val tuple: t -> Table.schema -> string list -> unit
   val end_tp: t -> unit
+  val command: t -> string -> Helper.commandParameter option -> unit
+  val end_log: t -> unit
   val parse_error: t -> Lexing.position -> string -> unit
 end
 
 let string_of_position p = Lexing.(
-  Printf.sprintf "%s:%d:%d" p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol))
+  Printf.sprintf "%s:%d:%d" p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol + 1))
 
-(*type token = AT | LPA | RPA | LCB | RCB | COM | SEP | CMD | EOC | EOF | ERR
-  | STR of string*)
-type token = Log_parser.token
-
-let string_of_token (t: token) =
+let string_of_token (t: Log_lexer.token) =
   match t with
   | AT -> "'@'"
   | LPA -> "'('"
@@ -66,7 +64,7 @@ let string_of_token (t: token) =
 
 type parsebuf = {
   pb_lexbuf: Lexing.lexbuf;
-  mutable pb_token: token;
+  mutable pb_token: Log_lexer.token;
   mutable pb_schema: Table.schema;
 }
 
@@ -77,6 +75,157 @@ let init_parsebuf lexbuf = {
 }
 
 let next pb = pb.pb_token <- Log_lexer.token pb.pb_lexbuf
+
+(* Utility parsers *)
+
+exception Local_error of string
+
+let expect pb t = if pb.pb_token = t then next pb
+  else raise (Local_error ("Expected " ^ string_of_token t ^ " but saw "
+    ^ string_of_token pb.pb_token))
+
+let parse_string pb =
+  match pb.pb_token with
+  | STR s -> next pb; s
+  | t -> raise (Local_error ("Expected a string but saw " ^ string_of_token t))
+
+let parse_int pb =
+  let s = parse_string pb in
+  try int_of_string s
+  with Failure _ -> raise (Local_error ("Expected an integer but saw \""
+    ^ String.escaped s ^ "\""))
+
+let parse_tuple pb =
+  let rec more l =
+    match pb.pb_token with
+    | COM ->
+        next pb;
+        let s = parse_string pb in
+        more (s::l)
+    | RPA -> next pb; List.rev l
+    | t -> raise (Local_error ("Expected ',' or ')' but saw "
+        ^ string_of_token t))
+  in
+  expect pb LPA;
+  match pb.pb_token with
+  | RPA -> next pb; []
+  | STR s -> next pb; more [s]
+  | t -> raise (Local_error ("Expected a string or ')' but saw "
+      ^ string_of_token t))
+
+
+(* Signature *)
+
+let get_type = function
+  | "int" -> Predicate.TInt
+  | "string" -> Predicate.TStr
+  | "float" -> Predicate.TFloat
+  | "regexp" -> Predicate.TRegexp
+  | t -> raise (Local_error ("Unknown type " ^ t))
+
+let convert_types l = List.map
+  (fun str ->
+    match Misc.nsplit str ":" with
+    | [] -> failwith "[Simple_log_parser.convert_types] internal error"
+    | [type_str] -> "", get_type type_str
+    | var_name :: type_str :: _ -> var_name, get_type type_str
+  ) l
+
+let rec parse_predicates pb dbschema =
+  match pb.pb_token with
+  | EOF -> dbschema
+  | STR s ->
+      next pb;
+      let l = parse_tuple pb in
+      let l = convert_types l in
+      parse_predicates pb (Db.add_predicate s l dbschema)
+  | t -> raise (Local_error ("Expected a string but saw " ^ string_of_token t))
+
+let parse_signature_pb pb =
+  try parse_predicates pb Db.base_schema
+  with Local_error msg -> failwith ("Error while parsing signature: " ^ msg)
+
+let parse_signature s =
+  let lexbuf = Lexing.from_string s in
+  parse_signature_pb (init_parsebuf lexbuf)
+
+(*TODO(JS): Should close ic after parsing.*)
+let parse_signature_file fname =
+  let ic = open_in fname in
+  let lexbuf = Lexing.from_channel ic in
+  Lexing.set_filename lexbuf fname;
+  parse_signature_pb (init_parsebuf lexbuf)
+
+(* Slicing specification *)
+
+let parse_int_tuple pb =
+  let t = parse_tuple pb in
+  try List.map int_of_string t
+  with Failure _ -> raise (Local_error "Expected a tuple of integers")
+
+let parse_heavy pb =
+  expect pb LPA;
+  let i = parse_int pb in
+  expect pb COM;
+  let t = parse_tuple pb in
+  expect pb RPA;
+  (i, t)
+
+let parse_heavies pb =
+  let rec more l =
+    match pb.pb_token with
+    | COM ->
+        next pb;
+        let h = parse_heavy pb in
+        more (h::l)
+    | _ -> List.rev l
+  in
+  expect pb LCB;
+  let h0 = parse_heavy pb in
+  let hl = more [h0] in
+  expect pb RCB;
+  Array.of_list hl
+
+let parse_slices pb =
+  let rec more l =
+    match pb.pb_token with
+    | COM ->
+        next pb;
+        let t = Array.of_list (parse_int_tuple pb) in
+        more (t::l)
+    | _ -> List.rev l
+  in
+  expect pb LCB;
+  let t0 = Array.of_list (parse_int_tuple pb) in
+  let tl = more [t0] in
+  expect pb RCB;
+  Array.of_list tl
+
+let parse_slicing_params pb =
+  expect pb LCB;
+  let heavies = parse_heavies pb in
+  expect pb COM;
+  let shares = parse_slices pb in
+  expect pb COM;
+  let seeds = parse_slices pb in
+  expect pb RCB;
+  (heavies, shares, seeds)
+
+let parse_command_params pb =
+  match pb.pb_token with
+  | LCB ->
+      let p = parse_slicing_params pb in
+      expect pb EOC;
+      Some (Helper.SplitSave p)
+  | STR s ->
+      next pb;
+      expect pb EOC;
+      Some (Helper.Argument s)
+  | EOC -> next pb; None
+  | t -> raise (Local_error ("Expected a string, '{' or '<' but saw "
+      ^ string_of_token t))
+
+(* Main log parser *)
 
 module Make(C: Consumer) = struct
   let parse db_schema lexbuf ctxt =
@@ -92,7 +241,8 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | EOF -> ()
       | AT -> next pb; parse_ts ()
-      | t -> fail ("Expected '@' but saw " ^ string_of_token t)
+      | CMD -> next pb; parse_command ()
+      | t -> fail ("Expected '@' or '>' but saw " ^ string_of_token t)
     and parse_ts () =
       debug "ts";
       match pb.pb_token with
@@ -125,8 +275,12 @@ module Make(C: Consumer) = struct
           next pb;
           C.end_tp ctxt;
           parse_init ()
+      | CMD ->
+          next pb;
+          C.end_tp ctxt;
+          parse_command ()
       | EOF -> C.end_tp ctxt
-      | t -> fail ("Expected a predicate, '@', or ';' but saw "
+      | t -> fail ("Expected a predicate, '@', ';', or '>' but saw "
           ^ string_of_token t)
     and parse_tuple () =
       debug "tuple";
@@ -156,16 +310,44 @@ module Make(C: Consumer) = struct
               parse_tuple_cont (s::l)
           | t -> fail ("Expected a tuple field but saw " ^ string_of_token t))
       | t -> fail ("Expected ',' or ')' but saw " ^ string_of_token t)
+    and parse_command () =
+      match pb.pb_token with
+      | STR name ->
+          next pb;
+          let err, params =
+            try None, parse_command_params pb
+            with Local_error msg -> Some msg, None
+          in
+          (match err with
+          | None -> C.command ctxt name params; parse_init ()
+          | Some msg -> fail msg)
+      | t -> fail ("Expected a command name but saw " ^ string_of_token t)
     and fail msg =
       C.parse_error ctxt pb.pb_lexbuf.Lexing.lex_start_p msg;
       recover ()
     and recover () =
       next pb;
       match pb.pb_token with
-      | AT -> parse_init ()
+      | AT -> next pb; parse_ts ()
       | SEP -> next pb; parse_init ()
+      | CMD -> next pb; parse_command ()
       | EOF -> ()
       | _ -> next pb; recover ()
     in
-    try parse_init (); true with Stop_parser -> false
+    try
+      parse_init ();
+      C.end_log ctxt;
+      true
+    with Stop_parser -> false
+
+  let parse_file dbschema fname ctxt =
+    let ic =
+      if fname = "" then
+        stdin
+      else
+        open_in fname
+    in
+    let lexbuf = Lexing.from_channel ic in
+    Lexing.set_filename lexbuf fname;
+    parse dbschema lexbuf ctxt
 end

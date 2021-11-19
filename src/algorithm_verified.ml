@@ -1,7 +1,5 @@
 let no_mw = ref false
 
-type exit_condition = OK | Violation | Error
-
 module Monitor = struct
   type t = {
     fv_pos: int list;
@@ -9,7 +7,6 @@ module Monitor = struct
     mutable cur_ts: MFOTL.timestamp;
     mutable cur_db: Verified_adapter.db;
     mutable cur_state: Verified_adapter.state;
-    mutable condition: exit_condition;
   }
 
   let begin_tp ctxt ts =
@@ -19,8 +16,7 @@ module Monitor = struct
       begin
         Printf.eprintf "Error: Out of order timestamp %s (previous: %s)\n"
           (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.cur_ts);
-        ctxt.condition <- Error;
-        raise Simple_log_parser.Stop_parser
+        exit 1
       end
 
   let tuple ctxt s sl =
@@ -36,20 +32,25 @@ module Monitor = struct
     List.iter (fun (q, tsq, rel) ->
       Helper.show_results ctxt.fv_pos ctxt.cur_tp q tsq rel;
       if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then
-        begin
-          ctxt.condition <- Violation;
-          raise Simple_log_parser.Stop_parser
-        end) vs;
+        raise Simple_log_parser.Stop_parser
+      ) vs;
     ctxt.cur_tp <- ctxt.cur_tp + 1
+
+  let command ctxt _name _params =
+    prerr_endline "Error: Commands are not supported by the verified kernel";
+    if not !Misc.ignore_parse_errors then exit 1
+
+  let end_log ctxt =
+    if !Misc.new_last_ts then
+      begin
+        begin_tp ctxt MFOTL.ts_max;
+        end_tp ctxt
+      end
 
   let parse_error ctxt pos msg =
     prerr_endline "Error while parsing log:";
     prerr_endline (Simple_log_parser.string_of_position pos ^ ": " ^ msg);
-    if not !Misc.ignore_parse_errors then
-      begin
-        ctxt.condition <- Error;
-        raise Simple_log_parser.Stop_parser
-      end
+    if not !Misc.ignore_parse_errors then exit 1
 end
 
 module P = Simple_log_parser.Make (Monitor)
@@ -67,8 +68,5 @@ let monitor dbschema logfile fv f =
     cur_ts = MFOTL.ts_invalid;
     cur_db = Verified_adapter.empty_db;
     cur_state = Verified_adapter.init cf;
-    condition = OK;
   } in
-  let lexbuf = Log.log_open logfile in
-  ignore (P.parse dbschema lexbuf ctxt);
-  ctxt.condition
+  ignore (P.parse_file dbschema logfile ctxt)

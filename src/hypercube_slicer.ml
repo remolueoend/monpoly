@@ -3,7 +3,6 @@ open Predicate
 open Helper
 open Tuple
 open Mformula
-open Log_parser
 open Domain_set
 
 exception Error of string

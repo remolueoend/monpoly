@@ -9,7 +9,6 @@ open Predicate
 open MFOTL
 open Tuple
 open Relation
-open Log
 open Sliding
 open Helper
 open Extformula

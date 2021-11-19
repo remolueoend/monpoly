@@ -70,7 +70,7 @@ let convert_agg_op = function
   | Avg -> Agg_Avg
   | Med -> Agg_Med
 
-(* These must be synchronized with Log.get_signature_lexbuf *)
+(* These must be synchronized with Db.base_schema *)
 let special_predicates = ["tp"; "ts"; "tpts"]
 
 let convert_special_predicate fvl bvl = function

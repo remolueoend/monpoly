@@ -36,7 +36,8 @@
  *)
 
 {
-open Log_parser
+type token = AT | LPA | RPA | LCB | RCB | COM | SEP | CMD | EOC | EOF | ERR
+  | STR of string
 
 let f str lexbuf =
   if Misc.debugging Misc.Dbg_log then
