@@ -110,8 +110,13 @@ let m_to_ext mf =
           let cond = fun (tpj,_,_) -> (tpj - tpq) < 0 in
           Helper.get_new_elements mezinf.mezauxrels Dllist.void cond f
         in
-        let meztree   = Sliding.build_rl_tree_from_seq Relation.union tree_list in
-        {ezlastev = mezinf.mezlastev; eztree = meztree; ezlast = ezlast; ezauxrels  = mezinf.mezauxrels}
+        let eztree =
+          if tree_list = [] then
+            LNode {l = -1; r = -1; res = Some (Relation.empty)}
+          else
+            Sliding.build_rl_tree_from_seq Relation.union tree_list
+        in
+        {ezlastev = mezinf.mezlastev; eztree; ezlast; ezauxrels  = mezinf.mezauxrels}
       else return_empty
     else begin
       return_empty
@@ -140,8 +145,13 @@ let m_to_ext mf =
           let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
           Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
         in
-        let einf = {elastev = meinf.melastev; etree = Sliding.build_rl_tree_from_seq Relation.union tree_list; elast = elast;eauxrels = meinf.meauxrels} in
-        einf
+        let etree =
+          if tree_list = [] then
+            LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)}
+          else
+            Sliding.build_rl_tree_from_seq Relation.union tree_list
+        in
+        {elastev = meinf.melastev; etree; elast; eauxrels = meinf.meauxrels}
       else return_empty
     else begin
       return_empty
@@ -165,24 +175,32 @@ let m_to_ext mf =
   in
   let mo2e intv moinf =
     let moauxrels = moinf.moauxrels in
-    let (tsq, rel) = Dllist.get_last moauxrels in
     (*Consider interval [a,b): Retrieves tree relevant list of auxrels elements, aswell as olast by setting the break condition to hold until
       the first element whose timestamp does not have distance "a" from the last auxrel element's timestamp.
       - ozlast thus is the last element in auxrels which has distance a from the last element from auxrels
       - tree [list] contains all auxrel elements up to and including olast.*)
     if not (Dllist.is_empty moauxrels) then
-      let tree_list, olast =
-        let cond = fun (tsj,_) -> (MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv) in
-        Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
-    in
-    let oinf = { otree = Sliding.build_rl_tree_from_seq Relation.union tree_list; olast = olast; oauxrels = moauxrels } in
-    oinf
-    else begin
-      (* If auxrels is empty, set tree to be invalid, forcing reevaluation in the algorithm *)
-      let otree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
-      let olast = Dllist.void in
-      { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
-    end
+      begin
+        let (tsq, rel) = Dllist.get_last moauxrels in
+        let tree_list, olast =
+          let cond = fun (tsj,_) -> (MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv) in
+          Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
+        in
+        { otree =
+            if tree_list = [] then
+              LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)}
+            else
+              Sliding.build_rl_tree_from_seq Relation.union tree_list;
+          olast = olast;
+          oauxrels = moauxrels }
+      end
+    else
+      begin
+        (* If auxrels is empty, set tree to be invalid, forcing reevaluation in the algorithm *)
+        let otree = LNode {l = MFOTL.ts_invalid; r = MFOTL.ts_invalid; res = Some (Relation.empty)} in
+        let olast = Dllist.void in
+        { otree = otree; olast = olast; oauxrels = moinf.moauxrels }
+      end
   in
   let moz2e intv mozinf =
     let mozauxrels = mozinf.mozauxrels in
@@ -196,8 +214,14 @@ let m_to_ext mf =
         let f = fun (j,_,rel) -> (j,rel) in
         let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
         Helper.get_new_elements mozauxrels Dllist.void cond f
-      in 
-      { oztree = Sliding.build_rl_tree_from_seq Relation.union tree_list; ozlast = ozlast; ozauxrels = mozinf.mozauxrels }
+      in
+      { oztree =
+          if tree_list = [] then
+            LNode {l = -1; r = -1; res = Some (Relation.empty)}
+          else
+            Sliding.build_rl_tree_from_seq Relation.union tree_list;
+        ozlast = ozlast;
+        ozauxrels = mozinf.mozauxrels }
     else begin
      (* If auxrels is empty, set tree to be invalid, forcing reevaluation in the algorithm *)
       let oztree = LNode {l = -1; r = -1; res = Some (Relation.empty)} in
