@@ -247,26 +247,30 @@ module Make(C: Consumer) = struct
       debug "ts";
       match pb.pb_token with
       | STR s ->
-          (try
-            let ts = float_of_string s in
-            C.begin_tp ctxt ts;
-            next pb;
-            parse_db ()
-          with Failure _ -> fail ("Cannot convert " ^ s ^ " into a timestamp"))
+          let ts =
+            try Some (float_of_string s)
+            with Failure _ -> None
+          in
+          (match ts with
+          | Some ts ->
+              C.begin_tp ctxt ts;
+              next pb;
+              parse_db ()
+          | None -> fail ("Cannot convert " ^ s ^ " into a timestamp"))
       | t -> fail ("Expected a time-stamp but saw " ^ string_of_token t)
     and parse_db () =
       debug "db";
       match pb.pb_token with
       | STR s ->
-          (try
-            let tl = List.assoc s db_schema in
-            pb.pb_schema <- (s, tl);
-            next pb;
-            (match pb.pb_token with
-            | LPA -> next pb; parse_tuple ()
-            | _ -> C.tuple ctxt pb.pb_schema []; parse_db ())
-          with Not_found -> fail ("Predicate " ^ s
-            ^ " was not defined in the signature."))
+          (match List.assoc_opt s db_schema with
+          | Some tl ->
+              pb.pb_schema <- (s, tl);
+              next pb;
+              (match pb.pb_token with
+              | LPA -> next pb; parse_tuple ()
+              | _ -> C.tuple ctxt pb.pb_schema []; parse_db ())
+          | None -> fail ("Predicate " ^ s
+              ^ " was not defined in the signature."))
       | AT ->
           next pb;
           C.end_tp ctxt;
@@ -311,6 +315,7 @@ module Make(C: Consumer) = struct
           | t -> fail ("Expected a tuple field but saw " ^ string_of_token t))
       | t -> fail ("Expected ',' or ')' but saw " ^ string_of_token t)
     and parse_command () =
+      debug "command";
       match pb.pb_token with
       | STR name ->
           next pb;
@@ -326,6 +331,7 @@ module Make(C: Consumer) = struct
       C.parse_error ctxt pb.pb_lexbuf.Lexing.lex_start_p msg;
       recover ()
     and recover () =
+      debug "recover";
       next pb;
       match pb.pb_token with
       | AT -> next pb; parse_ts ()
