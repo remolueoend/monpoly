@@ -1711,20 +1711,21 @@ module Monitor = struct
           Hashtbl.replace ctxt.s_db name (Relation.add tuple rel)
         with Not_found -> Hashtbl.add ctxt.s_db name (Relation.singleton tuple)
 
+  let eval_tp ctxt =
+    ctxt.s_in_tp <- ctxt.s_log_tp;
+    ignore (Neval.append (ctxt.s_log_tp, ctxt.s_log_ts) ctxt.s_neval);
+    add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
+    Hashtbl.clear ctxt.s_db;
+    if not (process_index ctxt) then
+      raise Log_parser.Stop_parser
+
   let end_tp ctxt =
     if ctxt.s_skip then
       ctxt.s_skip <- false
     else if !Filter_empty_tp.enabled && Hashtbl.length ctxt.s_db = 0 then
       Hashtbl.clear ctxt.s_db
     else
-      begin
-        ctxt.s_in_tp <- ctxt.s_log_tp;
-        ignore (Neval.append (ctxt.s_log_tp, ctxt.s_log_ts) ctxt.s_neval);
-        add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
-        Hashtbl.clear ctxt.s_db;
-        if not (process_index ctxt) then
-          raise Log_parser.Stop_parser
-      end
+      eval_tp ctxt
 
   let command ctxt name params =
     match name with
@@ -1778,7 +1779,7 @@ module Monitor = struct
     if !Misc.new_last_ts then
       begin
         begin_tp ctxt MFOTL.ts_max;
-        end_tp ctxt
+        eval_tp ctxt (* skip empty tp filter *)
       end;
     if Misc.debugging Dbg_perf then
       Perf.check_log_end ctxt.s_log_tp ctxt.s_log_ts
