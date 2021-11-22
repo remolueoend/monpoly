@@ -1685,6 +1685,7 @@ module Monitor = struct
           Printf.eprintf "Warning: Skipping out of order timestamp %s\
             \ (previous: %s)\n"
             (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
+          ctxt.s_log_tp <- ctxt.s_log_tp - 1;
           ctxt.s_skip <- true
         end;
     if Misc.debugging Dbg_perf then
