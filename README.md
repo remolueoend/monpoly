@@ -98,7 +98,7 @@ Usage:
 monpoly -sig <file> -formula <file> [-negate] [-log <file>]
         [-help] [-version] [-debug <unit>] [-verbose]
         [-check] [-sigout] [-unix] [-mem] [-nonewlastts]
-        [-nofilterrel] [-nofilteremptytp] [-testfilter]
+        [-nofilterrel] [-nofilteremptytp]
 ```
 
 The options are:
@@ -117,7 +117,6 @@ The options are:
     -nonewlastts      Do not add a last maximal timestamp
     -nofilterrel      Disable filter_rel module
     -nofilteremptytp  Disable filter_empty_tp module
-    -testfilter       Test filter on the log without evaluating the formula
 ```
 
 

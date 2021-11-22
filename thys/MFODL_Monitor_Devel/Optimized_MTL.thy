@@ -129,7 +129,7 @@ fun tl_queue_t :: "'a queue_t \<Rightarrow> 'a queue_t" where
 lift_definition tl_queue :: "'a queue \<Rightarrow> 'a queue" is tl_queue_t
   by (auto simp: queue_invariant_def split: list.splits elim!: tl_queue_t.elims)
 
-lemma tl_queue_rep: "\<not>is_empty q \<Longrightarrow> linearize (tl_queue q) = tl (linearize q)"
+lemma tl_queue_rep: "linearize (tl_queue q) = tl (linearize q)"
   by transfer (auto simp: tl_append split: prod.splits list.splits elim!: tl_queue_t.elims)
 
 lemma length_tl_queue_rep: "\<not>is_empty q \<Longrightarrow>
@@ -254,6 +254,27 @@ proof -
   then show "\<exists>ts aa ba. queue_invariant (aa, ba) \<and> safe_hd_t (xs, ys) = (Some ts, aa, ba) " 
     by(cases xs; cases ys') (auto simp:queue_invariant_def Let_def list.case_eq_if) 
 qed
+
+fun pop_t :: "'a queue_t \<Rightarrow> 'a option \<times> 'a queue_t" where
+  "pop_t ([], []) = (None, ([], []))"
+| "pop_t ([], [y]) = (Some y, ([], []))"
+| "pop_t ([], y # ys) = (case rev ys of z # ys' \<Rightarrow> (Some z, (ys', [y])))"
+| "pop_t (x # xs, ys) = (Some x, (xs, ys))"
+
+lift_definition (code_dt) pop :: "'a queue \<Rightarrow> 'a option \<times> 'a queue" is pop_t
+proof -
+  fix q :: "'a queue_t"
+  assume "queue_invariant q"
+  then show "pred_prod top queue_invariant (pop_t q)"
+    by (induction q rule: pop_t.induct)
+      (simp_all add: queue_invariant_def split: list.split)
+qed
+
+lemma pop_rep: "pop q = (x, q') \<Longrightarrow> (case x of
+    None \<Rightarrow> linearize q = [] \<and> q' = q
+  | Some y \<Rightarrow> linearize q = y # linearize q')"
+  by transfer (auto split: list.splits elim!: pop_t.elims)
+
 
 subsection \<open>Optimized data structure for Since\<close>
 
@@ -751,8 +772,6 @@ lemma valid_shift_end_mmsaux: "valid_mmsaux args cur aux auxlist \<Longrightarro
   valid_mmsaux args cur (shift_end args nt aux)
   (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
   using valid_shift_end_mmsaux_unfolded by (cases aux) fast
-
-setup_lifting type_definition_mapping
 
 lift_definition upd_set :: "('a, 'b) mapping \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'a set \<Rightarrow> ('a, 'b) mapping" is
   "\<lambda>m f X a. if a \<in> X then Some (f a) else m a" .
@@ -2126,7 +2145,7 @@ proof -
     by (metis Suc_le_mono a2_map_keys atLeastAtMost_iff le_SucI)
   have lin_tss_Cons: "linearize tss = ts # linearize (tl_queue tss')"
     using lin_tss_not_Nil
-    by (auto simp add: tl_queue_rep[OF tss'_not_empty] lin_tss' ts_hd)
+    by (auto simp add: tl_queue_rep lin_tss' ts_hd)
   have tp_len_tp_unfold: "[tp - len..<tp] = (tp - len) # [tp - (len - 1)..<tp]"
     unfolding tp_len_assoc[symmetric]
     using len_pos len_tp Suc_diff_le upt_conv_Cons by auto
@@ -2569,9 +2588,8 @@ proof -
       then have "ts''' = ts'" using safe_hd_eq unfolding ts'_def by auto
       then have safe_hd_final: "safe_hd (tl_queue tss') = (Some ts', tss'')" using safe_hd_eq ts3_def by auto
       have rep_defs: "ts' = hd (linearize (tl_queue tss'))" "linearize (tl_queue tss') = linearize tss''" "linearize (tl_queue tss') \<noteq> []" using safe_hd_rep[OF safe_hd_final] by auto
-      have tl_not_empty: "\<not> is_empty (tl_queue tss')" using is_empty_alt rep_defs(3) by auto
       have lin_tss'_Cons: "linearize (tl_queue tss') = ts' # linearize (tl_queue (tl_queue tss'))"
-        using tl_queue_rep[OF tl_not_empty] rep_defs(1) by (simp add: tss'_not_empty)
+        using tl_queue_rep[of "tl_queue tss'"] rep_defs(1) by (simp add: tss'_not_empty)
       have  "(ts', tp - len + 1) \<in> set (zip (linearize (tl_queue tss')) [tp - (len - 1)..<tp])" 
         unfolding eq2 lin_tss'_Cons tp_len_assoc by auto
       then show "(ts', tp - len + 1) \<in> set (zip (linearize tss) [tp - len..<tp])" unfolding lin_tss_Cons tp_len_tp_unfold by auto
@@ -2734,7 +2752,7 @@ proof -
     using valid_before a2_map''_keys sorted_tl list_all' lookup'' list_all2'' list_all'' lin_ts still_empty sorted_tables' isl_tables' valid_tables' valid_table_restr
     unfolding eval_step_mmuaux_eq valid_mmuaux'.simps tl_aux_def aux_def I_def n_def R_def pos_def
     using lin_tss_not_Nil safe_hd_eq len_pos Suc_diff_le result'_def result'
-    by (auto simp add: list.set_sel(2) lin_tss' lin_tss''' tl_queue_rep[OF tss'_not_empty] min_auxlist_done)
+    by (auto simp add: list.set_sel(2) lin_tss' lin_tss''' tl_queue_rep[of tss'] min_auxlist_done)
 qed
 
 lemma done_empty_valid_mmuaux'_intro:

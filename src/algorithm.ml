@@ -79,7 +79,6 @@ open Tuple
 open Relation
 open Table
 open Db
-open Log
 open Sliding
 open Helper
 
@@ -93,7 +92,6 @@ module Sk = Dllist
 module Sj = Dllist
 
 let resumefile = ref ""
-let dumpfile = ref ""
 let combine_files = ref ""
 let lastts = ref MFOTL.ts_invalid
 let slicer_heavy_unproc : (int * string list) array ref= ref [|(0, [])|]
@@ -1201,15 +1199,14 @@ let rec eval f crt discard =
 let add_index f i tsi db =
   let rec update lets = function
     | EPred (p, comp, inf) ->
-      if List.mem (Predicate.get_name p) lets
+      let name = Predicate.get_name p in
+      if List.mem name lets
       then ()
       else
         let rel =
-          (try
-             let t = Db.get_table db p in
-             Table.get_relation t
+          (try Hashtbl.find db name
            with Not_found ->
-           match Predicate.get_name p with
+           match name with
            | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
            | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
            | "tpts" ->
@@ -1249,26 +1246,6 @@ let add_index f i tsi db =
       update lets f2
   in
   update [] f
-
-let process_index ff posl last i =
-  if !Misc.verbose then
-    Printf.printf "At time point %d:\n%!" i;
-
-  let rec eval_loop () =
-    let crt = Neval.get_next !last in
-    let (q, tsq) = Neval.get_data crt in
-    if tsq < MFOTL.ts_max then
-      match eval ff crt false with
-      | Some rel ->
-        show_results posl i q tsq rel;
-        last := crt;
-        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
-        else if Neval.is_last crt then true
-        else eval_loop ()
-      | None -> true
-    else false
-  in
-  eval_loop ()
 
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
@@ -1517,14 +1494,38 @@ let add_ext neval f =
 
   | _ -> failwith "[add_ext] internal error"
   in
-  add_ext f, ref neval0
+  add_ext f, neval0
+
+
+type 'a state = {
+  s_posl: int list; (** variable position list for output tuples *)
+  s_extf: 'a; (** extended formula *)
+  s_neval: Neval.queue; (** NEval queue *)
+  mutable s_log_tp: int; (** most recent time-point in log *)
+  mutable s_log_ts: MFOTL.timestamp; (** most recent time-stamp in log *)
+  mutable s_skip: bool; (** whether the current time-point should be skipped *)
+  mutable s_db: (string, relation) Hashtbl.t; (** db being parsed *)
+  mutable s_in_tp: int; (** most recent time-point after filtering *)
+  mutable s_last: Neval.cell; (** most recently evaluated time-point *)
+}
+
+let map_state f s = {
+  s_posl = s.s_posl;
+  s_extf = f s.s_extf;
+  s_neval = s.s_neval;
+  s_log_tp = s.s_log_tp;
+  s_log_ts = s.s_log_ts;
+  s_skip = s.s_skip;
+  s_db = s.s_db;
+  s_in_tp = s.s_in_tp;
+  s_last = s.s_last;
+}
 
 (*
   STATE MANAGEMENT CALLS
   - (Un-)Marshalling, Splitting, Merging
  *)
 
-let split_state_msg = "Split state"
 let saved_state_msg = "Saved state"
 let slicing_parameters_updated_msg = "Slicing parameters updated"
 let restored_state_msg = "Loaded state"
@@ -1542,67 +1543,57 @@ let dump_to_file dumpfile value =
 
 (*
   Helper function used in "unmarshal" and "merge_formulas" functions.
-  Reads state from specified dumpfile and converts neval array to dllist
+  Reads state from specified dumpfile.
 *)
 let read_m_from_file file =
   let ch = open_in_bin file in
-  let value = (Marshal.from_channel ch : state) in
+  let value = (Marshal.from_channel ch : mformula state) in
   close_in ch;
   value
 
+let empty_db: (string, relation) Hashtbl.t = Hashtbl.create 1
+
+let prepare_state_for_marshalling state =
+  state.s_skip <- false;
+  Hashtbl.reset state.s_db;
+  let rec eval_loop () =
+    let crt = Neval.get_next state.s_last in
+    match eval state.s_extf crt false with
+    | Some rel ->
+      let (q, tsq) = Neval.get_data crt in
+      show_results state.s_posl state.s_in_tp q tsq rel;
+      state.s_last <- crt;
+      if Neval.is_last crt then () else eval_loop ()
+    | None -> ()
+  in
+  if (state.s_in_tp < state.s_log_tp) then
+    begin
+      state.s_in_tp <- state.s_log_tp;
+      ignore (Neval.append (state.s_log_tp, state.s_log_ts) state.s_neval);
+      add_index state.s_extf state.s_log_tp state.s_log_ts empty_db;
+      eval_loop ()
+    end
 
 (* Converts extformula to mformula form used for storage. Saves formula + state in specified dumpfile. *)
-let marshal dumpfile ff posl neval lastev =
-  let mf = Marshalling.ext_to_m ff in
-  let value : state = (!Log.last_ts,posl,mf,neval,!lastev,!Log.tp,!Log.last) in
-  (*Printf.printf "Log TP to restore: %d \n" !Log.tp;*)
-  dump_to_file dumpfile value
+let marshal dumpfile state =
+  prepare_state_for_marshalling state;
+  dump_to_file dumpfile (map_state Marshalling.ext_to_m state)
 
 (*
   Reads mformula + state from specified dumpfile and restores it to extformula form with full state
   information using m_to_ext function.
 *)
 let unmarshal resumefile =
-  let (last_ts,posl,mf,neval,lastev,tp,last) = read_m_from_file resumefile in
-  let ff = Marshalling.m_to_ext mf in
-  (last_ts,posl,ff,neval,ref lastev,tp,last)
+  map_state Marshalling.m_to_ext (read_m_from_file resumefile)
 
-
-let create_empty_db =
-  Db.make_db []
-
-let add_empty_db ff neval =
-  crt_tp := !Log.tp -1;
-  lastts := !Log.last_ts;
-  ignore (Neval.append (!crt_tp, !lastts) neval);
-  add_index ff !crt_tp !lastts create_empty_db
-
-let catch_up_on_filtered_tp posl i ff neval last =
-  let rec eval_loop () =
-    let crt = Neval.get_next !last in
-    match eval ff crt false with
-    | Some rel ->
-      let (q, tsq) = Neval.get_data crt in
-      show_results posl i q tsq rel;
-      last := crt;
-      if Neval.is_last crt then () else eval_loop ()
-    | None -> ()
-  in
-  (*print_extf "Before catching up \n" ff;*)
-  if (!crt_tp < (!Log.tp-1) && (!Log.tp) > 0) then begin
-    add_empty_db ff neval;
-    eval_loop ()
-  end
-  (*print_extf "After catching up \n" ff*)
-
-let split_save filename ff posl i neval last =
+let split_save filename state =
   let heavy_unproc = !slicer_heavy_unproc in
   let shares = !slicer_shares in
   let seeds = !slicer_seeds in
 
-  catch_up_on_filtered_tp posl i ff neval last;
+  prepare_state_for_marshalling state;
 
-  let mf = Marshalling.ext_to_m ff in
+  let mf = Marshalling.ext_to_m state.s_extf in
   let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
   let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
   let result = Splitting.split_with_slicer (Hypercube_slicer.add_slices_of_valuation slicer) slicer.degree mf in
@@ -1612,25 +1603,11 @@ let split_save filename ff posl i neval last =
   in
 
   Array.iteri (fun index mf ->
-    let value : state = (!Log.last_ts,posl,mf,neval,!last,!Log.tp,!Log.last) in
-    dump_to_file (format_filename index) value
+    let mstate = map_state (fun _ -> mf) state in
+    dump_to_file (format_filename index) mstate
   ) result;
   Printf.printf "%s\n%!" saved_state_msg
   (*Printf.printf "%s to file with substr: %s \n%!" saved_state_msg filename*)
-
-(*
-   Split formula according to split constraints (sconsts). Resulting splits will be stored to files
-   with names of index prepended with dumpfile variable.
-*)
-let split_and_save  sconsts dumpfile posl i ff neval last =
-  catch_up_on_filtered_tp posl i ff neval last;
-  let mf = Marshalling.ext_to_m ff in
-  let result = Splitting.split_formula sconsts mf in
-
-  Array.iteri (fun index mf ->
-  let value : state = (!Log.last_ts,posl,mf,neval,!last,!Log.tp,!Log.last) in
-  dump_to_file (dumpfile ^ (string_of_int index)) value) result;
-  Printf.printf "%s\n%!" saved_state_msg
 
 (* Convert comma separated filenames to list of strings *)
 let files_to_list f =
@@ -1643,308 +1620,215 @@ let files_to_list f =
   being the accumulator which is initialized as the first element of the list. The rest of the list
   is then folded over.
  *)
-let merge_formulas files =
+let merge_states files =
   if List.length files == 1 then unmarshal (List.hd files)
   else
-    let (last_ts, posl, mf, neval, lastev, tp, last) =
-      List.fold_right (fun s (last_ts1,posl,mf1,neval,lastev,tp1,last) ->
-        let (last_ts,_,mf2,_,_,tp,_) = read_m_from_file s in
-
-        if (MFOTL.ts_minus last_ts1 last_ts) = 0. then failwith "[merge_formulas] last_ts mismatch";
-        if tp1 <> tp then failwith "[merge_formulas] tp mismatch";
-
-        let comb_mf = Splitting.comb_m lastev mf1 mf2 in
-        (last_ts,posl, comb_mf, neval, lastev, tp,last)
+    let mstate =
+      List.fold_right (fun filename mstate ->
+        let mstate' = read_m_from_file filename in
+        assert (mstate.s_log_tp = mstate'.s_log_tp);
+        assert (mstate.s_log_ts = mstate'.s_log_ts);
+        assert (mstate.s_in_tp = mstate'.s_in_tp);
+        assert (fst (Neval.get_data mstate.s_last) =
+          fst (Neval.get_data mstate'.s_last));
+        map_state (fun mf ->
+          Splitting.comb_m mstate.s_last mf mstate'.s_extf) mstate
       ) (List.tl files) (read_m_from_file (List.hd files))
     in
-    let ff = Marshalling.m_to_ext mf in
-    (last_ts, posl, ff, neval, ref lastev, tp, last)
+    map_state Marshalling.m_to_ext mstate
+
 
 (* MONITORING FUNCTION *)
 
-(* Checks if the parameter for the exit command is set *)
-let checkExitParam p = match p with
-  | Argument str ->
-    dumpfile := str;
-    true
-  | _ -> false
+let process_index state =
+  if !Misc.verbose then
+    Printf.printf "At time point %d:\n%!" state.s_in_tp;
 
-(* Checks if the parameters for the split command are set *)
-let checkSplitParam p = match p with
-  | SplitParameters sp ->
-    dumpfile := "partition-";
-    true
-  | _ -> false
-
-(* The arguments are:
-   lexbuf - the lexer buffer (holds current state of the scanner)
-   ff - the extended MFOTL formula
-   posl - permutation of free variable positions, for output
-   neval - the queue of no-yet evaluted indexes/entries
-   i - the index of current entry in the log file
-   ([i] may be different from the current time point when
-   filter_empty_tp is enabled)
-*)
-
-let set_slicer_parameters c p =
-  match p with
-  | SplitSave sp ->
-    let heavy, shares, seeds = sp in
-    slicer_heavy_unproc := heavy;
-    slicer_shares := shares;
-    slicer_seeds := seeds;
-    Printf.printf "%s\n%!" slicing_parameters_updated_msg
-  | _ ->  Printf.printf "%s: Wrong parameters specified, continuing at timepoint %d\n%!" c !tp
-
-let rec check_log lexbuf ff posl neval i last =
-  let finish () =
-    if Misc.debugging Dbg_perf then
-      Perf.check_log_end i !lastts
+  let rec eval_loop () =
+    let crt = Neval.get_next state.s_last in
+    let (q, tsq) = Neval.get_data crt in
+    if tsq < MFOTL.ts_max then
+      match eval state.s_extf crt false with
+      | Some rel ->
+        show_results state.s_posl state.s_in_tp q tsq rel;
+        state.s_last <- crt;
+        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
+        else if Neval.is_last crt then true
+        else eval_loop ()
+      | None -> true
+    else false
   in
-  let rec loop ffl i =
+  eval_loop ()
+
+let set_slicer_parameters (heavy, shares, seeds) =
+  slicer_heavy_unproc := heavy;
+  slicer_shares := shares;
+  slicer_seeds := seeds;
+  Printf.printf "%s\n%!" slicing_parameters_updated_msg
+
+module Monitor = struct
+  type t = extformula state
+
+  let begin_tp ctxt ts =
+    ctxt.s_log_tp <- ctxt.s_log_tp + 1;
+    if ts >= ctxt.s_log_ts then
+      ctxt.s_log_ts <- ts
+    else
+      if !Misc.stop_at_out_of_order_ts then
+        begin
+          Printf.eprintf "Error: Out of order timestamp %s (previous: %s)\n"
+            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
+          exit 1
+        end
+      else
+        begin
+          Printf.eprintf "Warning: Skipping out of order timestamp %s\
+            \ (previous: %s)\n"
+            (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
+          ctxt.s_skip <- true
+        end;
     if Misc.debugging Dbg_perf then
-      Perf.check_log i !lastts;
+      Perf.check_log ctxt.s_log_tp ctxt.s_log_ts
 
-    let get_constraints_split_state p = match p with
-      (* Other case already handled by check split param *)
-      | SplitParameters sp -> sp
-      | _ -> raise (Type_error ("Unsupported parameter to get_constraints"))
-    in
-    match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c; parameters} ->
-        let process_command = function
-            | "print" ->
-               print_extf "Current extended formula:\n" ff;
-               print_newline ();
-               loop ffl i
-            | "terminate" ->
-               Printf.printf "Terminated at timepoint: %d \n%!" !tp
-            | "print_and_exit" ->
-               print_extf "Current extended formula:\n" ff;
-               print_newline ();
-               Printf.printf "Terminated at timepoint: %d \n%!" !tp
-            | "get_pos"   ->
-               Printf.printf "Current timepoint: %d \n%!" !tp;
-               loop ffl i
-            | "save_state" ->
-              (match parameters with
-              | Some (Argument filename) ->
-                catch_up_on_filtered_tp posl !crt_tp ff neval last;
-                marshal filename ff posl neval last;
-                Printf.printf "%s\n%!" saved_state_msg;
-                loop ffl i
-              | None ->
-                Printf.printf "%s: No filename specified\n%!" c;
-                loop ffl i
-              | _ ->
-                print_endline "Unsupported parameters to save_state";
-                loop ffl i
-              )
-            | "set_slicer" ->
-              (match parameters with
-              | Some p -> set_slicer_parameters c p
-              | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp
-              );
-              loop ffl i
-            | "split_save" ->
-              (match parameters with
-              | Some p ->
-                if checkExitParam p then begin
-                  split_save !dumpfile ff posl !crt_tp neval last;
-                  loop ffl i
-                end else begin
-                  Printf.printf "%s: Invalid parameters supplied, continuing with index %d\n%!" c i;
-                  loop ffl i
-                end
-              | None ->
-                Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
-                loop ffl i
-              )
-            | "save_and_exit" ->
-              (match parameters with
-              | Some p ->
-                if checkExitParam p then begin
-                  catch_up_on_filtered_tp posl !crt_tp ff neval last;
-                  marshal !dumpfile ff posl neval last;
-                  Printf.printf "%s\n%!" saved_state_msg
-                end
-                else Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
-              | None -> Printf.printf "%s: No filename specified at timepoint %d\n%!" c !tp
-              )
-            | "split_state" ->
-              (match parameters with
-              | Some p ->
-                if checkSplitParam p then
-                  split_and_save (get_constraints_split_state p)
-                    !dumpfile posl !crt_tp ff neval last
-                else
-                  Printf.printf "%s: Invalid parameters supplied at index %d\n%!" c i
-              | None -> Printf.printf "%s: No parameters specified at timepoint %d\n%!" c !tp
-              )
-            | _ ->
-                Printf.printf "UNRECOGNIZED COMMAND: %s\n%!" c;
-                loop ffl i
-        in
-        process_command c;
-    | MonpolyData {tp; ts; db} ->
-        crt_tp := tp;
-        crt_ts := ts;
-        add_index ff tp ts db;
-        ignore (Neval.append (tp, ts) neval);
-        let cont = process_index ff posl last tp in
-        lastts := ts;
-        if cont then
-          loop ffl (i + 1)
-        else
-          finish ()
-        
-    | MonpolyTestTuple st -> finish ()
-    | MonpolyError s -> finish ()
-  in
-  loop ff i
+  let tuple ctxt (name, tl) sl =
+    if not ctxt.s_skip && (not !Filter_rel.enabled || Filter_rel.rel_OK name)
+    then
+      let tuple =
+        try Tuple.make_tuple2 sl tl with
+        | Invalid_argument _ ->
+          Printf.eprintf "Error: Wrong tuple length for predicate %s\
+            \ (expected: %d, actual: %d)\n"
+            name (List.length tl) (List.length sl);
+          exit 1
+        | Type_error msg ->
+          Printf.eprintf "Error: Wrong type for predicate %s: %s\n"
+            name msg;
+          exit 1
+      in
+      if not !Filter_rel.enabled || Filter_rel.tuple_OK name tuple then
+        try
+          let rel = Hashtbl.find ctxt.s_db name in
+          Hashtbl.replace ctxt.s_db name (Relation.add tuple rel)
+        with Not_found -> Hashtbl.add ctxt.s_db name (Relation.singleton tuple)
 
+  let eval_tp ctxt =
+    ctxt.s_in_tp <- ctxt.s_log_tp;
+    ignore (Neval.append (ctxt.s_log_tp, ctxt.s_log_ts) ctxt.s_neval);
+    add_index ctxt.s_extf ctxt.s_log_tp ctxt.s_log_ts ctxt.s_db;
+    Hashtbl.clear ctxt.s_db;
+    if not (process_index ctxt) then
+      raise Log_parser.Stop_parser
 
-let monitor_lexbuf lexbuf fv f =
+  let end_tp ctxt =
+    if ctxt.s_skip then
+      ctxt.s_skip <- false
+    else if !Filter_empty_tp.enabled && Hashtbl.length ctxt.s_db = 0 then
+      Hashtbl.clear ctxt.s_db
+    else
+      eval_tp ctxt
+
+  let command ctxt name params =
+    match name with
+    | "print" ->
+        print_extf "Current extended formula:\n" ctxt.s_extf;
+        print_newline ()
+    | "terminate" ->
+        Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
+        raise Log_parser.Stop_parser
+    | "print_and_exit" ->
+        print_extf "Current extended formula:\n" ctxt.s_extf;
+        print_newline ();
+        Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
+        raise Log_parser.Stop_parser
+    | "get_pos" ->
+        Printf.printf "Current timepoint: %d\n%!" ctxt.s_log_tp;
+    | "save_state" ->
+        (match params with
+        | Some (Argument filename) ->
+            marshal filename ctxt;
+            Printf.printf "%s\n%!" saved_state_msg
+        | _ ->
+            prerr_endline "Error: Bad arguments for save_state command";
+            if not !Misc.ignore_parse_errors then exit 1)
+    | "save_and_exit" ->
+        (match params with
+        | Some (Argument filename) ->
+            marshal filename ctxt;
+            Printf.printf "%s\n%!" saved_state_msg;
+            raise Log_parser.Stop_parser
+        | _ ->
+            prerr_endline "Error: Bad arguments for save_and_exit command";
+            exit 1)
+    | "set_slicer" ->
+        (match params with
+        | Some (SplitSave sp) -> set_slicer_parameters sp
+        | _ ->
+            prerr_endline "Error: Bad arguments for set_slicer command";
+            if not !Misc.ignore_parse_errors then exit 1)
+    | "split_save" ->
+        (match params with
+        | Some (Argument filename) -> split_save filename ctxt
+        | _ ->
+            prerr_endline "Error: Bad arguments for split_save command";
+            if not !Misc.ignore_parse_errors then exit 1)
+    | _ ->
+        Printf.eprintf "Error: Unrecognized command: %s\n" name;
+        if not !Misc.ignore_parse_errors then exit 1
+
+  let end_log ctxt =
+    if !Misc.new_last_ts then
+      begin
+        begin_tp ctxt MFOTL.ts_max;
+        eval_tp ctxt (* skip empty tp filter *)
+      end;
+    if Misc.debugging Dbg_perf then
+      Perf.check_log_end ctxt.s_log_tp ctxt.s_log_ts
+
+  let parse_error ctxt pos msg =
+    prerr_endline "Error while parsing log:";
+    prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
+    if not !Misc.ignore_parse_errors then exit 1
+
+end
+
+module Parser = Log_parser.Make (Monitor)
+
+let init_monitor_state dbschema fv f =
   (* compute permutation for output tuples *)
   let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
   assert (List.length fv_pos = List.length fv);
   let neval = Neval.create () in
   let extf, last = add_ext neval f in
-  check_log lexbuf extf fv_pos neval 0 last
+  { s_posl = fv_pos;
+    s_extf = extf;
+    s_neval = neval;
+    s_log_tp = -1;
+    s_log_ts = MFOTL.ts_invalid;
+    s_skip = false;
+    s_db = Hashtbl.create (List.length dbschema);
+    s_in_tp = -1;
+    s_last = last; }
 
-let monitor_string log fv f =
-  (let lexbuf = Lexing.from_string log in
-   lastts := MFOTL.ts_invalid;
-   crt_tp := -1;
-   crt_ts := MFOTL.ts_invalid;
-   Log.tp := 0;
-   Log.skipped_tps := 0;
-   Log.last := false;
-   monitor_lexbuf lexbuf fv f;
-   Lexing.flush_input lexbuf;)
+let monitor_string dbschema log fv f =
+  let lexbuf = Lexing.from_string log in
+  let ctxt = init_monitor_state dbschema fv f in
+  ignore (Parser.parse dbschema lexbuf ctxt)
 
-let monitor logfile =
-  let lexbuf = Log.log_open logfile in
-  monitor_lexbuf lexbuf
+let monitor dbschema logfile fv f =
+  let ctxt = init_monitor_state dbschema fv f in
+  ignore (Parser.parse_file dbschema logfile ctxt)
 
-
-let test_filter logfile f =
-  let lexbuf = Log.log_open logfile in
-  let rec loop f i =
-    match Log.get_next_entry lexbuf with
-    | MonpolyData {tp;ts;db;} ->
-      loop f tp
-    | MonpolyError s ->
-      Printf.printf "%s, processed %d time points\n" s (i - 1)
-    | MonpolyCommand {c; _} ->
-          let process_command c = match c with
-              | "terminate" ->
-                Printf.printf "Command: %s, processed %d time points\n" c (i - 1)
-              | "get_pos"   ->
-                Printf.printf "%s %d \n" get_index_prefix_msg !tp;
-                loop f i
-              | _ ->
-                Printf.printf "UNREGONIZED COMMAND: %s\n" c;
-                loop f i
-          in
-          process_command c;
-      | _ ->
-        Printf.printf "%s, processed %d time points\n" "Unrecognized type" (i - 1)
-  in
-  loop f 0
-
-(* Unmarshals formula & state from resume file and then starts processing logfile.
-   Note: The whole logfile is read from the start, with old timestamps being skipped  *)
-let resume logfile =
-  let (last_ts,posl,ff,neval,lastev,tp,last) = unmarshal !resumefile in
-
-  (*print_neval "Neval \n" neval;
-  print_extf "State \n" ff;*)
-  lastts := last_ts;
-  Log.tp := tp;
-  Log.skipped_tps := 0;
-  Log.last := last;
-  let lexbuf = Log.log_open logfile in
+(* Unmarshals formula & state from resume file and then starts processing
+   logfile. *)
+let resume dbschema logfile =
+  let ctxt = unmarshal !resumefile in
   Printf.printf "%s\n%!" restored_state_msg;
-  check_log lexbuf ff posl neval 0 lastev
+  ignore (Parser.parse_file dbschema logfile ctxt)
 
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
-let combine logfile =
+let combine dbschema logfile =
   let files = files_to_list !combine_files in
-  let (last_ts,posl,ff,neval,lastev,tp,last) = merge_formulas files in
-
-  (*print_neval "Combined neval \n" neval;
-  print_extf "Combined formula \n" ff;*)
-
-  lastts := last_ts;
-  Log.tp := tp;
-  Log.skipped_tps := 0;
-  Log.last := last;
-
-  let lexbuf = Log.log_open logfile in
+  let ctxt = merge_states files in
   Printf.printf "%s\n%!" combined_state_msg;
-  check_log lexbuf ff posl neval 0 lastev
-
-
-(* Testing slicer *)
-let test_tuple_split slicer size tuple dest =
-  let parts = slicer tuple in
-  Array.iter2 (fun i1 i2 ->
-   Printf.printf "%d, %d\n" i1 i2;
-     if i1 <> i2 then failwith "Mismatch between slicing result and groundtruth"
-   ) parts dest
-
-let test_slicer ff evaluation  =
-  let heavy_unproc = !slicer_heavy_unproc in
-  let shares = !slicer_shares in
-  let seeds = !slicer_seeds in
-
-  let mf = Marshalling.ext_to_m ff in
-  let heavy = Hypercube_slicer.convert_heavy mf heavy_unproc in
-  let slicer = Hypercube_slicer.create_slicer mf heavy shares seeds in
-
-  let rec test_entries i =
-    if Dllist.is_empty evaluation <> true then
-      let elem = Dllist.pop_first evaluation in
-      let tuple = convert_slicing_tuple slicer elem.vars elem.tuple in
-      let () = test_tuple_split (Hypercube_slicer.return_shares slicer) slicer.degree tuple elem.output in
-      test_entries i
-    else
-      print_endline "All entries tested"
-  in
-    test_entries 0
-
-let rec test_log lexbuf ff evaluation =
-  let rec loop ffl =
-    let set_slicer c params = match params with
-      | Some p -> set_slicer_parameters c p
-      | None -> Printf.printf "%s: No parameters specified, continuing at timepoint %d\n%!" c !tp;
-    in
-    match Log.get_next_entry lexbuf with
-    | MonpolyCommand {c; parameters} ->
-        let process_command = function
-            | "set_slicer" ->
-                set_slicer c parameters;
-                loop ffl
-            | "test_slicer" -> test_slicer ff evaluation;
-                loop ffl
-            | _ ->
-                Printf.printf "UNRECOGNIZED COMMAND: %s\n%!" c;
-                loop ffl
-        in
-        process_command c;
-    | MonpolyTestTuple st ->
-          Dllist.add_last st evaluation;
-          loop ffl
-    | _ -> ()
-  in
-  loop ff
-
-
-let run_test testfile formula =
-  let lexbuf = Log.log_open testfile in
-  let neval = Neval.create () in
-  let extf, _ = add_ext neval formula in
-  Printf.printf "Testing slicing configurations\n";
-  test_log lexbuf extf (Dllist.empty())
+  ignore (Parser.parse_file dbschema logfile ctxt)

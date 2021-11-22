@@ -83,7 +83,7 @@ lemma mbuf_t_append_code[code]: "mbuf_t_append (MBuf2_t xs) ys = MBuf2_t (fold a
 
 lemma mbuf_t_cases_code[code]: "mbuf_t_cases (MBuf2_t xs) = (case safe_hd xs of (None, xs') \<Rightarrow> (None, MBuf2_t xs')
   | (Some x, xs') \<Rightarrow> (Some x, MBuf2_t (tl_queue xs')))"
-  by transfer' (auto simp: tl_queue_rep[unfolded is_empty_alt, OF list.discI] split: list.splits prod.splits option.splits dest: safe_hd_rep)
+  by transfer' (auto simp: tl_queue_rep split: list.splits prod.splits option.splits dest: safe_hd_rep)
 
 type_synonym 'a mebuf2 = "'a table mbuf_t \<times> 'a table mbuf_t"
 type_synonym 'a mebufn = "'a table mbuf_t list"
@@ -108,6 +108,8 @@ datatype (dead 'msaux, dead 'muaux) meformula =
   | MUntil args "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2" "ts mbuf_t" ts "'muaux"
   | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) meformula list" "event_data mebufn" "ts mbuf_t" "event_data mr\<delta>aux"
   | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) meformula list" "event_data mebufn" "ts mbuf_t" ts "event_data ml\<delta>aux"
+  | MTP mtrm nat
+  | MTS mtrm
 
 fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) mformula" where
   "Rep_meformula (MRel rel) = mformula.MRel rel"
@@ -132,6 +134,8 @@ fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) 
     (map Rep_mbuf_t buf) (Rep_mbuf_t nts) aux"
 | "Rep_meformula (MMatchF I mr mrs \<phi>s buf nts t aux) = mformula.MMatchF I mr mrs (map Rep_meformula \<phi>s)
     (map Rep_mbuf_t buf) (Rep_mbuf_t nts) t aux"
+| "Rep_meformula (MTP mt i) = mformula.MTP mt i"
+| "Rep_meformula (MTS mt) = mformula.MTS mt"
 
 lemma size_list_cong: "xs = ys \<Longrightarrow> (\<And>x. x \<in> set xs \<Longrightarrow> f x = g x) \<Longrightarrow> size_list f xs = size_list g ys"
   by (induct xs arbitrary: ys) auto
@@ -205,6 +209,8 @@ function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> Formula.formula \<
 | "meinit0 n (Formula.MatchF I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchF I mr (sorted_list_of_set (LPDs mr)) (map (meinit0 n) \<phi>s) (replicate (length \<phi>s) mbuf_t_empty) mbuf_t_empty 0 [])"
+| "meinit0 n (Formula.TP t) = MTP (mtrm_of_trm t) 0"
+| "meinit0 n (Formula.TS t) = MTS (mtrm_of_trm t)"
 | "meinit0 n _ = MRel empty_table"
   by pat_completeness auto 
 termination (in maux)
@@ -214,8 +220,14 @@ termination (in maux)
 lemma (in maux) minit0_code[code]: "minit0 n \<phi> = Rep_meformula (meinit0 n \<phi>)"
   by (induction n \<phi> rule: meinit0.induct) (auto simp: init_since_def init_until_def mbuf_t_empty.rep_eq Let_def split: formula.splits prod.splits)
 
-lemma (in maux) minit_code[code]: "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_j = 0, mstate_m = Rep_meformula (meinit0 n \<phi>), mstate_n = n\<rparr>)"
-  by (auto simp: minit_def Let_def minit0_code)
+definition mestate :: "nat \<Rightarrow> nat \<Rightarrow> ('a, 'b) mformula \<Rightarrow> nat \<Rightarrow> ts queue \<Rightarrow> 'c \<Rightarrow> ('a, 'b, 'c) mstate_ext" where
+  "mestate i j m n t \<zeta> =
+    \<lparr>mstate_i = i, mstate_j = j, mstate_m = m, mstate_n = n, mstate_t = linearize t, \<dots> = \<zeta>\<rparr>"
+
+code_datatype mestate
+
+lemma (in maux) minit_code[code]: "minit \<phi> = (let n = Formula.nfv \<phi> in mestate 0 0 (minit0 n \<phi>) n empty_queue ())"
+  by (auto simp: minit_def Let_def mestate_def empty_queue_rep)
 
 fun meprev_next :: "\<I> \<Rightarrow> event_data table mbuf_t \<Rightarrow> ts mbuf_t \<Rightarrow> event_data table list \<times> event_data table mbuf_t \<times> ts mbuf_t" where
   "meprev_next I xs ts = (case mbuf_t_cases xs of (None, xs') \<Rightarrow> ([], mbuf_t_empty, ts)
@@ -578,6 +590,8 @@ function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> databas
       (aux, buf, nt, nts') = mebufnt_take (update_matchF n I mr mrs) aux (mebufn_add xss buf) t (nts @@ ts);
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
+| "meeval n ts db (MTP mt i) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) [i..<j], MTP mt j)"
+| "meeval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EFloat (double_of_int x))) ts, MTS mt)"
   by pat_completeness auto
 
 lemma psize_snd_meeval: "meeval_dom (n, t, db, \<phi>) \<Longrightarrow> size (snd (meeval n t db \<phi>)) = size \<phi>"
@@ -640,6 +654,32 @@ qed (auto simp: mbuf2_add mbuf_t_empty.rep_eq mbuf_t_append.rep_eq
     split: prod.splits dest!: mebuf2_take mebuf2t_take meprev_next eeval_since)
 
 end
+
+
+fun annotate_verdicts :: "nat \<Rightarrow> ts queue \<Rightarrow> event_data table list \<Rightarrow>
+  (nat \<times> ts \<times> event_data table) list \<Rightarrow> nat \<times> ts queue \<times> (nat \<times> ts \<times> event_data table) list" where
+  "annotate_verdicts i tq [] acc = (i, tq, rev acc)"
+| "annotate_verdicts i tq (v # vs) acc = (case pop tq of
+      (None, tq') \<Rightarrow> (i + 1 + length vs, (tl_queue^^(1 + length vs)) tq', rev acc)  \<comment> \<open>unreachable due to invariant\<close>
+    | (Some t, tq') \<Rightarrow> annotate_verdicts (i + 1) tq' vs ((i, t, v) # acc))"
+
+lemma linearize_funpow_tl_queue: "linearize ((tl_queue^^n) q) = drop n (linearize q)"
+  by (induction n) (auto simp add: tl_queue_rep drop_Suc tl_drop)
+
+lemma annotate_verdicts_alt: "annotate_verdicts i tq xs acc = (i', tq', xs') \<Longrightarrow>
+  i' = i + length xs \<and> linearize tq' = drop (length xs) (linearize tq) \<and>
+    xs' = rev acc @ List.enumerate i (zip (linearize tq) xs)"
+  by (induction i tq xs acc rule: annotate_verdicts.induct)
+    (auto simp add: linearize_funpow_tl_queue tl_queue_rep drop_Suc neq_Nil_conv
+      simp del: funpow.simps split: prod.splits option.splits dest!: pop_rep)
+
+lemma mstep_code[code]: "mstep (db, t) (mestate i j m n tq \<zeta>) =
+  (case meval (j + 1) n [t] db m of
+    (vs, m') \<Rightarrow> (case annotate_verdicts i (append_queue t tq) vs [] of
+      (i', ts', vs') \<Rightarrow> (vs', mestate i' (j + 1) m' n ts' \<zeta>)))"
+  unfolding mstep_def mestate_def
+  by (auto simp add: append_queue_rep split: prod.split dest!: annotate_verdicts_alt)
+
 end
 
 section \<open>Instantiation of the generic algorithm and code setup\<close>
@@ -805,18 +845,6 @@ declare [[code drop: meeval vmeeval]]
 lemmas meeval_code[code] = default_maux.meeval.simps(1) meeval_MPred default_maux.meeval.simps(3-)
 lemmas vmeeval_code[code] = verimon_maux.meeval.simps(1) vmeeval_MPred verimon_maux.meeval.simps(3-)
 
-definition mk_db :: "((Formula.name \<times> nat) \<times> event_data option list set) list \<Rightarrow> database" where
-  "mk_db m = Mapping.of_alist (map (\<lambda>(p, X). (p, [X])) m)"
-
-definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
-  "rbt_fold = RBT_Set2.fold"
-
-definition rbt_empty :: "event_data option list set_rbt" where
-  "rbt_empty = RBT_Set2.empty"
-
-definition rbt_insert :: "_ \<Rightarrow> _ \<Rightarrow> event_data option list set_rbt" where
-  "rbt_insert = RBT_Set2.insert"
-
 lemma saturate_commute:
   assumes "\<And>s. r \<in> g s" "\<And>s. g (Set.insert r s) = g s" "\<And>s. r \<in> s \<Longrightarrow> h s = g s"
   and terminates: "mono g" "\<And>X. X \<subseteq> C \<Longrightarrow> g X \<subseteq> C" "finite C"
@@ -925,7 +953,7 @@ lemma upd_set'_insert: "d = f d \<Longrightarrow> (\<And>x. f (f x) = f x) \<Lon
 lemma upd_set'_aux1: "upd_set' Mapping.empty d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k d (upd_set' Mapping.empty d f {b. (a, b) \<in> A})"
   by (rule mapping_eqI) (auto simp add: Let_def upd_set'_lookup Mapping.lookup_update'
-      Mapping.lookup_empty split: option.splits)
+      split: option.splits)
 
 lemma upd_set'_aux2: "Mapping.lookup m k = None \<Longrightarrow> upd_set' m d f {b. b = k \<or> (a, b) \<in> A} =
   Mapping.update k d (upd_set' m d f {b. (a, b) \<in> A})"
@@ -1311,7 +1339,7 @@ lemma upd_nested_insert:
   using upd_set'_aux1[of d f _ _ A] upd_set'_aux2[of _ _ d f _ A] upd_set'_aux3[of _ _ _ d f _ A]
     upd_set'_aux4[of _ A d f]
   by (auto simp add: Let_def upd_nested_lookup upd_set'_lookup Mapping.lookup_update'
-      Mapping.lookup_empty split: option.splits prod.splits if_splits intro!: mapping_eqI)
+      split: option.splits prod.splits if_splits intro!: mapping_eqI)
 
 definition upd_nested_max_tstp where
   "upd_nested_max_tstp m d X = upd_nested m d (max_tstp d) X"
@@ -1322,7 +1350,7 @@ lemma upd_nested_max_tstp_fold:
 proof -
   interpret comp_fun_idem "upd_nested_step d (max_tstp d)"
     by (unfold_locales; rule ext)
-      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+      (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update'
        update_update max_tstp_d_d max_tstp_idem' split: option.splits)
   note upd_nested_insert' = upd_nested_insert[of d "max_tstp d",
     OF max_tstp_d_d[symmetric] max_tstp_idem']
@@ -1336,7 +1364,7 @@ lift_definition upd_nested_max_tstp_cfi ::
   "ts + tp \<Rightarrow> ('a \<times> 'b, ('a, ('b, ts + tp) mapping) mapping) comp_fun_idem"
   is "\<lambda>d. upd_nested_step d (max_tstp d)"
   by (unfold_locales; rule ext)
-    (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update' Mapping.lookup_empty
+    (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update'
       update_update max_tstp_d_d max_tstp_idem' split: option.splits)
 
 lemma filter_join'_False_empty: "filter_join' False {} m = (m, {})"
@@ -1381,7 +1409,7 @@ lemma filter_join'_code[code]:
     (if \<not>pos \<and> finite X then set_fold_cfi filter_not_in_cfi' (m, {}) X
     else (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m)))"
   unfolding filter_join'_def
-  by (transfer fixing: m) (use filter_join'_False in \<open>auto simp add: filter_join'_def\<close>)
+  by (transfer fixing: m) (use filter_join'_False in auto)
 
 lemma upd_nested_max_tstp_code[code]:
   "upd_nested_max_tstp m d X = (if finite X then set_fold_cfi (upd_nested_max_tstp_cfi d) m X
@@ -1438,6 +1466,40 @@ lemma [code]:
     tss = append_queue nt tss in
     ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done, done_length), aggaux)))"
   by(auto simp del: add_new_mmuaux.simps simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
+
+
+lift_definition update_mapping_with :: "('a \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping \<Rightarrow> ('a, 'b) mapping" is
+  "\<lambda>f k v m. case m k of None \<Rightarrow> m(k \<mapsto> v) | Some v' \<Rightarrow> m(k \<mapsto> f k v' v)" .
+
+lemma update_mapping_with_alt: "update_mapping_with f k v m =
+  (case Mapping.lookup m k of
+      None \<Rightarrow> Mapping.update k v m
+    | Some v' \<Rightarrow> Mapping.update k (f k v' v) m)"
+  by transfer (simp add: Map_To_Mapping.map_apply_def)
+
+lift_definition mapping_rbt_insertwk :: "('a::ccompare \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping_rbt \<Rightarrow> ('a, 'b) mapping_rbt" is
+  "rbt_comp_insert_with_key ccomp"
+  by (auto 0 3 intro: linorder.rbt_insertwk_is_rbt ID_ccompare simp: rbt_comp_insert_with_key[OF ID_ccompare'])
+
+declare [[code drop: update_mapping_with]]
+
+lemma update_mapping_with_code[code]:
+  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
+  "update_mapping_with f k v (RBT_Mapping t) =
+  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''update_mapping_with RBT_Mapping: ccompare = None'') (\<lambda>_. update_mapping_with f k v (RBT_Mapping t))
+  | Some _ \<Rightarrow> RBT_Mapping (mapping_rbt_insertwk f k v t))"
+  by (clarsimp split: option.split, transfer fixing: f k v)
+    (auto simp add: rbt_comp_lookup[OF ID_ccompare'] rbt_comp_insert_with_key[OF ID_ccompare']
+      linorder.rbt_lookup_rbt_insertwk[OF ID_ccompare] ord.is_rbt_rbt_sorted
+      split: option.split)
+
+definition empty_db :: database where "empty_db = Mapping.empty"
+
+definition insert_into_db :: "string8 \<times> nat \<Rightarrow> event_data tuple \<Rightarrow> database \<Rightarrow> database" where
+  "insert_into_db p xs db = update_mapping_with (\<lambda>_ tbl _. map (Set.insert xs) tbl) p [{xs}] db"
+
+definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
+  "rbt_fold = RBT_Set2.fold"
 
 (*<*)
 end

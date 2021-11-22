@@ -50,6 +50,8 @@ fun mmonitorable_exec :: "Formula.formula \<Rightarrow> bool" where
     (mmonitorable_exec \<phi> \<or> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False)) \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.MatchP I r) = Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "mmonitorable_exec (Formula.MatchF I r) = (Regex.safe_regex Formula.fv (\<lambda>g \<phi>. mmonitorable_exec \<phi> \<or> (g = Lax \<and> (case \<phi> of Formula.Neg \<phi>' \<Rightarrow> mmonitorable_exec \<phi>' | _ \<Rightarrow> False))) Futu Strict r \<and> bounded I)"
+| "mmonitorable_exec (Formula.TP t) = (Formula.is_Var t \<or> Formula.is_Const t)"
+| "mmonitorable_exec (Formula.TS t) = (Formula.is_Var t \<or> Formula.is_Const t)"
 | "mmonitorable_exec _ = False"
 
 lemma cases_Neg_iff:
@@ -686,6 +688,8 @@ record args =
 
 datatype pred_mode = Copy | Simple | Match
 
+datatype mtrm = MVar nat | MConst event_data
+
 datatype (dead 'msaux, dead 'muaux) mformula =                                   
   MRel "event_data table"
   | MPred Formula.name "Formula.trm list" pred_mode
@@ -705,12 +709,15 @@ datatype (dead 'msaux, dead 'muaux) mformula =
   | MUntil args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2" "ts list" ts "'muaux"
   | MMatchP \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" "event_data mr\<delta>aux"
   | MMatchF \<I> "mregex" "mregex list" "('msaux, 'muaux) mformula list" "event_data mbufn" "ts list" ts "event_data ml\<delta>aux"
+  | MTP mtrm nat
+  | MTS mtrm
 
 record ('msaux, 'muaux) mstate =
   mstate_i :: nat
   mstate_j :: nat
   mstate_m :: "('msaux, 'muaux) mformula"
   mstate_n :: nat
+  mstate_t :: "ts list"
 
 fun eq_rel :: "nat \<Rightarrow> Formula.trm \<Rightarrow> Formula.trm \<Rightarrow> event_data table" where
   "eq_rel n (Formula.Const x) (Formula.Const y) = (if x = y then unit_table n else empty_table)"
@@ -962,6 +969,11 @@ lemma (in maux) init_until_cong[fundef_cong]:
   using assms
   by (auto simp: init_until_def split: formula.splits)
 
+fun mtrm_of_trm :: "Formula.trm \<Rightarrow> mtrm" where
+  "mtrm_of_trm (Formula.Var x) = MVar x"
+| "mtrm_of_trm (Formula.Const x) = MConst x"
+| "mtrm_of_trm _ = undefined"
+
 function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<Rightarrow> ('msaux, 'muaux) mformula" where
   "minit0 n (Formula.Neg \<phi>) = (if fv \<phi> = {} then MNeg (minit0 n \<phi>) else MRel empty_table)"
 | "minit0 n (Formula.Eq t1 t2) = MRel (eq_rel n t1 t2)"
@@ -1004,6 +1016,8 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
 | "minit0 n (Formula.MatchF I r) =
     (let (mr, \<phi>s) = to_mregex r
     in MMatchF I mr (sorted_list_of_set (LPDs mr)) (map (minit0 n) \<phi>s) (replicate (length \<phi>s) []) [] 0 [])"
+| "minit0 n (Formula.TP t) = MTP (mtrm_of_trm t) 0"
+| "minit0 n (Formula.TS t) = MTS (mtrm_of_trm t)"
 | "minit0 n _ = MRel empty_table"
   by pat_completeness auto
 termination (in maux)
@@ -1012,7 +1026,8 @@ termination (in maux)
       dest!: to_mregex_ok[OF sym] atms_size)
 
 definition (in maux) minit :: "Formula.formula \<Rightarrow> ('msaux, 'muaux) mstate" where
-  "minit \<phi> = (let n = Formula.nfv \<phi> in \<lparr>mstate_i = 0, mstate_j = 0, mstate_m = minit0 n \<phi>, mstate_n = n\<rparr>)"
+  "minit \<phi> = (let n = Formula.nfv \<phi>
+              in \<lparr>mstate_i = 0, mstate_j = 0, mstate_m = minit0 n \<phi>, mstate_n = n, mstate_t = []\<rparr>)"
 
 definition (in maux) minit_safe where
   "minit_safe \<phi> = (if mmonitorable_exec \<phi> then minit \<phi> else undefined)"
@@ -1240,6 +1255,10 @@ fun list_of_option :: "'a option \<Rightarrow> 'a list" where
   "list_of_option None = []"
 | "list_of_option (Some x) = [x]"
 
+fun eval_mtrm :: "nat \<Rightarrow> mtrm \<Rightarrow> event_data \<Rightarrow> event_data table" where
+  "eval_mtrm n (MVar v) x = singleton_table n v x"
+| "eval_mtrm n (MConst c) x = (if c = x then unit_table n else empty_table)"
+
 type_synonym database = "(Formula.name \<times> nat, event_data table list) mapping"
 
 context maux
@@ -1321,6 +1340,8 @@ function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> database
       (aux, buf, nt, nts') = mbufnt_take (update_matchF n I mr mrs) aux (mbufn_add xss buf) t (nts @ ts);
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
+| "meval n ts db (MTP mt i) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) [i..<j], MTP mt j)"
+| "meval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EFloat (double_of_int x))) ts, MTS mt)"
   by pat_completeness auto
 
 lemma size_list_cong: "xs = ys \<Longrightarrow> (\<And>x. x \<in> set xs \<Longrightarrow> f x = g x) \<Longrightarrow> size_list f xs = size_list g ys"
@@ -1351,7 +1372,7 @@ termination meval
 end
 
 lemma mformula_induct[case_names MRel MPred MLet MLetPast MAnd MAndAssign MAndRel MAnds MOr MNeg
-   MExists MAgg MPrev MNext MSince MUntil MMatchP MMatchF]:
+   MExists MAgg MPrev MNext MSince MUntil MMatchP MMatchF MTP MTS]:
   "(\<And>rel. P (MRel rel)) \<Longrightarrow>
    (\<And>e ts mode. P (MPred e ts mode)) \<Longrightarrow>
    (\<And>p m \<phi> \<psi>. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MLet p m \<phi> \<psi>)) \<Longrightarrow>
@@ -1370,6 +1391,8 @@ lemma mformula_induct[case_names MRel MPred MLet MLetPast MAnd MAndAssign MAndRe
    (\<And>args \<phi> \<psi> buf nts t aux. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MUntil args \<phi> \<psi> buf nts t aux)) \<Longrightarrow>
    (\<And>I mr mrs \<phi>s buf nts aux. (\<And>\<phi>. \<phi> \<in> set \<phi>s \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MMatchP I mr mrs \<phi>s buf nts aux)) \<Longrightarrow>
    (\<And>I mr mrs \<phi>s buf nts t aux. (\<And>\<phi>. \<phi> \<in> set \<phi>s \<Longrightarrow> P \<phi>) \<Longrightarrow> P (MMatchF I mr mrs \<phi>s buf nts t aux)) \<Longrightarrow>
+   (\<And>mt i. P (MTP mt i)) \<Longrightarrow>
+   (\<And>mt. P (MTS mt)) \<Longrightarrow>
    P mf"
   apply (induct "size mf" arbitrary: mf rule: less_induct)
   subgoal for mf
@@ -1409,11 +1432,17 @@ lemma letpast_meval_induct[case_names step]:
 
 end
 
-definition (in maux) mstep :: "database \<times> ts \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mstate" where
+definition (in maux) mstep :: "database \<times> ts \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow>
+    (nat \<times> ts \<times> event_data table) list \<times> ('msaux, 'muaux) mstate" where
   "mstep tdb st =
-     (let (xs, m) = meval (mstate_j st + 1) (mstate_n st) [snd tdb] (fst tdb) (mstate_m st)
-     in (List.enumerate (mstate_i st) xs,
-      \<lparr>mstate_i = mstate_i st + length xs, mstate_j = mstate_j st + 1, mstate_m = m, mstate_n = mstate_n st\<rparr>))"
+    (case meval (mstate_j st + 1) (mstate_n st) [snd tdb] (fst tdb) (mstate_m st) of
+      (xs, m) \<Rightarrow> (List.enumerate (mstate_i st) (zip (mstate_t st @ [snd tdb]) xs),
+        \<lparr> mstate_i = mstate_i st + length xs,
+          mstate_j = mstate_j st + 1,
+          mstate_m = m,
+          mstate_n = mstate_n st,
+          mstate_t = drop (length xs) (mstate_t st @ [snd tdb]) \<rparr>))"
+
 
 subsection \<open>Verdict delay\<close>
 
@@ -1443,6 +1472,8 @@ fun progress :: "(Formula.name \<times> nat \<rightharpoonup> nat) \<Rightarrow>
 | "progress P (Formula.MatchP I r) j = min_regex_default (progress P) r j"
 | "progress P (Formula.MatchF I r) j =
     Inf {i. \<forall>k. k < j \<and> k \<le> min_regex_default (progress P) r j \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
+| "progress P (Formula.TP t) j = j"
+| "progress P (Formula.TS t) j = j"
 
 definition "progress_regex P = min_regex_default (progress P)"
 definition "letpast_progress P p \<phi> j = \<Sqinter>{i. i \<le> j \<and> i = progress (P(p \<mapsto> i)) \<phi> j}"
@@ -2585,6 +2616,14 @@ next
           simp: ac_simps Suc_le_eq trans_le_add2 Max_mapping_coboundedI progress_regex_def
           dest: spec[of _ "i'"] spec[of _ ?j])
   qed
+next
+  case (TP t)
+  show ?case
+    by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
+next
+  case (TS t)
+  show ?case
+    by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 qed (auto split: option.splits)
 
 lemma progress_ge: "Formula.future_bounded \<phi> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> Map.empty \<phi> j"
@@ -2924,6 +2963,10 @@ next
           (subst (1 2) \<tau>_prefix_conv[OF assms(1,2) 21]; auto simp: diff_le_mono memR_antimono elim!: contrapos_np[of _ False])
     qed
   qed
+next
+  case (TS t)
+  with \<tau>_prefix_conv[OF assms] show ?case
+    by simp
 qed auto
 
 lemma sat_prefix_conv:
@@ -3379,11 +3422,17 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     wf_matchF_aux \<sigma> V n R I r aux (progress \<sigma> P (Formula.MatchF I r) j) 0 \<Longrightarrow>
     progress \<sigma> P (Formula.MatchF I r) j + length aux = progress_regex \<sigma> P r j \<Longrightarrow>
     wf_mformula \<sigma> j P V n R (MMatchF I mr mrs \<phi>s buf nts t aux) (Formula.MatchF I r)"
+  | MTP: "\<forall>x\<in>Formula.fv_trm t. x < n \<Longrightarrow> Formula.is_Var t \<or> Formula.is_Const t \<Longrightarrow> mtrm_of_trm t = mt \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MTP mt j) (Formula.TP t)"
+  | MTS: "\<forall>x\<in>Formula.fv_trm t. x < n \<Longrightarrow> Formula.is_Var t \<or> Formula.is_Const t \<Longrightarrow> mtrm_of_trm t = mt \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MTS mt) (Formula.TS t)"
 
 definition (in maux) wf_mstate :: "Formula.formula \<Rightarrow> Formula.prefix \<Rightarrow> event_data list set \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> bool" where
-  "wf_mstate \<phi> \<pi> R st \<longleftrightarrow> mstate_j st = plen \<pi> \<and> mstate_n st = Formula.nfv \<phi> \<and> (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow>
-    mstate_i st = progress \<sigma> Map.empty \<phi> (plen \<pi>) \<and>
-    wf_mformula \<sigma> (plen \<pi>) Map.empty Map.empty (mstate_n st) R (mstate_m st) \<phi>)"
+  "wf_mstate \<phi> \<pi> R st \<longleftrightarrow> mstate_j st = plen \<pi> \<and> mstate_n st = Formula.nfv \<phi> \<and>
+    (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow>
+      mstate_i st = progress \<sigma> Map.empty \<phi> (plen \<pi>) \<and>
+      wf_mformula \<sigma> (plen \<pi>) Map.empty Map.empty (mstate_n st) R (mstate_m st) \<phi>) \<and>
+    mstate_t st = drop (mstate_i st) (pts \<pi>)"
 
 definition (in maux) letpast_meval_invar where
 "letpast_meval_invar n V \<sigma> P \<phi>' m j' i ys xs p ts db \<phi> k=
@@ -3563,15 +3612,6 @@ next
       by (simp add: Let_def fun_upd_twist[of p, OF False] del: fun_upd_apply)
   qed
 next
-  case (Eq x1 x2)
-  then show ?case by simp
-next
-  case (Less x1 x2)
-  then show ?case by simp
-next
-  case (LessEq x1 x2)
-  then show ?case by simp
-next
   case (Neg \<phi>)
   show ?case
     using Neg.IH[of p i f g V v] Neg.prems
@@ -3650,7 +3690,7 @@ next
       apply (erule meta_mp)
       by simp
     done
-qed
+qed simp_all
 
 lemma V_subst_letpast:
   "safe_letpast p \<phi> \<le> PastRec \<Longrightarrow>
@@ -4119,11 +4159,17 @@ next
         simp del: progress_simps split: prod.split
         intro!: wf_mformula.MatchF list.rel_refl_strong wf_mbufn'_0 wf_ts_regex_0 wf_matchF_aux_Nil
         dest!: to_mregex_atms)
+next
+  case (TP t)
+  then show ?case by (auto intro!: wf_mformula.MTP)
+next
+  case (TS t)
+  then show ?case by (auto intro!: wf_mformula.MTS)
 qed
 
 lemma (in maux) wf_mstate_minit: "safe_formula \<phi> \<Longrightarrow> wf_mstate \<phi> pnil R (minit \<phi>)"
   unfolding wf_mstate_def minit_def Let_def
-  by (auto intro!: wf_minit0 fvi_less_nfv)
+  by (auto simp add: pts.rep_eq pnil.rep_eq intro!: wf_minit0 fvi_less_nfv)
 
 
 subsubsection \<open>Evaluation\<close>
@@ -7343,6 +7389,16 @@ qed
 lemma progress_packagg[simp]: "Monitor.progress \<sigma> P (packagg args \<phi>) j = Monitor.progress \<sigma> P \<phi> j"
   by (auto simp: packagg_def split: option.splits)
 
+lemma qtable_singleton_table: "i < n \<Longrightarrow> qtable n {i} R (\<lambda>v. map the v ! i = x) (singleton_table n i x)"
+  unfolding qtable_def singleton_table_def table_def wf_tuple_def
+  by (auto simp add: list_eq_iff_nth_eq)
+
+lemma qtable_eval_mtrm:
+  assumes "\<forall>x\<in>fv_trm t. x < n" and "trm.is_Var t \<or> trm.is_Const t"
+  shows "qtable n (fv_trm t) R (\<lambda>v. Formula.eval_trm (map the v) t = x) (eval_mtrm n (mtrm_of_trm t) x)"
+  using assms unfolding table_def Formula.is_Var_def Formula.is_Const_def
+  by (auto split: if_splits intro!: qtable_singleton_table qtable_unit_table qtable_empty)
+
 lemma (in maux) meval:
   assumes "wf_mformula \<sigma> j P V n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' V db"
   shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> (j + \<delta>) P' V n R \<phi>\<^sub>n \<phi>' \<and>
@@ -8269,48 +8325,102 @@ next
         elim!: list.rel_mono_strong mbufnt_take_add'(1)[OF _ wf_envs_P_simps[OF MMatchF.prems(2)] safe mr buf nts_snoc]
         mbufnt_take_add'(2)[OF _ wf_envs_P_simps[OF MMatchF.prems(2)] safe mr buf nts_snoc]
         dest!: MMatchF.IH[OF _ _ MMatchF.prems(2)] update split: prod.splits)
+next
+  case (MTP mt i)
+  then obtain t where "\<forall>x\<in>fv_trm t. x < n" "Formula.is_Var t \<or> Formula.is_Const t"
+    "mt = mtrm_of_trm t" "\<phi>' = Formula.TP t" "i = j"
+    by (cases rule: wf_mformula.cases) simp
+  then show ?case
+    by (auto simp add: list.rel_map intro!: wf_mformula.MTP list.rel_refl qtable_eval_mtrm)
+next
+  case (MTS mt)
+  then obtain t where "\<forall>x\<in>fv_trm t. x < n" "Formula.is_Var t \<or> Formula.is_Const t"
+    "mt = mtrm_of_trm t" "\<phi>' = Formula.TS t"
+    by (cases rule: wf_mformula.cases) simp
+  then show ?case
+    by (auto simp add: list.rel_map intro!: wf_mformula.MTS list.rel_refl qtable_eval_mtrm)
 qed
 
 
 subsubsection \<open>Monitor step\<close>
 
-lemma (in maux) wf_mstate_mstep: "wf_mstate \<phi> \<pi> R st \<Longrightarrow> last_ts \<pi> \<le> snd tdb \<Longrightarrow>
-  wf_mstate \<phi> (psnoc \<pi> tdb) R (snd (mstep (apfst mk_db tdb) st))"
-  unfolding wf_mstate_def mstep_def Let_def
-  by (fastforce simp add: progress_mono le_imp_diff_is_add split: prod.splits
-      elim!: prefix_of_psnocE dest: meval[OF _ wf_envs_mk_db] list_all2_lengthD)
+lemma (in maux) wf_mstate_mstep:
+  assumes "wf_mstate \<phi> \<pi> R st" and "last_ts \<pi> \<le> snd tdb"
+  shows "wf_mstate \<phi> (psnoc \<pi> tdb) R (snd (mstep (apfst mk_db tdb) st))"
+proof -
+  from assms(1) have "mstate_i st \<le> plen \<pi>"
+    unfolding wf_mstate_def
+    by (metis ex_prefix_of progress_le)
+  with assms show ?thesis
+    unfolding wf_mstate_def mstep_def
+    by (fastforce simp add: progress_mono le_imp_diff_is_add pts_psnoc length_pts_eq_plen add.commute
+        split: prod.splits elim!: prefix_of_psnocE dest: meval[OF _ wf_envs_mk_db] list_all2_lengthD)
+qed
 
-definition "flatten_verdicts Vs = (\<Union> (set (map (\<lambda>(i, X). (\<lambda>v. (i, v)) ` X) Vs)))"
+definition "flatten_verdicts Vs = (\<Union> (set (map (\<lambda>(i, t, X). (\<lambda>v. (i, t, v)) ` X) Vs)))"
 
 lemma flatten_verdicts_append[simp]:
   "flatten_verdicts (Vs @ Us) = flatten_verdicts Vs \<union> flatten_verdicts Us"
-  by (induct Vs) (auto simp: flatten_verdicts_def)
+  unfolding flatten_verdicts_def by simp
 
 lemma (in maux) mstep_output_iff:
   assumes "wf_mstate \<phi> \<pi> R st" "last_ts \<pi> \<le> snd tdb" "prefix_of (psnoc \<pi> tdb) \<sigma>" "mem_restr R v"
-  shows "(i, v) \<in> flatten_verdicts (fst (mstep (apfst mk_db tdb) st)) \<longleftrightarrow>
-    progress \<sigma> Map.empty \<phi> (plen \<pi>) \<le> i \<and> i < progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>)) \<and>
+  shows "(i, t, v) \<in> flatten_verdicts (fst (mstep (apfst mk_db tdb) st)) \<longleftrightarrow>
+    progress \<sigma> Map.empty \<phi> (plen \<pi>) \<le> i \<and> i < progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>)) \<and> t = \<tau> \<sigma> i \<and>
     wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> Formula.sat \<sigma> Map.empty (map the v) i \<phi>"
+  (is "?L \<longleftrightarrow> ?R")
 proof -
+  let ?p = "progress \<sigma> Map.empty \<phi> (plen \<pi>)"
+  let ?p' = "progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>))"
   from prefix_of_psnocE[OF assms(3,2)] have "prefix_of \<pi> \<sigma>"
-    "\<Gamma> \<sigma> (plen \<pi>) = fst tdb" "\<tau> \<sigma> (plen \<pi>) = snd tdb" by auto
-  moreover from assms(1) \<open>prefix_of \<pi> \<sigma>\<close> have "mstate_n st = Formula.nfv \<phi>" "mstate_j st = plen \<pi>"
-    "mstate_i st = progress \<sigma> Map.empty \<phi> (plen \<pi>)" "wf_mformula \<sigma> (plen \<pi>) Map.empty Map.empty (mstate_n st) R (mstate_m st) \<phi>"
-    unfolding wf_mstate_def by blast+
-  moreover from meval[OF \<open>wf_mformula \<sigma> (plen \<pi>) Map.empty Map.empty (mstate_n st) R (mstate_m st) \<phi>\<close> wf_envs_mk_db] obtain Vs st' where
-    "meval (plen \<pi> + 1) (mstate_n st) [\<tau> \<sigma> (plen \<pi>)] (mk_db (\<Gamma> \<sigma> (plen \<pi>))) (mstate_m st) = (Vs, st')"
-    "wf_mformula \<sigma> (Suc (plen \<pi>)) Map.empty Map.empty (mstate_n st) R st' \<phi>"
-    "list_all2 (\<lambda>i. qtable (mstate_n st) (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> Map.empty (map the v) i \<phi>))
-      [progress \<sigma> Map.empty \<phi> (plen \<pi>)..<progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>))] Vs" by auto
-  moreover from this assms(4) have "qtable (mstate_n st) (fv \<phi>) (mem_restr R)
-    (\<lambda>v. Formula.sat \<sigma> Map.empty (map the v) i \<phi>) (Vs ! (i - progress \<sigma> Map.empty \<phi> (plen \<pi>)))"
-    if "progress \<sigma> Map.empty \<phi> (plen \<pi>) \<le> i" "i < progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>))"
-    using that by (auto simp: list_all2_conv_all_nth
-        dest!: spec[of _ "(i - progress \<sigma> Map.empty \<phi> (plen \<pi>))"])
-  ultimately show ?thesis
-    using assms(4) unfolding mstep_def Let_def flatten_verdicts_def
-    by (auto simp: in_set_enumerate_eq list_all2_conv_all_nth progress_mono le_imp_diff_is_add
-        elim!: in_qtableE in_qtableI intro!: bexI[of _ "(i, Vs ! (i - progress \<sigma> Map.empty \<phi> (plen \<pi>)))"])
+    and tdb_eqs: "\<Gamma> \<sigma> (plen \<pi>) = fst tdb" "\<tau> \<sigma> (plen \<pi>) = snd tdb" by auto
+  from assms(1) \<open>prefix_of \<pi> \<sigma>\<close> have
+    state_eqs:
+    "mstate_n st = Formula.nfv \<phi>" "mstate_j st = plen \<pi>"
+    "mstate_i st = ?p" "mstate_t st = drop ?p (pts \<pi>)"
+    and wf_m: "wf_mformula \<sigma> (plen \<pi>) Map.empty Map.empty (Formula.nfv \<phi>) R (mstate_m st) \<phi>"
+    unfolding wf_mstate_def by auto
+  from meval[OF wf_m wf_envs_mk_db]
+  obtain Vs st' where
+    meval_eq: "meval (Suc (plen \<pi>)) (Formula.nfv \<phi>) [snd tdb] (mk_db (fst tdb)) (mstate_m st) = (Vs, st')"
+    and wf_m': "wf_mformula \<sigma> (Suc (plen \<pi>)) Map.empty Map.empty (Formula.nfv \<phi>) R st' \<phi>"
+    and "list_all2 (\<lambda>i. qtable (Formula.nfv \<phi>) (fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> Map.empty (map the v) i \<phi>))
+      [progress \<sigma> Map.empty \<phi> (plen \<pi>)..<progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>))] Vs"
+    by (auto simp add: tdb_eqs state_eqs)
+  then have
+    length_Vs: "length Vs = ?p' - ?p"
+    and set_Vs: "\<forall>i<?p'-?p. v \<in> Vs ! i \<longleftrightarrow>
+      wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> Formula.sat \<sigma> Map.empty (map the v) (?p + i) \<phi>"
+    using assms(4)
+    by (auto simp add: list_all2_conv_all_nth in_set_conv_nth elim!: in_qtableE in_qtableI)
+  have \<tau>_eq: "(drop ?p (pts \<pi>) @ [snd tdb]) ! (i - ?p) = \<tau> \<sigma> i" if "?p \<le> i" "i < ?p'"
+  proof (cases "i = plen \<pi>")
+    case True
+    then show ?thesis
+      by (auto simp add: nth_append length_pts_eq_plen tdb_eqs)
+  next
+    case False
+    with that(2) have "i < plen \<pi>"
+      by (metis less_trans_Suc linorder_not_less nat_neq_iff progress_le)
+    with that(1) show ?thesis
+      by (auto simp add: nth_append length_pts_eq_plen nth_pts_eq_\<tau>[OF \<open>prefix_of \<pi> \<sigma>\<close>])
+  qed
+  show ?thesis
+  proof
+    assume ?L
+    then show ?R
+      unfolding flatten_verdicts_def mstep_def using set_Vs \<tau>_eq
+      by (auto simp add: in_set_enumerate_eq state_eqs meval_eq length_pts_eq_plen length_Vs
+          split: prod.splits)
+  next
+    assume ?R
+    then have "i \<le> plen \<pi>"
+      by (metis Suc_leI Suc_le_mono le_trans progress_le)
+    with \<open>?R\<close> show ?L
+      unfolding flatten_verdicts_def mstep_def using set_Vs \<tau>_eq
+      by (auto simp add: in_set_enumerate_eq state_eqs meval_eq length_pts_eq_plen length_Vs
+          min_add_distrib_left split: prod.splits intro!: bexI[where x="(i, \<tau> \<sigma> i, Vs ! (i - ?p))"])
+  qed
 qed
 
 
@@ -8322,16 +8432,19 @@ lemma (in verimon) mstep_mverdicts:
   assumes wf: "wf_mstate \<phi> \<pi> R st"
     and le[simp]: "last_ts \<pi> \<le> snd tdb"
     and restrict: "mem_restr R v"
-  shows "(i, v) \<in> flatten_verdicts (fst (mstep (apfst mk_db tdb) st)) \<longleftrightarrow>
-    (i, v) \<in> M (psnoc \<pi> tdb) - M \<pi>"
+  shows "(i, t, v) \<in> flatten_verdicts (fst (mstep (apfst mk_db tdb) st)) \<longleftrightarrow>
+    (i, t, v) \<in> Mt (psnoc \<pi> tdb) - Mt \<pi>"
 proof -
   obtain \<sigma> where p2: "prefix_of (psnoc \<pi> tdb) \<sigma>"
     using ex_prefix_of by blast
   with le have p1: "prefix_of \<pi> \<sigma>" by (blast elim!: prefix_of_psnocE)
-  show ?thesis
-    unfolding M_def
+  have "i < progress \<sigma> Map.empty \<phi> (Suc (plen \<pi>)) \<Longrightarrow> i < Suc (plen \<pi>)"
+    by (metis order.strict_trans2 progress_le)
+  then show ?thesis
+    unfolding Mt_def M_def
     by (auto 0 3 simp: p2 progress_prefix_conv[OF _ p1] sat_prefix_conv[OF _ p1] not_less
-        pprogress_eq[OF p1] pprogress_eq[OF p2]
+        pprogress_eq[OF p1] pprogress_eq[OF p2] nth_pts_eq_\<tau>[OF p1] nth_pts_eq_\<tau>[OF p2]
+        image_iff less_Suc_eq cong: conj_cong
         dest: mstep_output_iff[OF wf le p2 restrict, THEN iffD1] spec[of _ \<sigma>]
         mstep_output_iff[OF wf le _ restrict, THEN iffD1] progress_sat_cong[OF p1]
         intro: mstep_output_iff[OF wf le p2 restrict, THEN iffD2] p1)
@@ -8352,10 +8465,10 @@ primrec msteps0_stateless where
 lemma msteps0_msteps0_stateless: "fst (msteps0 w st) = msteps0_stateless w st"
   by (induct w arbitrary: st) (auto simp: split_beta)
 
-lift_definition msteps :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list \<times> ('msaux, 'muaux) mstate"
+lift_definition msteps :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> ts \<times> event_data table) list \<times> ('msaux, 'muaux) mstate"
   is msteps0 .
 
-lift_definition msteps_stateless :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> event_data table) list"
+lift_definition msteps_stateless :: "Formula.prefix \<Rightarrow> ('msaux, 'muaux) mstate \<Rightarrow> (nat \<times> ts \<times> event_data table) list"
   is msteps0_stateless .
 
 lemma msteps_msteps_stateless: "fst (msteps w st) = msteps_stateless w st"
@@ -8377,9 +8490,26 @@ end
 lemma Suc_length_conv_snoc: "(Suc n = length xs) = (\<exists>y ys. xs = ys @ [y] \<and> length ys = n)"
   by (cases xs rule: rev_cases) auto
 
+lemma (in verimon) fst_M_less_plen: assumes "(i, v) \<in> M \<pi>" shows "i < plen \<pi>"
+proof -
+  obtain \<sigma> where "prefix_of \<pi> \<sigma>"
+    using ex_prefix_of by blast
+  then have "pprogress \<phi> \<pi> \<le> plen \<pi>"
+    by (simp add: pprogress_eq)
+  with assms show ?thesis
+    unfolding M_def by simp
+qed
+
+lemma nth_pts_prefix_cong: "\<pi> \<le> \<pi>' \<Longrightarrow> i < plen \<pi> \<Longrightarrow> pts \<pi> ! i = pts \<pi>' ! i"
+  by transfer (auto simp add: nth_append)
+
+lemma (in verimon) mono_monitor': "\<pi> \<le> \<pi>' \<Longrightarrow> Mt \<pi> \<subseteq> Mt \<pi>'"
+  unfolding Mt_def using mono_monitor[of \<pi> \<pi>'] fst_M_less_plen[of _ _ \<pi>]
+  by (auto simp add: nth_pts_prefix_cong dest!: subsetD)
+
 lemma (in verimon) wf_mstate_msteps: "wf_mstate \<phi> \<pi> R st \<Longrightarrow> mem_restr R v \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
   X = msteps (pdrop (plen \<pi>) \<pi>') st \<Longrightarrow> wf_mstate \<phi> \<pi>' R (snd X) \<and>
-  ((i, v) \<in> flatten_verdicts (fst X)) = ((i, v) \<in> M \<pi>' - M \<pi>)"
+  ((i, t, v) \<in> flatten_verdicts (fst X)) = ((i, t, v) \<in> Mt \<pi>' - Mt \<pi>)"
 proof (induct "plen \<pi>' - plen \<pi>" arbitrary: X st \<pi> \<pi>')
   case 0
   from 0(1,4,5) have "\<pi> = \<pi>'"  "X = ([], st)"
@@ -8403,20 +8533,21 @@ next
   qed
   with Suc(1)[OF this(1) Suc.prems(1,2) this(2) refl] Suc.prems show ?case
     by (auto simp: msteps_psnoc split_beta mstep_mverdicts
-        dest: mono_monitor[THEN set_mp, rotated] intro!: wf_mstate_mstep)
+        dest: mono_monitor'[THEN set_mp, rotated] intro!: wf_mstate_mstep)
 qed
 
 lemma (in verimon) wf_mstate_msteps_stateless:
   assumes "wf_mstate \<phi> \<pi> R st" "mem_restr R v" "\<pi> \<le> \<pi>'"
-  shows "(i, v) \<in> flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) \<longleftrightarrow> (i, v) \<in> M \<pi>' - M \<pi>"
+  shows "(i, t, v) \<in> flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) \<longleftrightarrow>
+    (i, t, v) \<in> Mt \<pi>' - Mt \<pi>"
   using wf_mstate_msteps[OF assms refl] unfolding msteps_msteps_stateless by simp
 
 lemma (in verimon) wf_mstate_msteps_stateless_UNIV: "wf_mstate \<phi> \<pi> UNIV st \<Longrightarrow> \<pi> \<le> \<pi>' \<Longrightarrow>
-  flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) = M \<pi>' - M \<pi>"
+  flatten_verdicts (msteps_stateless (pdrop (plen \<pi>) \<pi>') st) = Mt \<pi>' - Mt \<pi>"
   by (auto dest: wf_mstate_msteps_stateless[OF _ mem_restr_UNIV])
 
-lemma (in verimon) mverdicts_Nil: "M pnil = {}"
-  by (simp add: M_def pprogress_eq)
+lemma (in verimon) Mt_pnil: "Mt pnil = {}"
+  by (simp add: Mt_def M_def pprogress_eq)
 
 context maux
 begin
@@ -8429,10 +8560,11 @@ lemma wf_mstate_minit_safe: "mmonitorable \<phi> \<Longrightarrow> wf_mstate \<p
 
 end
 
-lemma (in verimon) monitor_mverdicts: "flatten_verdicts (monitor \<phi> \<pi>) = M \<pi>"
+lemma (in verimon) monitor_mverdicts: "flatten_verdicts (monitor \<phi> \<pi>) = Mt \<pi>"
   unfolding monitor_def using monitorable
   by (subst wf_mstate_msteps_stateless_UNIV[OF wf_mstate_minit_safe, simplified])
-    (auto simp: mmonitorable_def mverdicts_Nil)
+    (auto simp: mmonitorable_def Mt_pnil)
+
 
 subsection \<open>Collected correctness results\<close>
 

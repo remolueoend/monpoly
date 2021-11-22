@@ -235,6 +235,7 @@ qualified datatype (discs_sels) formula = Pred name "trm list"
   | Prev \<I> formula | Next \<I> formula
   | Since formula \<I> formula | Until formula \<I> formula
   | MatchF \<I> "formula Regex.regex" | MatchP \<I> "formula Regex.regex"
+  | TP trm | TS trm
 
 qualified definition "FF = Exists (Neg (Eq (Var 0) (Var 0)))"
 qualified definition "TT \<equiv> Neg FF"
@@ -258,6 +259,8 @@ qualified fun fvi :: "nat \<Rightarrow> formula \<Rightarrow> nat set" where
 | "fvi b (Until \<phi> I \<psi>) = fvi b \<phi> \<union> fvi b \<psi>"
 | "fvi b (MatchF I r) = Regex.fv_regex (fvi b) r"
 | "fvi b (MatchP I r) = Regex.fv_regex (fvi b) r"
+| "fvi b (TP t) = fvi_trm b t"
+| "fvi b (TS t) = fvi_trm b t"
 
 abbreviation "fv \<equiv> fvi 0"
 abbreviation "fv_regex \<equiv> Regex.fv_regex fv"
@@ -390,6 +393,8 @@ fun contains_pred :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> bool
 |  "contains_pred p (Until \<phi> I \<psi>) = (contains_pred p \<phi> \<or> contains_pred p \<psi>)"
 |  "contains_pred p (MatchP I r) = (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
 |  "contains_pred p (MatchF I r) =  (\<exists>\<phi>\<in>Regex.atms r. contains_pred p \<phi>)"
+|  "contains_pred p (TP t) = False"
+|  "contains_pred p (TS t) = False"
 
 fun safe_letpast :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> rec_safety" where
    "safe_letpast p (Eq t1 t2) = Unused"
@@ -415,6 +420,8 @@ fun safe_letpast :: "name \<times> nat \<Rightarrow> formula \<Rightarrow> rec_s
 |  "safe_letpast p (Until \<phi> I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
 |  "safe_letpast p (MatchP I r) = \<Squnion>(safe_letpast p ` Regex.atms r)"
 |  "safe_letpast p (MatchF I r) =  AnyRec * \<Squnion>(safe_letpast p ` Regex.atms r)"
+|  "safe_letpast p (TP t) = Unused"
+|  "safe_letpast p (TS t) = Unused"
 
 qualified fun future_bounded :: "formula \<Rightarrow> bool" where
   "future_bounded (Pred _ _) = True"
@@ -435,6 +442,8 @@ qualified fun future_bounded :: "formula \<Rightarrow> bool" where
 | "future_bounded (Until \<phi> I \<psi>) = (future_bounded \<phi> \<and> future_bounded \<psi> \<and> bounded I)"
 | "future_bounded (MatchP I r) = Regex.pred_regex future_bounded r"
 | "future_bounded (MatchF I r) = (Regex.pred_regex future_bounded r \<and> bounded I)"
+| "future_bounded (TP _) = True"
+| "future_bounded (TS _) = True"
 
 
 subsubsection \<open>Semantics\<close>
@@ -471,6 +480,8 @@ qualified fun sat :: "trace \<Rightarrow> (name \<times> nat \<rightharpoonup> e
 | "sat \<sigma> V v i (Until \<phi> I \<psi>) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> sat \<sigma> V v j \<psi> \<and> (\<forall>k \<in> {i ..< j}. sat \<sigma> V v k \<phi>))"
 | "sat \<sigma> V v i (MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat \<sigma> V v) r j i)"
 | "sat \<sigma> V v i (MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat \<sigma> V v) r i j)"
+| "sat \<sigma> V v i (TP t) = (eval_trm v t = EInt (integer_of_nat i))"
+| "sat \<sigma> V v i (TS t) = (eval_trm v t = EFloat (double_of_int (\<tau> \<sigma> i)))"
 
 lemma sat_abbrevs[simp]:
   "sat \<sigma> V v i TT" "\<not> sat \<sigma> V v i FF"
@@ -666,6 +677,12 @@ next
     by (intro match_fv_cong) (auto simp: fv_regex_alt)
   then show ?case
     by auto
+next
+  case (TP t)
+  then show ?case unfolding fvi.simps sat.simps by (metis eval_trm_fv_cong)
+next
+  case (TS t)
+  then show ?case unfolding fvi.simps sat.simps by (metis eval_trm_fv_cong)
 qed (auto 10 0 simp: Let_def split: nat.splits intro!: iff_exI)
 
 lemma match_fv_cong:
@@ -698,6 +715,8 @@ fun past_only :: "formula \<Rightarrow> bool" where
 | "past_only (Until \<alpha> _ \<beta>) = False"
 | "past_only (MatchP _ r) = Regex.pred_regex past_only r"
 | "past_only (MatchF _ _) = False"
+| "past_only (TP _) = True"
+| "past_only (TS _) = True"
 
 lemma past_only_sat:
   assumes "prefix_of \<pi> \<sigma>" "prefix_of \<pi> \<sigma>'"
@@ -798,6 +817,12 @@ next
   then have "Regex.match (sat \<sigma> V v) r a b = Regex.match (sat \<sigma>' V' v) r a b" if "b < plen \<pi>" for a b
     using that by (intro Regex.match_cong_strong) (auto simp: regex.pred_set)
   with \<tau>_prefix_conv[OF assms] MatchP(2) show ?case by auto
+next
+  case (TP t)
+  with \<tau>_prefix_conv[OF assms] show ?case by simp
+next
+  case (TS t)
+  with \<tau>_prefix_conv[OF assms] show ?case by simp
 qed auto
 
 
@@ -861,6 +886,8 @@ fun safe_formula :: "formula \<Rightarrow> bool" where
      (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) Past Strict r"
 | "safe_formula (MatchF I r) = Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
      (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False))) Futu Strict r"
+| "safe_formula (TP t) = (is_Var t \<or> is_Const t)"
+| "safe_formula (TS t) = (is_Var t \<or> is_Const t)"
 
 abbreviation "safe_regex \<equiv> Regex.safe_regex fv (\<lambda>g \<phi>. safe_formula \<phi> \<or>
   (g = Lax \<and> (case \<phi> of Neg \<phi>' \<Rightarrow> safe_formula \<phi>' | _ \<Rightarrow> False)))"
@@ -896,7 +923,7 @@ lemma disjE_Not2: "P \<or> Q \<Longrightarrow> (P \<Longrightarrow> R) \<Longrig
 
 lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Var Pred Let LetPast
     And_assign And_safe And_constraint And_Not Ands Neg Or Exists Agg
-    Prev Next Since Not_Since Until Not_Until MatchP MatchF]:
+    Prev Next Since Not_Since Until Not_Until MatchP MatchF TP TS]:
   assumes "safe_formula \<phi>"
     and Eq_Const: "\<And>c d. P (Eq (Const c) (Const d))"
     and Eq_Var1: "\<And>c x. P (Eq (Const c) (Var x))"
@@ -931,6 +958,8 @@ lemma safe_formula_induct[consumes 1, case_names Eq_Const Eq_Var1 Eq_Var2 neq_Va
       \<not> safe_formula (Neg \<phi>) \<Longrightarrow> safe_formula \<psi> \<Longrightarrow> P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (Until (Neg \<phi>) I \<psi>)"
     and MatchP: "\<And>I r. safe_regex Past Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchP I r)"
     and MatchF: "\<And>I r. safe_regex Futu Strict r \<Longrightarrow> \<forall>\<phi> \<in> atms r. P \<phi> \<Longrightarrow> P (MatchF I r)"
+    and TP: "\<And>t. is_Var t \<or> is_Const t \<Longrightarrow> P (TP t)"
+    and TS: "\<And>t. is_Var t \<or> is_Const t \<Longrightarrow> P (TS t)"
   shows "P \<phi>"
 using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_induct)
   case 1
@@ -1065,6 +1094,8 @@ qualified fun matches ::
 | "matches v (Until \<phi> I \<psi>) e = (matches v \<phi> e \<or> matches v \<psi> e)"
 | "matches v (MatchP I r) e = (\<exists>\<phi> \<in> Regex.atms r. matches v \<phi> e)"
 | "matches v (MatchF I r) e = (\<exists>\<phi> \<in> Regex.atms r. matches v \<phi> e)"
+| "matches v (TP _) e = False"
+| "matches v (TS _) e = False"
 
 lemma matches_cong:
   "\<forall>x\<in>fv \<phi>. v!x = v'!x \<Longrightarrow> matches v \<phi> e = matches v' \<phi> e"
@@ -1342,6 +1373,8 @@ primrec convert_multiway :: "formula \<Rightarrow> formula" where
 | "convert_multiway (Until \<phi> I \<psi>) = Until (convert_multiway \<phi>) I (convert_multiway \<psi>)"
 | "convert_multiway (MatchP I r) = MatchP I (Regex.map_regex convert_multiway r)"
 | "convert_multiway (MatchF I r) = MatchF I (Regex.map_regex convert_multiway r)"
+| "convert_multiway (TP t) = TP t"
+| "convert_multiway (TS t) = TS t"
 
 abbreviation "convert_multiway_regex \<equiv> Regex.map_regex convert_multiway"
 
@@ -1867,6 +1900,15 @@ lemma safe_regex_Future_finite: "safe_regex Futu Strict r \<Longrightarrow>
     done
   done
 
+lemma wf_tuple_empty_iff: "wf_tuple n {} v \<longleftrightarrow> v = replicate n None"
+  unfolding wf_tuple_def
+  by (auto simp add: list_eq_iff_nth_eq)
+
+lemma Collect_singleton_tuple_eq_image: "i < n \<Longrightarrow> {v. wf_tuple n {i} v \<and> P (map the v ! i)} =
+  (\<lambda>x. (replicate n None)[i := Some x]) ` Collect P"
+  unfolding wf_tuple_def
+  by (auto simp add: list_eq_iff_nth_eq nth_list_update intro: rev_image_eqI)
+  
 lemma safe_formula_finite: "safe_formula \<phi> \<Longrightarrow> future_bounded \<phi> \<Longrightarrow> n\<ge> (nfv \<phi>) \<Longrightarrow> \<forall> i. finite (\<Gamma> \<sigma> i) \<Longrightarrow>
   \<forall>pn\<in>dom V. \<forall>i. finite {v. length v = snd pn \<and> the (V pn) v i} \<Longrightarrow>
   finite {v. wf_tuple n (fv \<phi>) v \<and> sat \<sigma> V (map the v) i \<phi>}"
@@ -2364,6 +2406,16 @@ next
      apply auto
     apply (meson \<tau>_mono diff_le_mono le_cases memR_antimono)
     done
+next
+  case (TP t)
+  then show ?case
+    unfolding is_Var_def is_Const_def nfv_def 
+    by (auto simp add: wf_tuple_empty_iff Collect_singleton_tuple_eq_image[where P="\<lambda>x. x = _"])
+next
+  case (TS t)
+  then show ?case
+    unfolding is_Var_def is_Const_def nfv_def
+    by (auto simp add: wf_tuple_empty_iff Collect_singleton_tuple_eq_image[where P="\<lambda>x. x = _"])
 qed
 
 end (*context*)

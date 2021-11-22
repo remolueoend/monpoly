@@ -1,12 +1,7 @@
 (*
  * This file is part of MONPOLY.
  *
- * Copyright (C) 2011 Nokia Corporation and/or its subsidiary(-ies).
- * Contact:  Nokia Corporation (Debmalya Biswas: debmalya.biswas@nokia.com)
- *
- * Copyright (C) 2012 ETH Zurich.
- * Contact:  ETH Zurich (Eugen Zalinescu: eugen.zalinescu@inf.ethz.ch)
- *
+ * Copyright (C) 2021 ETH Zurich.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -37,32 +32,25 @@
  * covered by the GNU Lesser General Public License.
  *)
 
+val parse_signature: string -> Db.schema
+val parse_signature_file: string -> Db.schema
 
-(** This module is an interface to the log parser. *)
+exception Stop_parser
 
-open MFOTL
-open Helper
-open Db
-open Log_parser
+module type Consumer = sig
+  type t
+  val begin_tp: t -> MFOTL.timestamp -> unit
+  val tuple: t -> Table.schema -> string list -> unit
+  val end_tp: t -> unit
+  val command: t -> string -> Helper.commandParameter option -> unit
+  val end_log: t -> unit
+  val parse_error: t -> Lexing.position -> string -> unit
+end
 
-val log_open : string -> Lexing.lexbuf
-(** [log_open f] opens file [f] and returns the initial state of the
-    corresponding log scanner. *)
+(*TODO(JS): move to Misc*)
+val string_of_position: Lexing.position -> string
 
-val get_signature_string : string -> schema
-(** [get_signature s] returns the schema defined in the signature string
-    [s]. *)
-
-val get_signature : string -> schema
-(** [get_signature f] returns the schema defined in the signature file
-    [f]. *)
-
-val get_next_entry : Lexing.lexbuf -> monpoly_feed
-(** [get_next_entry lexbuf] reads the current entry in the log file
-    corresponding to the scanner [lexbuf]. It returns [None] when the
-    end of the log is reached. *)
-
-val tp : int ref
-val last_ts : MFOTL.timestamp ref
-val skipped_tps : int ref
-val last : bool ref
+module Make(C: Consumer): sig
+  val parse: Db.schema -> Lexing.lexbuf -> C.t -> bool
+  val parse_file: Db.schema -> string -> C.t -> bool
+end

@@ -119,6 +119,9 @@ definition M :: "'a prefix \<Rightarrow> (nat \<times> 'b tuple) set" where
   "M \<pi> = {(i, v). i < progress \<pi> \<and> wf_tuple nfv fv v \<and>
     (\<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> sat \<sigma> (map the v) i)}"
 
+definition Mt :: "'a prefix \<Rightarrow> (nat \<times> nat \<times> 'b tuple) set" where
+  "Mt \<pi> = (\<lambda>(i, v). (i, pts \<pi> ! i, v)) ` M \<pi>"
+
 lemma M_alt: "M \<pi> = {(i, v). i < progress \<pi> \<and> wf_tuple nfv fv v \<and>
     (\<exists>\<sigma>. prefix_of \<pi> \<sigma> \<and> sat \<sigma> (map the v) i)}"
   using ex_prefix_of[of \<pi>]

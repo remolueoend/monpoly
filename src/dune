@@ -8,4 +8,4 @@
   (ocamlopt_flags (:standard -O3)))
 
 (ocamllex formula_lexer log_lexer)
-(ocamlyacc formula_parser log_parser)
+(ocamlyacc formula_parser)
