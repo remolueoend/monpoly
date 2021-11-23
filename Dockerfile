@@ -1,34 +1,24 @@
-FROM ocaml/opam2:ubuntu-18.04
+FROM ocaml/opam:alpine-3.14-ocaml-4.11-flambda AS build
 
-RUN sudo apt-get update \
-    && sudo apt-get install -y \
+RUN sudo apk add --no-cache \
+    gmp-dev \
     m4 \
-    libgmp-dev \
-    && sudo rm -rf /var/lib/apt/lists/* 
+    && opam update
 
-RUN rm -rf /home/opam/.opam \
-    && opam init -y \
-    && opam update \
-    && opam switch create 4.11.1 
+COPY --chown=opam:opam . build
+WORKDIR build
 
-RUN eval $(opam env) 
+RUN opam install --deps-only --ignore-constraints-on=libmonpoly . \
+    && eval $(opam env) \
+    && dune build --profile=release @install @runtest \
+    && dune install --prefix=/home/opam/dist --relocatable monpoly monpoly-tools
 
-USER opam
-ENV MDIR /monpoly
+FROM alpine:3.14
+
+RUN apk add --no-cache gmp
+
+COPY --from=build /home/opam/dist /usr/local/
+
 ENV WDIR /work
-RUN sudo mkdir -p ${WDIR} \
-    && sudo mkdir -p ${MDIR}
-WORKDIR ${MDIR}
-
-ADD . ${MDIR}
-RUN sudo chown -R opam:opam . \
-    && opam install --deps-only . 
-RUN eval $(opam env) \
-    && dune build --release \
-    && dune test \
-    && dune install
-    # TODO add log_generator fma_generator and verimon 
-RUN chmod +x ${MDIR}/run.sh \
-    && sudo mv ${MDIR}/run.sh /run.sh
-WORKDIR ${WDIR}
-ENTRYPOINT ["/run.sh"]
+WORKDIR $WDIR
+ENTRYPOINT ["monpoly"]
