@@ -1,5 +1,5 @@
 (lang dune 2.8)
-(name monpoly-dev)
+(name monpoly)
 
 (generate_opam_files true)
 (cram enable)
@@ -11,14 +11,27 @@
 (bug_reports "https://bitbucket.org/jshs/monpoly/issues")
 
 (package
-  (name monpoly-dev)
-  (synopsis "Check compliance of log files with respect to policies")
-  (description "\
-MonPoly is a prototype monitoring tool. It checks the compliance of log files
-with respect to policies that are specified by formulas in Metric First-Order
-Temporal Logic (MFOTL) with aggregations.")
+  (name libmonpoly)
+  (synopsis "Library for the MonPoly and VeriMon monitoring tools")
   (depends
     (ocaml (>= 4.11))
     (dune (>= 2.8))
-    dune-build-info
     (zarith (>= 1.11))))
+
+(package
+  (name monpoly)
+  (synopsis "Check compliance of log files with respect to policies")
+  (description "\
+MonPoly and VeriMon are monitoring tools. They check the compliance of log files
+with respect to policies that are specified by formulas in Metric First-Order
+Temporal Logic (MFOTL) with aggregations.")
+  (depends
+    (libmonpoly (= version))
+    dune-build-info))
+
+(package
+  (name monpoly-tools)
+  (synopsis "Additional tools for the MonPoly and VeriMon monitors")
+  (depends
+    (libmonpoly (= version))
+    (qcheck (>= 0.18))))

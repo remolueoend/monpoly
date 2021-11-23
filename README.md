@@ -47,7 +47,7 @@ eval $(opam env)
 
 Missing dependencies including Dune can be installed with
 ```
-opam install --deps-only .
+opam install --deps-only --ignore-constraints-on=libmonpoly .
 ```
 
 ### Quick installation

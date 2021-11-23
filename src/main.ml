@@ -38,7 +38,7 @@
  *)
 
 
-
+open Libmonpoly
 open Misc
 open Predicate
 open MFOTL

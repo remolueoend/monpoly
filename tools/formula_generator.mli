@@ -1,7 +1,7 @@
 
 
-open MFOTL
-open Predicate
+open Libmonpoly.MFOTL
+open Libmonpoly.Predicate
 
 type genformula
 

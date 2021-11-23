@@ -24,11 +24,12 @@ Generate these formulas as base cases:
 *)
 
 open QCheck
+open Libmonpoly
 open MFOTL
 open Predicate
 
-module Set = Set.Make(struct type t = string let compare = Pervasives.compare end)
-module IntMap = Map.Make(struct type t = int let compare = Pervasives.compare end)
+module Set = Set.Make(struct type t = string let compare = Stdlib.compare end)
+module IntMap = Map.Make(struct type t = int let compare = Stdlib.compare end)
 open IntMap
 
 type relop = LT | GT | LEQ | GEQ | EQ 
