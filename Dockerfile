@@ -8,7 +8,7 @@ RUN sudo apk add --no-cache \
 COPY --chown=opam:opam . build
 WORKDIR build
 
-RUN opam install --deps-only --ignore-constraints-on=libmonpoly . \
+RUN opam install -y --deps-only --ignore-constraints-on=libmonpoly . \
     && eval $(opam env) \
     && dune build --profile=release @install @runtest \
     && dune install --prefix=/home/opam/dist --relocatable monpoly monpoly-tools

@@ -1,0 +1,30 @@
+FROM ocaml/opam:ubuntu-18.04-opam AS build
+
+RUN sudo apt-get update \
+    && sudo apt-get install --no-install-recommends -y \
+        libgmp-dev \
+        m4 \
+    && opam update \
+    && opam switch create "ocaml-variants.4.11.2+flambda" \
+    && eval $(opam env)
+
+COPY --chown=opam:opam . build
+WORKDIR build
+
+RUN opam install -y --deps-only --ignore-constraints-on=libmonpoly . \
+    && eval $(opam env) \
+    && dune build --profile=release @install @runtest \
+    && dune install --prefix=/home/opam/dist --relocatable monpoly monpoly-tools
+
+FROM ubuntu:18.04
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        libgmp-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /home/opam/dist /usr/local/
+
+ENV WDIR /work
+WORKDIR $WDIR
+ENTRYPOINT ["monpoly"]
