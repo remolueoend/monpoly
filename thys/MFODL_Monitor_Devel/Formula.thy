@@ -843,6 +843,7 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
       by (auto simp: 17 intro!: MatchF)
   qed (auto simp: assms)
 qed
+
 lemma aux: "safe_regex m g r \<Longrightarrow> \<forall>x\<in>atms r. wf_formula x \<Longrightarrow>\<forall>x\<in>regex.atms r. wf_formula x" apply(induction rule: safe_regex_induct)
   sorry
 
