@@ -9,8 +9,8 @@
   At time point 3:
   At time point 4:
   At time point 5:
-  @41. (time point 0): ((2,4,2003))
-  @42. (time point 1): ()
-  @43. (time point 2): ()
-  @44. (time point 3): ()
-  @47. (time point 4): ()
+  @41 (time point 0): ((2,4,2003))
+  @42 (time point 1): ()
+  @43 (time point 2): ()
+  @44 (time point 3): ()
+  @47 (time point 4): ()

@@ -139,9 +139,9 @@ let m_to_ext mf =
       let (_, tsq) = Neval.get_data meinf.melastev in
       let (tsj, _) = Dllist.get_first meauxrels in
       (* Catch case where auxrels contains exactly one element with same ts as elast *)
-      if ((MFOTL.ts_minus tsj tsq) < 0.0) then
+      if Z.(tsj - tsq < zero) then
         let tree_list, elast =
-          let cond = fun (tsj,_) -> (MFOTL.ts_minus tsj tsq) < 0.0 in
+          let cond = fun (tsj,_) -> Z.(tsj - tsq < zero) in
           Helper.get_new_elements meinf.meauxrels Dllist.void cond (fun x -> x)
         in
         let etree =
@@ -182,7 +182,7 @@ let m_to_ext mf =
       begin
         let (tsq, rel) = Dllist.get_last moauxrels in
         let tree_list, olast =
-          let cond = fun (tsj,_) -> (MFOTL.in_right_ext (MFOTL.ts_minus tsq tsj) intv) in
+          let cond = fun (tsj,_) -> (MFOTL.in_right_ext Z.(tsq - tsj) intv) in
           Helper.get_new_elements moauxrels Dllist.void cond (fun x -> x)
         in
         { otree =
@@ -211,7 +211,7 @@ let m_to_ext mf =
       let tree_list, ozlast  =
         let (_, tsq, arel) = Dllist.get_first mozauxrels in
         let f = fun (j,_,rel) -> (j,rel) in
-        let cond = fun (_,tsj,_) -> MFOTL.in_left_ext (MFOTL.ts_minus tsj tsq) intv in
+        let cond = fun (_,tsj,_) -> MFOTL.in_left_ext Z.(tsj - tsq) intv in
         Helper.get_new_elements mozauxrels Dllist.void cond f
       in
       { oztree =

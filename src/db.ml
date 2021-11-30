@@ -49,8 +49,8 @@ type schema = Table.schema list
 
 let base_schema =
   [("tp", ["i", TInt]);
-   ("ts", ["t", TFloat]);
-   ("tpts", [("i", TInt); ("t", TFloat)]);]
+   ("ts", ["t", TInt]);
+   ("tpts", [("i", TInt); ("t", TInt)]);]
 
 let add_predicate p l s =
   if List.mem_assoc p s

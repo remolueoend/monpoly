@@ -7,3 +7,5 @@ _build
 
 /thys/*/*.ocaml
 .DS_Store
+.vscode
+libmonpoly.install

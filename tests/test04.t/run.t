@@ -5,11 +5,11 @@ Safe-range:
     P(x) AND 0 = 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND ( 0 =  1)' > test4_2.mfotl
@@ -18,11 +18,11 @@ Safe-range:
     P(x) AND 0 = 1
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND (x =  0)' > test4_3.mfotl
@@ -31,11 +31,11 @@ Safe-range:
     P(x) AND x = 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND ( 0 = x)' > test4_4.mfotl
@@ -44,11 +44,11 @@ Safe-range:
     P(x) AND 0 = x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND (x = x)' > test4_5.mfotl
@@ -57,11 +57,11 @@ Safe-range:
     P(x) AND x = x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Domain independent but not safe-range:
   $ echo 'P(x) AND (x = y)' > test4_6.mfotl
@@ -70,11 +70,11 @@ Domain independent but not safe-range:
     P(x) AND x = y
   The sequence of free variables is: (x,y)
   At time point 0:
-  @100. (time point 0): ((0,0))
+  @100 (time point 0): ((0,0))
   At time point 1:
-  @200. (time point 1): ((1,1))
+  @200 (time point 1): ((1,1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND ( 0 <  0)' > test4_7.mfotl
@@ -83,11 +83,11 @@ Safe-range:
     P(x) AND 0 < 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND ( 0 <  1)' > test4_8.mfotl
@@ -96,11 +96,11 @@ Safe-range:
     P(x) AND 0 < 1
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND (x <  0)' > test4_9.mfotl
@@ -109,11 +109,11 @@ Safe-range:
     P(x) AND x < 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND (x <  1)' > test4_10.mfotl
@@ -122,11 +122,11 @@ Safe-range:
     P(x) AND x < 1
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND ( 0 < x)' > test4_11.mfotl
@@ -135,11 +135,11 @@ Safe-range:
     P(x) AND 0 < x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND (x < x)' > test4_12.mfotl
@@ -148,11 +148,11 @@ Safe-range:
     P(x) AND x < x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Domain dependent:
   $ echo 'P(x) AND (x < y)' > test4_13.mfotl
@@ -173,11 +173,11 @@ Safe-range:
     P(y) AND x = 0
   The sequence of free variables is: (y,x)
   At time point 0:
-  @100. (time point 0): ((0,0))
+  @100 (time point 0): ((0,0))
   At time point 1:
-  @200. (time point 1): ((1,0))
+  @200 (time point 1): ((1,0))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(y) AND ( 0 = x)' > test4_15.mfotl
@@ -186,11 +186,11 @@ Safe-range:
     P(y) AND 0 = x
   The sequence of free variables is: (y,x)
   At time point 0:
-  @100. (time point 0): ((0,0))
+  @100 (time point 0): ((0,0))
   At time point 1:
-  @200. (time point 1): ((1,0))
+  @200 (time point 1): ((1,0))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Domain dependent:
   $ echo 'P(y) AND (x = x)' > test4_16.mfotl
@@ -211,11 +211,11 @@ Domain independent but not safe-range:
     P(y) AND x = y
   The sequence of free variables is: (y,x)
   At time point 0:
-  @100. (time point 0): ((0,0))
+  @100 (time point 0): ((0,0))
   At time point 1:
-  @200. (time point 1): ((1,1))
+  @200 (time point 1): ((1,1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Domain dependent (integers):
   $ echo 'P(y) AND (x <  0)' > test4_18.mfotl
@@ -288,11 +288,11 @@ Safe-range:
     P(x) AND (NOT 0 = 0)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT ( 0 =  1)' > test4_24.mfotl
@@ -301,11 +301,11 @@ Safe-range:
     P(x) AND (NOT 0 = 1)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT (x =  0)' > test4_25.mfotl
@@ -314,11 +314,11 @@ Safe-range:
     P(x) AND (NOT x = 0)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT ( 0 = x)' > test4_26.mfotl
@@ -327,11 +327,11 @@ Safe-range:
     P(x) AND (NOT 0 = x)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT (x = x)' > test4_27.mfotl
@@ -340,11 +340,11 @@ Safe-range:
     P(x) AND (NOT x = x)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Domain dependent:
   $ echo 'P(x) AND NOT (x = y)' > test4_28.mfotl
@@ -365,11 +365,11 @@ Safe-range:
     P(x) AND (NOT 0 < 0)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT ( 0 <  1)' > test4_30.mfotl
@@ -378,11 +378,11 @@ Safe-range:
     P(x) AND (NOT 0 < 1)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT (x <  0)' > test4_31.mfotl
@@ -391,11 +391,11 @@ Safe-range:
     P(x) AND (NOT x < 0)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT (x <  1)' > test4_32.mfotl
@@ -404,11 +404,11 @@ Safe-range:
     P(x) AND (NOT x < 1)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ()
+  @100 (time point 0): ()
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT ( 0 < x)' > test4_33.mfotl
@@ -417,11 +417,11 @@ Safe-range:
     P(x) AND (NOT 0 < x)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Safe-range:
   $ echo 'P(x) AND NOT (x < x)' > test4_34.mfotl
@@ -430,11 +430,11 @@ Safe-range:
     P(x) AND (NOT x < x)
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((1))
+  @200 (time point 1): ((1))
   At time point 2:
-  @300. (time point 2): ()
+  @300 (time point 2): ()
 
 Domain dependent (integers):
   $ echo 'P(x) AND NOT (x < y)' > test4_35.mfotl

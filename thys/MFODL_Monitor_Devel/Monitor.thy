@@ -1341,7 +1341,7 @@ function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> database
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
 | "meval n ts db (MTP mt i) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) [i..<j], MTP mt j)"
-| "meval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EFloat (double_of_int x))) ts, MTS mt)"
+| "meval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) ts, MTS mt)"
   by pat_completeness auto
 
 lemma size_list_cong: "xs = ys \<Longrightarrow> (\<And>x. x \<in> set xs \<Longrightarrow> f x = g x) \<Longrightarrow> size_list f xs = size_list g ys"

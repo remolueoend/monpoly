@@ -8,15 +8,9 @@ exception UnsupportedFragment of string
 
 let unsupported msg = raise (UnsupportedFragment msg)
 
+let int_of_nat n = Z.to_int (integer_of_nat n)
 let nat_of_int i = nat_of_integer (Z.of_int i)
-let nat_of_int64 i = nat_of_integer (Z.of_int64 i)
-let nat_of_float f = nat_of_integer (Z.of_float f)
-let enat_of_float f = Enat (nat_of_float f)
-let int_of_nat n = Z.to_int (integer_of_nat n) (* Problem? *)
-let float_of_nat n = Z.to_float (integer_of_nat n) (* Problem? *)
-let int_of_enat = function
-  | Enat n -> Z.to_int (integer_of_nat n)
-  | Infinity_enat -> failwith "[int_of_enat] Infinity"
+let enat_of_integer i = Enat (nat_of_integer i)
 
 let convert_cst = function
   | Int x -> EInt (Z.of_int x)
@@ -47,19 +41,19 @@ let convert_term fvl bvl =
 
 let convert_interval (l,r) =
     let lm = match l with
-    | OBnd a -> (a+.1.)
+    | OBnd a -> Z.(a + one)
     | CBnd a -> a
     | Inf -> unsupported ("Unsupported interval " ^ (string_of_interval (l,r)))
     in
     let um = match r with
-    | OBnd a -> Some (a-.1.)
+    | OBnd a -> Some Z.(a - one)
     | CBnd a ->  Some a
     | Inf -> None in
     match um with
-    | None -> interval (nat_of_float lm) Infinity_enat
+    | None -> interval (nat_of_integer lm) Infinity_enat
     | Some um ->
         if lm <= um
-        then interval (nat_of_float lm) (enat_of_float um)
+        then interval (nat_of_integer lm) (enat_of_integer um)
         else unsupported ("Unsupported interval " ^ (string_of_interval (l,r)))
 
 let convert_agg_op = function
@@ -218,11 +212,11 @@ let set_fold f s x = match s with
 let unconvert_violations =
   let add_tuple t = Relation.add (unconvert_tuple t) in
   let ucv_rel rel = set_fold add_tuple rel Relation.empty in
-  let ucv (tp, (ts, v)) = (int_of_nat tp, float_of_nat ts, ucv_rel v) in
+  let ucv (tp, (ts, v)) = (int_of_nat tp, integer_of_nat ts, ucv_rel v) in
   List.map ucv
 
 let step t db st =
-  let (vs, st') = mstep (db, nat_of_float t) st in
+  let (vs, st') = mstep (db, nat_of_integer t) st in
   (unconvert_violations vs, st')
 
 let is_monitorable dbschema f =

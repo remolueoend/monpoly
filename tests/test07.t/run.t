@@ -8,7 +8,7 @@
   At time point 2:
   At time point 3:
   At time point 4:
-  @100. (time point 0): false
-  @100. (time point 1): false
-  @100. (time point 2): false
-  @100. (time point 3): false
+  @100 (time point 0): false
+  @100 (time point 1): false
+  @100 (time point 2): false
+  @100 (time point 3): false

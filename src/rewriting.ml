@@ -783,7 +783,7 @@ let rec check_intervals =
   let check_interval intv =
     let check_bound b = match b with
     | OBnd a
-    | CBnd a -> a >= 0.
+    | CBnd a -> Z.(a >= zero)
     | _ -> true
     in
     let check_lb_ub lb ub =
