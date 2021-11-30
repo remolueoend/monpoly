@@ -1539,7 +1539,7 @@ let rec type_check_formula (sch, vars) f =
         (fun vrs vr -> (vr,new_type_symbol TAny sch (List.append shadowed_vars vrs))::vrs) reduced_vars zs in
     let type_check_aggregation exp_typ1 exp_typ2 =
         let (s1,v1,_) = type_check_term_debug d (sch,vars') exp_typ2 (Var x) in   (* Type check variable x *)
-        let (s2,v2,_) = type_check_formula (s1,v1) f in                           (* Type check formula f *)
+        let (s2,v2,f) = type_check_formula (s1,v1) f in                           (* Type check formula f *)
         let reduced_vars = 
           List.filter (fun (v,_) -> List.mem_assoc v reduced_vars) v2 in          (* Get the updated types for gs vars *)
         let vars = shadowed_vars @ reduced_vars in                                (* Restore the top-level vars with updated vars *)
