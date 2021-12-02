@@ -63,6 +63,7 @@ let uc = ['A'-'Z']
 let letter = uc | lc
 let digit = ['0'-'9']
 let string = (letter | digit | '_' | '[' | ']' | '/' | ':' | '-' | '.' | '!')+
+let quoted_string = ([^ '"' '\\'] | '\\' _)*
 
 rule
   token = parse
@@ -79,8 +80,8 @@ rule
   | ";"                      { f "SEP" lexbuf; SEP }
 
   | string as s              { f "STR" lexbuf; STR s }
-  | '"' ([^'"']* as s) '"'   { f "STR" lexbuf; STR s }
-  | "r\"" ([^'"']* as s) '"' { f "STR" lexbuf; STR s }
+  | '"' (quoted_string as s) '"'   { f "STR" lexbuf; STR s }
+  | "r\"" (quoted_string as s) '"' { f "STR" lexbuf; STR s }
 
   | "#"                      { f "begin comment" lexbuf; line_comment lexbuf }
   | eof                      { f "EOF" lexbuf; EOF }
