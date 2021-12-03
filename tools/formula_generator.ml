@@ -360,7 +360,9 @@ let random_subset = Gen.oneofl << powerset
     Since Verimon does not support var1 = var2 formulas this is used with n=1
     to pick variables for constraints of the form var = const
 *)
-let random_bounded_subset n = Gen.oneofl << List.filter (fun x -> let l = List.length x in 1<=l && l <= n) << powerset 
+let random_bounded_subset n = 
+  assert (n > 0);
+  Gen.oneofl << List.filter (fun x -> let l = List.length x in 1<=l && l <= n) << powerset 
 
 let shuffle l =
   let a = Array.of_list l in
@@ -374,20 +376,19 @@ let shuffle l =
 
 let var_op f vs1 vs2 = Set.elements (f (Set.of_list vs1) (Set.of_list vs2))
 
-let rel_gen vs all_rels max_const = 
+let rel_gen v all_rels max_const = 
   let rel  = if all_rels then Gen.oneofl [LT ; GT ; LEQ ; GEQ ; EQ] else Gen.return EQ in 
   let cons1 = Gen.int_bound max_const in 
   let cons2 = Gen.int_bound max_const in 
   cons1 >>= (fun c1 -> 
   cons2 >>= (fun c2 -> 
-    vs >>= (fun v -> 
       rel >>= (fun r -> 
       (fun s -> match (List.length v) with
         | 2 ->  gRel r (Var (List.hd v)) (Var (List.hd (List.tl v)))
         | 1 ->  gRel r (Var (List.hd v)) (Cst (Int c1))
         | 0 ->  gRel r (Cst (Int c1)) (Cst (Int c2))
         | _ -> failwith "Rigid predicates can have up to 2 variables"
-      )))))
+      ))))
 
 let predicate_gen map vs =
   let vs = List.map (fun e -> Var e) vs in 
@@ -422,8 +423,8 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       let predbool = Gen.bool in
       predbool >>= (fun b ->
         if b then 
-          let twovars = random_bounded_subset vnum vars in
-          Gen.map (fun e -> (predmap,e)) (rel_gen twovars all_rels max_const)
+          (* let twovars = random_bounded_subset vnum vars in *)
+          Gen.map (fun e -> (predmap,e)) (rel_gen vars all_rels max_const)
         else
           Gen.map (mapSnd gPred) (predicate_gen predmap vars)
       )
@@ -474,11 +475,12 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       let m = Random.int n in
       let unarybind f vars =
         let twovars = random_bounded_subset 1 vars in
-        let sf = rel_gen twovars all_rels max_const in 
+        twovars >>= (fun v -> 
+        let sf = rel_gen v all_rels max_const in 
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf1) -> 
               sf >>= (fun sf2 ->
-                  (fun s -> (newMap, f sf1 sf2)))) in 
+                  (fun s -> (newMap, f sf1 sf2))))) in 
       let metricunarybind f intr =
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf) -> 
