@@ -9643,9 +9643,7 @@ let rec args_n
 let rec meeval
   j n ts db x4 = match j, n, ts, db, x4 with
     j, n, ts, db, MTS mt ->
-      (mapa (fun x -> eval_mtrm n mt (EFloat (double_of_int x)))
-         (mapa int_of_nat ts),
-        MTS mt)
+      (mapa (fun x -> eval_mtrm n mt (EInt (integer_of_nat x))) ts, MTS mt)
     | j, n, ts, db, MTP (mt, i) ->
         (mapa (fun x -> eval_mtrm n mt (EInt (integer_of_nat x))) (upt i j),
           MTP (mt, j))

@@ -1208,9 +1208,9 @@ let add_index f i tsi db =
            with Not_found ->
            match name with
            | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
-           | "ts" -> Relation.singleton (Tuple.make_tuple [Float tsi])
+           | "ts" -> Relation.singleton (Tuple.make_tuple [Int (Z.to_int tsi)])
            | "tpts" ->
-             Relation.singleton (Tuple.make_tuple [Int i; Float tsi])
+             Relation.singleton (Tuple.make_tuple [Int i; Int (Z.to_int tsi)])
            | _ -> Relation.empty
           )
         in

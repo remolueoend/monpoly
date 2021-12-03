@@ -5,9 +5,9 @@ Safe-range:
     0 = 0
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): true
+  @200 (time point 1): true
 
 Safe-range:
   $ echo '( 0 =  1)' > test3_2.mfotl
@@ -16,9 +16,9 @@ Safe-range:
     0 = 1
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo '(x =  0)' > test3_3.mfotl
@@ -27,9 +27,9 @@ Safe-range:
     x = 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((0))
+  @200 (time point 1): ((0))
 
 Safe-range:
   $ echo '( 0 = x)' > test3_4.mfotl
@@ -38,9 +38,9 @@ Safe-range:
     0 = x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((0))
+  @200 (time point 1): ((0))
 
 Domain dependent:
   $ echo '(x = x)' > test3_5.mfotl
@@ -162,9 +162,9 @@ Safe-range:
     T() AND 0 = 0
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND ( 0 =  1)' > test3_15.mfotl
@@ -173,9 +173,9 @@ Safe-range:
     T() AND 0 = 1
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND (x =  0)' > test3_16.mfotl
@@ -184,9 +184,9 @@ Safe-range:
     T() AND x = 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
 
 Safe-range:
   $ echo 'T() AND ( 0 = x)' > test3_17.mfotl
@@ -195,9 +195,9 @@ Safe-range:
     T() AND 0 = x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
 
 Domain dependent:
   $ echo 'T() AND (x = x)' > test3_18.mfotl
@@ -230,9 +230,9 @@ Safe-range:
     T() AND 0 < 0
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND ( 0 <  1)' > test3_21.mfotl
@@ -241,9 +241,9 @@ Safe-range:
     T() AND 0 < 1
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Domain dependent (integers):
   $ echo 'T() AND (x <  0)' > test3_22.mfotl
@@ -315,9 +315,9 @@ Safe-range:
     T() AND (NOT 0 = 0)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND NOT ( 0 =  1)' > test3_28.mfotl
@@ -326,9 +326,9 @@ Safe-range:
     T() AND (NOT 0 = 1)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Domain dependent:
   $ echo 'T() AND NOT (x =  0)' > test3_29.mfotl
@@ -386,9 +386,9 @@ Safe-range:
     T() AND (NOT 0 < 0)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND NOT ( 0 <  1)' > test3_34.mfotl
@@ -397,9 +397,9 @@ Safe-range:
     T() AND (NOT 0 < 1)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Domain dependent:
   $ echo 'T() AND NOT (x <  0)' > test3_35.mfotl

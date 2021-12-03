@@ -113,7 +113,7 @@ fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> Form
 | "sat \<sigma> v i (Formula.MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat \<sigma> v) r j i)"
 | "sat \<sigma> v i (Formula.MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat \<sigma> v) r i j)"
 | "sat \<sigma> v i (Formula.TP t) = (Formula.eval_trm v t = EInt (integer_of_nat i))"
-| "sat \<sigma> v i (Formula.TS t) = (Formula.eval_trm v t = EFloat (double_of_int (\<tau> \<sigma> i)))"
+| "sat \<sigma> v i (Formula.TS t) = (Formula.eval_trm v t = EInt (integer_of_nat (\<tau> \<sigma> i)))"
 
 end
 

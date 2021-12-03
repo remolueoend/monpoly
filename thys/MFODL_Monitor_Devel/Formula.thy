@@ -481,7 +481,7 @@ qualified fun sat :: "trace \<Rightarrow> (name \<times> nat \<rightharpoonup> e
 | "sat \<sigma> V v i (MatchP I r) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> Regex.match (sat \<sigma> V v) r j i)"
 | "sat \<sigma> V v i (MatchF I r) = (\<exists>j\<ge>i. mem I (\<tau> \<sigma> j - \<tau> \<sigma> i) \<and> Regex.match (sat \<sigma> V v) r i j)"
 | "sat \<sigma> V v i (TP t) = (eval_trm v t = EInt (integer_of_nat i))"
-| "sat \<sigma> V v i (TS t) = (eval_trm v t = EFloat (double_of_int (\<tau> \<sigma> i)))"
+| "sat \<sigma> V v i (TS t) = (eval_trm v t = EInt (integer_of_nat (\<tau> \<sigma> i)))"
 
 lemma sat_abbrevs[simp]:
   "sat \<sigma> V v i TT" "\<not> sat \<sigma> V v i FF"

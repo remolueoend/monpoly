@@ -136,7 +136,7 @@ rule
   | "MED"                       { f "MED" lexbuf; MED }
 
   | unit as lxm                 { f "TU" lexbuf; TU (get_ts lxm)}
-  | integer as lxm              { f "INT" lexbuf; INT (float_of_string lxm) }
+  | integer as lxm              { f "INT" lexbuf; INT (Z.of_string lxm) }
   | rational as lxm             { f "RAT" lexbuf; RAT (float_of_string lxm) }
   | quoted_string as lxm        { f "STR_CST" lexbuf; STR_CST lxm }
   | 'r' quoted_string as lxm    { f "REGEXP" lexbuf; REGEXP_CST lxm }

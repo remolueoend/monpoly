@@ -98,7 +98,7 @@ let print_labels l = Printf.printf "%s" (string_of_labels l)
 let eprint_labels l = Printf.eprintf "%s" (string_of_labels l)
 
 let intv_contains_zero = function
-  | CBnd (0.0),_ ->
+  | Z.(CBnd (zero),_) ->
     (* Printf.printf "contains zero\n"; *)
     true
   | _ ->

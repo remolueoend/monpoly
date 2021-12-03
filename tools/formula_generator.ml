@@ -169,7 +169,7 @@ let mapSnd f (a,b) = (a,f b)
 (* Fully parenthesize an MFOTL formula *)
 let string_of_parenthesized_formula_qtl str g =
 let check_interval = function
-| (CBnd 0., Inf) -> ""
+| (CBnd lb, Inf) when lb = Z.zero -> ""
 (* | (OBnd 0., Inf) -> "" *)
 | _ -> failwith "Unsupported: metric operators" in
 let rec string_f_rec top par h =
@@ -303,32 +303,32 @@ let string_of_genformula_qtl f = string_of_parenthesized_formula_qtl "prop rando
 let interval_gen_bound max_lb max_delta =
     let lb = Gen.int_bound (max max_lb 0) in
     let delta = Gen.int_bound max_delta in
-    let ival = Gen.map2 (fun l d -> (l, (l + d))) lb delta in
+    let ival = Gen.map2 (fun l d -> (l, l + d)) lb delta in
     let lp = Gen.bool in
     let rp = Gen.bool in
-    Gen.map3 
-    (fun (a,b) l r -> 
-      let (x,y) = (float_of_int a, float_of_int b) in
-      if y <= x then (CBnd x, CBnd x) 
+    Gen.map3
+    (fun (a,b) l r ->
+      let a, b = Z.of_int a, Z.of_int b in
+      if b <= a then (CBnd a, CBnd a) 
       else
         match (l,r) with 
-          | (true,true)   -> (CBnd x, CBnd y)
-          | (true, false)  -> (CBnd x, OBnd y)
-          | (false,true)  -> (OBnd x, CBnd y)
-          | _             -> (OBnd x, OBnd y)
+          | (true,true)   -> (CBnd a, CBnd b)
+          | (true, false)  -> (CBnd a, OBnd b)
+          | (false,true)  -> (OBnd a, CBnd b)
+          | _             -> (OBnd a, OBnd b)
     ) 
     ival lp rp
   
   let interval_gen_inf max_lb =
-    let noint = Gen.return (CBnd 0., Inf) in
+    let noint = Gen.return (CBnd Z.zero, Inf) in
     if (max_lb == -1) then noint else
       let lb = Gen.int_bound max_lb in
       let lp = Gen.bool in
-      Gen.map2 (fun a l -> 
-      let x = float_of_int a in
+      Gen.map2 (fun a l ->
+      let a = Z.of_int a in
       match l with 
-        | true   -> (CBnd x, Inf)
-        | _      -> (OBnd x, Inf)
+        | true   -> (CBnd a, Inf)
+        | _      -> (OBnd a, Inf)
       ) 
       lb lp
 
@@ -458,7 +458,7 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       let aggr_gen_mm = Gen.oneofl [MAX ; MIN] in
       let aggr_gen_mmcs = Gen.oneofl [MAX ; MIN ; CNT ; SUM] in
       let side = Gen.bool in
-      let noint = Gen.return (CBnd 0., Inf) in
+      let noint = Gen.return (CBnd Z.zero, Inf) in
       let interval = if qtl then noint else interval_gen max_lb max_interval in
       let interval_bound = if qtl then noint else interval_gen_bound max_lb max_interval in
       let interval_inf = if qtl then noint else interval_gen_inf max_lb in
@@ -492,9 +492,9 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
                         else side >>= 
                           (fun left -> 
                             if left then 
-                            (fun s -> (newestMap, (f (gOnce (CBnd 0., Inf) lf) rf)))
+                            (fun s -> (newestMap, (f (gOnce (CBnd Z.zero, Inf) lf) rf)))
                             else 
-                            (fun s -> (newestMap, (f lf (gOnce (CBnd 0., Inf) rf))))
+                            (fun s -> (newestMap, (f lf (gOnce (CBnd Z.zero, Inf) rf))))
                           )
                     )) 
                         in

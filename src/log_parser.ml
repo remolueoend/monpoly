@@ -248,7 +248,7 @@ module Make(C: Consumer) = struct
       match pb.pb_token with
       | STR s ->
           let ts =
-            try Some (float_of_string s)
+            try Some (MFOTL.ts_of_string s)
             with Failure _ -> None
           in
           (match ts with

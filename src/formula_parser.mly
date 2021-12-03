@@ -62,7 +62,7 @@
       | 's' -> 1
       | _ -> failwith "[Formula_parser.time_units] unrecognized time unit"
     in
-    float_of_int (d * n)
+    Z.of_int (d * n)
 
   let rec exists varlist f =
     match varlist with
@@ -75,7 +75,7 @@
     | vl -> ForAll (vl, f)
 
 
-  let dfintv = (MFOTL.CBnd 0., MFOTL.Inf)
+  let dfintv = (MFOTL.CBnd Z.zero, MFOTL.Inf)
 
   let strip str =
     let len = String.length str in
@@ -84,10 +84,7 @@
     else
       str
 
-  let get_cst str =
-    try
-      Int (int_of_string str)
-    with _ -> Str (strip str)
+
 
   let check f = f
 
@@ -142,7 +139,8 @@
 %token LPA RPA LSB RSB COM SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
 %token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE R2S S2R
 %token <string> STR STR_CST REGEXP_CST
-%token <float> INT RAT
+%token <Z.t> INT
+%token <float> RAT
 %token <int*char> TU
 %token LET LETPAST IN NOT AND OR IMPL EQUIV EX FA
 %token PREV NEXT EVENTUALLY ONCE ALWAYS PAST_ALWAYS SINCE UNTIL BAR FREX PREX
@@ -306,10 +304,7 @@ term:
 
 
 cst:
-  | INT                     { f "cst(int)";
-                              assert ($1 < float_of_int max_int);
-                              assert ($1 > float_of_int min_int);
-                              Int (int_of_float $1) }
+  | INT                     { f "cst(int)"; Int (Z.to_int $1) }
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }
   | REGEXP_CST              { f "cst(regex)"; compile_regexp $1 }
@@ -328,4 +323,3 @@ varlist:
 var:
   | LD                      { f "unnamed var"; incr var_cnt; "_" ^ (string_of_int !var_cnt) }
   | STR                     { f "var"; assert (String.length $1 > 0); $1 }
-

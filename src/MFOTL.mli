@@ -46,11 +46,11 @@
 open Predicate
 
 
-type timestamp = float
+type timestamp = Z.t
 (** The type of timestamps. *)
 
-type tsdiff = float
-    (** The type of differences between timestamps. Only used for
+type tsdiff = Z.t
+  (** The type of differences between timestamps. Only used for
   clarity reasons in the types of some functions in other
   modules. *)
 
@@ -107,6 +107,8 @@ and regex =
 (** Operations on timestamps: *)
 
 val ts_null: timestamp
+(* TODO: Timestamps are unbounded. ts_max is therefore an arbitrary (large)
+   value. We should avoid using it. *)
 val ts_max: timestamp
 val ts_invalid: timestamp
 val ts_plus: tsdiff -> tsdiff -> tsdiff
@@ -155,10 +157,7 @@ val count_pred_uses: Predicate.predicate -> formula -> int
 
 (** Conversion functions: *)
 
-val ts_of_string: string -> string -> timestamp
-val cst_of_tsdiff: tsdiff -> cst
-val tsdiff_of_cst: cst -> tsdiff
-val string_of_agg_op: agg_op -> string
+val ts_of_string: string -> timestamp
 
 (** Pretty-printing functions: *)
 
@@ -166,6 +165,7 @@ val string_of_ts: timestamp -> string
 val print_ts: timestamp -> unit
 val string_of_interval: interval -> string
 val print_interval: interval -> unit
+val string_of_agg_op: agg_op -> string
 val string_of_formula: string -> formula -> string
 val print_formula: string -> formula -> unit
 val printnl_formula: string -> formula -> unit

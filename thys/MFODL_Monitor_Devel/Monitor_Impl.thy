@@ -591,7 +591,7 @@ function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> databas
       (zs, aux) = eval_matchF I mr nt aux
     in (zs, MMatchF I mr mrs \<phi>s buf nts' nt aux))"
 | "meeval n ts db (MTP mt i) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) [i..<j], MTP mt j)"
-| "meeval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EFloat (double_of_int x))) ts, MTS mt)"
+| "meeval n ts db (MTS mt) = (map (\<lambda>x. eval_mtrm n mt (EInt (integer_of_nat x))) ts, MTS mt)"
   by pat_completeness auto
 
 lemma psize_snd_meeval: "meeval_dom (n, t, db, \<phi>) \<Longrightarrow> size (snd (meeval n t db \<phi>)) = size \<phi>"
