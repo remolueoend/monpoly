@@ -50,7 +50,6 @@ type genformula =
   | GAndSUB1      of (genformula * genformula)
   | GAndSUB2      of (genformula * genformula)
   | GExists       of (var list * genformula)
-  | GForall       of (var list * genformula)
   | GPrev         of (interval * genformula)
   | GNext         of (interval * genformula)
   | GOnce         of (interval * genformula)
@@ -83,7 +82,6 @@ let gAndEQ       f1 f2        = GAndEQ       (f1, f2)
 let gAndSUB1     f1 f2        = GAndSUB1     (f1, f2) 
 let gAndSUB2     f1 f2        = GAndSUB2     (f1, f2) 
 let gExists      v f          = GExists      (v, f) 
-let gForall      v f          = GForall      (v, f) 
 let gPrev        i f          = GPrev        (i, f) 
 let gNext        i f          = GNext        (i, f) 
 let gOnce        i f          = GOnce        (i, f) 
@@ -138,7 +136,6 @@ let rec formula_of_genformula = function
 | GAndSUB1     (f1, f2)
 | GAndSUB2     (f1, f2)    -> And (formula_of_genformula f1, formula_of_genformula f2)
 | GExists      (v, f)      -> Exists (v, formula_of_genformula f)
-| GForall      (v, f)      -> ForAll (v, formula_of_genformula f)
 | GPrev        (i, f)      -> Prev (i, formula_of_genformula f)
 | GNext        (i, f)      -> Next (i, formula_of_genformula f)
 | GOnce        (i, f)
@@ -568,7 +565,6 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
         1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gAnd v1 v2'));
         1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gOr v1 v2'));
         1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [new_bv] sf)));
-        1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gForall [new_bv] sf)));
        tq, metricunarybind gPrev        interval;
     fq*tq, metricunarybind gNext        interval_bound;
        tq, metricunarybind gOnce        interval;
