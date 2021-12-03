@@ -64,8 +64,7 @@ let rational = ('-')? digit+ '.' digit*
 let unit =  digit+ letter
 let any_string = (letter | digit | '_' | '-' | '/' | ':' | '\'' | '\"')*
 let string = (letter | digit | '_') any_string
-let str_cst = ('\'' [^'\'']* '\'') | ('\"' [^'\"']* '\"')
-let regexp_cst = 'r' str_cst
+let quoted_string = '"' ([^ '"' '\\'] | '\\' _)* '"'
 
 rule
   token = parse
@@ -139,8 +138,8 @@ rule
   | unit as lxm                 { f "TU" lexbuf; TU (get_ts lxm)}
   | integer as lxm              { f "INT" lexbuf; INT (float_of_string lxm) }
   | rational as lxm             { f "RAT" lexbuf; RAT (float_of_string lxm) }
-  | str_cst as lxm              { f "STR_CST" lexbuf; STR_CST lxm }
-  | regexp_cst as lxm           { f "REGEXP" lexbuf; REGEXP_CST lxm }
+  | quoted_string as lxm        { f "STR_CST" lexbuf; STR_CST lxm }
+  | 'r' quoted_string as lxm    { f "REGEXP" lexbuf; REGEXP_CST lxm }
   | string as lxm               { f "STR" lexbuf; STR lxm }
 
   | "(*"                        { f "multi-line comment" lexbuf; comment lexbuf }
