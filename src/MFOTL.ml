@@ -95,17 +95,6 @@ let ts_of_string str =
     let msg = Printf.sprintf "[MFOTL.ts_of_string] Cannot convert %s into a timestamp" str in
     failwith msg
 
-let ts_of_cst c =
-  match c with
-  | ZInt i -> i
-  | Int i -> Z.of_int i
-  | Str s -> Z.of_string s
-  | Regexp _
-  | Float _ -> failwith "[MFOTL.ts_of_cst] conversion not possible"
-let cst_of_ts t = Str (Z.to_string t)
-let tsdiff_of_cst = ts_of_cst
-let cst_of_tsdiff = cst_of_ts
-
 let ts_plus t1 t2 = Z.add t1 t2
 let ts_minus t1 t2 = Z.sub t1 t2
 let ts_invalid = Z.minus_one
