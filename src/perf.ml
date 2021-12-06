@@ -121,3 +121,56 @@ let dump_stats starttime =
     (times.tms_utime +. times.tms_stime);
   Printf.printf "===STATS=== mem: %s kB\n" (Misc.mem_max ())
 
+
+type profile_state = {
+  mutable ps_enter_global: float;
+  mutable ps_enter: float array;
+  mutable ps_acc: float array;
+  mutable ps_groups: (int * string) list;
+}
+
+let profile_state = {
+  ps_enter_global = 0.0;
+  ps_enter = [||];
+  ps_acc = [||];
+  ps_groups = [];
+}
+
+let add_profile_group i s =
+  profile_state.ps_groups <- (i, s) :: profile_state.ps_groups
+
+let begin_profile () =
+  if profile_state.ps_enter_global > 0.0 then
+    failwith "[Perf.begin_profile] Profiling has already been started";
+  let n = List.fold_left (fun a (i, _) -> max a i) 0 profile_state.ps_groups
+    + 1 in
+  profile_state.ps_enter <- Array.make n 0.0;
+  profile_state.ps_acc <- Array.make n 0.0;
+  profile_state.ps_enter_global <- Sys.time ()
+
+let profile_enter i = profile_state.ps_enter.(i) <- Sys.time ()
+
+let profile_exit i x =
+  let now = Sys.time () in
+  let diff = now -. profile_state.ps_enter.(i) in
+  profile_state.ps_acc.(i) <- profile_state.ps_acc.(i) +. diff;
+  x
+
+let end_profile () =
+  let now = Sys.time () in
+  let total_time = now -. profile_state.ps_enter_global in
+  let total_label = "total" in
+  let label_len = List.fold_left (fun a (_, s) -> max a (String.length s))
+    (String.length total_label) profile_state.ps_groups in
+  let pad s = s ^ String.make (label_len - String.length s) ' ' in
+  Printf.eprintf "=== Performance profile ===\n";
+  Printf.eprintf "%s %10.6f\n" (pad total_label) total_time;
+  for i = 0 to Array.length profile_state.ps_acc - 1 do
+    match List.assoc_opt i profile_state.ps_groups with
+    | Some s ->
+        let time = profile_state.ps_acc.(i) in
+        let frac = (time /. total_time) *. 100.0 in
+        Printf.eprintf "%s %10.6f %4.1f%%\n" (pad s) time frac
+    | None -> ()
+  done;
+  Printf.eprintf "===========================\n"

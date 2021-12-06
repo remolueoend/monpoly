@@ -46,3 +46,9 @@ val show_results: int -> MFOTL.timestamp -> unit
 val check_log: int -> MFOTL.timestamp -> unit
 val check_log_end: int -> MFOTL.timestamp -> unit
 val dump_stats: float -> unit
+
+val add_profile_group: int -> string -> unit
+val begin_profile: unit -> unit
+val profile_enter: int -> unit
+val profile_exit: int -> 'a -> 'a
+val end_profile: unit -> unit
