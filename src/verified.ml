@@ -3341,10 +3341,10 @@ type ('a, 'b) meformula = MRel of ((event_data option) list) set |
         (((event_data option) list) set mbuf_t *
           ((event_data option) list) set mbuf_t)
   | MNeg of ('a, 'b) meformula | MExists of ('a, 'b) meformula |
-  MAgg of bool * nat * (agg_type * event_data) * nat * trm * ('a, 'b) meformula
-  | MPrev of
-      i * ('a, 'b) meformula * bool * ((event_data option) list) set mbuf_t *
-        nat mbuf_t
+  MAgg of unit aggargs_ext * ('a, 'b) meformula |
+  MPrev of
+    i * ('a, 'b) meformula * bool * ((event_data option) list) set mbuf_t *
+      nat mbuf_t
   | MNext of i * ('a, 'b) meformula * bool * nat mbuf_t |
   MSince of
     unit args_ext * ('a, 'b) meformula * ('a, 'b) meformula *
@@ -3394,8 +3394,7 @@ let rec size_meformulaa
           (suc zero_nata)
     | MNeg x10 -> plus_nata (size_meformulaa x10) (suc zero_nata)
     | MExists x11 -> plus_nata (size_meformulaa x11) (suc zero_nata)
-    | MAgg (x121, x122, x123, x124, x125, x126) ->
-        plus_nata (size_meformulaa x126) (suc zero_nata)
+    | MAgg (x121, x122) -> plus_nata (size_meformulaa x122) (suc zero_nata)
     | MPrev (x131, x132, x133, x134, x135) ->
         plus_nata (size_meformulaa x132) (suc zero_nata)
     | MNext (x141, x142, x143, x144) ->
@@ -9714,10 +9713,9 @@ let rec meeval
                              zs
                       else zs),
                      MPrev (i, phia, false, buf, ntsa)))))
-    | j, n, ts, db, MAgg (g0, y, omega, b, f, phi) ->
-        (let (xs, phia) = meeval j (plus_nata b n) ts db phi in
-          (mapa (eval_agg n g0 y omega b f) xs,
-            MAgg (g0, y, omega, b, f, phia)))
+    | j, n, ts, db, MAgg (argsa, phi) ->
+        (let (xs, phia) = meeval j (plus_nata (aggargs_b argsa) n) ts db phi in
+          (mapa (eval_aggargs argsa) xs, MAgg (argsa, phia)))
     | j, n, ts, db, MExists phi ->
         (let (xs, phia) = meeval j (suc n) ts db phi in
           (mapa (image
@@ -10196,11 +10194,13 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
     | n, Exists phi -> MExists (meinit0 (suc n) phi)
     | n, Agg (y, omega, b, f, phi) ->
         (let default =
-           MAgg (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
-                   (fvi zero_nata phi)
-                   (set (ceq_nat, ccompare_nat, set_impl_nat)
-                     (upt zero_nata b)),
-                  y, omega, b, f, meinit0 (plus_nata b n) phi)
+           MAgg (init_aggargs (fvi zero_nata phi) n
+                   (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
+                     (fvi zero_nata phi)
+                     (set (ceq_nat, ccompare_nat, set_impl_nat)
+                       (upt zero_nata b)))
+                   y omega b f,
+                  meinit0 (plus_nata b n) phi)
            in
           (match phi with Pred (_, _) -> default | Let (_, _, _) -> default
             | LetPast (_, _, _) -> default | Eq (_, _) -> default

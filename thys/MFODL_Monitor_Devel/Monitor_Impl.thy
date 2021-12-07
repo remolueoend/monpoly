@@ -101,7 +101,7 @@ datatype (dead 'msaux, dead 'muaux) meformula =
   | MOr "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2"
   | MNeg "('msaux, 'muaux) meformula"
   | MExists "('msaux, 'muaux) meformula"
-  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux) meformula"
+  | MAgg aggargs "('msaux, 'muaux) meformula"
   | MPrev \<I> "('msaux, 'muaux) meformula" bool "event_data table mbuf_t" "ts mbuf_t"
   | MNext \<I> "('msaux, 'muaux) meformula" bool "ts mbuf_t"
   | MSince args "('msaux, 'muaux) meformula" "('msaux, 'muaux) meformula" "event_data mebuf2S" "'msaux"
@@ -123,7 +123,7 @@ fun Rep_meformula :: "('msaux, 'muaux) meformula \<Rightarrow> ('msaux, 'muaux) 
 | "Rep_meformula (MOr \<phi> \<psi> buf) = mformula.MOr (Rep_meformula \<phi>) (Rep_meformula \<psi>) (map_prod Rep_mbuf_t Rep_mbuf_t buf)"
 | "Rep_meformula (MNeg \<phi>) = mformula.MNeg (Rep_meformula \<phi>)"
 | "Rep_meformula (MExists \<phi>) = mformula.MExists (Rep_meformula \<phi>)"
-| "Rep_meformula (MAgg g0 y \<omega> b f \<phi>) = mformula.MAgg g0 y \<omega> b f (Rep_meformula \<phi>)"
+| "Rep_meformula (MAgg args \<phi>) = mformula.MAgg args (Rep_meformula \<phi>)"
 | "Rep_meformula (MPrev I \<phi> first buf nts) = mformula.MPrev I (Rep_meformula \<phi>) first (Rep_mbuf_t buf) (Rep_mbuf_t nts)"
 | "Rep_meformula (MNext I \<phi> first nts) = mformula.MNext I (Rep_meformula \<phi>) first (Rep_mbuf_t nts)"
 | "Rep_meformula (MSince args \<phi> \<psi> buf aux) = mformula.MSince args (Rep_meformula \<phi>) (Rep_meformula \<psi>)
@@ -171,7 +171,7 @@ function (in maux) (sequential) meinit0 :: "nat \<Rightarrow> Formula.formula \<
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) mbuf_t_empty))"
 | "meinit0 n (Formula.Exists \<phi>) = MExists (meinit0 (Suc n) \<phi>)"
 | "meinit0 n (Formula.Agg y \<omega> b f \<phi>) = 
-    (let default = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f (meinit0 (b + n) \<phi>) in
+    (let default = MAgg (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f) (meinit0 (b + n) \<phi>) in
     (case \<phi> of Formula.Since \<phi>' I \<psi>' \<Rightarrow>
         let agg = Some (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f) in
         (let args = (\<lambda>k. (init_args I (b + n) (Formula.fv \<phi>') (Formula.fv \<psi>') k agg)) in
@@ -218,7 +218,8 @@ termination (in maux)
       dest!: to_mregex_ok[OF sym] atms_size) 
 
 lemma (in maux) minit0_code[code]: "minit0 n \<phi> = Rep_meformula (meinit0 n \<phi>)"
-  by (induction n \<phi> rule: meinit0.induct) (auto simp: init_since_def init_until_def mbuf_t_empty.rep_eq Let_def split: formula.splits prod.splits)
+  by (induction n \<phi> rule: meinit0.induct) (auto simp: init_since_def init_until_def
+      mbuf_t_empty.rep_eq Let_def split: formula.splits prod.splits)
 
 definition mestate :: "nat \<Rightarrow> nat \<Rightarrow> ('a, 'b) mformula \<Rightarrow> nat \<Rightarrow> ts queue \<Rightarrow> 'c \<Rightarrow> ('a, 'b, 'c) mstate_ext" where
   "mestate i j m n t \<zeta> =
@@ -558,8 +559,8 @@ function (sequential) meeval :: "nat \<Rightarrow> ts list \<Rightarrow> databas
     (let (xs, \<phi>) = meeval n ts db \<phi> in (map (\<lambda>r. (if r = empty_table then unit_table n else empty_table)) xs, MNeg \<phi>))"
 | "meeval n ts db (MExists \<phi>) =
     (let (xs, \<phi>) = meeval (Suc n) ts db \<phi> in (map (\<lambda>r. tl ` r) xs, MExists \<phi>))"
-| "meeval n ts db (MAgg g0 y \<omega> b f \<phi>) =
-    (let (xs, \<phi>) = meeval (b + n) ts db \<phi> in (map (eval_agg n g0 y \<omega> b f) xs, MAgg g0 y \<omega> b f \<phi>))"
+| "meeval n ts db (MAgg args \<phi>) =
+    (let (xs, \<phi>) = meeval (aggargs_b args + n) ts db \<phi> in (map (eval_aggargs args) xs, MAgg args \<phi>))"
 | "meeval n ts db (MPrev I \<phi> first buf nts) =
     (let (xs, \<phi>) = meeval n ts db \<phi>
     in if first \<and> ts = [] then ([], MPrev I \<phi> True (buf @@ xs) (nts @@ ts))

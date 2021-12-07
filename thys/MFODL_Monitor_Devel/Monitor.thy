@@ -702,7 +702,7 @@ datatype (dead 'msaux, dead 'muaux) mformula =
   | MOr "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2"
   | MNeg "('msaux, 'muaux) mformula"
   | MExists "('msaux, 'muaux) mformula"
-  | MAgg bool nat Formula.agg_op nat "Formula.trm" "('msaux, 'muaux) mformula"
+  | MAgg aggargs "('msaux, 'muaux) mformula"
   | MPrev \<I> "('msaux, 'muaux) mformula" bool "event_data table list" "ts list"
   | MNext \<I> "('msaux, 'muaux) mformula" bool "ts list"
   | MSince args "('msaux, 'muaux) mformula" "('msaux, 'muaux) mformula" "event_data mbuf2S" "'msaux"
@@ -998,7 +998,7 @@ function (in maux) (sequential) minit0 :: "nat \<Rightarrow> Formula.formula \<R
     MAnds vpos vneg (mpos @ mneg) (replicate (length l) []))"
 | "minit0 n (Formula.Exists \<phi>) = MExists (minit0 (Suc n) \<phi>)"
 | "minit0 n (Formula.Agg y \<omega> b f \<phi>) = 
-    (let default = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f (minit0 (b + n) \<phi>) in
+    (let default = MAgg (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f) (minit0 (b + n) \<phi>) in
     (case \<phi> of Formula.Since \<phi>' I \<psi>' \<Rightarrow>
         let agg = Some (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f) in
         init_since minit0 (b + n) agg \<phi>' I \<psi>'
@@ -1308,8 +1308,8 @@ function (sequential) meval :: "nat \<Rightarrow> ts list \<Rightarrow> database
     (let (xs, \<phi>) = meval n ts db \<phi> in (map (\<lambda>r. (if r = empty_table then unit_table n else empty_table)) xs, MNeg \<phi>))"
 | "meval n ts db (MExists \<phi>) =
     (let (xs, \<phi>) = meval (Suc n) ts db \<phi> in (map (\<lambda>r. tl ` r) xs, MExists \<phi>))"
-| "meval n ts db (MAgg g0 y \<omega> b f \<phi>) =
-    (let (xs, \<phi>) = meval (b + n) ts db \<phi> in (map (eval_agg n g0 y \<omega> b f) xs, MAgg g0 y \<omega> b f \<phi>))"
+| "meval n ts db (MAgg args \<phi>) =
+    (let (xs, \<phi>) = meval (aggargs_b args + n) ts db \<phi> in (map (eval_aggargs args) xs, MAgg args \<phi>))"
 | "meval n ts db (MPrev I \<phi> first buf nts) =
     (let (xs, \<phi>) = meval n ts db \<phi>
     in if first \<and> ts = [] then ([], MPrev I \<phi> True (buf @ xs) (nts @ ts))
@@ -1384,7 +1384,7 @@ lemma mformula_induct[case_names MRel MPred MLet MLetPast MAnd MAndAssign MAndRe
    (\<And> \<phi> \<psi> buf. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MOr \<phi> \<psi> buf)) \<Longrightarrow>
    (\<And>\<phi>. P \<phi> \<Longrightarrow> P (MNeg \<phi>)) \<Longrightarrow>
    (\<And>\<phi>. P \<phi> \<Longrightarrow> P (MExists \<phi>)) \<Longrightarrow>
-   (\<And>g0 y \<omega> b f \<phi>. P \<phi> \<Longrightarrow> P (MAgg g0 y \<omega> b f \<phi>)) \<Longrightarrow>
+   (\<And>args \<phi>. P \<phi> \<Longrightarrow> P (MAgg args \<phi>)) \<Longrightarrow>
    (\<And>I \<phi> first buf nts. P \<phi> \<Longrightarrow> P (MPrev I \<phi> first buf nts)) \<Longrightarrow>
    (\<And>I \<phi> first nts. P \<phi> \<Longrightarrow> P (MNext I \<phi> first nts)) \<Longrightarrow>
    (\<And>args \<phi> \<psi> buf aux. P \<phi> \<Longrightarrow> P \<psi> \<Longrightarrow> P (MSince args \<phi> \<psi> buf aux)) \<Longrightarrow>
@@ -3365,8 +3365,10 @@ inductive (in maux) wf_mformula :: "Formula.trace \<Rightarrow> nat \<Rightarrow
     y + b \<notin> Formula.fv \<phi>' \<Longrightarrow>
     {0..<b} \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
     Formula.fv_trm f \<subseteq> Formula.fv \<phi>' \<Longrightarrow>
-    g0 = (Formula.fv \<phi>' \<subseteq> {0..<b}) \<Longrightarrow>
-    wf_mformula \<sigma> j P V n R (MAgg g0 y \<omega> b f \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
+    aggargs_g0 args = (Formula.fv \<phi>' \<subseteq> {0..<b}) \<Longrightarrow>
+    aggargs_cols args = fv \<phi>' \<Longrightarrow> aggargs_n args = n \<Longrightarrow> aggargs_y args = y \<Longrightarrow>
+    aggargs_\<omega> args = \<omega> \<Longrightarrow> aggargs_b args = b \<Longrightarrow> aggargs_f args = f \<Longrightarrow>
+    wf_mformula \<sigma> j P V n R (MAgg args \<phi>) (Formula.Agg y \<omega> b f \<phi>')"
   | Prev: "wf_mformula \<sigma> j P V n R \<phi> \<phi>' \<Longrightarrow>
     first \<longleftrightarrow> j = 0 \<Longrightarrow>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'))
@@ -4070,13 +4072,13 @@ next
   then show ?case by (auto simp: fvi_Suc_bound intro!: wf_mformula.Exists)
 next
   case (Agg y \<omega> b f \<phi>)
-  define default where "default = MAgg (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f (minit0 (b + n) \<phi>)"
+  define default where "default = MAgg (init_aggargs (fv \<phi>) n (fv \<phi> \<subseteq> {0..<b}) y \<omega> b f) (minit0 (b + n) \<phi>)"
   have fv_le: "\<forall>x\<in>fv \<phi>. x < b + n"
     using Agg
     by (auto intro!: fvi_plus_bound)
   have wf_default: "wf_mformula \<sigma> 0 P V n R default (formula.Agg y \<omega> b f \<phi>)"
     using Agg
-    by (auto simp: default_def intro!: wf_mformula.Agg Agg.IH fvi_plus_bound)
+    by (auto simp: default_def init_aggargs_def intro!: wf_mformula.Agg Agg.IH fvi_plus_bound)
   {
     fix y0 \<phi>' I \<psi>' op init
     assume op_def: "(op = formula.Since \<and> init = init_since) \<or> (op = formula.Until \<and> init = init_until)"
@@ -6645,10 +6647,10 @@ next
     by (auto dest: bspec[where x="remove_neg _"])
   then show ?case using Ands.hyps(2) by auto
 next
-  case (Agg P V b n R \<phi> \<phi>' y f g0 \<omega>)
+  case (Agg P V b n R \<phi> \<phi>' y f args \<omega>)
   then have "Formula.fvi_trm b f \<subseteq> Formula.fvi b \<phi>'"
-    by (auto simp: fvi_trm_iff_fv_trm[where b=b] fvi_iff_fv[where b=b])
-  with Agg show ?case by (auto 0 3 simp: Un_absorb2 fvi_iff_fv[where b=b])
+    by (auto simp: fvi_trm_iff_fv_trm[where b="aggargs_b args"] fvi_iff_fv[where b="aggargs_b args"])
+  with Agg show ?case by (auto 0 3 simp: Un_absorb2 fvi_iff_fv[where b="aggargs_b args"])
 next
   case (MatchP r P V n R \<phi>s mr mrs buf nts I aux)
   then obtain \<phi>s' where conv: "to_mregex r = (mr, \<phi>s')" by blast
@@ -7796,11 +7798,11 @@ next
         elim!: list.rel_mono_strong table_fvi_tl qtable_cong sat_fv_cong[THEN iffD1, rotated -1]
         split: if_splits)+
 next
-  case (MAgg g0 y \<omega> b f \<phi>)
+  case (MAgg args \<phi>)
   from MAgg.prems show ?case
     using wf_mformula_wf_set[OF MAgg.prems(1), unfolded wf_set_def]
     by (cases rule: wf_mformula.cases)
-      (auto 0 3 simp add: list.rel_map simp del: sat.simps fvi.simps split: prod.split
+      (auto 0 3 simp add: list.rel_map eval_aggargs_def simp del: sat.simps fvi.simps split: prod.split
         intro!: wf_mformula.Agg qtable_eval_agg dest!: MAgg.IH elim!: list.rel_mono_strong)
 next
   case (MPrev I \<phi> first buf nts)
