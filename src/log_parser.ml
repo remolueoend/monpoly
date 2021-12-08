@@ -290,9 +290,7 @@ module Make(C: Consumer) = struct
       debug "tuple";
       match pb.pb_token with
       | RPA ->
-          next pb;
-          C.tuple ctxt pb.pb_schema [];
-          parse_db ()
+          parse_tuple_cont []
       | STR s ->
           next pb;
           parse_tuple_cont [s]
