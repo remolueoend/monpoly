@@ -1763,6 +1763,8 @@ datatype tysym = TAny nat | TNum nat | TCst ty
                                  
 type_synonym tysenv = "nat \<Rightarrow> tysym"
 
+type_synonym tyssig = "Formula.name \<rightharpoonup> tysym list"
+
 definition agg_tysenv :: "tysenv \<Rightarrow> tysym list \<Rightarrow> tysenv " where
 "agg_tysenv E tys =  (\<lambda>z. if z < length tys then tys ! z else E (z - length tys))"
 
@@ -2504,11 +2506,22 @@ next
   show ?case using check_conversion_sound[OF I2f(1) I2f(2) *] by auto
 qed 
 
+definition map_sig where
+  "map_sig f S = map_option (map f) \<circ> S"
 
-definition wty_result_fX :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
+lemma map_sig_comp_aux: 
+  "map_sig f (map_sig g S) t = map_sig (f \<circ> g) S t"
+  unfolding map_sig_def by(cases "S t"; auto)
+
+lemma map_sig_comp [simp]:
+  "map_sig f (map_sig g S) = map_sig (f \<circ> g) S"
+  using map_sig_comp_aux by fastforce
+  
+
+definition wty_result_fX :: "tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
   "wty_result_fX S E \<phi> f \<longleftrightarrow> wf_f f \<and> 
 (\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> 
-  (S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and> (f'' = g \<circ> f)))"
+  (map_sig f'' S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and> (f'' = g \<circ> f)))"
 
 lemma map_regex_fv:  assumes "\<And>x . x \<in> regex.atms x2 \<Longrightarrow>  g (formula.map_formula f x) = g' x"
   shows "Regex.fv_regex g (regex.map_regex (formula.map_formula f) x2) = Regex.fv_regex g' x2" using assms by (induction x2) auto
@@ -2532,25 +2545,6 @@ lemma[simp]: " wf_formula (formula.map_formula f \<psi>) = wf_formula \<psi>" by
 
 lemma used_tys_map[simp]: "used_tys (f \<circ> E) (formula.map_formula f \<psi>) = f ` used_tys E \<psi>"
   by (auto simp: used_tys_def formula.set_map)
-
-lemma map_formula_f_cong: "(\<And>t. t \<in> X \<Longrightarrow> f t = g t) \<Longrightarrow> formula.set_formula \<psi> \<subseteq> X \<Longrightarrow>
-  formula.map_formula f \<psi> = formula.map_formula g \<psi>"
-  apply (induction \<psi>)
-                  apply auto
-  subgoal for r
-    by (induction r) auto
-  subgoal for r
-    by (induction r) auto
-  done
-
-lemma wty_map_formula_cong: "S, f \<circ> E \<turnstile> formula.map_formula f \<psi> \<Longrightarrow> used_tys E \<psi> \<subseteq> X \<Longrightarrow>
-       (\<And>t. t \<in> X \<Longrightarrow> f t = g t) \<Longrightarrow> S, g \<circ> E \<turnstile> formula.map_formula g \<psi>"
-  apply (rule iffD1[OF wty_formula_fv_cong, where ?E1="f \<circ> E"])
-   apply (auto simp: used_tys_def)[1]
-  using map_formula_f_cong[of X f g]
-  by (auto simp: used_tys_def)
-
-
 
 lemma eq_refinement_min_type: assumes "\<exists> f g . wf_f f \<and> wf_f g \<and> f typ = g typ'"
   shows "\<exists> t1 t2 . min_type typ typ' = Some (t1,t2)"
@@ -2773,13 +2767,13 @@ definition check_comparison where
    Some f \<Rightarrow> (case check_trm (f \<circ> new_type_symbol \<circ> E) (f (TAny 0)) t2 of Some f' \<Rightarrow> Some (f' \<circ> f \<circ> new_type_symbol) | None \<Rightarrow> None )
 | None \<Rightarrow> None)"
 
-definition check_two_formulas :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) option) \<Rightarrow> sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> tysym Formula.formula \<Rightarrow> (tysym \<Rightarrow> tysym) option" where
+definition check_two_formulas :: "(tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) option) \<Rightarrow> tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula \<Rightarrow> tysym Formula.formula \<Rightarrow> (tysym \<Rightarrow> tysym) option" where
 "check_two_formulas check S E \<phi> \<psi>  \<equiv> (case check S E \<phi>  of
-   Some f \<Rightarrow> (case check S (f \<circ> E) (formula.map_formula f \<psi>) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
+   Some f \<Rightarrow> (case check (map_sig f S) (f \<circ> E) (formula.map_formula f \<psi>) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
    | None \<Rightarrow> None)"
 
-definition check_ands_f :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) option) \<Rightarrow> sig \<Rightarrow> tysenv \<Rightarrow>  tysym Formula.formula \<Rightarrow> (tysym \<Rightarrow> tysym) option  \<Rightarrow>(tysym \<Rightarrow> tysym) option  " where
-"check_ands_f check S E = (\<lambda>\<phi> f_op . case f_op of Some f \<Rightarrow> (case check S (f \<circ> E) (formula.map_formula f \<phi>) of Some f' \<Rightarrow> Some (f' \<circ> f)| None \<Rightarrow> None )
+definition check_ands_f :: "(tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) option) \<Rightarrow> tyssig \<Rightarrow> tysenv \<Rightarrow>  tysym Formula.formula \<Rightarrow> (tysym \<Rightarrow> tysym) option  \<Rightarrow>(tysym \<Rightarrow> tysym) option  " where
+"check_ands_f check S E = (\<lambda>\<phi> f_op . case f_op of Some f \<Rightarrow> (case check (map_sig f S) (f \<circ> E) (formula.map_formula f \<phi>) of Some f' \<Rightarrow> Some (f' \<circ> f)| None \<Rightarrow> None )
     | None \<Rightarrow> None )"
 
 definition check_ands where
@@ -2791,21 +2785,21 @@ definition highest_bound_TAny where
 definition E_empty where
 "E_empty \<phi> = (TAny \<circ> (+) (highest_bound_TAny \<phi> + 1))"
 
-fun check_pred :: "tysenv \<Rightarrow> Formula.trm list \<Rightarrow> ty list \<Rightarrow>  (tysym \<Rightarrow> tysym) option" where
-"check_pred  E (trm#trms) (t#ts)  = (case check_trm  E (TCst t) trm of
- Some f \<Rightarrow> (case check_pred  (f\<circ>E) trms ts of Some f' \<Rightarrow> Some (f' \<circ>f) | None \<Rightarrow> None)
+fun check_pred :: "tysenv \<Rightarrow> Formula.trm list \<Rightarrow> tysym list \<Rightarrow>  (tysym \<Rightarrow> tysym) option" where
+"check_pred  E (trm#trms) (t#ts)  = (case check_trm  E t trm of
+ Some f \<Rightarrow> (case check_pred  (f \<circ> E) trms (map f ts) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None)
  | None \<Rightarrow> None)"
 |"check_pred  E [] []  = Some id"
 |"check_pred  E _ _  = None"
 
-fun check_regex :: "(sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) option) \<Rightarrow>sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula Regex.regex  \<Rightarrow>   (tysym \<Rightarrow> tysym) option"  where
+fun check_regex :: "(tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) option) \<Rightarrow> tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula Regex.regex  \<Rightarrow>   (tysym \<Rightarrow> tysym) option"  where
 "check_regex check S E (Regex.Skip l)  = Some id"
 | "check_regex check S E (Regex.Test \<phi>)  = check S E \<phi>"
 | "check_regex check S E (Regex.Plus r s)  = (case check_regex check S E r  of
-  Some f \<Rightarrow> (case check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
+  Some f \<Rightarrow> (case check_regex check (map_sig f S) (f \<circ> E) (regex.map_regex (formula.map_formula f) s) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
 | None \<Rightarrow> None )"
 | "check_regex check S E (Regex.Times r s)  = (case check_regex check S E r  of
-  Some f \<Rightarrow> (case check_regex check S (f \<circ> E) (regex.map_regex (formula.map_formula f) s) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
+  Some f \<Rightarrow> (case check_regex check (map_sig f S) (f \<circ> E) (regex.map_regex (formula.map_formula f) s) of Some f' \<Rightarrow> Some (f' \<circ> f) | None \<Rightarrow> None )
 | None \<Rightarrow> None )"
 | "check_regex check S E (Regex.Star r)  = check_regex check S E r"
 
@@ -2842,17 +2836,16 @@ lemma[simp]: "regex.size_regex size (regex.map_regex (formula.map_formula x2) s)
 lemma [fundef_cong]: "(\<And> S E \<phi>'. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check S E \<phi>' = check' S E \<phi>') \<Longrightarrow> check_regex check S E r = check_regex check' S E r"
   by (induction check S E r  rule: check_regex.induct) (auto split: option.splits) 
 
-fun check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>   (tysym \<Rightarrow> tysym) option"
+fun check :: "tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow>   (tysym \<Rightarrow> tysym) option"
   where (*what to do if predicate is not in sigs?*)
   "check S E (Formula.Pred r ts)  = (case S r of 
   None \<Rightarrow> None 
   | Some tys \<Rightarrow>  check_pred E ts tys)"
 | "check S E (Formula.Let p \<phi> \<psi>)  = (case check S (E_empty \<phi>) \<phi> of 
-  Some f \<Rightarrow> if \<forall>x \<in> Formula.fv \<phi> . case f ((E_empty \<phi>) x) of TCst _ \<Rightarrow> True | _ \<Rightarrow> False 
-      then let f' = (\<lambda>k. if k \<in> formula.set_formula \<phi> then f k else k) in case check (S(p \<mapsto> tabulate (\<lambda>x. case f ((E_empty \<phi>) x) of TCst t \<Rightarrow> t ) 0 (Formula.nfv \<phi>))) (f' \<circ> E) (formula.map_formula f' \<psi>) of
-        Some f'' \<Rightarrow> Some (f'' \<circ> f') |
-        None \<Rightarrow> None 
-      else None  | None \<Rightarrow> None)"
+    Some f \<Rightarrow> (case check (S(p \<mapsto> tabulate (f \<circ> (E_empty \<phi>)) 0 (Formula.nfv \<phi>))) (f \<circ> E) (formula.map_formula f \<psi>) of
+        Some f' \<Rightarrow> Some f' |
+        None \<Rightarrow> None)
+     | None \<Rightarrow> None)"
 | "check S E (Formula.Eq t1 t2)  = check_comparison E t1 t2 "
 | "check S E (Formula.Less t1 t2)  = check_comparison E t1 t2 "
 | "check S E (Formula.LessEq t1 t2)  = check_comparison E t1 t2 "
@@ -2862,7 +2855,7 @@ fun check :: "sig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Ri
 | "check S E (Formula.Ands \<phi>s) = check_ands check S E \<phi>s" 
 | "check S E (Formula.Exists t \<phi>) = check S (case_nat t E) \<phi> " 
 | "check S E (Formula.Agg y (agg_type, d) tys trm \<phi>) = (case check_trm (new_type_symbol \<circ> (agg_tysenv E tys)) (agg_trm_tysym agg_type) trm of 
-    Some f \<Rightarrow> (case check S (f \<circ> new_type_symbol \<circ> (agg_tysenv E tys)) (formula.map_formula (f \<circ> new_type_symbol) \<phi>) of
+    Some f \<Rightarrow> (case check (map_sig (f \<circ> new_type_symbol) S) (f \<circ> new_type_symbol \<circ> (agg_tysenv E tys)) (formula.map_formula (f \<circ> new_type_symbol) \<phi>) of
       Some f' \<Rightarrow> (case check_trm (f' \<circ> f \<circ> new_type_symbol \<circ> E) ((f' \<circ> f) (t_res_tysym agg_type (agg_trm_tysym agg_type))) (Formula.Var y) of 
         Some f'' \<Rightarrow> (case check_trm (f'' \<circ> f' \<circ> f \<circ> new_type_symbol \<circ> E) ((f'' \<circ> f' \<circ> f \<circ> new_type_symbol) d) (Formula.Var y) of
           Some f''' \<Rightarrow> Some (f''' \<circ> f'' \<circ> f' \<circ> f \<circ> new_type_symbol) 
@@ -2891,31 +2884,31 @@ proof -
   have wty1: " wty_result_fX S E \<phi> f" apply (rule assms(1)[OF _ f_def])
     using assms(2-)  unfolding used_tys_def
     by (auto simp: check_two_formulas_def split: option.splits)
-  obtain f1 where  f1_def: "check S (f \<circ> E) (formula.map_formula f \<psi>) = Some  f1 \<and> f' = f1 \<circ> f "
+  obtain f1 where  f1_def: "check (map_sig f S) (f \<circ> E) (formula.map_formula f \<psi>) = Some  f1 \<and> f' = f1 \<circ> f "
     using assms(2,5) f_def
     by (auto simp add: check_two_formulas_def split: option.splits)
-  have wty2:" wty_result_fX S (f\<circ>E) (formula.map_formula f \<psi>) f1"
+  have wty2:" wty_result_fX (map_sig f S) (f \<circ> E) (formula.map_formula f \<psi>) f1"
     apply (rule assms(1)) using assms(3,4) f1_def aux
     by (auto simp add: safe_formula_map)
   have f'_def: "f' = f1 \<circ> f"
     by (auto simp: f1_def)
-  have wty_form_iff: "S, f'' \<circ> E \<turnstile> formula.map_formula f'' form \<longleftrightarrow>
-    S, f'' \<circ> E \<turnstile> formula.map_formula f'' \<phi> \<and> S, f'' \<circ> E \<turnstile> formula.map_formula f'' \<psi>" for f''
+  have wty_form_iff: "map_sig f'' S, f'' \<circ> E \<turnstile> formula.map_formula f'' form \<longleftrightarrow>
+    map_sig f'' S, f'' \<circ> E \<turnstile> formula.map_formula f'' \<phi> \<and> map_sig f'' S, f'' \<circ> E \<turnstile> formula.map_formula f'' \<psi>" for f''
     using assms(5)
     by (auto elim: wty_formula.cases intro: wty_formula.intros)
   show ?thesis
-    using wty1 wty2 assms(3) wty_map_formula_cong[of S _ E] 
+    using wty1 wty2 assms(3) 
     apply (auto simp: f'_def wty_form_iff wty_result_fX_def formula.set_map
-        formula.map_comp intro: wf_f_comp) 
+        formula.map_comp intro: wf_f_comp)
       apply (smt (z3) comp_apply comp_assoc)
      apply (metis  comp_assoc wf_f_comp)
     subgoal premises prems for g
     proof -
       have "wf_f (TCst \<circ> (g \<circ> f1))"
-        by (metis comp_assoc prems(5) prems(8) wf_f_comp)
-      then have "(S, (g \<circ> f1 \<circ> f) \<circ> E \<turnstile> formula.map_formula (g \<circ> f1 \<circ> f) \<psi>)"
-        using prems(8) spec[OF prems(4), where ?x="g \<circ> f1"]
-        by (metis (no_types, lifting) fun.map_comp prems(6))
+        by (metis comp_assoc prems(4) prems(7) wf_f_comp)
+      then have "(map_sig (g \<circ> f1 \<circ> f) S, (g \<circ> f1 \<circ> f) \<circ> E \<turnstile> formula.map_formula (g \<circ> f1 \<circ> f) \<psi>)"
+        using prems(7) spec[OF prems(3), where ?x="g \<circ> f1"]
+        by (metis (no_types, lifting) fun.map_comp prems(5))
       then show ?thesis by (simp add: fun.map_comp)
     qed
     done
@@ -2941,7 +2934,7 @@ proof -
     fix fa
     assume 
       wfa: "wf_f (TCst \<circ> fa)" and
-      wty: "S, fa \<circ> E \<turnstile> formula.map_formula fa form"
+      wty: "map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa form"
     obtain t where wtys: "fa \<circ> E \<turnstile> t1 :: t" "fa \<circ> E \<turnstile> t2 :: t"
       using wty type by(auto elim:wty_formula.cases)
     define nn where nn_def: "nn = (\<lambda>t'. case t' of TAny (Suc n) \<Rightarrow> TAny n  | TAny 0 \<Rightarrow> TCst t | TNum n \<Rightarrow> TNum (n-1) | _ \<Rightarrow> t' )"
@@ -2991,7 +2984,7 @@ proof -
       by(auto simp:used_tys_def fun.map_comp image_subset_iff)
     have "(fa \<circ> E \<turnstile> t2 :: fa (nn (TAny 0)))" "(fa \<circ> E \<turnstile> t1 :: fa (nn (TAny 0)))" 
       using wt1 wt2 by (metis comp_id fun.map_comp nn_n)+
-    then have "S, fa \<circ> E \<turnstile> formula.map_formula fa form" 
+    then have "map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa form" 
       using type by(auto intro!: wty_formula.intros)
   }
   ultimately show ?thesis using wty1 wty2 unfolding wty_result_fX_def f'_def 
@@ -3002,22 +2995,22 @@ lemma check_pred_sound:
   "S r = Some tys \<Longrightarrow> check_pred E ts tys = Some f \<Longrightarrow> wty_result_fX S E (formula.Pred r ts) f"
 proof(induction arbitrary: f S rule:check_pred.induct)
   case (1 E trm trms t ts)
-  obtain f' where f'_def: "check_trm E (TCst t) trm = Some f'" using 1(3) by(auto split:option.splits)
-  then obtain f'' where f''_def: "check_pred (f' \<circ> E) trms ts = Some f''" using 1(3) by(auto split:option.splits)
+  obtain f' where f'_def: "check_trm E t trm = Some f'" using 1(3) by(auto split:option.splits)
+  then obtain f'' where f''_def: "check_pred (f' \<circ> E) trms (map f' ts) = Some f''" using 1(3) by(auto split:option.splits)
   then have f_def: "f = f'' \<circ> f'" using 1(3) f'_def by(auto split:option.splits)
   define S' where S'_def: "S' = (\<lambda>k. if k = r then Some ts else S k)"
-  then have sr: "S' r = Some ts" by auto
+  then have sr: "map_sig f' S' r = Some (map f' ts)" by (auto simp:map_sig_def)
   note wty1 = check_trm_sound[OF f'_def]
-  have wty2: "wty_result_fX S' (f' \<circ> E) (formula.Pred r trms) f''"
-    using 1(1)[OF f'_def _ f''_def, of S'] sr by blast
+  note wty2 = 1(1)[OF f'_def, of "map_sig f' S'", OF sr f''_def] 
   {
     fix fa
     assume wf: "wf_f (TCst \<circ> fa)" and
-           wty: "S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Pred r (trm # trms))"
-    have "S, fa \<circ> E \<turnstile>formula.Pred r (trm # trms)" using wty by auto
-    then have la: "list_all2 (wty_trm (fa \<circ> E)) (trm # trms) (t # ts)" 
-      using 1(2) using wty_formula.intros(1) by(auto elim:wty_formula.cases)
-    then have "fa \<circ> E \<turnstile> trm :: fa (TCst t)" 
+           wty: "map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Pred r (trm # trms))"
+    have "map_sig fa S, fa \<circ> E \<turnstile>formula.Pred r (trm # trms)" using wty by auto
+    have sr: "map_sig fa S' r = Some (map fa ts)" using S'_def by (auto simp:map_sig_def)
+    have la: "list_all2 (wty_trm (fa \<circ> E)) (trm # trms) (fa t # (map fa ts))" 
+      using 1(2) wty using wty_formula.intros(1) by(auto simp:map_sig_def elim:wty_formula.cases)
+    then have "fa \<circ> E \<turnstile> trm :: fa t" 
       using wf unfolding wf_f_def by auto
     then obtain g where g_def: "wf_f (TCst \<circ> g)" "fa = g \<circ> f'" 
       using wty1 wf unfolding wty_result_fX_trm_def by auto
@@ -3028,12 +3021,12 @@ proof(induction arbitrary: f S rule:check_pred.induct)
     }
     then have "trm \<in> set trms \<Longrightarrow> (fa \<circ> E) \<turnstile> trm :: t \<Longrightarrow> (g \<circ> (f' \<circ> E)) \<turnstile> trm :: t" for t trm
       using wty_trm_fv_cong by blast
-    then have "list_all2 (wty_trm (g \<circ> (f' \<circ> E))) trms ts" 
+    then have "list_all2 (wty_trm (g \<circ> (f' \<circ> E))) trms (map fa ts)" 
       using la by auto (metis list.rel_mono_strong)
-    then have *: "(S', (g \<circ> (f' \<circ> E)) \<turnstile> formula.map_formula g (formula.Pred r trms))"
-      using wty_formula.intros(1) sr by auto
+    then have *: "(map_sig (g \<circ> f') S', (g \<circ> (f' \<circ> E)) \<turnstile> formula.map_formula g (formula.Pred r trms))"
+      using wty_formula.intros(1)[of "map_sig fa S'", OF sr] g_def(2) by (auto simp:map_sig_def)
     have "\<exists>g. wf_f (TCst \<circ> g) \<and> fa = g \<circ> f" 
-      using wty2 unfolding wty_result_fX_def using * f_def g_def by force
+      using wty2 unfolding wty_result_fX_def f_def g_def using * g_def(1) by force
   } moreover {
     fix f'''
     assume wf: "wf_f (TCst \<circ> f''')" and
@@ -3041,14 +3034,16 @@ proof(induction arbitrary: f S rule:check_pred.induct)
     obtain g where g_def: "wf_f (TCst \<circ> g)" "f''' = (g \<circ> f'') \<circ> f'" using exg f_def fun.map_comp by blast
     have wf_comb: "wf_f (TCst \<circ> (g \<circ> f''))" 
       using g_def(1) wty2 unfolding wty_result_fX_def by (simp add: fun.map_comp wf_f_comp)
-    moreover have "f''' (TCst t) = ((g \<circ> f'') \<circ> f') (TCst t)" 
-      using wf g_def(1) wf_f_def wty1 wty2 wty_result_fX_def wty_result_fX_trm_def by force
-    ultimately have t1: "f''' \<circ> E \<turnstile> trm :: f''' (TCst t)" 
+    moreover have "f''' t = ((g \<circ> f'') \<circ> f') t" 
+      using wf g_def wf_f_def wty1 wty2 wty_result_fX_def wty_result_fX_trm_def by fastforce
+    ultimately have t1: "f''' \<circ> E \<turnstile> trm :: f''' t" 
       using wty1 unfolding wty_result_fX_trm_def using g_def(2) local.wf by blast
-    have "S', (g \<circ> f'') \<circ> (f' \<circ> E) \<turnstile> (formula.Pred r trms)"
+    have sr: "map_sig (g \<circ> f'' \<circ> f') S' r = Some (map (g \<circ> f'' \<circ> f') ts)"
+      using S'_def by(auto simp:map_sig_def)
+    have "map_sig (g \<circ> f'' \<circ> f') S', (g \<circ> f'') \<circ> (f' \<circ> E) \<turnstile> (formula.Pred r trms)"
       using wty2 unfolding wty_result_fX_def using wf_comb g_def(1) by auto
-    then have la: "list_all2 (wty_trm (g \<circ> f'' \<circ> f' \<circ> E)) trms ts" 
-      using sr using wty_formula.intros(1) by(auto elim:wty_formula.cases simp:comp_assoc)
+    then have la: "list_all2 (wty_trm (g \<circ> f'' \<circ> f' \<circ> E)) trms (map (g \<circ> f'' \<circ> f') ts)" 
+      using sr using wty_formula.intros(1)[of "map_sig (g \<circ> f'' \<circ> f') S'", OF sr] by(auto elim:wty_formula.cases simp:comp_assoc)
     {
       fix trm y
       assume assm: "trm \<in> set trms" "y \<in> fv_trm trm"
@@ -3056,12 +3051,14 @@ proof(induction arbitrary: f S rule:check_pred.induct)
     }
     then have "trm \<in> set trms \<Longrightarrow> (g \<circ> f'' \<circ> f' \<circ> E) \<turnstile> trm :: t \<Longrightarrow> (f''' \<circ> E) \<turnstile> trm :: t" for t trm
       using wty_trm_fv_cong by blast
-    then have "list_all2 (wty_trm (f''' \<circ> E)) trms ts" 
-      using wty_trm_fv_cong la list.rel_mono_strong by blast
-    then have "list_all2 (wty_trm (f''' \<circ> E)) (trm#trms) (t#ts)" 
+    then have "list_all2 (wty_trm (f''' \<circ> E)) trms (map f''' ts)" 
+      using wty_trm_fv_cong la list.rel_mono_strong g_def(2) by force
+    then have *: "list_all2 (wty_trm (f''' \<circ> E)) (trm#trms) (map f''' (t#ts))" 
       using t1 wf wf_f_def by auto
-    then have "S, f''' \<circ> E \<turnstile> formula.map_formula f''' (formula.Pred r (trm # trms))"
-      using wty_formula.intros(1) 1(2) by auto
+    have sr: "map_sig f''' S r = Some (map f''' (t # ts))"
+      using 1(2) by(auto simp:map_sig_def)
+    have "map_sig f''' S, f''' \<circ> E \<turnstile> formula.map_formula f''' (formula.Pred r (trm # trms))"
+      using wty_formula.intros(1)[OF _ *] sr by simp
   }
   moreover have "wf_f f" 
     using wty1 wty2 wf_f_comp unfolding f_def wty_result_fX_trm_def wty_result_fX_def by auto
@@ -3069,8 +3066,8 @@ proof(induction arbitrary: f S rule:check_pred.induct)
 next
   case (2 E)
   then have "f = id" by auto
-  moreover have "S, f \<circ> E \<turnstile> formula.Pred r []" for f
-    using wty_formula.intros(1)[of S r "[]" _ "[]"] 2(1) by auto
+  moreover have "map_sig f S, f \<circ> E \<turnstile> formula.Pred r []" for f
+    using wty_formula.intros(1)[of "map_sig f S" r "[]" _ "[]"] 2(1) by (auto simp:map_sig_def)
   ultimately show ?case unfolding wty_result_fX_def by auto
 qed auto
 
@@ -3091,9 +3088,9 @@ next
     using Cons(2) unfolding check_ands_def by(auto simp:check_ands_f_def) fastforce
   then have wty1: "wty_result_fX S E (formula.Ands \<phi>s) f'" 
     using Cons(3-4) by(auto intro!:Cons(1)) (auto simp:check_ands_def used_tys_def image_Un image_subset_iff)
-  obtain f'' where f''_def:  "check S (f' \<circ> E) (formula.map_formula f' a) = Some f''"
+  obtain f'' where f''_def:  "check (map_sig f' S) (f' \<circ> E) (formula.map_formula f' a) = Some f''"
     using Cons(2)[unfolded check_ands_def comp_def f'_def foldr.simps] unfolding check_ands_f_def by(auto split:option.splits)
-  have wty2: "wty_result_fX S (f' \<circ> E) (formula.map_formula f' a) f''" 
+  have wty2: "wty_result_fX (map_sig f' S) (f' \<circ> E) (formula.map_formula f' a) f''" 
     using Cons(3,4) by(auto intro!:Cons(4)[OF _ f''_def])
   have f_def: "f = f'' \<circ> f'"
     using Cons(2) f'_def f''_def by(auto simp:check_ands_def check_ands_f_def)
@@ -3101,8 +3098,8 @@ next
   moreover {
     fix fa
     assume wf: "wf_f (TCst \<circ> fa)" and
-           wty: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands (a # \<phi>s)))" 
-    have tys: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands \<phi>s))" "(S, fa \<circ> E \<turnstile> formula.map_formula fa a)" 
+           wty: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands (a # \<phi>s)))" 
+    have tys: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands \<phi>s))" "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa a)" 
       using Ands wty by(auto elim:wty_formula.cases)
     then obtain g where g_def: "wf_f (TCst \<circ> g)" "fa = g \<circ> f'"
       using wty1 wf unfolding wty_result_fX_def by auto
@@ -3110,8 +3107,8 @@ next
       using Cons(4) by(auto simp:used_tys_def) (metis (no_types, lifting) formula.map_comp)
     have "y \<in> fv (formula.map_formula fa a) \<Longrightarrow> (g \<circ> (f' \<circ> E)) y = (fa \<circ> E) y" for y
       using Cons(4) g_def(2) by(auto simp:used_tys_def)
-    then have "(S, g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' a))"
-      using eq tys(2) wty_formula_fv_cong[of "formula.map_formula fa a" "g \<circ> (f' \<circ> E)" "fa \<circ> E"] by auto
+    then have "(map_sig g (map_sig f' S), g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' a))"
+      using eq tys(2) wty_formula_fv_cong[of "formula.map_formula fa a" "g \<circ> (f' \<circ> E)" "fa \<circ> E"] g_def(2) by force
     then have "\<exists>g. wf_f (TCst \<circ> g) \<and> fa = g \<circ> f" 
       using wty2 wf f_def g_def unfolding wty_result_fX_def by force
   } moreover {
@@ -3119,21 +3116,20 @@ next
     assume wf: "wf_f (TCst \<circ> fa)" and
            exg: "\<exists>g. wf_f (TCst \<circ> g) \<and> fa = g \<circ> f" 
     obtain g where g_def: "wf_f (TCst \<circ> g)" "fa = g \<circ> f" using exg by auto
-    have fst: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands \<phi>s))" 
+    have fst: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands \<phi>s))" 
       using wf exg wty1 unfolding wty_result_fX_def f_def by (metis (no_types, lifting) fun.map_comp wf_f_comp wty2 wty_result_fX_def)
-    then have "(S, fa \<circ> E \<turnstile> (formula.Ands (map (formula.map_formula fa) \<phi>s)))" by simp
-    then have fst: " \<forall>\<phi>\<in>set (map (formula.map_formula fa) \<phi>s). S, fa \<circ> E \<turnstile> \<phi>" 
-      by(rule wty_formula.cases[of S "fa \<circ> E" "formula.Ands (map (formula.map_formula fa) \<phi>s)"]) auto
-    have ty: "(S, g \<circ> f'' \<circ> (f' \<circ> E) \<turnstile> formula.map_formula (g \<circ> f'') (formula.map_formula f' a))" 
+    then have "(map_sig fa S, fa \<circ> E \<turnstile> (formula.Ands (map (formula.map_formula fa) \<phi>s)))" by simp
+    then have fst: " \<forall>\<phi>\<in>set (map (formula.map_formula fa) \<phi>s). map_sig fa S, fa \<circ> E \<turnstile> \<phi>" 
+      by(rule wty_formula.cases[of "map_sig fa S" "fa \<circ> E" "formula.Ands (map (formula.map_formula fa) \<phi>s)"]) auto
+    have ty: "(map_sig (g \<circ> f'') (map_sig f' S), g \<circ> f'' \<circ> (f' \<circ> E) \<turnstile> formula.map_formula (g \<circ> f'') (formula.map_formula f' a))" 
       using wf exg wty2 g_def(1) unfolding wty_result_fX_def f_def by (metis (no_types, opaque_lifting) comp_assoc wf_f_comp)
     have *: "formula.map_formula (g \<circ> f'') (formula.map_formula f' a) = formula.map_formula fa a"
-      using g_def(1) g_def(2)[unfolded f_def] Cons(4) by(auto simp:used_tys_def) (metis (no_types, lifting) f_def formula.map_comp g_def(2) map_formula_f_cong)
+      using g_def(1) g_def(2)[unfolded f_def] Cons(4) by(auto simp:used_tys_def) (metis (no_types, lifting)  formula.map_comp)
     have "y \<in> fv (formula.map_formula fa a) \<Longrightarrow> (g \<circ> f'' \<circ> (f' \<circ> E)) y = (fa \<circ> E) y" for y
       using g_def(2) Cons(4) f_def by(auto simp:used_tys_def) 
-    then have "(S, fa \<circ> E \<turnstile> formula.map_formula fa a)" 
-      using ty[unfolded *] wty_formula_fv_cong[of "formula.map_formula fa a" "g \<circ> f'' \<circ> (f' \<circ> E)" "fa \<circ> E" S]
-      by auto
-    then have "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands (a # \<phi>s)))"
+    then have "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa a)" 
+      using ty[unfolded *] by (simp add: f_def fun.map_comp g_def(2))
+    then have "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Ands (a # \<phi>s)))"
       using fst Ands by auto
   }
   ultimately show ?case unfolding wty_result_fX_def by auto
@@ -3156,7 +3152,7 @@ qed auto
 lemma wty_regex_binop:
   assumes 
     wty1: "wty_result_fX S E (type I r1) f'" and
-    wty2: "wty_result_fX S (f' \<circ> E) (type I (regex.map_regex (formula.map_formula f') r2)) f''" and
+    wty2: "wty_result_fX (map_sig f' S) (f' \<circ> E) (type I (regex.map_regex (formula.map_formula f') r2)) f''" and
     type: "type = formula.MatchP \<or> type = formula.MatchF" and
     binop: "binop = regex.Plus \<or> binop = regex.Times"
   shows "wty_result_fX S E (type I (binop r1 r2)) (f'' \<circ> f')"
@@ -3166,18 +3162,17 @@ proof -
     fix fa
     assume 
       wf: "wf_f (TCst \<circ> fa)" and 
-      wty: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (binop r1 r2)))"
-    then have "regex.pred_regex (wty_formula S (fa \<circ> E)) (regex.map_regex (formula.map_formula fa) (binop r1 r2))"
+      wty: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (binop r1 r2)))"
+    then have "regex.pred_regex (wty_formula (map_sig fa S) (fa \<circ> E)) (regex.map_regex (formula.map_formula fa) (binop r1 r2))"
       using type binop by(auto elim:wty_formula.cases)
     then have wtys:
-      "(S, fa \<circ> E \<turnstile> formula.map_formula fa (type I r1))" 
-      "(S, fa \<circ> E \<turnstile> formula.map_formula fa (type I r2))" 
+      "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I r1))" 
+      "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I r2))" 
       using type binop by(auto intro!:wty_formula.intros) 
     then obtain g where g_def: "wf_f (TCst \<circ> g)" "fa = g \<circ> f'"
       using wty1 wf unfolding wty_result_fX_def by auto
-    then have aux: "(S, g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula fa (type I r2))"
-      using wty_formula_fv_cong[of "formula.map_formula fa (type I r2)" "fa \<circ> E" "g \<circ> (f' \<circ> E)" S]
-       type binop wtys(2) by(auto simp:used_tys_def)
+    then have aux: "(map_sig fa S, g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula fa (type I r2))"
+      using type binop wtys(2) by (simp add: fun.map_comp)
     have "(formula.map_formula g \<circ> formula.map_formula f') x = formula.map_formula (g \<circ> f') x" for x
       by (simp add: formula.map_comp)
     then have comp_eq: "(formula.map_formula g \<circ> formula.map_formula f') = formula.map_formula (g \<circ> f')"
@@ -3197,20 +3192,18 @@ proof -
       by (simp add: formula.map_comp)
     then have comp_eq: "(formula.map_formula (g \<circ> f'') \<circ> formula.map_formula f') = formula.map_formula (g \<circ> f'' \<circ> f')"
       by auto
-    have ty1: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (type I r1))"
+    have ty1: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I r1))"
       using wty1 wf exg unfolding wty_result_fX_def by (metis (no_types, lifting) fun.map_comp wf_f_comp wty2 wty_result_fX_def)
-    have ty2': "(S, (g \<circ> f'') \<circ> (f' \<circ> E) \<turnstile> formula.map_formula (g \<circ> f'') (type I (regex.map_regex (formula.map_formula f') r2)))" 
+    have ty2': "(map_sig (g \<circ> f'') (map_sig f' S), (g \<circ> f'') \<circ> (f' \<circ> E) \<turnstile> formula.map_formula (g \<circ> f'') (type I (regex.map_regex (formula.map_formula f') r2)))" 
       using wty2 wf exg unfolding wty_result_fX_def by (metis (no_types, opaque_lifting) fun.map_comp g_def(1) wf_f_comp)
     have map_eq: "formula.map_formula (g \<circ> f'') (type I (regex.map_regex (formula.map_formula f') r2)) = formula.map_formula fa (type I r2)"
       using type binop UN_subset_iff[of formula.set_formula _] g_def(2)
       by(auto intro!: regex.map_cong0 formula.map_cong0 simp:regex.map_comp comp_eq used_tys_def)
-    have ty2: "(S, (fa \<circ> E) \<turnstile> formula.map_formula fa (type I r2))" 
-      using ty2'[unfolded map_eq] wty_formula_fv_cong[of "formula.map_formula fa (type I r2)" "fa \<circ> E" "(g \<circ> f'') \<circ> (f' \<circ> E)" S] 
-         type binop g_def(2)
-      by(auto simp:used_tys_def) 
-    have "regex.pred_regex (wty_formula S (fa \<circ> E)) (regex.map_regex (formula.map_formula fa) (binop r1 r2))"
+    have ty2: "(map_sig fa S, (fa \<circ> E) \<turnstile> formula.map_formula fa (type I r2))" 
+      using ty2'[unfolded map_eq] type binop g_def(2) by (simp add: fun.map_comp)
+    have "regex.pred_regex (wty_formula (map_sig fa S) (fa \<circ> E)) (regex.map_regex (formula.map_formula fa) (binop r1 r2))"
       using type binop ty1 ty2 by(auto intro!:wty_formula.intros elim:wty_formula.cases)
-    then have "(S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (binop r1 r2)))" 
+    then have "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (binop r1 r2)))" 
       using type binop by(auto intro!:wty_formula.intros)
   }
   ultimately show ?thesis unfolding wty_result_fX_def by auto
@@ -3256,20 +3249,20 @@ next
   moreover {
     fix fa
     assume wf: "wf_f (TCst \<circ> fa)" and
-           ty: "S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (regex.Test x))"
-    then have "S, fa \<circ> E \<turnstile> formula.MatchP I (regex.Test (formula.map_formula fa x)) \<or>
-               S, fa \<circ> E \<turnstile> formula.MatchF I (regex.Test (formula.map_formula fa x))"
+           ty: "map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (regex.Test x))"
+    then have "map_sig fa S, fa \<circ> E \<turnstile> formula.MatchP I (regex.Test (formula.map_formula fa x)) \<or>
+               map_sig fa S, fa \<circ> E \<turnstile> formula.MatchF I (regex.Test (formula.map_formula fa x))"
       using type by auto
-    then have "Regex.pred_regex (\<lambda>\<phi>. S, fa \<circ> E \<turnstile> \<phi>) (regex.Test (formula.map_formula fa x))"
+    then have "Regex.pred_regex (\<lambda>\<phi>. map_sig fa S, fa \<circ> E \<turnstile> \<phi>) (regex.Test (formula.map_formula fa x))"
        by(auto elim:wty_formula.cases) 
-    then have "S, fa \<circ> E \<turnstile> formula.map_formula fa x"
+    then have "map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa x"
       by auto
     then have "\<exists>g. wf_f (TCst \<circ> g) \<and> fa = (g \<circ> f)" using wty wf unfolding wty_result_fX_def by auto
   } moreover {
     fix fa
     assume wf: "wf_f (TCst \<circ> fa)" and
            exg: "\<exists>g. wf_f (TCst \<circ> g) \<and> (fa = g \<circ> f)"
-    have "S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (regex.Test x))" 
+    have "map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (type I (regex.Test x))" 
       using type wf exg wty MatchP MatchF unfolding wty_result_fX_def by auto
   }
   ultimately show ?case 
@@ -3279,16 +3272,16 @@ next
   case (Plus r1 r2)
   obtain f' f'' where f_defs:
     "check_regex check S E r1 = Some f'"
-    "check_regex check S (f' \<circ> E) (regex.map_regex (formula.map_formula f') r2) = Some f''"
+    "check_regex check (map_sig f' S) (f' \<circ> E) (regex.map_regex (formula.map_formula f') r2) = Some f''"
     "f = f'' \<circ> f'"
     using Plus(4) by(auto split:option.splits)
   have wfs: "wf_formula (type I r1)" "wf_formula (type I (regex.map_regex (formula.map_formula f') r2))" 
     using Plus(3, 5) type by(auto) (metis map_regex_pred regex.pred_set wf_formula_map)+
   have wtys: 
     "wty_result_fX S E (type I r1) f'" 
-    "wty_result_fX S (f' \<circ> E) (type I (regex.map_regex (formula.map_formula f') r2)) f''"
+    "wty_result_fX (map_sig f' S) (f' \<circ> E) (type I (regex.map_regex (formula.map_formula f') r2)) f''"
     using Plus(6)[OF _ _ wfs(1), of S] type f_defs(1) 
-      Plus(6)[OF _ _ wfs(2), of S] f_defs(2)
+      Plus(6)[OF _ _ wfs(2), of "map_sig f' S"] f_defs(2)
      by(auto simp del:comp_apply)
    show ?case 
      using wty_regex_binop[OF wtys type, of regex.Plus] 
@@ -3298,16 +3291,16 @@ next
   case (Times r1 r2)
   obtain f' f'' where f_defs:
     "check_regex check S E r1 = Some f'"
-    "check_regex check S (f' \<circ> E) (regex.map_regex (formula.map_formula f') r2) = Some f''"
+    "check_regex check (map_sig f' S) (f' \<circ> E) (regex.map_regex (formula.map_formula f') r2) = Some f''"
     "f = f'' \<circ> f'"
     using Times(4) by(auto split:option.splits)
   have wfs: "wf_formula (type I r1)" "wf_formula (type I (regex.map_regex (formula.map_formula f') r2))" 
     using Times(3, 5) type by(auto) (metis map_regex_pred regex.pred_set wf_formula_map)+
   have wtys: 
     "wty_result_fX S E (type I r1) f'" 
-    "wty_result_fX S (f' \<circ> E) (type I (regex.map_regex (formula.map_formula f') r2)) f''"
+    "wty_result_fX (map_sig f' S) (f' \<circ> E) (type I (regex.map_regex (formula.map_formula f') r2)) f''"
     using Times(6)[OF _ _ wfs(1), of S] type f_defs(1) 
-      Times(6)[OF _ _ wfs(2), of S] f_defs(2)
+      Times(6)[OF _ _ wfs(2), of "map_sig f' S"] f_defs(2)
      by(auto simp del:comp_apply)
    show ?case 
      using wty_regex_binop[OF wtys type, of regex.Times] 
@@ -3501,7 +3494,7 @@ next
   case (11 S E y agg_type d tys trm \<phi>)
   obtain f' where f'_def: "check_trm (new_type_symbol \<circ> (agg_tysenv E tys)) (agg_trm_tysym agg_type) trm = Some f'"
     using 11(2) by(auto split:option.splits) 
-  then obtain f'' where f''_def: "check S (f' \<circ> new_type_symbol \<circ> (agg_tysenv E tys)) (formula.map_formula (f' \<circ> new_type_symbol) \<phi>) = Some f''"
+  then obtain f'' where f''_def: "check (map_sig (f' \<circ> new_type_symbol) S) (f' \<circ> new_type_symbol \<circ> (agg_tysenv E tys)) (formula.map_formula (f' \<circ> new_type_symbol) \<phi>) = Some f''"
     using 11(2) by(auto split:option.splits)
   then obtain f''' where f'''_def: "check_trm (f'' \<circ> f' \<circ> new_type_symbol \<circ> E) ((f'' \<circ> f') (t_res_tysym agg_type (agg_trm_tysym agg_type))) (Formula.Var y) = Some f'''"
     using 11(2) f'_def by(auto simp del: check_trm.simps split:option.splits)
@@ -3517,11 +3510,11 @@ next
   {
     fix fa
     assume wf: "wf_f (TCst \<circ> fa)"
-    and wty: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Agg y (agg_type, d) tys trm \<phi>))"
+    and wty: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Agg y (agg_type, d) tys trm \<phi>))"
     obtain t where wtys: 
       "(fa \<circ> E) y = t_res agg_type t" 
       "agg_env (fa \<circ> E) (map fa tys)  \<turnstile> trm :: t" 
-      "S, agg_env (fa \<circ> E) (map fa tys) \<turnstile> formula.map_formula fa \<phi>"
+      "map_sig fa S, agg_env (fa \<circ> E) (map fa tys) \<turnstile> formula.map_formula fa \<phi>"
       "t \<in> agg_trm_type agg_type" 
       "fa d = t_res agg_type t" using wty by(auto elim:wty_formula.cases)
     define nn where nn_def: "nn = (\<lambda>t'. if t' = (agg_trm_tysym agg_type) then (TCst t) else case t' of TAny n \<Rightarrow> TAny (n - 1) | TNum n \<Rightarrow> TNum (n-1) | _ \<Rightarrow> t' )"
@@ -3540,12 +3533,13 @@ next
       using g_def(2) nn_n by (metis comp_id fun.map_comp)
     have map_eq: "formula.map_formula fa \<phi> = formula.map_formula (g \<circ> (f' \<circ> new_type_symbol)) \<phi>"
       using eq1 11(3) by(auto simp:used_tys_def comp_assoc)
-    have "S, (g \<circ> f' \<circ> new_type_symbol \<circ> agg_tysenv E tys) \<turnstile> formula.map_formula fa \<phi>"
+    have "(map_sig (g \<circ> f' \<circ> new_type_symbol) S), (g \<circ> f' \<circ> new_type_symbol \<circ> agg_tysenv E tys) \<turnstile> formula.map_formula fa \<phi>"
       using wtys(3)[unfolded env_eq] eq1 wty_formula_fv_cong by blast
     then obtain g' where g'_def: 
       "wf_f (TCst \<circ> g')" 
       "g = g' \<circ> f''"
-      using g_def(1) wty2 unfolding map_eq wty_result_fX_def formula.map_comp[symmetric, of g] by (metis (no_types, lifting) fun.map_comp)
+      using g_def(1) wty2 unfolding map_eq wty_result_fX_def formula.map_comp[symmetric, of g]
+      by (metis (no_types, lifting) fun.map_comp map_sig_comp)
     have "(fa \<circ> E) y = (fa \<circ> nn) (t_res_tysym agg_type (agg_trm_tysym agg_type))" 
       using wtys(1) wf wf_nn by(cases agg_type; auto simp:nn_def wf_f_def)
     then have "(g' \<circ> (f'' \<circ> f' \<circ> new_type_symbol \<circ> E)) y = g' ((f'' \<circ> f') (t_res_tysym agg_type (agg_trm_tysym agg_type)))"
@@ -3594,11 +3588,11 @@ next
       using nn_n by (metis comp_id fun.map_comp)
     have prem2: "(fa \<circ> nn) (agg_trm_tysym agg_type) \<in> agg_trm_type agg_type" 
       by (smt (z3) UNIV_I agg_trm_type.elims agg_trm_tysym.simps(1) agg_trm_tysym.simps(3) agg_trm_tysym.simps(4) comp_assoc eq_refinement_min_type local.wf min_consistent resless_wty_num_dir2 wf_f_comp wf_nn)
-    have "(S, (g \<circ> f'''' \<circ> f''' \<circ> f'') \<circ> (f' \<circ> new_type_symbol \<circ> agg_tysenv E tys) \<turnstile> formula.map_formula (g \<circ> f'''' \<circ> f''' \<circ> f'') (formula.map_formula (f' \<circ> new_type_symbol) \<phi>))"
+    have "(map_sig (g \<circ> f'''' \<circ> f''' \<circ> f'') (map_sig (f' \<circ> new_type_symbol) S), (g \<circ> f'''' \<circ> f''' \<circ> f'') \<circ> (f' \<circ> new_type_symbol \<circ> agg_tysenv E tys) \<turnstile> formula.map_formula (g \<circ> f'''' \<circ> f''' \<circ> f'') (formula.map_formula (f' \<circ> new_type_symbol) \<phi>))"
       using wty2 unfolding wty_result_fX_def by (metis (no_types, opaque_lifting) fun.map_comp g_def(1) wf_f_comp wfs(3) wfs(4))
-    then have prem3: "S, agg_env (fa \<circ> E) (map fa tys) \<turnstile> formula.map_formula fa \<phi>"
+    then have prem3: "map_sig fa S, agg_env (fa \<circ> E) (map fa tys) \<turnstile> formula.map_formula fa \<phi>"
       unfolding formula.map_comp comp_assoc g_def(2)[unfolded f_def comp_assoc, symmetric]
-      using fa_eq[symmetric] by (metis (no_types, lifting) env_eq f_def fun.map_comp g_def(2))
+      using fa_eq[symmetric] by (metis (mono_tags, lifting) env_eq f_def fun.map_comp g_def(2) map_sig_comp)
     have "((g \<circ> f'''' \<circ> f''') \<circ> (f'' \<circ> f' \<circ> new_type_symbol \<circ> E)  \<turnstile> trm.Var y :: (g \<circ> f'''' \<circ> f''') ((f'' \<circ> f') (t_res_tysym agg_type (agg_trm_tysym agg_type))))"
       using wty3 unfolding wty_result_fX_trm_def by (metis (no_types, opaque_lifting) fun.map_comp g_def(1) wf_f_comp wfs(4))
     then have "(fa \<circ> E)  \<turnstile> trm.Var y :: (fa \<circ> nn) (t_res_tysym agg_type (agg_trm_tysym agg_type))" 
@@ -3611,7 +3605,7 @@ next
     then have "(fa \<circ> E) \<turnstile> trm.Var y :: fa d" by (simp add: f_def fun.map_comp g_def(2))
     then have prem5: "fa d = t_res agg_type ((fa \<circ> nn) (agg_trm_tysym agg_type))"
       using prem4 by(auto elim:wty_trm.cases)
-    have "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Agg y (agg_type, d) tys trm \<phi>))"
+    have "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Agg y (agg_type, d) tys trm \<phi>))"
       using Agg[OF prem4 prem1[unfolded env_eq] prem3 prem2 prem5] by auto
   }                                        
   moreover have "wf_f f" unfolding f_def using wfs wf_f_comp by force
@@ -3641,29 +3635,20 @@ next
 qed 
 
 lemma check_pred_complete:
-  "S r = Some tys \<Longrightarrow> list_all2 (wty_trm (f \<circ> E)) ts tys \<Longrightarrow> check_pred E ts tys = None  \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> False"
+  "S r = Some tys \<Longrightarrow> list_all2 (wty_trm (f \<circ> E)) ts (map f tys) \<Longrightarrow> check_pred E ts tys = None  \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> False"
 proof(induction arbitrary: f S rule:check_pred.induct)
   case (1 E trm trms t ts)
-  have "f (TCst t) = t" using 1(5) by(auto simp:wf_f_def)
-  then have wty: "f \<circ> E \<turnstile> trm :: f (TCst t)" using 1(3) by (auto simp del:comp_apply)
-  obtain f' where f'_def: "check_trm E (TCst t) trm = Some f'"
+  then have wty: "f \<circ> E \<turnstile> trm :: f t" using 1(3) by (auto simp del:comp_apply)
+  obtain f' where f'_def: "check_trm E t trm = Some f'"
     using check_trm_complete'[OF _ 1(5) wty] by auto
   obtain g where g_def: "wf_f (TCst \<circ> g)" "f = g \<circ> f'" 
     using check_trm_sound[OF f'_def] wty 1(5) unfolding wty_result_fX_trm_def by auto
   define S' where "S' = (\<lambda>k. if k = r then Some ts else None)"
-  then have S': "S' r = Some ts" by auto
-  have "trm \<in> set trms \<Longrightarrow> wty_trm (f \<circ> E) trm t \<Longrightarrow> wty_trm (g \<circ> (f' \<circ> E)) trm t" for trm t
-  proof -
-    fix trm t
-    assume int: "trm \<in> set trms" and
-      wty: "wty_trm (f \<circ> E) trm t"
-    then have "wty_trm ((g \<circ> f') \<circ> E) trm t" 
-      using wty_trm_fv_cong[of trm "f \<circ> E" "(g \<circ> f') \<circ> E"] wty g_def(2) by (simp add: image_subset_iff)
-    then show "wty_trm (g \<circ> (f' \<circ> E)) trm t" by (simp add: fun.map_comp)
-  qed
-  then have la2: "list_all2 (wty_trm (g \<circ> (f' \<circ> E))) trms ts" 
-    using 1(3) unfolding list_all2_iff by auto (metis old.prod.case set_zip_leftD)
-  show ?case using 1(1)[of _ S', OF f'_def S' la2 _ g_def(1)] 1(4) f'_def by(auto simp del:comp_apply split:option.splits)
+  then have S': "map_sig f' S' r = Some (map f' ts)" by (auto simp:map_sig_def)
+ 
+  have la2: "list_all2 (wty_trm (g \<circ> (f' \<circ> E))) trms (map g (map f' ts))" 
+    using 1(3) unfolding g_def(2) by (metis (no_types, lifting) list.map_comp list.rel_inject(2) list.simps(9) rewriteR_comp_comp)
+  show ?case using 1(1)[OF f'_def, of "map_sig f' S'", OF S' la2 _ g_def(1)] 1(4) f'_def by(auto simp del:comp_apply split:option.splits)
 next
   case (2 E X)
   then show ?case by auto
@@ -3672,26 +3657,26 @@ next
   then show ?case by blast
 next
   case ("3_2" E X v va)
-  then show ?case by blast
+  then show ?case by force
 qed
 
 lemma check_binary_complete: assumes 
-  IH: "\<And>\<phi>' S E f. size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = None \<Longrightarrow> S, f \<circ> E \<turnstile> formula.map_formula f \<phi>'\<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> False" and
+  IH: "\<And>\<phi>' S E f. size \<phi>' \<le> size \<phi> + size \<psi> \<Longrightarrow> check S E \<phi>' = None \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>'\<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> False" and
   none: "check S E form = None" and
-  wty: "S, f \<circ> E \<turnstile> formula.map_formula f form" and
+  wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f form" and
   wf: "wf_f (TCst \<circ> f)" and
   wformula: "wf_formula form" and
   type: "form \<in> {formula.Or \<phi> \<psi>, formula.And \<phi> \<psi>, formula.Since \<phi> I \<psi>, formula.Until \<phi> I \<psi>}" shows "False"
 proof -
   have wformulas: "wf_formula \<phi>" "wf_formula \<psi>" using wformula type by auto
-  have wtys: "S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" "S, f \<circ> E \<turnstile> formula.map_formula f \<psi>"
+  have wtys: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<psi>"
     using wty type by(auto elim:wty_formula.cases)
   obtain f' where f_def: "check S E \<phi> = Some f'"
     using IH[OF _ _ wtys(1) wf wformulas(1)] by auto
   have "wty_result_fX S E \<phi> f'" using check_sound_proven[OF f_def] wformula type by auto
   then obtain g where g_def: "wf_f (TCst \<circ> g)" "f = g \<circ> f'" unfolding wty_result_fX_def using wtys(1) wf by auto
-  have wty': "S, g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' \<psi>)" 
-    unfolding formula.map_comp using wtys(2) g_def(2) wty_map_formula_cong by (metis (no_types, lifting) fun.map_comp)
+  have wty': "map_sig g (map_sig f' S), g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' \<psi>)" 
+    unfolding formula.map_comp using wtys(2) g_def(2) by (simp add: fun.map_comp)
   show ?thesis using IH[OF _ _ wty' g_def(1)] wformulas(2) f_def none type by(auto simp:check_two_formulas_def split:option.splits)
 qed
 
@@ -3699,47 +3684,47 @@ lemma check_regex_binop_complete:
   assumes 
     type: "type = Formula.MatchP \<or> type = Formula.MatchF" and
     binop: "binop = regex.Plus \<or> binop = regex.Times" and
-    IH: "\<And>\<phi>' S E f. size \<phi>' \<le> regex.size_regex size (binop r1 r2) \<Longrightarrow> check S E \<phi>' = None \<Longrightarrow> S, f \<circ> E \<turnstile> formula.map_formula f \<phi>' \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> False" and
+    IH: "\<And>\<phi>' S E f. size \<phi>' \<le> regex.size_regex size (binop r1 r2) \<Longrightarrow> check S E \<phi>' = None \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>' \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> False" and
     none: "check_regex check S E (binop r1 r2) = None" and
-    wty: "S, f \<circ> E \<turnstile> formula.map_formula f (type I (binop r1 r2))" and
+    wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f (type I (binop r1 r2))" and
     wf: "wf_f (TCst \<circ> f)" and
     wformula: "wf_formula (type I (binop r1 r2))"
   shows "False" 
 proof -
   have wfs: "wf_formula (type I r1)" "wf_formula (type I r2)"
     using type binop wformula by auto
-  have "regex.pred_regex (wty_formula S (f \<circ> E)) (regex.map_regex (formula.map_formula f) (binop r1 r2))"
+  have "regex.pred_regex (wty_formula (map_sig f S) (f \<circ> E)) (regex.map_regex (formula.map_formula f) (binop r1 r2))"
     using type binop wty by (auto elim:wty_formula.cases)
   then have wtys: 
-    "S, f \<circ> E \<turnstile> formula.map_formula f (type I r1)"
-    "S, f \<circ> E \<turnstile> formula.map_formula f (type I r2)"
+    "(map_sig f S), f \<circ> E \<turnstile> formula.map_formula f (type I r1)"
+    "(map_sig f S), f \<circ> E \<turnstile> formula.map_formula f (type I r2)"
     using type binop by (auto intro!: wty_formula.intros)
   obtain f' where f'_def: "check S E (type I r1) = Some f'"
     using IH[OF _ _ wtys(1) wf wfs(1)] type binop by auto blast+
   have wf': "wf_formula (formula.map_formula f' (type I r2))" using wfs(2) type by auto
   obtain g where g_def: "wf_f (TCst \<circ> g)" "f = g \<circ> f'"
     using check_sound_proven[OF f'_def wfs(1)] wf wtys(1) unfolding wty_result_fX_def by auto
-  have "S, (g \<circ> f') \<circ> E \<turnstile> formula.map_formula g (formula.map_formula f' (type I r2))"
-    unfolding formula.map_comp using g_def(2) type wty_map_formula_cong wtys(2) by blast
-  then have wty': "S, g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' (type I r2))"
-    by (simp add: fun.map_comp)
+  have "(map_sig f S), (g \<circ> f') \<circ> E \<turnstile> formula.map_formula g (formula.map_formula f' (type I r2))"
+    unfolding formula.map_comp using g_def(2) type  wtys(2) by blast
+  then have wty': "(map_sig g (map_sig f' S)), g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' (type I r2))"
+    by (simp add: fun.map_comp g_def(2))
   show ?thesis using IH[OF _ _ wty' g_def(1) wf'] f'_def none type binop by(auto split:option.splits)
 qed
 
 lemma check_regex_complete:
   assumes type: "type = Formula.MatchP \<or> type = Formula.MatchF" and
-    IH: "\<And>\<phi>' S E f. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check S E \<phi>' = None \<Longrightarrow> S, f \<circ> E \<turnstile> formula.map_formula f \<phi>' \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> False"
-  shows "\<phi> = type I r \<Longrightarrow> check_regex check S E r = None  \<Longrightarrow> S, f \<circ> E \<turnstile> formula.map_formula f \<phi> \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> False"
+    IH: "\<And>\<phi>' S E f. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check S E \<phi>' = None \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>' \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi>' \<Longrightarrow> False"
+  shows "\<phi> = type I r \<Longrightarrow> check_regex check S E r = None  \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi> \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> False"
   using IH
 proof(induction r arbitrary: E f \<phi>)
   case (Skip x)
   then show ?case by auto
 next
   case (Test x)
-  have "S, f \<circ> E \<turnstile> formula.MatchP I (regex.Test (formula.map_formula f x)) \<or>
-        S, f \<circ> E \<turnstile> formula.MatchF I (regex.Test (formula.map_formula f x))"
+  have "map_sig f S, f \<circ> E \<turnstile> formula.MatchP I (regex.Test (formula.map_formula f x)) \<or>
+        map_sig f S, f \<circ> E \<turnstile> formula.MatchF I (regex.Test (formula.map_formula f x))"
     using type Test(1, 3) by (auto simp del: comp_apply)
-  then have wty: "S, f \<circ> E \<turnstile> formula.map_formula f x" 
+  then have wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f x" 
     by(auto elim:wty_formula.cases)  
   have wf: "wf_formula x" using Test(1, 5) type by auto
   show ?case using Test(6)[OF _ _ wty Test(4) wf] Test(2) by auto
@@ -3751,16 +3736,16 @@ next
   show ?case using check_regex_binop_complete[OF type, of regex.Times, OF _ _ Times(4-7)[unfolded Times(3)]] Times(8) by blast
 next
   case (Star r)
-  have wty: "S, f \<circ> E \<turnstile> formula.map_formula f (type I r)"
-    using star_regex_eq[OF type, of S "f \<circ> E" f I r] Star(4)[unfolded Star(2)] by auto
+  have wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f (type I r)"
+    using star_regex_eq[OF type, of "map_sig f S" "f \<circ> E" f I r] Star(4)[unfolded Star(2)] by auto
   have wf: "wf_formula (type I r)"
     using Star(6)[unfolded Star(2)] type by auto
   then show ?case using Star(3) Star(7)[OF _ _ wty Star(5) wf] type by auto
 qed
 
 lemma check_ands_complete:
-  assumes IH: "\<And>\<phi> S E f. size \<phi> \<le> size_list size \<phi>s \<Longrightarrow> check S E \<phi> = None \<Longrightarrow> S, f \<circ> E \<turnstile> formula.map_formula f \<phi> \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow>  wf_formula \<phi> \<Longrightarrow> False"
-  shows "check_ands check S E \<phi>s = None \<Longrightarrow> S, f \<circ> E \<turnstile> formula.map_formula f (Formula.Ands \<phi>s) \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula (Formula.Ands \<phi>s) \<Longrightarrow> False"
+  assumes IH: "\<And>\<phi> S E f. size \<phi> \<le> size_list size \<phi>s \<Longrightarrow> check S E \<phi> = None \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi> \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow>  wf_formula \<phi> \<Longrightarrow> False"
+  shows "check_ands check S E \<phi>s = None \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f (Formula.Ands \<phi>s) \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula (Formula.Ands \<phi>s) \<Longrightarrow> False"
   using IH
 proof(induction \<phi>s)
   case Nil
@@ -3768,24 +3753,24 @@ proof(induction \<phi>s)
 next
   case (Cons a \<phi>s)
   have wfs: "wf_formula (formula.Ands \<phi>s)" "wf_formula a" using Cons(5) by auto
-  have wty_pre: "\<forall>\<phi> \<in> set (a#\<phi>s). S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" 
+  have wty_pre: "\<forall>\<phi> \<in> set (a#\<phi>s). map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" 
     using Cons(3) by(auto simp del:comp_apply elim:wty_formula.cases)
-  then have wtys: "S, f \<circ> E \<turnstile> formula.map_formula f (formula.Ands \<phi>s)" "S, f \<circ> E \<turnstile> formula.map_formula f a"
+  then have wtys: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f (formula.Ands \<phi>s)" "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f a"
     by (auto intro!:wty_formula.intros)
   have "(foldr (check_ands_f check S E) \<phi>s (Some id)) = None \<Longrightarrow> False"
     using Cons(1)[OF _  wtys(1) Cons(4) wfs(1)] Cons(6) check_ands_def by force
   then obtain f' where f'_def: "foldr (check_ands_f check S E) \<phi>s (Some id) = Some f'"
     by auto
-  then have none: "check S (f' \<circ> E) (formula.map_formula f' a) = None" 
+  then have none: "check (map_sig f' S) (f' \<circ> E) (formula.map_formula f' a) = None" 
     using Cons(2)[unfolded check_ands_def foldr.simps comp_apply f'_def]
     by(auto simp:check_ands_f_def split:option.splits)
   have "wty_result_fX S E (formula.Ands \<phi>s) f'" 
     using check_sound_proven[OF _ wfs(1)] f'_def by(auto simp: check_ands_def) 
   then obtain g where g_def: "wf_f (TCst \<circ> g)" "f = g \<circ> f'" 
     using wtys(1) Cons(4) unfolding wty_result_fX_def by auto
-  have "S, (g \<circ> f') \<circ> E \<turnstile> formula.map_formula g (formula.map_formula f' a)"
-    unfolding formula.map_comp using wtys(2) g_def(2) wty_map_formula_cong by blast
-  then have wty': "S, g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' a)"
+  have "map_sig (g \<circ> f') S, (g \<circ> f') \<circ> E \<turnstile> formula.map_formula g (formula.map_formula f' a)"
+    unfolding formula.map_comp using wtys(2) g_def(2) by blast
+  then have wty': "map_sig g (map_sig f' S), g \<circ> (f' \<circ> E) \<turnstile> formula.map_formula g (formula.map_formula f' a)"
     by (simp add: fun.map_comp)
   show ?case using Cons(6)[OF _ none wty' g_def(1)] wfs(2) by auto
 qed
@@ -3793,7 +3778,7 @@ qed
 lemma check_comparison_complete: 
   assumes 
     none: "check S E form = None" and 
-    wty: "S, f \<circ> E \<turnstile> formula.map_formula f form" and
+    wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f form" and
     wf: "wf_f (TCst \<circ> f)" and
     wformula: "wf_formula form" and
     type: "form \<in> {formula.Less t1 t2,formula.LessEq t1 t2,formula.Eq t1 t2}" 
@@ -3822,12 +3807,13 @@ proof -
 qed
 
 lemma check_complete': 
-  "check S E \<phi> = None \<Longrightarrow>  S, f \<circ> E \<turnstile> formula.map_formula f \<phi> \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> False"
+  "check S E \<phi> = None \<Longrightarrow> map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi> \<Longrightarrow> wf_f (TCst \<circ> f) \<Longrightarrow> wf_formula \<phi> \<Longrightarrow> False"
 proof (induction S E \<phi> arbitrary: f rule: check.induct)
   case (1 S E r ts)
-  obtain tys where prelims: "S r = Some tys" "list_all2 (wty_trm (f \<circ> E)) ts tys"
-    using 1(2) by(auto simp del:comp_apply intro!:wty_formula.intros elim:wty_formula.cases)
-  then show ?case  using check_pred_complete[of S, OF prelims _ 1(3)] 1(1) by auto
+  obtain tys' where prelims: "map_sig f S r = Some tys'" "list_all2 (wty_trm (f \<circ> E)) ts tys'"
+    using 1(2) Pred by(auto simp del:comp_apply intro!:wty_formula.intros elim:wty_formula.cases)
+  obtain tys where *: "S r = Some tys" "tys' = map f tys" using prelims(1) by(auto simp:map_sig_def)
+  then show ?case  using check_pred_complete[of S, OF *(1) prelims(2)[unfolded *(2)] _ 1(3)]  1(1) by auto
 next
   case (2 S E p \<phi> \<psi>)
   then show ?case sorry
@@ -3842,7 +3828,7 @@ next
   then show ?case using check_comparison_complete[OF 5(1-4)] by auto
 next
   case (6 S E \<phi>)
-  have wty: "S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" 
+  have wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" 
     using 6(3) by(auto simp del:comp_apply elim:wty_formula.cases)
   show ?case using 6 using 6(1)[OF _ wty] by(auto simp:used_tys_def)
 next
@@ -3857,19 +3843,19 @@ next
 next
   case (10 S E t \<phi>)
   have wf: "wf_formula \<phi>" using 10(5) by auto
-  have "S, case_nat (f t) (f \<circ> E) \<turnstile> formula.map_formula f \<phi>"
+  have "map_sig f S, case_nat (f t) (f \<circ> E) \<turnstile> formula.map_formula f \<phi>"
     using 10(3) by(auto simp del: comp_apply elim:wty_formula.cases)
-  then have wty: "S, f \<circ> (\<lambda>a. case a of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x) \<turnstile> formula.map_formula f \<phi>"
+  then have wty: "map_sig f S, f \<circ> (\<lambda>a. case a of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x) \<turnstile> formula.map_formula f \<phi>"
     unfolding comp_apply Nitpick.case_nat_unfold by (smt (verit, best) wty_formula_fv_cong)
   show ?case  using 10(1)[OF _ wty 10(4) wf] 10(2) by auto
 next
   case (11 S E y agg_type d tys trm \<phi>)
-  have "S, f \<circ> E \<turnstile> formula.Agg y (agg_type, f d) (map f tys) trm (formula.map_formula f \<phi>)" 
+  have "map_sig f S, f \<circ> E \<turnstile> formula.Agg y (agg_type, f d) (map f tys) trm (formula.map_formula f \<phi>)" 
     using 11(3) by(auto simp del:comp_apply)
   then obtain t where wtys:
     "(f \<circ> E) y = t_res agg_type t"
     "agg_env (f \<circ> E) (map f tys) \<turnstile> trm :: t"
-    "S, agg_env (f \<circ> E) (map f tys) \<turnstile> formula.map_formula f \<phi>"
+    "map_sig f S, agg_env (f \<circ> E) (map f tys) \<turnstile> formula.map_formula f \<phi>"
     "t \<in> agg_trm_type agg_type"
     "f d = t_res agg_type t"
     by(auto elim:wty_formula.cases)
@@ -3885,9 +3871,9 @@ next
   obtain g where g_def: "wf_f (TCst \<circ> g)" "f \<circ> nn = g \<circ> f'" 
     using check_trm_sound[OF f'_def] wf_f_nn wty unfolding wty_result_fX_trm_def by force
   then have g_def': "f = g \<circ> f' \<circ> new_type_symbol" by (metis comp_id fun.map_comp nn_n)
-  note wty = wtys(3)[unfolded env_eq, unfolded g_def' comp_assoc[of g] formula.map_comp[symmetric, of g]]
-  obtain f'' where f''_def: "check S (f' \<circ> new_type_symbol \<circ> agg_tysenv E tys) (formula.map_formula (f' \<circ> new_type_symbol) \<phi>) = Some f''" 
-    using 11(1)[OF f'_def _ wty g_def(1)] 11(5) by(auto simp del:comp_apply)
+  note wty = wtys(3)[unfolded env_eq, unfolded g_def' comp_assoc[of g] formula.map_comp[symmetric, of g] map_sig_comp[symmetric, of g]]
+  obtain f'' where f''_def: "check (map_sig (f' \<circ> new_type_symbol) S)  (f' \<circ> new_type_symbol \<circ> agg_tysenv E tys) (formula.map_formula (f' \<circ> new_type_symbol) \<phi>) = Some f''" 
+    using 11(1)[OF f'_def _ wty g_def(1)] 11(5) by (auto simp del:comp_apply)
   obtain g' where g'_def: "wf_f (TCst \<circ> g')" "g = g' \<circ> f''" 
     using check_sound_proven[OF f''_def] 11(5) wty g_def(1) unfolding wty_result_fX_def by(auto simp del:comp_apply)
   have t_res_eq: "t_res agg_type t = (f \<circ> nn) (t_res_tysym agg_type (agg_trm_tysym agg_type))"
@@ -3904,11 +3890,11 @@ next
     by(auto simp del:check_trm.simps split:option.splits)
 next
   case (12 S E I \<phi>)
-  have wty: "S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" using 12(3) by(auto simp del:comp_apply elim:wty_formula.cases)
+  have wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" using 12(3) by(auto simp del:comp_apply elim:wty_formula.cases)
   then show ?case using 12(1)[OF _ wty 12(4)] 12(2, 3, 5) by (auto simp:used_tys_def)
 next
   case (13 S E I \<phi>)
-  have wty: "S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" using 13(3) by(auto simp del:comp_apply elim:wty_formula.cases)
+  have wty: "map_sig f S, f \<circ> E \<turnstile> formula.map_formula f \<phi>" using 13(3) by(auto simp del:comp_apply elim:wty_formula.cases)
   then show ?case using 13(1)[OF _ wty 13(4)] 13(2, 3, 5) by (auto simp:used_tys_def)
 next
   case (14 S E \<phi> I \<psi>)
