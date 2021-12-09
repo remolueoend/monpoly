@@ -13,6 +13,7 @@ typedef string8 = "UNIV :: char list set" ..
 
 setup_lifting type_definition_string8
 
+lift_definition empty_string :: string8 is "[]" .
 lift_definition string8_literal :: "String.literal \<Rightarrow> string8" is String.explode .
 declare [[coercion string8_literal]]
 

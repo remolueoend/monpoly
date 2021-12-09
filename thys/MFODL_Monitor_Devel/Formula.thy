@@ -70,9 +70,10 @@ qualified primrec eval_trm :: "env \<Rightarrow> trm \<Rightarrow> event_data" w
 lemma eval_trm_fv_cong: "\<forall>x\<in>fv_trm t. v ! x = v' ! x \<Longrightarrow> eval_trm v t = eval_trm v' t"
   by (induction t) simp_all
 
+datatype ty = TInt | TFloat | TString
 
 qualified datatype agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
-qualified type_synonym agg_op = "agg_type \<times> event_data"
+qualified type_synonym 't agg_op = "agg_type \<times> 't"
 
 definition flatten_multiset :: "(event_data \<times> enat) set \<Rightarrow> event_data list" where
   "flatten_multiset M = concat (map (\<lambda>(x, c). replicate (the_enat c) x) (csorted_list_of_set M))"
@@ -80,28 +81,42 @@ definition flatten_multiset :: "(event_data \<times> enat) set \<Rightarrow> eve
 definition finite_multiset :: "(event_data \<times> enat) set \<Rightarrow> bool" where
 "finite_multiset M = (finite M \<and> \<not>(\<exists>s. (s,\<infinity>) \<in> M ))"
 
-fun eval_agg_op :: "agg_op \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
-  "eval_agg_op (Agg_Cnt, y0) M = (case (flatten_multiset M, finite_multiset M) of
+definition aggreg_default_value :: "agg_type \<Rightarrow> ty \<Rightarrow> event_data" where
+  "aggreg_default_value op t = (case (op, t) of
+    (Agg_Min, TFloat) \<Rightarrow> EFloat Code_Double.infinity |
+    (Agg_Max, TFloat) \<Rightarrow> EFloat (-Code_Double.infinity) |
+    (_, TFloat) \<Rightarrow> EFloat 0 |
+    (_, TInt) \<Rightarrow> EInt 0 |
+    (_, TString) \<Rightarrow> EString empty_string)"
+
+fun eval_agg_op :: "ty agg_op \<Rightarrow> (event_data \<times> enat) set \<Rightarrow> event_data" where
+  "eval_agg_op (Agg_Cnt, ty) M = (let y0 = aggreg_default_value Agg_Cnt ty in
+    case (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (xs,_) \<Rightarrow> EInt (integer_of_int (length xs)))"
-| "eval_agg_op (Agg_Min, y0) M = (case  (flatten_multiset M, finite_multiset M) of
+| "eval_agg_op (Agg_Min, ty) M = (let y0 = aggreg_default_value Agg_Min ty in
+    case  (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (x # xs,_) \<Rightarrow> foldl min x xs)"
-| "eval_agg_op (Agg_Max, y0) M = (case  (flatten_multiset M, finite_multiset M) of
+| "eval_agg_op (Agg_Max, ty) M = (let y0 = aggreg_default_value Agg_Max ty in 
+    case  (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (x # xs,_) \<Rightarrow> foldl max x xs)"
-| "eval_agg_op (agg_type.Agg_Sum, y0) M = (case  (flatten_multiset M, finite_multiset M) of
+| "eval_agg_op (agg_type.Agg_Sum, ty) M = (let y0 = aggreg_default_value Agg_Sum ty in
+    case  (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (x # xs,_) \<Rightarrow> foldl (+) x xs)"
-| "eval_agg_op (Agg_Avg, y0) M =(case  (flatten_multiset M, finite_multiset M) of
+| "eval_agg_op (Agg_Avg, ty) M =(let y0 = aggreg_default_value Agg_Avg ty in 
+    case  (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (x#xs,_) \<Rightarrow> EFloat ( double_of_event_data_agg (foldl plus x xs) / double_of_int (length (x#xs))))"
-| "eval_agg_op (Agg_Med, y0) M =(case (flatten_multiset M, finite_multiset M) of
+| "eval_agg_op (Agg_Med, ty) M =(let y0 = aggreg_default_value Agg_Med ty in
+    case (flatten_multiset M, finite_multiset M) of
     (_, False) \<Rightarrow> y0
     |    ([],_) \<Rightarrow> y0
     | (xs,_) \<Rightarrow> EFloat (let u = length xs;  u' = u div 2 in
@@ -123,7 +138,7 @@ qualified datatype (discs_sels) 't formula = Pred name "trm list"
   | Let name "'t formula" "'t formula"
   | Eq trm trm | Less trm trm | LessEq trm trm
   | Neg "'t formula" | Or "'t formula" "'t formula" | And "'t formula" "'t formula" | Ands "'t formula list" | Exists 't "'t formula"
-  | Agg nat agg_op "'t list" trm "'t formula"
+  | Agg nat "'t agg_op" "'t list" trm "'t formula"
   | Prev \<I> "'t formula" | Next \<I> "'t formula"
   | Since "'t formula" \<I> "'t formula" | Until "'t formula" \<I> "'t formula"
   | MatchF \<I> "'t formula Regex.regex" | MatchP \<I> "'t formula Regex.regex"
@@ -293,7 +308,7 @@ subsubsection \<open>Semantics\<close>
 
 definition "ecard A = (if finite A then card A else \<infinity>)"
 
-qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> 't formula \<Rightarrow> bool" where
+qualified fun sat :: "trace \<Rightarrow> (name \<rightharpoonup> nat \<Rightarrow> event_data list set) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> ty formula \<Rightarrow> bool" where
   "sat \<sigma> V v i (Pred r ts) = (case V r of
        None \<Rightarrow> (r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i
      | Some X \<Rightarrow> map (eval_trm v) ts \<in> X i)"
