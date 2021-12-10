@@ -3776,7 +3776,40 @@ proof (induction S E \<phi> arbitrary: f rule: check.induct)
   then show ?case  using check_pred_complete[of S, OF *(1) prelims(2)[unfolded *(2)] _ 1(3)]  1(1) by auto
 next
   case (2 S E p \<phi> \<psi>)
-  then show ?case sorry
+  define f0 where f0_def: "f0 = new_type_symbol ^^ Formula.nfv \<phi>"
+  have wfs: "wf_formula \<phi>" "wf_formula \<psi>" using 2(6) by auto
+  obtain E' where wtys:
+    "map_sig f S, E' \<turnstile> formula.map_formula f \<phi>"
+    "map_sig f S(p \<mapsto> tabulate E' 0 (Formula.nfv (formula.map_formula f \<phi>))), (f \<circ> E) \<turnstile> formula.map_formula f \<psi>"
+    using 2(4) by(auto simp del:comp_apply elim:wty_formula.cases)
+  define fa' where fa'_def: "fa' = (\<lambda>t. (case t of TAny n \<Rightarrow> if n < Formula.nfv \<phi> then E' n else f (TAny (n - Formula.nfv \<phi>)) |
+                                                     TNum n \<Rightarrow> f (TNum (n - Formula.nfv \<phi>)) |
+                                                     _ \<Rightarrow> f t))"
+  then have wf_fa': "wf_f (TCst \<circ> fa')"
+    using 2(5) unfolding wf_f_def by(auto simp:numeric_ty_def)
+  moreover have fa'_TAny: "x \<in> fv \<phi> \<Longrightarrow> (fa' \<circ> TAny) x = E' x" for x
+    unfolding fa'_def by (simp add: fvi_less_nfv)
+  moreover have fa'_f0: "fa' \<circ> f0 = f"
+    unfolding fa'_def f0_def
+    by (simp add: fun_eq_iff new_type_symbol_pow split: tysym.splits)
+  ultimately have wty1': "map_sig fa' (map_sig f0 S), fa' \<circ> TAny \<turnstile> formula.map_formula fa' (formula.map_formula f0 \<phi>)"
+    using wtys(1) wty_formula_fv_cong[of "formula.map_formula f \<phi>" E' "fa' \<circ> TAny"]
+    by (simp add: formula.map_comp)
+  obtain f' where f'_def: "check (map_sig f0 S) TAny (formula.map_formula f0 \<phi>) = Some f'" 
+    using 2(1)[OF f0_def _ wty1' wf_fa' wf_formula_map[OF wfs(1)]] by auto
+  note wty1 = check_sound_proven[OF f'_def wf_formula_map[OF wfs(1)]] 
+  then obtain g1 where wf_g1: "wf_f (TCst \<circ> g1)" and fa'_alt: "fa' = g1 \<circ> f'"
+      using wty1' wf_fa' unfolding wty_result_fX_def by blast
+  have list_eq: "map (fa' \<circ> TAny) [0..<Formula.nfv \<phi>] = map E' [0..<Formula.nfv \<phi>]"
+    unfolding fa'_def by simp
+  have wty2': "map_sig g1 (map_sig f' (map_sig f0 S(p \<mapsto> map TAny [0..<Formula.nfv \<phi>]))),
+          g1 \<circ> (f' \<circ> f0 \<circ> E) \<turnstile> formula.map_formula g1 (formula.map_formula (f' \<circ> f0) \<psi>)"
+    using wtys(2)
+    by (simp add: tabulate_alt formula.map_comp fa'_f0 map_sig_map_upd list_eq
+          flip: comp_assoc fa'_alt)
+  show ?case 
+    using 2(2)[OF f0_def f'_def _ wty2' wf_g1 wf_formula_map[OF wfs(2)]] f'_def 2(3) 
+    by(auto simp del:comp_apply simp:Let_def f0_def split:option.splits)
 next
   case (3 S E t1 t2)
   then show ?case using check_comparison_complete[OF 3(1-4)] by auto
