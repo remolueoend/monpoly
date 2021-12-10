@@ -2521,7 +2521,7 @@ lemma map_sig_comp [simp]:
 definition wty_result_fX :: "tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \<Rightarrow> (tysym \<Rightarrow> tysym) \<Rightarrow> bool" where
   "wty_result_fX S E \<phi> f \<longleftrightarrow> wf_f f \<and> 
 (\<forall>f'' .  wf_f (TCst \<circ> f'') \<longrightarrow> 
-  (map_sig f'' S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists> g. wf_f (TCst \<circ> g) \<and> (f'' = g \<circ> f)))"
+  (map_sig f'' S, (f''\<circ> E) \<turnstile> (formula.map_formula  f'' \<phi>)) = (\<exists>g. wf_f (TCst \<circ> g) \<and> (f'' = g \<circ> f)))"
 
 lemma map_regex_fv:  assumes "\<And>x . x \<in> regex.atms x2 \<Longrightarrow>  g (formula.map_formula f x) = g' x"
   shows "Regex.fv_regex g (regex.map_regex (formula.map_formula f) x2) = Regex.fv_regex g' x2" using assms by (induction x2) auto
@@ -2779,11 +2779,14 @@ definition check_ands_f :: "(tyssig \<Rightarrow> tysenv \<Rightarrow> tysym For
 definition check_ands where
 "check_ands check S E \<phi>s = foldr (check_ands_f check S E) \<phi>s (Some id)"
 
+definition set_map :: "tyssig \<Rightarrow> tysym set" where
+  "set_map S = \<Union> (set ` ran S)"
+
 definition highest_bound_TAny where
-"highest_bound_TAny \<phi> \<equiv> Max ((\<lambda>t. case t of TAny n \<Rightarrow> n | _ \<Rightarrow> 0) ` formula.set_formula \<phi>)"
+"highest_bound_TAny \<phi> S \<equiv> Max ((\<lambda>t. case t of TAny n \<Rightarrow> n | _ \<Rightarrow> 0) ` (formula.set_formula \<phi> \<union> set_map S))"
 
 definition E_empty where
-"E_empty \<phi> = (TAny \<circ> (+) (highest_bound_TAny \<phi> + 1))"
+"E_empty \<phi> S = (TAny \<circ> (+) (highest_bound_TAny \<phi> S + 1))"
 
 fun check_pred :: "tysenv \<Rightarrow> Formula.trm list \<Rightarrow> tysym list \<Rightarrow>  (tysym \<Rightarrow> tysym) option" where
 "check_pred  E (trm#trms) (t#ts)  = (case check_trm  E t trm of
@@ -2841,9 +2844,10 @@ fun check :: "tyssig \<Rightarrow> tysenv \<Rightarrow> tysym Formula.formula  \
   "check S E (Formula.Pred r ts)  = (case S r of 
   None \<Rightarrow> None 
   | Some tys \<Rightarrow>  check_pred E ts tys)"
-| "check S E (Formula.Let p \<phi> \<psi>)  = (case check S (E_empty \<phi>) \<phi> of 
-    Some f \<Rightarrow> (case check (S(p \<mapsto> tabulate (f \<circ> (E_empty \<phi>)) 0 (Formula.nfv \<phi>))) (f \<circ> E) (formula.map_formula f \<psi>) of
-        Some f' \<Rightarrow> Some f' |
+| "check S E (Formula.Let p \<phi> \<psi>)  = (case check S (E_empty \<phi> S) \<phi> of 
+    Some f \<Rightarrow> let f' = (\<lambda>k. if k \<in> formula.set_formula \<phi> then f k else k) in 
+      (case check ((map_sig f S)(p \<mapsto> tabulate (f \<circ> (E_empty \<phi> S)) 0 (Formula.nfv \<phi>))) (f' \<circ> E) (formula.map_formula f' \<psi>) of
+        Some f'' \<Rightarrow> Some (f'' \<circ> f') |
         None \<Rightarrow> None)
      | None \<Rightarrow> None)"
 | "check S E (Formula.Eq t1 t2)  = check_comparison E t1 t2 "
@@ -3331,92 +3335,64 @@ proof (induction S E \<phi> arbitrary: f rule: check.induct)
   qed
 next
   case (2 S E p \<phi> \<psi>)
-  show ?case sorry
-  (*obtain f'' where f''_def: "check S (E_empty \<phi>) (used_tys (E_empty \<phi>) \<phi>) \<phi> = Some f''" 
+  obtain f' where f'_def: "check S (E_empty \<phi> S) \<phi> = Some f'" 
     using 2(3) by(auto split:option.splits)
-  have aux1: "\<forall>x\<in>fv \<phi>. case f'' (E_empty \<phi> x) of TCst x \<Rightarrow> True | _ \<Rightarrow> False"
-    using 2(3) f''_def by(auto split:option.splits if_splits)
-  define f''' where f'''_def: "f''' = (\<lambda>k. if k \<in> formula.set_formula \<phi> then f'' k else k)"
-  have safe: "wf_formula \<phi>" "wf_formula (formula.map_formula f''' \<psi>)" using 2(4) by auto
-  have fvi: "used_tys (f''' \<circ> E) (formula.map_formula f''' \<psi>) \<subseteq> f''' ` X" 
-    using 2(5) by(auto simp:used_tys_def) (metis formula.set_map image_mono subset_eq)
-  obtain f'''' where f''''_def: "check (S(p \<mapsto> tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv \<phi>))) (f''' \<circ> E) (f''' ` X) (formula.map_formula f''' \<psi>) = Some f''''"
-    using 2(3) f''_def f'''_def by(auto simp:Let_def split:option.splits if_splits)
-  then have f'_def: "f = f'''' \<circ>f'''"
-    using 2(3) f''_def f'''_def by(auto simp:Let_def split:option.splits if_splits)
-  have wty1: "wty_result_fX S (E_empty \<phi>) \<phi> f'' (used_tys (E_empty \<phi>) \<phi>)"
-    using 2(1)[OF f''_def safe(1)]  by auto
-  note wty2 = 2(2)[OF f''_def aux1 f'''_def f''''_def safe(2)]
-  have f''_range: "x \<in> fv \<phi> \<Longrightarrow> f'' (E_empty \<phi> x) \<in> range TCst" for x
-    using 2(3) f''_def by(auto split:if_splits tysym.splits) (metis rangeI tysym.exhaust)
-  have highest_bound_TAny_aux: "x \<in> formula.set_formula \<phi> \<Longrightarrow> x = TAny n \<Longrightarrow> n \<le> highest_bound_TAny \<phi>" for x n
+  define f'' where f''_def: "f'' = (\<lambda>k. if k \<in> formula.set_formula \<phi> then f' k else k)"
+  have safe: "wf_formula \<phi>" "wf_formula (formula.map_formula f'' \<psi>)" using 2(4) by auto
+  obtain f''' where f'''_def: "check ((map_sig f' S)(p \<mapsto> tabulate (f' \<circ> (E_empty \<phi> S)) 0 (Formula.nfv \<phi>))) (f'' \<circ> E) (formula.map_formula f'' \<psi>) = Some f'''"
+    using 2(3) f'_def f''_def by(auto simp:Let_def split:option.splits if_splits)
+  then have f_def: "f = f''' \<circ>f''"
+    using 2(3) f'_def f''_def f'''_def by(auto simp:Let_def split:option.splits if_splits)
+  note wty1 = 2(1)[OF f'_def safe(1)]
+  note wty2 = 2(2)[OF f'_def f''_def f'''_def safe(2)]
+  have highest_bound_TAny_aux: "x \<in> formula.set_formula \<phi> \<Longrightarrow> x = TAny n \<Longrightarrow> n \<le> highest_bound_TAny \<phi> S" for x n
     proof -
       assume "x \<in> formula.set_formula \<phi>" "x = TAny n"
-      then have "n \<in> (\<lambda>t. case t of TAny n \<Rightarrow> n | _ \<Rightarrow> 0) ` formula.set_formula \<phi>"
-        using image_iff by fastforce
-      then show "n \<le> highest_bound_TAny \<phi>"
-        using finite_set_formula[of \<phi>] unfolding highest_bound_TAny_def by simp
+      then have "n \<in> (\<lambda>t. case t of TAny n \<Rightarrow> n | _ \<Rightarrow> 0) ` (formula.set_formula \<phi> \<union> set_map S)"
+        using image_iff by (metis subsetD sup.cobounded1 tysym.simps(10))
+      then show "n \<le> highest_bound_TAny \<phi> S"
+        using finite_set_formula[of \<phi>] unfolding highest_bound_TAny_def sorry
     qed
   {
     fix fa
     assume 
       wf: "wf_f (TCst \<circ> fa)" and
-      wty: "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Let p \<phi> \<psi>))"
+      wty: "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Let p \<phi> \<psi>))"
     obtain E' where E'_def:
-      "S, E' \<turnstile> formula.map_formula fa \<phi>" 
-      "S(p \<mapsto> tabulate E' 0 (Formula.nfv \<phi>)), fa \<circ> E \<turnstile> formula.map_formula fa \<psi>"
+      "map_sig fa S, E' \<turnstile> formula.map_formula fa \<phi>" 
+      "(map_sig fa S)(p \<mapsto> tabulate E' 0 (Formula.nfv \<phi>)), fa \<circ> E \<turnstile> formula.map_formula fa \<psi>"
       using wty by (auto intro:wty_formula.intros elim:wty_formula.cases)
-    define fa' where fa'_def: "fa' = (\<lambda>t. (case t of TAny n \<Rightarrow> if n \<ge>(highest_bound_TAny \<phi>) + 1 then E' (n - (highest_bound_TAny \<phi>) - 1) else fa t |
+    define fa' where fa'_def: "fa' = (\<lambda>t. (case t of TAny n \<Rightarrow> if n \<ge>(highest_bound_TAny \<phi> S) + 1 then E' (n - (highest_bound_TAny \<phi> S) - 1) else fa t |
                                                      _ \<Rightarrow> fa t))"
     then have wf_fa': "wf_f (TCst \<circ> fa')"
       using wf unfolding wf_f_def by(auto simp:numeric_ty_def)
-    have fa'_eq: "x \<in> fv \<phi> \<Longrightarrow> (fa' \<circ> E_empty \<phi>) x = E' x" for x
+    have fa'_eq: "x \<in> fv \<phi> \<Longrightarrow> (fa' \<circ> E_empty \<phi> S) x = E' x" for x
       using fa'_def by (simp add: E_empty_def)
-    then have wty1: "S, (fa' \<circ> E_empty \<phi>) \<turnstile> formula.map_formula fa \<phi>"
+    then have wty1': "map_sig fa S, (fa' \<circ> E_empty \<phi> S) \<turnstile> formula.map_formula fa \<phi>"
       using wty_formula_fv_cong by (simp add: E'_def(1) E_empty_def fa'_def) 
+    have "False" using wty1 unfolding wty_result_fX_def sorry
     have fa_fa'_eq: "x \<in> formula.set_formula \<phi> \<Longrightarrow> fa' x = fa x" for x
       using highest_bound_TAny_aux unfolding fa'_def by(auto split:tysym.splits) (meson not_less_eq_eq)
     then have "formula.map_formula fa \<phi> = formula.map_formula fa' \<phi>" by (metis formula.map_cong)
-    then have "S, (fa' \<circ> E_empty \<phi>) \<turnstile> formula.map_formula fa' \<phi>"
-      using wty1 by auto
-    then obtain g where g_def: "wf_f (TCst \<circ> g)" "\<forall>t \<in> used_tys (E_empty \<phi>) \<phi>. fa' t = (g \<circ> f'') t"
-      using wf_fa'"2.IH"(1) f''_def wty_result_fX_def safe(1) by auto
-    then have "t \<in> formula.set_formula \<phi> \<Longrightarrow> fa t = (g \<circ> f'') t" for t
-      using fa_fa'_eq by(auto simp:used_tys_def) 
-    moreover define g' where g'_def: "g' = (\<lambda>k. if k \<in> f'' ` formula.set_formula \<phi> then g k else fa k)"
-    ultimately have eq_aux: "t \<in> X \<Longrightarrow> fa t = (g' \<circ> f''') t" for t
-      using f'''_def apply(auto) sorry
-    then have eq_aux': "t \<in> used_tys E \<psi> \<Longrightarrow> fa t = (g' \<circ> f''') t" for t
-      using 2(5) by(auto simp:used_tys_def)
-    have wf_g': "wf_f (TCst \<circ> g')" 
-      using g'_def g_def(1) wf by(auto simp:wf_f_def)
-    have "x < (Formula.nfv \<phi>) \<Longrightarrow> (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) x = E' x" for x
-    proof -
-      assume "x < (Formula.nfv \<phi>)"
-      then have in_fv: "x \<in> fv \<phi>" using 2(4) by auto 
-      have "f'' (E_empty \<phi> x) = TCst (fa' (E_empty \<phi> x))"
-        using f''_range[OF in_fv] g_def in_fv by(auto simp:used_tys_def wf_f_def) 
-      then show "(\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) x = E' x"
-        using fa'_eq[OF in_fv] by auto
-    qed
-    then have "tabulate E' 0 (Formula.nfv \<phi>) = tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv \<phi>)"
-      unfolding tabulate_alt by auto
-    then have "S(p \<mapsto> tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv \<phi>)), fa \<circ> E \<turnstile> formula.map_formula fa \<psi>"
-      using E'_def(2) by auto
-    then have "S(p \<mapsto> tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv \<phi>)), (g' \<circ> f''') \<circ> E \<turnstile> formula.map_formula (g' \<circ> f''') \<psi>"
-      using eq_aux' by (meson order_refl wty_map_formula_cong)
-    then have "S(p \<mapsto> tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv \<phi>)), g' \<circ> (f''' \<circ> E) \<turnstile> formula.map_formula g' (formula.map_formula f''' \<psi>)"
-      by (simp add: formula.map_comp fun.map_comp)
-    then obtain g'' where g''_def: "wf_f (TCst \<circ> g'')" "\<forall>t\<in>f''' ` X. g' t = (g'' \<circ> f'''') t"
-      using wty2 wf wf_g' unfolding wty_result_fX_def using fvi by fastforce
-    then have "\<exists>g. wf_f (TCst \<circ> g) \<and> (\<forall>t\<in>X. fa t = (g \<circ> f) t)"
-      using eq_aux wf_g' f'_def by auto
+    then have "map_sig fa' S, (fa' \<circ> E_empty \<phi> S) \<turnstile> formula.map_formula fa' \<phi>"
+      using wty1' sorry
+    then obtain g where g_def: "wf_f (TCst \<circ> g)" "fa' = (g \<circ> f')"
+      using wty1 wf_fa' unfolding wty_result_fX_def by force
+    then have aux: "t \<in> formula.set_formula \<phi> \<Longrightarrow> fa t = (g \<circ> f'') t" for t
+      using fa_fa'_eq[of t] f''_def by(auto simp:used_tys_def) 
+    define g' where "g' = (\<lambda>k. if k \<in> f'' ` formula.set_formula \<phi> then g k else fa k)"
+    have "t \<in> formula.set_formula \<phi> \<Longrightarrow> fa t = (g' \<circ> f'') t" for t
+      using aux[of t] g'_def f''_def by auto
+    have "t \<notin> formula.set_formula \<phi> \<Longrightarrow> fa t = g' t" for t
+      using g'_def f''_def g_def(2) fa_fa'_eq apply(auto) sorry
+    have "\<exists>g. wf_f (TCst \<circ> g) \<and> fa = (g \<circ> f)"
+      using wty2 unfolding wty_result_fX_def f_def sorry
   } moreover {
     fix fa
     assume 
       wf: "wf_f (TCst \<circ> fa)" and
-      exg: "\<exists>g. wf_f (TCst \<circ> g) \<and> (\<forall>t\<in>X. fa t = (g \<circ> f) t)"
-    define g where g_def: "g = (\<lambda>k. if k \<in> (E_empty \<phi>) ` fv \<phi> then case f'' k of TCst t \<Rightarrow> t else fa k)"
+      exg: "\<exists>g. wf_f (TCst \<circ> g) \<and> fa = (g \<circ> f)"
+    (*define g where g_def: "g = (\<lambda>k. if k \<in> (E_empty \<phi>) ` fv \<phi> then case f'' k of TCst t \<Rightarrow> t else fa k)"
     have aux: "k \<in> formula.set_formula \<phi> \<Longrightarrow> (g \<circ> f'') k = fa k" for k
     proof -
       assume asm: "k \<in> formula.set_formula \<phi>"
@@ -3452,12 +3428,13 @@ next
     then have "(S(p \<mapsto> tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv (formula.map_formula fa \<phi>))), (ga \<circ> f'''') \<circ> (f''' \<circ> E) \<turnstile> formula.map_formula fa \<psi>)" 
       unfolding formula.map_comp using formula.map_cong0 2(5) by(auto simp:used_tys_def) (smt (verit, best) ga_def(2) map_formula_f_cong)
     then have "(S(p \<mapsto> tabulate (\<lambda>x. case f'' (E_empty \<phi> x) of TCst t \<Rightarrow> t) 0 (Formula.nfv (formula.map_formula fa \<phi>))), (fa \<circ> E) \<turnstile> formula.map_formula fa \<psi>)" 
-      using wty_formula_fv_cong[of "formula.map_formula fa \<psi>" "(ga \<circ> f'''') \<circ> (f''' \<circ> E)" "fa \<circ> E"] ga_def(2) 2(5) by(auto simp:used_tys_def image_subset_iff) 
-    then have "(S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Let p \<phi> \<psi>))"
-      using p1 Let by auto
+      using wty_formula_fv_cong[of "formula.map_formula fa \<psi>" "(ga \<circ> f'''') \<circ> (f''' \<circ> E)" "fa \<circ> E"] ga_def(2) 2(5) by(auto simp:used_tys_def image_subset_iff) *)
+    
+    have "(map_sig fa S, fa \<circ> E \<turnstile> formula.map_formula fa (formula.Let p \<phi> \<psi>))"
+      sorry
   }
   ultimately show ?case unfolding wty_result_fX_def f'_def apply(auto)
-    using f'''_def fvi wf_f_comp wf_f_def wty1 wty2 wty_result_fX_def by fastforce*)
+    using f'''_def  wf_f_comp wf_f_def wty1 wty2 wty_result_fX_def by (simp add: f''_def f_def)
 next
   case (3 S E t1 t2) 
   then show ?case using check_comparison_sound by auto
