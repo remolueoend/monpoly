@@ -45,10 +45,9 @@ exception Type_error of string
 
 type var = string
 type cst =
-  | Int of int
+  | Int of Z.t
   | Str of string
   | Float of float
-  | ZInt of Z.t
   | Regexp of (string * Str.regexp) (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
 
 type tcst = TInt | TStr | TFloat | TRegexp
@@ -104,12 +103,11 @@ let type_of_cst = function
   | Int _ -> TInt
   | Str _ -> TStr
   | Float _ -> TFloat
-  | ZInt _ -> TInt
   | Regexp _ -> TRegexp
 
 let cst_of_str t v = 
   match t with
-  | TInt   -> (try Int (int_of_string v) with Failure _ -> raise (Type_error ("Expecting int for type TInt [cst_of_ts]")))
+  | TInt   -> (try Int (Z.of_string v) with Failure _ -> raise (Type_error ("Expecting int for type TInt [cst_of_ts]")))
   | TStr   -> Str v
   | TFloat -> (try Float (float_of_string v) with Failure _ -> raise (Type_error ("Expecting float for type TFloat [cst_of_ts]")))
   | TRegexp -> (try Regexp (v, Str.regexp v) with Failure _ -> raise (Type_error ("Expecting regexp for type TRegexp [cst_of_ts]")))
@@ -118,7 +116,7 @@ let cst_of_str_basic v =
   if (Str.string_match (Str.regexp "^\".+\"$") v 0) then begin
     Str (Str.global_replace (Str.regexp "\"") "" v)
   end else begin
-    try Int (int_of_string v) with Failure _ ->
+    try Int (Z.of_string v) with Failure _ ->
     try Float (float_of_string v) with Failure _ -> 
     Str v
   end
@@ -165,19 +163,26 @@ let eval_eterm f t =
     | Cst c -> c
     | Var x -> f x
     | I2f t -> (match eval t with
-        | Int c -> Float (float_of_int c)
+        | Int c -> Float (Z.to_float c)
         | _ -> failwith "[Predicate.eval_eterm, i2f] wrong types")
     | F2i t -> (match eval t with
-        | Float c -> Int (int_of_float c)
+        | Float c ->
+            (* TODO(JS): Unclear what the correct behavior should be in case of
+               infinities/nan. The code below approximates the previous
+               implementation (int_of_float) where the type was Int instead of
+               Z.t. Overflow caused an unspecified result, which was 0 in
+               practice. *)
+            try Int (Z.of_float c)
+            with Z.Overflow -> Int Z.zero
         | _ -> failwith "[Predicate.eval_eterm, f2i] wrong types")
     | DayOfMonth t -> (match eval t with
-        | Float t -> Int ((safe_gmtime t).tm_mday)
+        | Float t -> Int (Z.of_int (safe_gmtime t).tm_mday)
         | _ -> failwith "[Predicate.eval_eterm, DayOfMonth] wrong types")
     | Month t -> (match eval t with
-        | Float t -> Int ((safe_gmtime t).tm_mon+1)
+        | Float t -> Int (Z.of_int ((safe_gmtime t).tm_mon+1))
         | _ -> failwith "[Predicate.eval_eterm, Month] wrong types")
     | Year t -> (match eval t with
-        | Float t -> Int ((safe_gmtime t).tm_year+1900)
+        | Float t -> Int (Z.of_int ((safe_gmtime t).tm_year+1900))
         | _ -> failwith "[Predicate.eval_eterm, year] wrong types")
     | FormatDate t -> (match eval t with
         | Float t -> 
@@ -193,31 +198,31 @@ let eval_eterm f t =
         | _ -> failwith "[Predicate.eval_eterm, r2s] wrong types")
     | Plus (t1, t2) ->
       (match eval t1, eval t2 with
-       | Int c1, Int c2 -> Int (c1 + c2)
+       | Int c1, Int c2 -> Int Z.(c1 + c2)
        | Float c1, Float c2 -> Float (c1 +. c2)
        | _ -> failwith "[Predicate.eval_eterm, +] wrong types")
     | Minus (t1, t2) ->
       (match eval t1, eval t2 with
-       | Int c1, Int c2 -> Int (c1 - c2)
+       | Int c1, Int c2 -> Int Z.(c1 - c2)
        | Float c1, Float c2 -> Float (c1 -. c2)
        | _ -> failwith "[Predicate.eval_eterm, binary -] wrong types")
     | Mult (t1, t2) ->
       (match eval t1, eval t2 with
-       | Int c1, Int c2 -> Int (c1 * c2)
+       | Int c1, Int c2 -> Int Z.(c1 * c2)
        | Float c1, Float c2 -> Float (c1 *. c2)
        | _ -> failwith "[Predicate.eval_eterm, *] wrong types")
     | Div (t1, t2) ->
       (match eval t1, eval t2 with
-       | Int c1, Int c2 -> Int (c1 / c2)
+       | Int c1, Int c2 -> Int Z.(c1 / c2)
        | Float c1, Float c2 -> Float (c1 /. c2)
        | _ -> failwith "[Predicate.eval_eterm, /] wrong types")
     | Mod (t1, t2) ->
       (match eval t1, eval t2 with
-       | Int c1, Int c2 -> Int (c1 mod c2)
+       | Int c1, Int c2 -> Int Z.(c1 mod c2)
        | _ -> failwith "[Predicate.eval_eterm, mod] wrong types")
     | UMinus t ->
       (match eval t with
-       | Int c -> Int (- c)
+       | Int c -> Int Z.(- c)
        | Float c -> Float (-. c)
        | _ -> failwith "[Predicate.eval_eterm, unary -] wrong type")
   in
@@ -232,24 +237,24 @@ let eval_gterm t = eval_term [] t
 
 let plus a b =
   match a, b with
-  | Int x, Int y -> Int (x+y)
+  | Int x, Int y -> Int Z.(x+y)
   | Float x, Float y -> Float (x+.y)
   | _ -> failwith "[Predicate.plus] type error"
 
 let minus a b =
   match a, b with
-  | Int x, Int y -> Int (x-y)
+  | Int x, Int y -> Int Z.(x-y)
   | Float x, Float y -> Float (x-.y)
   | _ -> failwith "[Predicate.minus] type error"
 
 let average a b =
   match a, b with
-  | Int x, Int y -> Float ((float_of_int x +. float_of_int y) /. 2.)
+  | Int x, Int y -> Float ((Z.to_float x +. Z.to_float y) /. 2.)
   | Float x, Float y -> Float ((x+.y)/.2.)
   | _ -> failwith "[Predicate.avg] type error"
 
 let float_of_cst = function
-  | Int x -> float_of_int x
+  | Int x -> Z.to_float x
   | Float x -> x
   | _ -> failwith "[Predicate.float_of_cst] type error"
 
@@ -278,27 +283,27 @@ let pvars (p:predicate) =
 
 let cst_eq c c' =
   match c, c' with
-  | Int a, Int a'     -> a == a'
-  | Str a, Str a'     -> compare a a' == 0
+  | Int a, Int a'     -> Z.equal a a'
+  | Str a, Str a'     -> String.equal a a'
   | Float f, _ -> failwith "comparing float"
   | _, Float f -> failwith "comparing float"
   | _ -> failwith "[Predicate.cst_eq] incomparable constants"
 
 let cst_smaller c c' =
   match c,c' with
-  | Int a, Int a' -> a < a'
+  | Int a, Int a' -> Z.lt a a'
   | Str a, Str a' -> a < a'
   | _ -> failwith "[Predicate.cst_smaller] incomparable constants"
 
 let cst_smaller_eq c c' =
   match c,c' with
-  | Int a, Int a' -> a <= a'
+  | Int a, Int a' -> Z.leq a a'
   | Str a, Str a' -> a <= a'
   | _ -> failwith "[Predicate.cst_smaller_eq] incomparable constants"
 
 
 let int_of_cst = function
-  | Int n -> n
+  | Int n -> Z.to_int n
   | _ -> failwith "[Predicate.int_of_cst]"
 
 let print_var = print_string
@@ -316,18 +321,16 @@ let string_of_var var =
 let rec string_of_cst c =
   let format_string s =
     if s = "" then "\"\""
-      else 
+      else
         if (s.[0] = '\"' && s.[(String.length s)-1] = '\"') then
           s
         else "\"" ^ s ^ "\""
 
   in match c with
-  | Int i -> string_of_int i
+  | Int i -> Z.to_string i
   | Float f -> Printf.sprintf "%g" f
   | Str s -> format_string s
-  | ZInt i -> Z.to_string i
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
-  
 
 let print_cst c = print_string (string_of_cst c)
 

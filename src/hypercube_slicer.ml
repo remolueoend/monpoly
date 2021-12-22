@@ -100,11 +100,11 @@ let hash value seed =
   let str_hash s = 
     Int32.to_int (Murmur_hash3.string_hash s (Int32.of_int seed)) in
   match value with
-  | Int   x -> handle_hash x seed
+  (* TODO(JS): Overflow possible. *)
+  | Int   x -> handle_hash (Z.to_int x) seed
   | Str   x -> str_hash x
     (*TODO*)
   | Float x -> handle_hash (int_of_float x) seed
-  | ZInt x  -> handle_hash (Z.to_int x) seed
   | Regexp (s,r) -> str_hash s
 
 let string_of_some_cst cst =

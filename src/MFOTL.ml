@@ -133,7 +133,7 @@ let aggreg_default_value op t = match op, t with
   | Min, TFloat -> Float infinity
   | Max, TFloat -> Float neg_infinity
   | _, TFloat -> Float 0.
-  | _, TInt -> Int 0
+  | _, TInt -> Int Z.zero
   | _, TStr -> Str ""
   | _, TRegexp -> Regexp ("", Str.regexp "")
 

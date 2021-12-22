@@ -77,8 +77,8 @@ let comp_aggreg empty_val init update post result_pos group_posl rel =
     end
 
 let cnt empty_val result_pos group_posl =
-  let init _t = 1 in
-  let update ov _nt = ov + 1 in
+  let init _t = Z.one in
+  let update ov _nt = Z.succ ov in
   let post c = Int c in
   comp_aggreg empty_val init update post result_pos group_posl
 
@@ -225,9 +225,9 @@ class once_aggregator (window: window_aggregator) intv =
   end
 
 let cnt_once empty_val intv result_pos group_posl =
-  let init _t = 1 in
-  let add ov _nt = ov + 1 in
-  let remove ov _dt = if ov = 1 then None else Some (ov - 1) in
+  let init _t = Z.one in
+  let add ov _nt = Z.succ ov in
+  let remove ov _dt = if Z.equal ov Z.one then None else Some (Z.pred ov) in
   let post x = Int x in
   let window = new comm_group_aggregator init add remove post intv empty_val
     result_pos group_posl in

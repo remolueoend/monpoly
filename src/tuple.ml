@@ -81,8 +81,8 @@ let make_tuple2 sl tl =
        incr pos;
        match t with
        | TInt ->
-         (try Int (int_of_string s)
-          with Failure _ ->
+         (try Int (Z.of_string s)
+          with Invalid_argument _ ->
             raise (Type_error ("Expected type int for field number "
                                ^ (string_of_int !pos))))
        | TStr -> Str (cached s)

@@ -177,8 +177,8 @@
 
 formula:
   | LPA formula RPA                 { f "f()"; $2 }
-  | FALSE                           { f "FALSE"; Equal (Cst (Int 0), Cst (Int 1)) }
-  | TRUE                            { f "TRUE"; Equal (Cst (Int 0), Cst (Int 0)) }
+  | FALSE                           { f "FALSE"; Equal (Cst (Int Z.zero), Cst (Int Z.one)) }
+  | TRUE                            { f "TRUE"; Equal (Cst (Int Z.zero), Cst (Int Z.zero)) }
   | predicate                       { f "f(pred)"; $1 }
   | LET predicate EQ formula IN formula
                                     { f "f(let)"; match $2 with
@@ -304,7 +304,7 @@ term:
 
 
 cst:
-  | INT                     { f "cst(int)"; Int (Z.to_int $1) }
+  | INT                     { f "cst(int)"; Int $1 }
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }
   | REGEXP_CST              { f "cst(regex)"; compile_regexp $1 }
