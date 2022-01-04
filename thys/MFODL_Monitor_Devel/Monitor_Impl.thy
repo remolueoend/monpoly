@@ -1408,9 +1408,9 @@ lift_definition filter_not_in_cfi' :: "('a, ('a, 'b) mapping \<times> 'a set) co
 lemma filter_join'_code[code]:
   "filter_join' pos X m =
     (if \<not>pos \<and> finite X then set_fold_cfi filter_not_in_cfi' (m, {}) X
-    else (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m)))"
+    else (let aux = filter_join pos X m in (aux, Mapping.keys m - Mapping.keys aux)))"
   unfolding filter_join'_def
-  by (transfer fixing: m) (use filter_join'_False in auto)
+  by (transfer' fixing: m) (auto simp: Let_def filter_join'_False[symmetric])
 
 lemma upd_nested_max_tstp_code[code]:
   "upd_nested_max_tstp m d X = (if finite X then set_fold_cfi (upd_nested_max_tstp_cfi d) m X

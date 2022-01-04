@@ -17,6 +17,9 @@ session MFODL_Monitor_Devel (AFP) = MFOTL_Monitor_Devel +
     Tree_List
     Optimized_Agg
     Optimized_Agg_Temporal
+    Cluster
+    Mapping_Code
+    Wf_Table
     Monitor_Impl
     Sat
   theories [document=false]

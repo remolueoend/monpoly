@@ -173,8 +173,11 @@ type state =
             ((nat * ((event_data option) list) set) queue *
               ((nat * ((event_data option) list) set) queue *
                 (((event_data option) list) set *
-                  ((((event_data option) list), nat) mapping *
-                    (((event_data option) list), nat) mapping)))))))) *
+                  (event_data wf_table *
+                    ((((event_data option) list), nat) mapping *
+                      (event_data wf_table *
+                        (((event_data option) list), nat)
+                          mapping)))))))))) *
      aggaux option),
     ((nat *
        (nat queue *
