@@ -1,4 +1,4 @@
-FROM ocaml/opam:alpine-3.14-ocaml-4.11-flambda AS build
+FROM ocaml/opam:alpine-3.14-ocaml-4.13-flambda AS build
 
 RUN sudo apk add --no-cache \
     gmp-dev \
