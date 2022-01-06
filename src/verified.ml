@@ -9295,37 +9295,6 @@ let rec shift_end_mmasaux
 let rec add_new_ts_mmasaux
   args nt aux = add_new_ts_mmasauxa args nt (shift_end_mmasaux args nt aux);;
 
-let rec filter_join_fold_fun (_A1, _A2, _A3)
-  xa (m, x) =
-    (delete (_A2, _A3) xa m,
-      (match lookupa (_A2, _A3) m xa with None -> x
-        | Some _ -> insert (_A1, _A2) xa x));;
-
-let rec filter_not_in_cfia (_A1, _A2, _A3)
-  = Abs_comp_fun_idem (filter_join_fold_fun (_A1, _A2, _A3));;
-
-let rec filter_not_in_cfi (_A1, _A2) = Abs_comp_fun_idem (delete (_A1, _A2));;
-
-let rec filter_join (_A1, _A2, _A3, _A4)
-  pos a m =
-    (if not pos && finite (_A1, _A2, _A3) a
-      then set_fold_cfi (_A2, _A3) (filter_not_in_cfi (_A3, _A4)) m a
-      else filterc _A3
-             (fun asa _ ->
-               (if pos then member (_A2, _A3) asa a
-                 else not (member (_A2, _A3) asa a)))
-             m);;
-
-let rec filter_joina (_A1, _A2, _A3, _A4, _A5, _A6)
-  pos x m =
-    (if not pos && finite (_A1, _A3, _A4) x
-      then set_fold_cfi (_A3, _A4) (filter_not_in_cfia (_A3, _A4, _A5))
-             (m, bot_set (_A3, _A4, _A6)) x
-      else (let aux = filter_join (_A1, _A3, _A4, _A5) pos x m in
-             (aux, filter (_A3, _A4)
-                     (fun k -> is_none (lookupa (_A4, _A5) aux k))
-                     (keys (_A2, _A3, _A4, _A6) m))));;
-
 let rec wf_set_join (_A1, _A2, _A3)
   xb xc =
     Abs_wf_set
@@ -9451,41 +9420,44 @@ let rec join_mmsaux (_A1, _A2, _A3)
                     (wf_idx_of_set (_A1, _A2) (args_n args) (args_L args)
                       (args_L args) x)
                   in
-                let x_in =
-                  wf_table_set (_A1, _A2)
-                    (wf_table_join (_A1, _A2, _A3) wf_table_in wf_X)
+                let wf_in_del =
+                  (if pos then wf_table_antijoin (_A1, _A2, _A3)
+                    else wf_table_join (_A1, _A2, _A3))
+                    wf_table_in
+                    wf_X
                   in
-                let (tuple_ina, to_del_in) =
-                  filter_joina
-                    (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
+                let in_del = wf_table_set (_A1, _A2) wf_in_del in
+                let tuple_ina =
+                  mapping_delete_set
+                    (finite_UNIV_list, (ceq_list (ceq_option _A1)),
                       (ccompare_list (ccompare_option _A2)),
-                      (equal_list (equal_option _A3)), set_impl_list)
-                    pos x_in tuple_in
+                      (equal_list (equal_option _A3)))
+                    tuple_in in_del
                   in
                 let table_ina =
                   minus_set
                     ((ceq_list (ceq_option _A1)),
                       (ccompare_list (ccompare_option _A2)))
-                    table_in to_del_in
+                    table_in in_del
                   in
                 let wf_table_ina =
-                  wf_table_antijoin (_A1, _A2, _A3) wf_table_in
-                    (wf_table_of_set_args (_A1, _A2) args to_del_in)
+                  wf_table_antijoin (_A1, _A2, _A3) wf_table_in wf_in_del in
+                let wf_since_del =
+                  (if pos then wf_table_antijoin (_A1, _A2, _A3)
+                    else wf_table_join (_A1, _A2, _A3))
+                    wf_table_since
+                    wf_X
                   in
-                let x_since =
-                  wf_table_set (_A1, _A2)
-                    (wf_table_join (_A1, _A2, _A3) wf_table_since wf_X)
-                  in
-                let (tuple_sincea, to_del_since) =
-                  filter_joina
-                    (finite_UNIV_list, cenum_list, (ceq_list (ceq_option _A1)),
+                let since_del = wf_table_set (_A1, _A2) wf_since_del in
+                let tuple_sincea =
+                  mapping_delete_set
+                    (finite_UNIV_list, (ceq_list (ceq_option _A1)),
                       (ccompare_list (ccompare_option _A2)),
-                      (equal_list (equal_option _A3)), set_impl_list)
-                    pos x_since tuple_since
+                      (equal_list (equal_option _A3)))
+                    tuple_since since_del
                   in
                 let wf_table_sincea =
-                  wf_table_antijoin (_A1, _A2, _A3) wf_table_since
-                    (wf_table_of_set_args (_A1, _A2) args to_del_since)
+                  wf_table_antijoin (_A1, _A2, _A3) wf_table_since wf_since_del
                   in
                  (t, (gc, (maskL,
                             (maskR,
@@ -9587,58 +9559,67 @@ let rec join_mmasaux
                         (wf_idx_of_set (ceq_event_data, ccompare_event_data)
                           (args_n args) (args_L args) (args_L args) x)
                       in
-                    let x_in =
-                      wf_table_set (ceq_event_data, ccompare_event_data)
-                        (wf_table_join
-                          (ceq_event_data, ccompare_event_data,
-                            equal_event_data)
-                          wf_table_in wf_X)
+                    let wf_in_del =
+                      (if pos
+                        then wf_table_antijoin
+                               (ceq_event_data, ccompare_event_data,
+                                 equal_event_data)
+                        else wf_table_join
+                               (ceq_event_data, ccompare_event_data,
+                                 equal_event_data))
+                        wf_table_in
+                        wf_X
                       in
-                    let (tuple_ina, to_del_in) =
-                      filter_joina
-                        (finite_UNIV_list, cenum_list,
+                    let in_del =
+                      wf_table_set (ceq_event_data, ccompare_event_data)
+                        wf_in_del
+                      in
+                    let tuple_ina =
+                      mapping_delete_set
+                        (finite_UNIV_list,
                           (ceq_list (ceq_option ceq_event_data)),
                           (ccompare_list (ccompare_option ccompare_event_data)),
-                          (equal_list (equal_option equal_event_data)),
-                          set_impl_list)
-                        pos x_in tuple_in
+                          (equal_list (equal_option equal_event_data)))
+                        tuple_in in_del
                       in
                     let table_ina =
                       minus_set
                         ((ceq_list (ceq_option ceq_event_data)),
                           (ccompare_list (ccompare_option ccompare_event_data)))
-                        table_in to_del_in
+                        table_in in_del
                       in
                     let wf_table_ina =
                       wf_table_antijoin
                         (ceq_event_data, ccompare_event_data, equal_event_data)
-                        wf_table_in
-                        (wf_table_of_set_args
-                          (ceq_event_data, ccompare_event_data) args to_del_in)
+                        wf_table_in wf_in_del
                       in
-                    let x_since =
+                    let wf_since_del =
+                      (if pos
+                        then wf_table_antijoin
+                               (ceq_event_data, ccompare_event_data,
+                                 equal_event_data)
+                        else wf_table_join
+                               (ceq_event_data, ccompare_event_data,
+                                 equal_event_data))
+                        wf_table_since
+                        wf_X
+                      in
+                    let since_del =
                       wf_table_set (ceq_event_data, ccompare_event_data)
-                        (wf_table_join
-                          (ceq_event_data, ccompare_event_data,
-                            equal_event_data)
-                          wf_table_since wf_X)
+                        wf_since_del
                       in
-                    let (tuple_sincea, to_del_since) =
-                      filter_joina
-                        (finite_UNIV_list, cenum_list,
+                    let tuple_sincea =
+                      mapping_delete_set
+                        (finite_UNIV_list,
                           (ceq_list (ceq_option ceq_event_data)),
                           (ccompare_list (ccompare_option ccompare_event_data)),
-                          (equal_list (equal_option equal_event_data)),
-                          set_impl_list)
-                        pos x_since tuple_since
+                          (equal_list (equal_option equal_event_data)))
+                        tuple_since since_del
                       in
                     let wf_table_sincea =
                       wf_table_antijoin
                         (ceq_event_data, ccompare_event_data, equal_event_data)
-                        wf_table_since
-                        (wf_table_of_set_args
-                          (ceq_event_data, ccompare_event_data) args
-                          to_del_since)
+                        wf_table_since wf_since_del
                       in
                      ((t, (gc, (maskL,
                                  (maskR,
@@ -9646,7 +9627,7 @@ let rec join_mmasaux
                                      (data_in,
                                        (table_ina,
  (wf_table_ina, (tuple_ina, (wf_table_sincea, tuple_sincea)))))))))),
-                       delete_maggauxa aggargs to_del_in aggaux)))));;
+                       delete_maggauxa aggargs in_del aggaux)))));;
 
 let rec gc_mmsaux (_A1, _A2)
   args (nt, (gc, (maskL,

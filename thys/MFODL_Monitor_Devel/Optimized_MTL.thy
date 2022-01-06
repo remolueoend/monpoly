@@ -442,6 +442,10 @@ lemma wf_table_of_set_args: "table (args_n args) (args_R args) X \<Longrightarro
   wf_table_set (wf_table_of_set_args args X) = X"
   by (auto simp: wf_table_of_set_args_def wf_idx_set_of_set table_def)
 
+lemma wf_table_of_set_args_wf_table_set: "wf_table_sig t = (args_n args, args_R args) \<Longrightarrow>
+  wf_table_of_set_args args (wf_table_set t) = t"
+  by (auto simp: wf_table_sig_args wf_table_of_set_args[OF wf_table_set_table] intro: wf_table_eqI)
+
 fun init_mmsaux :: "args \<Rightarrow> 'a mmsaux" where
   "init_mmsaux args = (0, 0, join_mask (args_n args) (args_L args),
   join_mask (args_n args) (args_R args), empty_queue, empty_queue,
@@ -1163,9 +1167,16 @@ lemma valid_add_new_ts_mmsaux:
   using valid_add_new_ts_mmsaux'[OF valid_shift_end_mmsaux[OF assms] assms(2)]
   unfolding add_new_ts_mmsaux_def .
 
-definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
+definition mapping_delete_set :: "('a, 'b) mapping \<Rightarrow> 'a set \<Rightarrow> ('a, 'b) mapping" where
+  "mapping_delete_set m X = Mapping.filter (join_filter_cond False X) m"
 
-definition [simp]: "filter_join' pos X m = (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m))"
+lemma delete_set_lookup: "Mapping.lookup (mapping_delete_set m X) a = (if a \<in> X then
+  None else Mapping.lookup m a)"
+  by (auto simp: mapping_delete_set_def Mapping.lookup_filter split: option.splits)
+
+lemma delete_set_keys[simp]: "Mapping.keys (mapping_delete_set m X) = Mapping.keys m - X"
+  by (auto simp add: delete_set_lookup intro!: Mapping_keys_intro
+      dest!: Mapping_keys_dest split: if_splits)
 
 fun join_mmsaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
   "join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
@@ -1180,13 +1191,15 @@ fun join_mmsaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Righta
       tuple_since' = (if take_all then tuple_since else Mapping.empty) in
       (t, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'))
      else (let wf_X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) X);
-      X_in = wf_table_set (wf_table_join wf_table_in wf_X);
-      (tuple_in', to_del_in) = filter_join' pos X_in tuple_in;
-      table_in' = table_in - to_del_in;
-      wf_table_in' = wf_table_antijoin wf_table_in (wf_table_of_set_args args to_del_in);
-      X_since = wf_table_set (wf_table_join wf_table_since wf_X);
-      (tuple_since', to_del_since) = filter_join' pos X_since tuple_since;
-      wf_table_since' = wf_table_antijoin wf_table_since (wf_table_of_set_args args to_del_since) in
+      wf_in_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_in wf_X;
+      in_del = wf_table_set wf_in_del;
+      tuple_in' = mapping_delete_set tuple_in in_del;
+      table_in' = table_in - in_del;
+      wf_table_in' = wf_table_antijoin wf_table_in wf_in_del;
+      wf_since_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_since wf_X;
+      since_del = wf_table_set wf_since_del;
+      tuple_since' = mapping_delete_set tuple_since since_del;
+      wf_table_since' = wf_table_antijoin wf_table_since wf_since_del in
       (t, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'))))"
 
 fun join_mmsaux_abs :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
@@ -1228,6 +1241,8 @@ proof -
     using valid_before
     by auto
   have table_in_def: "Mapping.keys tuple_in = table_in"
+    and table_table_in: "table (args_n args) (args_R args) table_in"
+    and table_tuple_since: "table (args_n args) (args_R args) (Mapping.keys tuple_since)"
     using valid_before
     by auto
   have sig_in: "wf_table_sig wf_table_in = (args_n args, args_R args)"
@@ -1276,71 +1291,70 @@ proof -
   next
     case False
     define wf_X where "wf_X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) X)"
-    define X_in where "X_in = wf_table_set (wf_table_join wf_table_in wf_X)"
-    obtain tuple_in' to_del_in where tuple_in'_def: "filter_join' pos X_in tuple_in = (tuple_in', to_del_in)"
-      by fastforce
-    define table_in' where "table_in' = table_in - to_del_in"
-    define wf_table_in' where "wf_table_in' = wf_table_antijoin wf_table_in (wf_table_of_set_args args to_del_in)"
-    define X_since where "X_since = wf_table_set (wf_table_join wf_table_since wf_X)"
-    obtain tuple_since' to_del_since where tuple_since'_def: "filter_join' pos X_since tuple_since = (tuple_since', to_del_since)"
-      by fastforce
-    define wf_table_since' where "wf_table_since' = wf_table_antijoin wf_table_since (wf_table_of_set_args args to_del_since)"
+    define wf_in_del where "wf_in_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_in wf_X"
+    define in_del where "in_del = wf_table_set wf_in_del"
+    define tuple_in' where "tuple_in' = mapping_delete_set tuple_in in_del"
+    define table_in' where "table_in' = table_in - in_del"
+    define wf_table_in' where "wf_table_in' = wf_table_antijoin wf_table_in wf_in_del"
+    define wf_since_del where "wf_since_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_since wf_X"
+    define since_del where "since_del = wf_table_set wf_since_del"
+    define tuple_since' where "tuple_since' = mapping_delete_set tuple_since since_del"
+    define wf_table_since' where "wf_table_since' = wf_table_antijoin wf_table_since wf_since_del"
+    have wf_in_set: "wf_table_set wf_table_in = table_in"
+      by (auto simp: set_in table_in_def)
     have wf_X_sig: "wf_table_sig wf_X = (args_n args, args_L args)"
       by (auto simp: wf_X_def wf_idx_sig_of_set)
     have wf_X_set: "wf_table_set wf_X = X"
       using table_left
       by (auto simp: wf_X_def wf_idx_set_of_set table_def)
+    have wf_in_del_sig: "wf_table_sig wf_in_del = (args_n args, args_R args)"
+      using L_R
+      by (auto simp: wf_in_del_def wf_table_sig_join wf_table_sig_antijoin sig_in wf_X_sig)
+    have in_del_set: "in_del = join table_in (\<not>pos) X"
+      by (auto simp: in_del_def wf_in_del_def wf_table_set_antijoin[OF sig_in wf_X_sig L_R]
+          wf_table_set_join[OF sig_in wf_X_sig refl] wf_in_set wf_X_set)
     have table_in': "Mapping.keys tuple_in' = table_in'"
-      using tuple_in'_def keys_filter
-      unfolding filter_join'_def table_in'_def table_in_def[symmetric]
-      by (fastforce simp: filter_join_def)
-    have table_keys_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
-      and table_in_minus_del: "table (args_n args) (args_R args) (table_in - to_del_in)"
-      and table_to_del_in: "table (args_n args) (args_R args) to_del_in"
-      using valid_before tuple_in'_def
-      by (auto simp: table_def)
-    have wf_in: "wf_table_set wf_table_in = table_in"
-      by (auto simp: set_in table_in_def)
+      using keys_filter
+      unfolding tuple_in'_def table_in'_def table_in_def[symmetric]
+      by auto
+    have wf_in'_sig: "wf_table_sig wf_table_in' = (args_n args, args_R args)"
+      by (auto simp: wf_table_in'_def wf_table_sig_antijoin sig_in)
+    have wf_in'_set: "wf_table_set wf_table_in' = table_in'"
+      unfolding wf_table_in'_def table_in'_def wf_table_set_antijoin[OF sig_in wf_in_del_sig subset_refl]
+        join_eq[OF wf_table_set_table[OF wf_in_del_sig] wf_table_set_table[OF sig_in]]
+      unfolding wf_in_set in_del_def
+      by auto
     have tuple_in': "Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in = tuple_in'"
-      using tuple_in'_def
-      by (auto simp: filter_join_def Mapping.lookup_filter X_in_def wf_table_set_join[OF sig_in wf_X_sig refl] wf_X_set
-          join_sub[OF L_R table_left table_keys_in] proj_tuple_in_join_def maskL_def set_in Mapping_keys_intro
-          intro!: mapping_eqI split: option.splits)
-    have wf_in': "wf_table_of_set_args args (Mapping.keys tuple_in') = wf_table_in'"
-      unfolding table_in' table_in'_def wf_table_in'_def
-      apply (rule wf_table_eqI)
-      unfolding wf_table_sig_args wf_table_sig_antijoin sig_in
-        wf_table_of_set_args[OF table_in_minus_del] wf_table_set_antijoin[OF sig_in wf_table_sig_args subset_refl]
-        join_eq[OF wf_table_set_table[OF wf_table_sig_args] wf_table_set_table[OF sig_in]]
-      unfolding wf_table_of_set_args[OF table_to_del_in] wf_in
+      unfolding tuple_in'_def
+      by (cases pos) (auto simp: mapping_delete_set_def in_del_set table_in_def
+          join_sub[OF L_R table_left table_table_in] maskL_def proj_tuple_in_join_def intro!: Mapping_filter_cong)
+    have wf_since_del_sig: "wf_table_sig wf_since_del = (args_n args, args_R args)"
+      using L_R
+      by (auto simp: wf_since_del_def wf_table_sig_join wf_table_sig_antijoin sig_since wf_X_sig)
+    have since_del_set: "since_del = join (Mapping.keys tuple_since) (\<not>pos) X"
+      by (auto simp: since_del_def wf_since_del_def wf_table_set_antijoin[OF sig_since wf_X_sig L_R]
+          wf_table_set_join[OF sig_since wf_X_sig refl] set_since wf_X_set)
+    have wf_since'_sig: "wf_table_sig wf_table_since' = (args_n args, args_R args)"
+      by (auto simp: wf_table_since'_def wf_table_sig_antijoin sig_since)
+    have wf_since'_set: "wf_table_set wf_table_since' = Mapping.keys tuple_since'"
+      unfolding wf_table_since'_def wf_table_set_antijoin[OF sig_since wf_since_del_sig subset_refl]
+        join_eq[OF wf_table_set_table[OF wf_since_del_sig] wf_table_set_table[OF sig_since]]
+      unfolding tuple_since'_def since_del_def set_since
       by auto
-    have table_since': "Mapping.keys tuple_since' = Mapping.keys tuple_since - to_del_since"
-      using tuple_since'_def keys_filter
-      unfolding filter_join'_def
-      by (fastforce simp: filter_join_def)
-    have table_keys_since: "table (args_n args) (args_R args) (Mapping.keys tuple_since)"
-      and table_since_minus_del: "table (args_n args) (args_R args) (Mapping.keys tuple_since - to_del_since)"
-      and table_to_del_since: "table (args_n args) (args_R args) to_del_since"
-      using valid_before tuple_since'_def
-      by (auto simp: table_def)
+    have table_tuple_since': "table (args_n args) (args_R args) (Mapping.keys tuple_since')"
+      using table_tuple_since
+      by (auto simp: tuple_since'_def table_def)
     have tuple_since': "Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since = tuple_since'"
-      using tuple_since'_def
-      by (auto simp: filter_join_def Mapping.lookup_filter X_since_def wf_table_set_join[OF sig_since wf_X_sig refl] wf_X_set
-          join_sub[OF L_R table_left table_keys_since] proj_tuple_in_join_def maskL_def set_since Mapping_keys_intro
-          intro!: mapping_eqI split: option.splits)
-    have wf_since': "wf_table_of_set_args args (Mapping.keys tuple_since') = wf_table_since'"
-      unfolding table_since' wf_table_since'_def
-      apply (rule wf_table_eqI)
-      unfolding wf_table_sig_args wf_table_sig_antijoin sig_since
-        wf_table_of_set_args[OF table_since_minus_del] wf_table_set_antijoin[OF sig_since wf_table_sig_args subset_refl]
-        join_eq[OF wf_table_set_table[OF wf_table_sig_args] wf_table_set_table[OF sig_since]]
-      unfolding wf_table_of_set_args[OF table_to_del_since] set_since
-      by auto
+      unfolding tuple_since'_def
+      by (cases pos) (auto simp: mapping_delete_set_def since_del_set
+          join_sub[OF L_R table_left table_tuple_since] maskL_def proj_tuple_in_join_def intro!: Mapping_filter_cong)
     show ?thesis
       using False
-      by (auto simp only: join_mmsaux.simps join_mmsaux_abs.simps Let_def pos_def[symmetric]
-          wf_X_def[symmetric] X_in_def[symmetric] tuple_in'_def table_in'_def[symmetric] wf_table_in'_def[symmetric]
-          X_since_def[symmetric] tuple_since'_def wf_table_since'_def[symmetric] table_in'[symmetric] tuple_in' wf_in' tuple_since' wf_since') auto
+      by (auto simp only:join_mmsaux.simps join_mmsaux_abs.simps Let_def pos_def[symmetric] wf_X_def[symmetric]
+          wf_in_del_def[symmetric] in_del_def[symmetric] tuple_in'_def[symmetric] table_in'_def[symmetric] wf_table_in'_def[symmetric]
+          wf_since_del_def[symmetric] since_del_def[symmetric] tuple_since'_def[symmetric] wf_table_since'_def[symmetric]
+          table_in' wf_in'_set[symmetric] wf_table_of_set_args_wf_table_set[OF wf_in'_sig] tuple_in'
+          wf_since'_set[symmetric] wf_table_of_set_args_wf_table_set[OF wf_since'_sig] tuple_since' split: if_splits)
   qed
 qed
 
@@ -2073,18 +2087,6 @@ fun valid_mmuaux' :: "args \<Rightarrow> ts \<Rightarrow> ts \<Rightarrow> event
 definition valid_mmuaux :: "args \<Rightarrow> ts \<Rightarrow> event_data mmuaux \<Rightarrow> event_data muaux \<Rightarrow>
   bool" where
   "valid_mmuaux args cur = valid_mmuaux' args cur cur"
-
-lift_definition mapping_delete_set :: "('a, 'b) mapping \<Rightarrow> 'a set \<Rightarrow> ('a, 'b) mapping" is
-  "\<lambda>m X a. (if a \<in> X then None
-    else Mapping.lookup m a)" .
-
-lemma delete_set_lookup: "Mapping.lookup (mapping_delete_set m X) a = (if a \<in> X then
-  None else Mapping.lookup m a)"
-  by (simp add: Mapping.lookup.rep_eq mapping_delete_set.rep_eq)
-
-lemma delete_set_keys: "Mapping.keys (mapping_delete_set m X) = Mapping.keys m - X"
-  by (auto simp add: delete_set_lookup intro!: Mapping_keys_intro
-      dest!: Mapping_keys_dest split: if_splits)
 
 fun eval_step_mmuaux :: "args \<Rightarrow> event_data mmuaux \<Rightarrow> event_data mmuaux" where
   "eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map,
