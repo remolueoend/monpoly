@@ -49,6 +49,9 @@ open Table
 type schema = Table.schema list
     (** A databases schema is a set of table schemas. *)
 
+val base_schema: schema
+val add_predicate: string -> (string * tcst) list -> schema -> schema
+
 type db
   (** A database consists of a set of tables. (It is currently
       implemented as a list of tables.) *)

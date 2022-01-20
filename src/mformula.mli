@@ -55,7 +55,5 @@ type mformula =
   | MEventuallyZ of interval * mformula * mezinfo
   | MEventually of interval * mformula * meinfo
 
-type state = (timestamp * int list * mformula * Neval.queue * Neval.cell * int * bool)
-
 val free_vars: mformula -> Predicate.var list
 val predicates: mformula -> Predicate.predicate list

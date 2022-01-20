@@ -326,6 +326,23 @@ let print_extf str ff =
           print_string "\n";
           print_f_rec (d+1) f
 
+        | EAggreg (info,_,f) -> 
+          print_string (string_of_agg_op info.op);
+          print_string "_";
+          print_string (string_of_cst info.default);
+          print_string "\n";
+          print_f_rec (d+1) f
+
+        | EAggOnce (info,aggr,f) -> 
+            print_string (string_of_agg_op info.op);
+            print_string "ONCE";
+            print_string "_";
+            print_string (string_of_cst info.default);
+            print_string " ";
+            Aggreg.print_state aggr;
+            print_string "\n";
+            print_f_rec (d+1) f
+
         | _ ->
           (match f with
             | ELet (p,_,f1,f2,linf) ->

@@ -63,8 +63,6 @@ type mformula =
   | MEventuallyZ of interval * mformula * mezinfo
   | MEventually of interval * mformula * meinfo
 
-type state = (timestamp * int list * mformula * Neval.queue * Neval.cell * int * bool)
-
 (* For each formula, returns list of relevant free variables according to sub structure *)
 let free_vars f =
   let pvars p = Predicate.pvars p in

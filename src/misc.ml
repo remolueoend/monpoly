@@ -96,9 +96,10 @@ type dbg =
   | Dbg_eval
   | Dbg_monitorable
   | Dbg_log
-  | Dbg_formula
   | Dbg_perf
   | Dbg_filter
+  | Dbg_parsing
+  | Dbg_typing
 
 
 let debugl = ref []
@@ -110,7 +111,8 @@ let split_debug debugstr =
         | "eval" -> Dbg_eval
         | "perf" -> Dbg_perf
         | "log" -> Dbg_log
-        | "formula" -> Dbg_formula
+        | "parsing" -> Dbg_parsing
+        | "typing" -> Dbg_typing
         | "monitorable" -> Dbg_monitorable
         | "filter" -> Dbg_filter
         | _ -> failwith "[Misc.split_debug] unrecognized debug option"
@@ -539,7 +541,7 @@ let mem_all () =
   try
     while true; do
       let line = input_line ic in
-      Printf.eprintf "%s\n" line
+      Printf.eprintf "%s\n%!" line
     done
   with End_of_file ->
     close_in ic

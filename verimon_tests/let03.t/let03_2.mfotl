@@ -1,0 +1,3 @@
+LET A(x) = Q(x) IN
+LET Q(x) = (x = 0) IN
+A(x)

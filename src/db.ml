@@ -47,14 +47,26 @@ open Table
 
 type schema = Table.schema list
 
+let base_schema =
+  [("tp", ["i", TInt]);
+   ("ts", ["t", TInt]);
+   ("tpts", [("i", TInt); ("t", TInt)]);]
+
+let add_predicate p l s =
+  if List.mem_assoc p s
+  then failwith (Printf.sprintf "[Db.add_predicate] Predicate %s was defined\
+    \ more than once in the signature." p)
+  else
+    begin
+      (*TODO(JS): Do this more cleanly.*)
+      Domain_set.predicates := Domain_set.convert_predicate (p, l)
+        :: !Domain_set.predicates;
+      (p, l)::s
+    end
+
 type db = table list
 
 type log = (timestamp * db) list
-
-
-
-let make_schema s = s
-
 
 let get_table db p =
   List.find (fun t ->

@@ -9,12 +9,12 @@
   At time point 3:
   At time point 4:
   At time point 5:
-  @10. (time point 0): true
+  @10 (time point 0): true
   At time point 6:
-  @11. (time point 1): true
+  @11 (time point 1): true
   At time point 7:
-  @12. (time point 2): true
+  @12 (time point 2): true
   At time point 8:
-  @13. (time point 3): true
+  @13 (time point 3): true
   At time point 9:
-  @14. (time point 4): true
+  @14 (time point 4): true

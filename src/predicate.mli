@@ -50,9 +50,10 @@ type cst =
   | Str of string
   | Float of float
   | ZInt of Z.t
+  | Regexp of (string * Str.regexp)
 
 (** Three (constant) types are supported: integers, strings and floats *)
-type tcst = TInt | TStr | TFloat
+type tcst = TInt | TStr | TFloat | TRegexp
 
 (** Two type classes exists: Numeric and Any*) 
 type tcl = TNum | TAny 
@@ -66,6 +67,12 @@ type 'a eterm =
   | Cst of cst
   | F2i of 'a eterm
   | I2f of 'a eterm
+  | DayOfMonth of 'a eterm
+  | Month of 'a eterm
+  | Year of 'a eterm
+  | FormatDate of 'a eterm
+  | R2s of 'a eterm
+  | S2r of 'a eterm
   | Plus of 'a eterm * 'a eterm
   | Minus of 'a eterm * 'a eterm
   | UMinus of 'a eterm
@@ -140,8 +147,8 @@ val int_of_cst: cst -> int
 val print_var: var -> unit
 val print_tcst: tcst -> unit
 val string_of_var: var -> string
-val string_of_cst: bool -> cst -> string
-val print_cst: bool -> cst -> unit
+val string_of_cst: cst -> string
+val print_cst: cst -> unit
 (* val output_cst: out_channel -> cst -> unit *)
 val string_of_term: term -> string
 val print_term: term -> unit

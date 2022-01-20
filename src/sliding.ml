@@ -130,7 +130,7 @@ let combine op tl tr =
 let rec reusable_subtrees (lw, rw) t =
   let lt, rt = stree_bounds t in
   (* if Misc.debugging Dbg_eval then *)
-  (*   Printf.printf "[reusable_subtrees] tree: (%s,%s)  window: (%s, %s)\n" *)
+  (*   Printf.eprintf "[reusable_subtrees] tree: (%s,%s)  window: (%s, %s)\n%!" *)
   (*     (MFOTL.string_of_ts lt) *)
   (*     (MFOTL.string_of_ts rt) *)
   (*     (MFOTL.string_of_ts lw) *)
@@ -195,7 +195,7 @@ let build_rl_tree op t_list =
 let slide f op seq (lw, rw) t =
   let lt, rt = stree_bounds t in
   if Misc.debugging Dbg_eval then
-    Printf.printf "[slide] (lt,rt) = (%s,%s) (lw,rw) = (%s,%s)\n" (f lt) (f rt) (f lw) (f rw);
+    Printf.eprintf "[slide] (lt,rt) = (%s,%s) (lw,rw) = (%s,%s)\n%!" (f lt) (f rt) (f lw) (f rw);
   assert(rt <= rw);
   if rt < lw then (* [t] is useless: discard it *)
     build_rl_tree_from_seq op seq

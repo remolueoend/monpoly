@@ -42,7 +42,7 @@
 open Unix
 open Predicate
 
-type timestamp = float
+type timestamp = Z.t
 type tsdiff = timestamp
 type bound = OBnd of tsdiff | CBnd of tsdiff | Inf
 type interval = bound * bound
@@ -54,8 +54,11 @@ type formula =
   | Equal of (term * term)
   | Less of (term * term)
   | LessEq of (term * term)
+  | Substring of (term * term)
+  | Matches of (term * term)
   | Pred of predicate
   | Let of (predicate * formula * formula)
+  | LetPast of (predicate * formula * formula)
   | Neg of formula
   | And of (formula * formula)
   | Or of (formula * formula)
@@ -85,50 +88,18 @@ and regex =
 
 let unixts = ref false
 
-let ts_of_string err_place str =
+let ts_of_string str =
   try
-    float_of_string str
+    Z.of_string str
   with Failure _ ->
-    let msg = Printf.sprintf "[%s, MFOTL.ts_of_string] Cannot convert %s into a timestamp" err_place str in
+    let msg = Printf.sprintf "[MFOTL.ts_of_string] Cannot convert %s into a timestamp" str in
     failwith msg
 
-let ts_of_cst c =
-  match c with
-  | ZInt _
-  | Int _ -> failwith "[MFOTL.ts_of_cst] conversion not possible"
-  | Str s -> float_of_string s
-  | Float f -> f
-let cst_of_ts t = Str (string_of_float t)
-let tsdiff_of_cst = ts_of_cst
-let cst_of_tsdiff = cst_of_ts
-
-let ts_plus t1 t2 = t1 +. t2
-let ts_minus t1 t2 = t1 -. t2
-let ts_invalid = -1.
-let ts_null = 0.
-let ts_max = max_float
-
-
-let ts_of_string2 err_place str =
-  try
-    int_of_string str
-  with Failure _ ->
-    (* a way of avoiding the problem of too big integers *)
-    let lens = String.length str in
-    let lenm = String.length (string_of_int max_int) in
-    let str =
-      if lens >= lenm then
-        let d = lens-lenm+1 in
-        String.sub str d (lens-d)
-      else
-        str
-    in
-    try
-      int_of_string str
-    with Failure _ ->
-      let msg = Printf.sprintf "[%s, MFOTL.ts_of_string] Cannot convert %s into a timestamp" err_place str in
-      failwith msg
-
+let ts_plus t1 t2 = Z.add t1 t2
+let ts_minus t1 t2 = Z.sub t1 t2
+let ts_invalid = Z.minus_one
+let ts_null = Z.zero
+let ts_max = Z.pow (Z.of_int 2) 64
 
 (* TODO: these function names are not intuitive, because one usually
    does not think in terms of the interval I labelling a temporal
@@ -156,7 +127,7 @@ let in_interval v intv =
 
 let infinite_interval (_, b) = (b = Inf)
 
-let init_interval (_, b) = (CBnd 0., b)
+let init_interval (_, b) = (CBnd Z.zero, b)
 
 let aggreg_default_value op t = match op, t with
   | Min, TFloat -> Float infinity
@@ -164,6 +135,7 @@ let aggreg_default_value op t = match op, t with
   | _, TFloat -> Float 0.
   | _, TInt -> Int 0
   | _, TStr -> Str ""
+  | _, TRegexp -> Regexp ("", Str.regexp "")
 
 
 let map mapf mapr =
@@ -171,11 +143,17 @@ let rec formula_map = function
   | Equal (_,_)
   | Less (_,_)
   | LessEq (_,_) 
+  | Matches (_,_) 
+  | Substring (_,_) 
   | Pred _ as f -> mapf f
   | Let (p,f1,f2) -> 
     let f1 = formula_map f1 in
     let f2 = formula_map f2 in
     mapf (Let (p,f1,f2))
+  | LetPast (p,f1,f2) -> 
+    let f1 = formula_map f1 in
+    let f2 = formula_map f2 in
+    mapf (LetPast (p,f1,f2))
   | Neg f -> mapf (Neg (formula_map f))
   | And (f1,f2) ->
     let f1 = formula_map f1 in
@@ -233,8 +211,11 @@ let rec direct_subformulas = function
   | Equal (t1,t2) -> []
   | Less (t1,t2) -> []
   | LessEq (t1,t2) -> []
+  | Matches (t1,t2) -> []
+  | Substring (t1, t2) -> []
   | Pred p -> []
   | Let (p,f1,f2) -> direct_subformulas f2
+  | LetPast (p,f1,f2) -> direct_subformulas f2
   | Neg f -> [f]
   | And (f1,f2) -> [f1;f2]
   | Or (f1,f2) -> [f1;f2]
@@ -312,9 +293,12 @@ let is_regular = function
 let rec is_mfodl = function 
   | Equal (t1,t2) 
   | Less (t1,t2) 
-  | LessEq (t1,t2) -> false
+  | LessEq (t1,t2) 
+  | Substring (t1,t2)
+  | Matches (t1,t2) -> false
   | Pred p -> false
   | Let (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
+  | LetPast (_,f1,f2) -> is_mfodl f1 || is_mfodl f2
   | Neg f -> is_mfodl f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -339,10 +323,13 @@ let rec is_mfodl = function
 let rec free_vars = function
   | Equal (t1,t2)
   | Less (t1,t2)
-  | LessEq (t1,t2) ->
+  | LessEq (t1,t2)
+  | Matches (t1,t2)
+  | Substring (t1,t2) ->
     Misc.union (Predicate.tvars t1) (Predicate.tvars t2)
   | Pred p -> Predicate.pvars p
   | Let (_,_,f) -> free_vars f
+  | LetPast (_,_,f) -> free_vars f
   | Neg f -> free_vars f
   | And (f1,f2) 
   | Or (f1,f2) 
@@ -394,12 +381,15 @@ let rec substitute_vars m =
   | Equal (t1, t2) -> Equal (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | Less  (t1, t2) -> Less (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
   | LessEq (t1, t2) -> LessEq (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Matches (t1, t2) -> Matches (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
+  | Substring (t1, t2) -> Substring (Predicate.substitute_vars m t1, Predicate.substitute_vars m t2)
 
   | Pred (p) -> 
     let (n,a,ts) = Predicate.get_info p in
     Pred (Predicate.make_predicate (n,List.map (Predicate.substitute_vars m) ts))
     
   | Let (p, f1, f2) -> Let (p, f1, substitute_vars m f2)
+  | LetPast (p, f1, f2) -> LetPast (p, f1, substitute_vars m f2)
 
   | Neg f -> Neg (substitute_vars m f)
   | Exists (v, f) -> 
@@ -463,18 +453,27 @@ and substitute_re_vars m = function
   | Plus (r1,r2) -> Plus (substitute_re_vars m r1, (substitute_re_vars m r2))
   | Star r -> Star (substitute_re_vars m r) 
 
+let same_pred p1 p2 =
+  let (n1, a1, _) = get_info p1 in
+  let (n2, a2, _) = get_info p2 in
+  n1 = n2 && a1 = a2
+
 let count_pred_uses pred f =
   let rec go = function
     | Equal _
     | Less _
-    | LessEq _ -> 0
+    | LessEq _
+    | Matches _
+    | Substring _ -> 0
 
-    | Pred p -> if Predicate.get_name p = pred then 1 else 0
+    | Pred p -> if same_pred p pred then 1 else 0
 
     | Let (p, f1, f2) ->
         let c1 = go f1 in
-        let c2 = if Predicate.get_name p = pred then 0 else go f2 in
+        let c2 = if same_pred p pred then 0 else go f2 in
         c1 + c2
+    | LetPast (p, f1, f2) ->
+        if same_pred p pred then 0 else go f1 + go f2
 
     | Neg f
     | Exists (_, f)
@@ -509,7 +508,7 @@ let count_pred_uses pred f =
 
 let string_of_ts ts =
   if !unixts then
-    let tm = Unix.gmtime ts in
+    let tm = Unix.gmtime (Z.to_float ts) in
     Printf.sprintf "%d-%d-%d %d:%d:%d"
       tm.tm_year tm.tm_mon tm.tm_mday
       tm.tm_hour tm.tm_min tm.tm_sec
@@ -517,20 +516,20 @@ let string_of_ts ts =
     if ts = ts_max then
       "MaxTS"
     else
-      Printf.sprintf "%F" ts
+      Z.to_string ts
 
 let print_ts ts =
   print_string (string_of_ts ts)
 
 let string_of_interval (a,b) =
   (match a with
-    | OBnd a -> Printf.sprintf "(%.0f," a
-    | CBnd a -> Printf.sprintf "[%.0f," a
+    | OBnd a -> Printf.sprintf "(%s," (Z.to_string a)
+    | CBnd a -> Printf.sprintf "[%s," (Z.to_string a)
     | Inf -> Printf.sprintf "(*,") 
   ^
   (match b with
-  | OBnd b -> Printf.sprintf "%.0f)" b
-  | CBnd b -> Printf.sprintf "%.0f]" b
+  | OBnd b -> Printf.sprintf "%s)" (Z.to_string b)
+  | CBnd b -> Printf.sprintf "%s]" (Z.to_string b)
   | Inf -> Printf.sprintf "*)")
 
 let print_interval (a,b) =
@@ -549,8 +548,11 @@ let rec type_of_fma = function
   | Equal (t1,t2) -> "Eq"
   | Less (t1,t2) -> "Less"
   | LessEq (t1,t2) -> "LessEq"
+  | Substring (t1, t2) -> "Substring"
+  | Matches (t1, t2) -> "Matches"
   | Pred p -> "Pred"
   | Let (p,f1,f2) -> "Let"
+  | LetPast (p,f1,f2) -> "LetPast"
   | Neg f -> "Neg"
   | And (f1,f2) -> "And"
   | Or (f1,f2) -> "Or"
@@ -583,6 +585,10 @@ let string_of_formula str g =
         Predicate.string_of_term t1 ^ " < " ^ Predicate.string_of_term t2
       | LessEq (t1,t2) ->
         Predicate.string_of_term t1 ^ " <= " ^ Predicate.string_of_term t2
+      | Substring (t1,t2) ->
+        Predicate.string_of_term t1 ^ " SUBSTRING " ^ Predicate.string_of_term t2
+      | Matches (t1,t2) ->
+        Predicate.string_of_term t1 ^ " MATCHES " ^ Predicate.string_of_term t2
       | Pred p -> Predicate.string_of_predicate p
       | _ ->
         (if par && not top then "(" else "")
@@ -751,6 +757,27 @@ let string_of_formula str g =
               ^
               (string_f_rec false false f2)  
 
+            | LetPast (p,f1,f2) ->
+              "LETPAST"
+              ^
+              " "
+              ^
+              (string_f_rec false true (Pred p))
+              ^
+              " = "
+              ^
+              (string_f_rec false true f1)
+              ^
+              "\n"
+              ^ 
+              padding
+              ^
+              "IN"
+              ^
+              " "
+              ^
+              (string_f_rec false false f2)  
+
             | Since (intv,f1,f2) ->
               (string_f_rec false true f1)
               ^ 
@@ -837,6 +864,10 @@ let string_of_formula str g =
           "(" ^ (Predicate.string_of_term t1) ^ " < " ^ (Predicate.string_of_term t2) ^ ")"
         | LessEq (t1,t2) ->
           "(" ^ (Predicate.string_of_term t1) ^ " <= " ^ (Predicate.string_of_term t2) ^ ")"
+        | Substring (t1,t2) ->
+          "(" ^ (Predicate.string_of_term t1) ^ " SUBSTRING " ^ (Predicate.string_of_term t2) ^ ")"
+        | Matches (t1,t2) ->
+          "(" ^ (Predicate.string_of_term t1) ^ " MATCHES " ^ (Predicate.string_of_term t2) ^ ")"
         | Pred p -> Predicate.string_of_predicate p
         | _ ->
            

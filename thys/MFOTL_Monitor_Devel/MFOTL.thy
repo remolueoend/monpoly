@@ -11,10 +11,10 @@ context begin
 subsection \<open>Formulas and satisfiability\<close>
 
 qualified type_synonym name = string
-qualified type_synonym 'a event = "(name \<times> 'a list)"
+qualified type_synonym 'a event = "name \<times> 'a list"
 qualified type_synonym 'a database = "'a event set"
-qualified type_synonym 'a prefix = "(name \<times> 'a list) prefix"
-qualified type_synonym 'a trace = "(name \<times> 'a list) trace"
+qualified type_synonym 'a prefix = "'a database prefix"
+qualified type_synonym 'a trace = "'a database trace"
 
 qualified type_synonym 'a env = "'a list"
 

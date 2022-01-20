@@ -5,11 +5,11 @@
   The sequence of free variables is: ()
   At time point 0:
   At time point 1:
-  @0. (time point 0): true
+  @0 (time point 0): true
   At time point 2:
   At time point 3:
-  @2. (time point 1): false
-  @2. (time point 2): false
+  @2 (time point 1): false
+  @2 (time point 2): false
 
   $ echo 'NOT TRUE UNTIL[0,0] r()' > test24_2.mfotl
   $ monpoly -sig test24.sig -formula test24_2.mfotl -log test24.log -verbose -nonewlastts
@@ -18,11 +18,11 @@
   The sequence of free variables is: ()
   At time point 0:
   At time point 1:
-  @0. (time point 0): true
+  @0 (time point 0): true
   At time point 2:
   At time point 3:
-  @2. (time point 1): false
-  @2. (time point 2): false
+  @2 (time point 1): false
+  @2 (time point 2): false
 
   $ echo '(NEXT NEXT s()) UNTIL[0,0] r()' > test24_3.mfotl
   $ monpoly -sig test24.sig -formula test24_3.mfotl -log test24.log -verbose -nonewlastts
@@ -32,7 +32,7 @@
   At time point 0:
   At time point 1:
   At time point 2:
-  @0. (time point 0): true
+  @0 (time point 0): true
   At time point 3:
 
   $ echo 'NOT (NEXT[0,0] NEXT[0,0] s()) UNTIL[0,0] r()' > test24_4.mfotl
@@ -43,7 +43,7 @@
   At time point 0:
   At time point 1:
   At time point 2:
-  @0. (time point 0): true
+  @0 (time point 0): true
   At time point 3:
 
   $ echo 'NOT (NEXT[0,0] s() OR NEXT[0,0] r()) UNTIL[0,0] r()' > test24_5.mfotl
@@ -54,7 +54,7 @@
   At time point 0:
   At time point 1:
   At time point 2:
-  @0. (time point 0): true
+  @0 (time point 0): true
   At time point 3:
 
   $ echo 'NOT ((NEXT[0,0] r()) OR NEXT[0,0] s()) UNTIL[0,0] r()' > test24_6.mfotl
@@ -66,8 +66,8 @@
   The sequence of free variables is: ()
   At time point 0:
   At time point 1:
-  @0. (time point 0): true
+  @0 (time point 0): true
   At time point 2:
   At time point 3:
-  @2. (time point 1): false
-  @2. (time point 2): false
+  @2 (time point 1): false
+  @2 (time point 2): false

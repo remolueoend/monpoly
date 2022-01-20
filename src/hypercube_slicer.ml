@@ -3,7 +3,6 @@ open Predicate
 open Helper
 open Tuple
 open Mformula
-open Log_parser
 open Domain_set
 
 exception Error of string
@@ -97,16 +96,20 @@ let handle_hash x seed =
   let res = Int32.to_int (Murmur_hash3.finalize_hash (Murmur_hash3.mix_last (Murmur_hash3.mix seed lo) (Int32.of_int hi)) 0) in
   res
 
-let hash value seed = match value with
+let hash value seed = 
+  let str_hash s = 
+    Int32.to_int (Murmur_hash3.string_hash s (Int32.of_int seed)) in
+  match value with
   | Int   x -> handle_hash x seed
-  | Str   x -> Int32.to_int (Murmur_hash3.string_hash x (Int32.of_int seed))
+  | Str   x -> str_hash x
     (*TODO*)
   | Float x -> handle_hash (int_of_float x) seed
   | ZInt x  -> handle_hash (Z.to_int x) seed
+  | Regexp (s,r) -> str_hash s
 
 let string_of_some_cst cst =
   match cst with 
-  | Some v -> Predicate.string_of_cst false v
+  | Some v -> Predicate.string_of_cst v
   | None -> "null"
 
 let return_shares slicer valuation =

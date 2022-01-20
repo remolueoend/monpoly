@@ -52,9 +52,10 @@ type dbg =
   | Dbg_eval
   | Dbg_monitorable
   | Dbg_log
-  | Dbg_formula
   | Dbg_perf
   | Dbg_filter
+  | Dbg_parsing
+  | Dbg_typing
 
 val usr2: bool ref
 val alrm: bool ref

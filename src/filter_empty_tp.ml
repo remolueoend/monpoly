@@ -53,6 +53,8 @@ type lformula =
   | LEqual of (term * term)
   | LLess of (term * term)
   | LLessEq of (term * term)
+  | LSubstring of (term * term)
+  | LMatches of (term * term)
   | LPred of predicate
   | LNeg of lformula labeled
   | LAnd of (lformula labeled * lformula labeled)
@@ -82,130 +84,26 @@ let add_label l labels =
   else
     l :: labels
 
-let print_label = function
-  | LTrue -> Printf.printf "(True)"
-  | LFalse -> Printf.printf "(False)"
-  | LEvRel -> Printf.printf "(EvRel)"
+let string_of_label = function
+  | LTrue -> "(True)"
+  | LFalse -> "(False)"
+  | LEvRel -> "(EvRel)"
 
-let rec print_labels = function
-  | [] -> ()
-  | h :: t -> print_label h;
-    Printf.printf ", ";
-    print_labels t
+let rec string_of_labels = function
+| [] -> ""
+| h :: t -> string_of_label h ^ ", " ^ string_of_labels t
+
+let print_labels l = Printf.printf "%s" (string_of_labels l)
+
+let eprint_labels l = Printf.eprintf "%s" (string_of_labels l)
 
 let intv_contains_zero = function
-  | CBnd (0.0),_ ->
+  | Z.(CBnd (zero),_) ->
     (* Printf.printf "contains zero\n"; *)
     true
   | _ ->
     (* Printf.printf "excludes zero\n"; *)
     false
-
-(* --- debugging code ------------------------------------------------- *)
-let print_formula str f =
-  let rec print_f_rec top par f =
-    if top then
-      print_string "(";
-    (match f with
-     | LEqual (t1,t2) ->
-       Predicate.print_term t1;
-       print_string " = ";
-       Predicate.print_term t2
-     | LLess (t1,t2) ->
-       Predicate.print_term t1;
-       print_string " < ";
-       Predicate.print_term t2
-     | LLessEq (t1,t2) ->
-       Predicate.print_term t1;
-       print_string " <= ";
-       Predicate.print_term t2
-     | LPred p ->
-       Predicate.print_predicate p;
-     | _ ->
-       if par && not top then
-         print_string "(";
-       (match f with
-        | LNeg (f,_) ->
-          print_string "NOT ";
-          print_f_rec false false f;
-        | LExists (vl,(f,_)) ->
-          print_string "EXISTS ";
-          Misc.print_list_ext "" "" ", "
-            Predicate.print_term
-            (List.map (fun v -> Var v) vl);
-          print_string ".";
-          print_f_rec false false f;
-        | LForAll (vl,(f,_)) ->
-          print_string "FORALL ";
-          Misc.print_list_ext "" "" ", "
-            Predicate.print_term
-            (List.map (fun v -> Var v) vl);
-          print_string ".";
-          print_f_rec false false f;
-        | LPrev (intv,(f,_)) ->
-          print_string "PREVIOUS";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | LNext (intv,(f,_)) ->
-          print_string "NEXT";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | LEventually (intv,(f,_)) ->
-          print_string "EVENTUALLY";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | LOnce (intv,(f,_)) ->
-          print_string "ONCE";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | LAlways (intv,(f,_)) ->
-          print_string "ALWAYS";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | LPastAlways (intv,(f,_)) ->
-          print_string "PAST_ALWAYS";
-          print_interval intv; print_string " ";
-          print_f_rec false false f
-        | _ ->
-          if not par && not top then
-            print_string "(";
-          (match f with
-           | LAnd ((f1,_),(f2,_)) ->
-             print_f_rec false true f1;
-             print_string " AND ";
-             print_f_rec false false f2
-           | LOr ((f1,_),(f2,_)) ->
-             print_f_rec false true f1;
-             print_string " OR ";
-             print_f_rec false false f2
-           | LSince (intv,(f1,_),(f2,_)) ->
-             print_f_rec false true f1;
-             print_string " SINCE";
-             print_interval intv; print_string " ";
-             print_f_rec false false f2
-           | LUntil (intv,(f1,_),(f2,_)) ->
-             print_f_rec false true f1;
-             print_string " UNTIL";
-             print_interval intv; print_string " ";
-             print_f_rec false false f2
-           | _ ->failwith "[print_formula] impossible"
-          );
-          if not par && not top then
-            print_string ")"
-       );
-       if par && not top then
-         print_string ")";
-    );
-    if top then
-      print_string ")";
-  in
-  print_string str;
-  print_f_rec true false f
-
-let printnl_formula str f =
-  print_formula str f;
-  print_newline()
-(* --- end of debugging code ------------------------------------------ *)
 
 let add_labels (lf : lformula) : label list =
   let labels = ref [] in
@@ -213,7 +111,9 @@ let add_labels (lf : lformula) : label list =
   (match lf with
    | LEqual (_,_)
    | LLess (_,_)
-   | LLessEq (_,_) -> ()
+   | LLessEq (_,_)
+   | LSubstring (_, _) 
+   | LMatches (_, _) -> ()
    | LPred _ ->
      labels := add_label LFalse !labels
    | LNeg (f1, l1) -> begin
@@ -254,6 +154,8 @@ let add_labels (lf : lformula) : label list =
    | LEqual (_,_)
    | LLess (_,_)
    | LLessEq (_,_)
+   | LSubstring (_,_)
+   | LMatches (_,_)
    | LPred _ ->
      labels := add_label LEvRel !labels
    | LNeg (f1, l1)
@@ -325,6 +227,8 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     | Equal (t1,t2) -> LEqual (t1,t2)
     | Less (t1,t2) -> LLess (t1,t2)
     | LessEq (t1,t2) -> LLessEq (t1,t2)
+    | Substring (t1,t2) -> LSubstring(t1, t2)
+    | Matches (t1,t2) -> LMatches(t1, t2)
     | Pred p -> LPred p
     | Neg f -> LNeg (go_down f)
     | And (f1,f2) -> LAnd ((go_down f1), (go_down f2))
@@ -344,9 +248,10 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     (* (\* rewrite p => q to ~p or q *\) *)
     (* LOr ((go_down (Neg f1)), (go_down f2)) *)
     | Equiv (f1,f2) -> failwith "[Filter_empty_tp.go_down] formula contains Equiv"
-    | Let (_,_,_) -> failwith "Internal error"
-    | Frex (_,_) -> failwith "Internal error"
-    | Prex (_,_) -> failwith "Internal error"
+    | Let (_,_,_) -> failwith "[Filter_empty_tp] LET not supported; use -unfold_let full or -nofilteremptytp"
+    | LetPast (_,_,_) -> failwith "[Filter_empty_tp] LETPAST not supported; use -verified"
+    | Frex (_,_) -> failwith "[Filter_empty_tp] MATCHF not supported; use -nofilteremptytp"
+    | Prex (_,_) -> failwith "[Filter_empty_tp] MATCHP not supported; use -nofilteremptytp"
   in
   let l = add_labels lf
   in
@@ -358,9 +263,9 @@ let is_filterable_empty_tp f =
   let (lf, l) = go_down f in
   (* --- debugging code ---*)
   if Misc.debugging Misc.Dbg_filter then begin
-    Printf.printf "Filter_empty_tp labels: ";
-    print_labels l;
-    Printf.printf "\n"
+    Printf.eprintf "Filter_empty_tp labels: ";
+    eprint_labels l;
+    Printf.eprintf "\n%!"
   end;
   (* --- end of debugging code ---*)
   if (has_label LFalse l) && (has_label LEvRel l) then
@@ -374,9 +279,9 @@ let enable f =
   enabled := is_filterable_empty_tp f;
   if Misc.debugging Misc.Dbg_all then
     if !enabled then
-      Printf.eprintf "[Filter_empty_tp.enable] Enabled\n"
+      Printf.eprintf "[Filter_empty_tp.enable] Enabled\n%!"
     else
-      Printf.eprintf "[Filter_empty_tp.enable] Disabled\n"
+      Printf.eprintf "[Filter_empty_tp.enable] Disabled\n%!"
 
 let fc_check_filterable_empty_tp f =
   let (lf, l) = go_down f in

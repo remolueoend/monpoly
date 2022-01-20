@@ -8,10 +8,10 @@
   At time point 2:
   At time point 3:
   At time point 4:
-  @10. (time point 0): ()
-  @20. (time point 1): ()
-  @30. (time point 2): ((3,4))
-  @40. (time point 3): ()
+  @10 (time point 0): ()
+  @20 (time point 1): ()
+  @30 (time point 2): ((3,4))
+  @40 (time point 3): ()
 
   $ echo '(Q(a) AND (EVENTUALLY[0,50] P(b)))' > test8_2.mfotl
   $ monpoly -sig test8.sig -formula test8_2.mfotl -log test8.log -verbose -nonewlastts -nofilteremptytp
@@ -23,7 +23,7 @@
   At time point 2:
   At time point 3:
   At time point 4:
-  @10. (time point 0): ()
-  @20. (time point 1): ()
-  @30. (time point 2): ((3,4))
-  @40. (time point 3): ()
+  @10 (time point 0): ()
+  @20 (time point 1): ()
+  @30 (time point 2): ((3,4))
+  @40 (time point 3): ()

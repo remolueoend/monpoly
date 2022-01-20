@@ -5,9 +5,9 @@ Safe-range:
     0 = 0
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): true
+  @200 (time point 1): true
 
 Safe-range:
   $ echo '( 0 =  1)' > test3_2.mfotl
@@ -16,9 +16,9 @@ Safe-range:
     0 = 1
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo '(x =  0)' > test3_3.mfotl
@@ -27,9 +27,9 @@ Safe-range:
     x = 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((0))
+  @200 (time point 1): ((0))
 
 Safe-range:
   $ echo '( 0 = x)' > test3_4.mfotl
@@ -38,9 +38,9 @@ Safe-range:
     0 = x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ((0))
+  @200 (time point 1): ((0))
 
 Domain dependent:
   $ echo '(x = x)' > test3_5.mfotl
@@ -74,7 +74,7 @@ Safe-range:
   The sequence of free variables is: ()
   The analyzed formula is NOT monitorable, because of the subformula:
     0 < 0
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -87,7 +87,7 @@ Safe-range:
   The sequence of free variables is: ()
   The analyzed formula is NOT monitorable, because of the subformula:
     0 < 1
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -100,7 +100,7 @@ Domain dependent (integers):
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < 0
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -113,7 +113,7 @@ Domain dependent (integers):
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < 5
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -126,7 +126,7 @@ Domain dependent:
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     0 < x
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
@@ -138,7 +138,7 @@ Safe-range:
   The sequence of free variables is: (x)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < x
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   However, the input (and also the analyzed) formula is safe-range, 
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
@@ -151,7 +151,7 @@ Domain dependent:
   The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     x < y
-  Formulas of the form t1 < t2 and t1 <= t2 are currently considered not monitorable.
+  Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES t2 are currently considered not monitorable.
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
@@ -162,9 +162,9 @@ Safe-range:
     T() AND 0 = 0
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND ( 0 =  1)' > test3_15.mfotl
@@ -173,9 +173,9 @@ Safe-range:
     T() AND 0 = 1
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND (x =  0)' > test3_16.mfotl
@@ -184,9 +184,9 @@ Safe-range:
     T() AND x = 0
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
 
 Safe-range:
   $ echo 'T() AND ( 0 = x)' > test3_17.mfotl
@@ -195,9 +195,9 @@ Safe-range:
     T() AND 0 = x
   The sequence of free variables is: (x)
   At time point 0:
-  @100. (time point 0): ((0))
+  @100 (time point 0): ((0))
   At time point 1:
-  @200. (time point 1): ()
+  @200 (time point 1): ()
 
 Domain dependent:
   $ echo 'T() AND (x = x)' > test3_18.mfotl
@@ -230,9 +230,9 @@ Safe-range:
     T() AND 0 < 0
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND ( 0 <  1)' > test3_21.mfotl
@@ -241,9 +241,9 @@ Safe-range:
     T() AND 0 < 1
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Domain dependent (integers):
   $ echo 'T() AND (x <  0)' > test3_22.mfotl
@@ -315,9 +315,9 @@ Safe-range:
     T() AND (NOT 0 = 0)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND NOT ( 0 =  1)' > test3_28.mfotl
@@ -326,9 +326,9 @@ Safe-range:
     T() AND (NOT 0 = 1)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Domain dependent:
   $ echo 'T() AND NOT (x =  0)' > test3_29.mfotl
@@ -386,9 +386,9 @@ Safe-range:
     T() AND (NOT 0 < 0)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): true
+  @100 (time point 0): true
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Safe-range:
   $ echo 'T() AND NOT ( 0 <  1)' > test3_34.mfotl
@@ -397,9 +397,9 @@ Safe-range:
     T() AND (NOT 0 < 1)
   The sequence of free variables is: ()
   At time point 0:
-  @100. (time point 0): false
+  @100 (time point 0): false
   At time point 1:
-  @200. (time point 1): false
+  @200 (time point 1): false
 
 Domain dependent:
   $ echo 'T() AND NOT (x <  0)' > test3_35.mfotl

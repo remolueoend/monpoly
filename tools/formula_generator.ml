@@ -24,11 +24,12 @@ Generate these formulas as base cases:
 *)
 
 open QCheck
+open Libmonpoly
 open MFOTL
 open Predicate
 
-module Set = Set.Make(struct type t = string let compare = Pervasives.compare end)
-module IntMap = Map.Make(struct type t = int let compare = Pervasives.compare end)
+module Set = Set.Make(struct type t = string let compare = Stdlib.compare end)
+module IntMap = Map.Make(struct type t = int let compare = Stdlib.compare end)
 open IntMap
 
 type relop = LT | GT | LEQ | GEQ | EQ 
@@ -49,7 +50,6 @@ type genformula =
   | GAndSUB1      of (genformula * genformula)
   | GAndSUB2      of (genformula * genformula)
   | GExists       of (var list * genformula)
-  | GForall       of (var list * genformula)
   | GPrev         of (interval * genformula)
   | GNext         of (interval * genformula)
   | GOnce         of (interval * genformula)
@@ -82,7 +82,6 @@ let gAndEQ       f1 f2        = GAndEQ       (f1, f2)
 let gAndSUB1     f1 f2        = GAndSUB1     (f1, f2) 
 let gAndSUB2     f1 f2        = GAndSUB2     (f1, f2) 
 let gExists      v f          = GExists      (v, f) 
-let gForall      v f          = GForall      (v, f) 
 let gPrev        i f          = GPrev        (i, f) 
 let gNext        i f          = GNext        (i, f) 
 let gOnce        i f          = GOnce        (i, f) 
@@ -137,7 +136,6 @@ let rec formula_of_genformula = function
 | GAndSUB1     (f1, f2)
 | GAndSUB2     (f1, f2)    -> And (formula_of_genformula f1, formula_of_genformula f2)
 | GExists      (v, f)      -> Exists (v, formula_of_genformula f)
-| GForall      (v, f)      -> ForAll (v, formula_of_genformula f)
 | GPrev        (i, f)      -> Prev (i, formula_of_genformula f)
 | GNext        (i, f)      -> Next (i, formula_of_genformula f)
 | GOnce        (i, f)
@@ -171,7 +169,7 @@ let mapSnd f (a,b) = (a,f b)
 (* Fully parenthesize an MFOTL formula *)
 let string_of_parenthesized_formula_qtl str g =
 let check_interval = function
-| (CBnd 0., Inf) -> ""
+| (CBnd lb, Inf) when lb = Z.zero -> ""
 (* | (OBnd 0., Inf) -> "" *)
 | _ -> failwith "Unsupported: metric operators" in
 let rec string_f_rec top par h =
@@ -305,32 +303,32 @@ let string_of_genformula_qtl f = string_of_parenthesized_formula_qtl "prop rando
 let interval_gen_bound max_lb max_delta =
     let lb = Gen.int_bound (max max_lb 0) in
     let delta = Gen.int_bound max_delta in
-    let ival = Gen.map2 (fun l d -> (l, (l + d))) lb delta in
+    let ival = Gen.map2 (fun l d -> (l, l + d)) lb delta in
     let lp = Gen.bool in
     let rp = Gen.bool in
-    Gen.map3 
-    (fun (a,b) l r -> 
-      let (x,y) = (float_of_int a, float_of_int b) in
-      if y <= x then (CBnd x, CBnd x) 
+    Gen.map3
+    (fun (a,b) l r ->
+      let a, b = Z.of_int a, Z.of_int b in
+      if b <= a then (CBnd a, CBnd a) 
       else
         match (l,r) with 
-          | (true,true)   -> (CBnd x, CBnd y)
-          | (true, false)  -> (CBnd x, OBnd y)
-          | (false,true)  -> (OBnd x, CBnd y)
-          | _             -> (OBnd x, OBnd y)
+          | (true,true)   -> (CBnd a, CBnd b)
+          | (true, false)  -> (CBnd a, OBnd b)
+          | (false,true)  -> (OBnd a, CBnd b)
+          | _             -> (OBnd a, OBnd b)
     ) 
     ival lp rp
   
   let interval_gen_inf max_lb =
-    let noint = Gen.return (CBnd 0., Inf) in
+    let noint = Gen.return (CBnd Z.zero, Inf) in
     if (max_lb == -1) then noint else
       let lb = Gen.int_bound max_lb in
       let lp = Gen.bool in
-      Gen.map2 (fun a l -> 
-      let x = float_of_int a in
+      Gen.map2 (fun a l ->
+      let a = Z.of_int a in
       match l with 
-        | true   -> (CBnd x, Inf)
-        | _      -> (OBnd x, Inf)
+        | true   -> (CBnd a, Inf)
+        | _      -> (OBnd a, Inf)
       ) 
       lb lp
 
@@ -359,7 +357,9 @@ let random_subset = Gen.oneofl << powerset
     Since Verimon does not support var1 = var2 formulas this is used with n=1
     to pick variables for constraints of the form var = const
 *)
-let random_bounded_subset n = Gen.oneofl << List.filter (fun x -> let l = List.length x in 1<=l && l <= n) << powerset 
+let random_bounded_subset n = 
+  assert (n > 0);
+  Gen.oneofl << List.filter (fun x -> let l = List.length x in 1<=l && l <= n) << powerset 
 
 let shuffle l =
   let a = Array.of_list l in
@@ -373,20 +373,19 @@ let shuffle l =
 
 let var_op f vs1 vs2 = Set.elements (f (Set.of_list vs1) (Set.of_list vs2))
 
-let rel_gen vs all_rels max_const = 
+let rel_gen v all_rels max_const = 
   let rel  = if all_rels then Gen.oneofl [LT ; GT ; LEQ ; GEQ ; EQ] else Gen.return EQ in 
   let cons1 = Gen.int_bound max_const in 
   let cons2 = Gen.int_bound max_const in 
   cons1 >>= (fun c1 -> 
   cons2 >>= (fun c2 -> 
-    vs >>= (fun v -> 
       rel >>= (fun r -> 
       (fun s -> match (List.length v) with
         | 2 ->  gRel r (Var (List.hd v)) (Var (List.hd (List.tl v)))
         | 1 ->  gRel r (Var (List.hd v)) (Cst (Int c1))
         | 0 ->  gRel r (Cst (Int c1)) (Cst (Int c2))
         | _ -> failwith "Rigid predicates can have up to 2 variables"
-      )))))
+      ))))
 
 let predicate_gen map vs =
   let vs = List.map (fun e -> Var e) vs in 
@@ -421,8 +420,8 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       let predbool = Gen.bool in
       predbool >>= (fun b ->
         if b then 
-          let twovars = random_bounded_subset vnum vars in
-          Gen.map (fun e -> (predmap,e)) (rel_gen twovars all_rels max_const)
+          (* let twovars = random_bounded_subset vnum vars in *)
+          Gen.map (fun e -> (predmap,e)) (rel_gen vars all_rels max_const)
         else
           Gen.map (mapSnd gPred) (predicate_gen predmap vars)
       )
@@ -459,7 +458,7 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       let aggr_gen_mm = Gen.oneofl [MAX ; MIN] in
       let aggr_gen_mmcs = Gen.oneofl [MAX ; MIN ; CNT ; SUM] in
       let side = Gen.bool in
-      let noint = Gen.return (CBnd 0., Inf) in
+      let noint = Gen.return (CBnd Z.zero, Inf) in
       let interval = if qtl then noint else interval_gen max_lb max_interval in
       let interval_bound = if qtl then noint else interval_gen_bound max_lb max_interval in
       let interval_inf = if qtl then noint else interval_gen_inf max_lb in
@@ -473,11 +472,12 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
       let m = Random.int n in
       let unarybind f vars =
         let twovars = random_bounded_subset 1 vars in
-        let sf = rel_gen twovars all_rels max_const in 
+        twovars >>= (fun v -> 
+        let sf = rel_gen v all_rels max_const in 
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf1) -> 
               sf >>= (fun sf2 ->
-                  (fun s -> (newMap, f sf1 sf2)))) in 
+                  (fun s -> (newMap, f sf1 sf2))))) in 
       let metricunarybind f intr =
         (go (predmap, vars, (n-1))) >>= 
             (fun (newMap,sf) -> 
@@ -492,9 +492,9 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
                         else side >>= 
                           (fun left -> 
                             if left then 
-                            (fun s -> (newestMap, (f (gOnce (CBnd 0., Inf) lf) rf)))
+                            (fun s -> (newestMap, (f (gOnce (CBnd Z.zero, Inf) lf) rf)))
                             else 
-                            (fun s -> (newestMap, (f lf (gOnce (CBnd 0., Inf) rf))))
+                            (fun s -> (newestMap, (f lf (gOnce (CBnd Z.zero, Inf) rf))))
                           )
                     )) 
                         in
@@ -565,7 +565,6 @@ let formula_gen signature max_lb max_interval past_only all_rels aggr foo ndi ma
         1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gAnd v1 v2'));
         1, vars_sub1 >>= (fun v1 -> vars_sub2 >>= (fun v2 -> let v2' = fv_cover v1 v2 vars in binarybind gOr v1 v2'));
         1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gExists [new_bv] sf)));
-        1, (go (predmap, (new_bv :: vars), (n-1))) >>= (fun (newMap,sf) -> (fun s -> (newMap, gForall [new_bv] sf)));
        tq, metricunarybind gPrev        interval;
     fq*tq, metricunarybind gNext        interval_bound;
        tq, metricunarybind gOnce        interval;

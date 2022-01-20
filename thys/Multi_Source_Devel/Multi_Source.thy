@@ -1258,9 +1258,9 @@ lemma mod_nat_cancel_left_add:
   shows "(c - b mod c + (a + b) mod c) mod c = a mod c"
 proof -
   have "(c - b mod c + (a + b) mod c) mod c = (c - b mod c + a mod c + b mod c) mod c"
-    by (metis (no_types, hide_lams) add.commute group_cancel.add2 mod_add_left_eq)
+    by (metis (no_types, opaque_lifting) add.commute group_cancel.add2 mod_add_left_eq)
   also have "\<dots> = ((c - b mod c + b mod c) mod c + a mod c) mod c"
-    by (metis (no_types, hide_lams) add.commute group_cancel.add2 mod_add_eq mod_add_right_eq)
+    by (metis (no_types, opaque_lifting) add.commute group_cancel.add2 mod_add_eq mod_add_right_eq)
   finally show ?thesis
     using assms by (simp add: mod_nat_cancel_left)
 qed
@@ -1883,7 +1883,7 @@ lemma sset_ssorted_ge_shd: "x \<in> sset s \<Longrightarrow> ssorted (smap f s) 
 
 lemma set_sorted_distinct_gr: "y \<in> set xs \<Longrightarrow> sorted (map f (x # xs)) \<Longrightarrow>
   distinct (map f (x # xs)) \<Longrightarrow> f x < f y"
-  by (smt distinct.simps(2) image_eqI less_le_trans list.simps(9) not_less_iff_gr_or_eq set_map sorted.simps(2))
+  by (metis image_eqI image_set list.simps(9) strict_sorted_iff strict_sorted_simps(2))
 
 lemma sorted_distinct_prefix_lemma: "ssorted (smap f s) \<Longrightarrow> sdistinct (smap f s) \<Longrightarrow>
   sorted (map f xs) \<Longrightarrow> distinct (map f xs) \<Longrightarrow>

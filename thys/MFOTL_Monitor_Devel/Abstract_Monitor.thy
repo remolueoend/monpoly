@@ -135,6 +135,9 @@ definition M :: "'a prefix \<Rightarrow> (nat \<times> 'b tuple) set" where
   "M \<pi> = {(i, v). i < progress \<pi> \<and> wf_tuple nfv fv v \<and>
     (\<forall>\<sigma> \<in> traces. prefix_of \<pi> \<sigma> \<longrightarrow> sat \<sigma> (map the v) i)}"
 
+definition Mt :: "'a prefix \<Rightarrow> (nat \<times> nat \<times> 'b tuple) set" where
+  "Mt \<pi> = (\<lambda>(i, v). (i, pts \<pi> ! i, v)) ` M \<pi>"
+
 lemma M_alt: "\<pi> \<in> prefixes \<Longrightarrow> M \<pi> = {(i, v). i < progress \<pi> \<and> wf_tuple nfv fv v \<and>
     (\<exists>\<sigma> \<in> traces. prefix_of \<pi> \<sigma> \<and> sat \<sigma> (map the v) i)}"
   using ex_prefix_of[of \<pi>]
@@ -196,10 +199,10 @@ locale abstract_slicer =
   fixes relevant_events :: "'b list set \<Rightarrow> 'a set"
 begin
 
-abbreviation slice :: "'b list set \<Rightarrow> 'a trace \<Rightarrow> 'a trace" where
+abbreviation slice :: "'b list set \<Rightarrow> 'a set trace \<Rightarrow> 'a set trace" where
   "slice S \<equiv> map_\<Gamma> (\<lambda>D. D \<inter> relevant_events S)"
 
-abbreviation pslice :: "'b list set \<Rightarrow> 'a prefix \<Rightarrow> 'a prefix" where
+abbreviation pslice :: "'b list set \<Rightarrow> 'a set prefix \<Rightarrow> 'a set prefix" where
   "pslice S \<equiv> pmap_\<Gamma> (\<lambda>D. D \<inter> relevant_events S)"
 
 lemma prefix_of_psliceI: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of (pslice S \<pi>) (slice S \<sigma>)"
@@ -220,7 +223,7 @@ abbreviation verdict_filter :: "'b list set \<Rightarrow> (nat \<times> 'b tuple
 end
 
 locale sliceable_fo_spec = fo_spec _ _ _ sat + abstract_slicer relevant_events
-  for relevant_events :: "'b list set \<Rightarrow> 'a set" and sat :: "'a trace \<Rightarrow> 'b list \<Rightarrow> nat \<Rightarrow> bool" +
+  for relevant_events :: "'b list set \<Rightarrow> 'a set" and sat :: "'a set trace \<Rightarrow> 'b list \<Rightarrow> nat \<Rightarrow> bool" +
   assumes
     slice_closed[simp, intro]: "\<sigma> \<in> traces \<Longrightarrow> slice S \<sigma> \<in> traces" and
     sliceable: "\<sigma> \<in> traces \<Longrightarrow> v \<in> S \<Longrightarrow> sat (slice S \<sigma>) v i \<longleftrightarrow> sat \<sigma> v i"
@@ -277,7 +280,7 @@ text \<open>
 \<close>
 
 locale sliceable_monitor = monitor _ _ _ sat M + abstract_slicer relevant_events
-  for relevant_events :: "'b list set \<Rightarrow> 'a set" and sat :: "'a trace \<Rightarrow> 'b list \<Rightarrow> nat \<Rightarrow> bool" and M +
+  for relevant_events :: "'b list set \<Rightarrow> 'a set" and sat :: "'a set trace \<Rightarrow> 'b list \<Rightarrow> nat \<Rightarrow> bool" and M +
   assumes sliceable_M: "\<pi> \<in> prefixes \<Longrightarrow> mem_restr S v \<Longrightarrow> (i, v) \<in> M (pslice S \<pi>) \<longleftrightarrow> (i, v) \<in> M \<pi>"
 begin
 

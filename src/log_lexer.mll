@@ -4,6 +4,7 @@
  * Copyright © 2011 Nokia Corporation and/or its subsidiary(-ies).
  * Contact:  Nokia Corporation (Debmalya Biswas: debmalya.biswas@nokia.com)
  *
+ * Copyright (C) 2021 ETH Zurich.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -34,15 +35,12 @@
  * covered by the GNU Lesser General Public License.
  *)
 
-
-
 {
-open Misc
-open Lexing
-open Log_parser
+type token = AT | LPA | RPA | LCB | RCB | COM | SEP | CMD | EOC | EOF | ERR
+  | STR of string
 
 let f str lexbuf =
-  if Misc.debugging Dbg_log then
+  if Misc.debugging Misc.Dbg_log then
     let lxm = Lexing.lexeme lexbuf in
     let show = match lxm with
       | "\n" -> "\\n"
@@ -51,66 +49,46 @@ let f str lexbuf =
       | _ -> lxm
     in
     begin
-      Printf.printf "[Log_lexer]  %s is -%s- with " str show;
-      Printf.printf "abs=%d len=%d start=%d curr=%d last=%d start_p=%d curr_p=%d\n%!"
+      Printf.eprintf "[Log_lexer]  %s is -%s- with " str show;
+      Printf.eprintf "abs=%d len=%d start=%d curr=%d last=%d start_p=%d curr_p=%d\n%!"
         lexbuf.lex_abs_pos lexbuf.lex_buffer_len lexbuf.lex_start_pos lexbuf.lex_curr_pos lexbuf.lex_last_pos
         lexbuf.lex_start_p.pos_cnum lexbuf.lex_curr_p.pos_cnum
     end
   else
     ()
-
-let strip str =
-  let len = String.length str in
-  if str.[0] = '\"' && str.[len-1] = '\"' then
-    String.sub str 1 (len-2)
-  else
-    str
-
-let new_line lexbuf =
-  let lcp = lexbuf.lex_curr_p in
-  lexbuf.lex_curr_p <-
-    { lcp with
-      pos_lnum = lcp.pos_lnum + 1;
-      pos_bol = lcp.pos_cnum;
-    }
 }
 
 let lc = ['a'-'z']
 let uc = ['A'-'Z']
 let letter = uc | lc
 let digit = ['0'-'9']
-let integer = digit*
-let string = (letter | digit | '_' | '[' | ']' | '/' | ':' | '-' | '.' | '!')* | '"'[^'"']*'"'
+let string = (letter | digit | '_' | '[' | ']' | '/' | ':' | '-' | '.' | '!')+
+let quoted_string = ([^ '"' '\\'] | '\\' _)*
 
 rule
   token = parse
-  | [' ' '\t' ]              { f "white space" lexbuf; token lexbuf }
-  | "\n" | "\r" | "\r\n"     { f "line break" lexbuf; new_line lexbuf; token lexbuf }
-  | "@"                      { f "TS"  lexbuf; AT }
+  | [' ' '\t']               { f "white space" lexbuf; token lexbuf }
+  | "\n" | "\r" | "\r\n"     { f "line break" lexbuf; Lexing.new_line lexbuf; token lexbuf }
+  | "@"                      { f "AT"  lexbuf; AT }
   | ">"                      { f "CMD" lexbuf; CMD }
-  | "<"                      { f "CMD" lexbuf; EOC }
+  | "<"                      { f "EOC" lexbuf; EOC }
   | "("                      { f "LPA" lexbuf; LPA }
   | ")"                      { f "RPA" lexbuf; RPA }
   | "{"                      { f "LBC" lexbuf; LCB }
   | "}"                      { f "RCB" lexbuf; RCB }
   | ","                      { f "COM" lexbuf; COM }
-  | ";"                      { f "TERMINATOR"  lexbuf; TR }
-  
-  | string as lxm            { f "STR" lexbuf; STR (strip lxm) }
+  | ";"                      { f "SEP" lexbuf; SEP }
 
-  | "#"                      { f "#" lexbuf; line_comment lexbuf }
+  | string as s              { f "STR" lexbuf; STR s }
+  | '"' (quoted_string as s) '"'   { f "STR" lexbuf; STR s }
+  | "r\"" (quoted_string as s) '"' { f "STR" lexbuf; STR s }
 
+  | "#"                      { f "begin comment" lexbuf; line_comment lexbuf }
   | eof                      { f "EOF" lexbuf; EOF }
-
-  | _                        { f "ERR" lexbuf;
-                               if !Misc.ignore_parse_errors then
-                                 ERR
-                               else
-                                 failwith "Illegal character in log file."
-                             }
+  | _                        { f "ERR" lexbuf; ERR }
 
 and
   line_comment = parse
-  | ['\n' '\r']              { f "end comment" lexbuf; new_line lexbuf; token lexbuf }
-  | _                        { f "any" lexbuf; line_comment lexbuf }
-  | eof                      { f "eof" lexbuf; EOF }
+  | "\n" | "\r" | "\r\n"     { f "end comment" lexbuf; Lexing.new_line lexbuf; token lexbuf }
+  | eof                      { f "EOF" lexbuf; EOF }
+  | _                        { f "comment" lexbuf; line_comment lexbuf }

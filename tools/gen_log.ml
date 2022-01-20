@@ -184,13 +184,13 @@ let foi = float_of_int
 
 module MgrSet = Set.Make ( 
   struct
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
     type t = int * int
   end )
 
 module AccSet = Set.Make ( 
   struct
-    let compare = Pervasives.compare
+    let compare = Stdlib.compare
     type t = int
   end )
 

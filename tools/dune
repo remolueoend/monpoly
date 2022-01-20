@@ -1,0 +1,12 @@
+(executable
+  (name gen_log)
+  (public_name gen_log)
+  (package monpoly-tools)
+  (modules PrioQueue Gen_log))
+
+(executable
+  (name gen_fma)
+  (public_name gen_fma)
+  (package monpoly-tools)
+  (modules Random_generator Formula_generator Gen_fma)
+  (libraries libmonpoly qcheck))

@@ -92,13 +92,13 @@ qed
 lemma sincreasing_stl: "sincreasing s \<Longrightarrow> sincreasing (stl s)" for s :: "'a :: semilattice_sup stream"
   by (auto 0 4 simp: gr0_conv_Suc intro!: sincreasingI dest: sincreasing_grD[of s 0])
 
-typedef 'a trace = "{s :: ('a set \<times> nat) stream. ssorted (smap snd s) \<and> sincreasing (smap snd s)}"
-  by (intro exI[of _ "smap (\<lambda>i. ({}, i)) nats"])
+typedef 'a trace = "{s :: ('a \<times> nat) stream. ssorted (smap snd s) \<and> sincreasing (smap snd s)}"
+  by (intro exI[of _ "smap (\<lambda>i. (undefined, i)) nats"])
     (auto simp: stream.map_comp stream.map_ident cong: stream.map_cong)
 
 setup_lifting type_definition_trace
 
-lift_definition \<Gamma> :: "'a trace \<Rightarrow> nat \<Rightarrow> 'a set" is
+lift_definition \<Gamma> :: "'a trace \<Rightarrow> nat \<Rightarrow> 'a" is
   "\<lambda>s i. fst (s !! i)" .
 lift_definition \<tau> :: "'a trace \<Rightarrow> nat \<Rightarrow> nat" is
   "\<lambda>s i. snd (s !! i)" .
@@ -123,7 +123,7 @@ lemma less_\<tau>D: "\<tau> \<sigma> i < \<tau> \<sigma> j \<Longrightarrow> i <
 
 abbreviation "\<Delta> s i \<equiv> \<tau> s i - \<tau> s (i - 1)"
 
-lift_definition map_\<Gamma> :: "('a set \<Rightarrow> 'b set) \<Rightarrow> 'a trace \<Rightarrow> 'b trace" is
+lift_definition map_\<Gamma> :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a trace \<Rightarrow> 'b trace" is
   "\<lambda>f s. smap (\<lambda>(x, i). (f x, i)) s"
   by (auto simp: stream.map_comp prod.case_eq_if cong: stream.map_cong)
 
@@ -145,12 +145,12 @@ lemma map_\<Gamma>_cong: "\<sigma>\<^sub>1 = \<sigma>\<^sub>2 \<Longrightarrow> 
 
 subsection \<open>Finite trace prefixes\<close>
 
-typedef 'a prefix = "{p :: ('a set \<times> nat) list. sorted (map snd p)}"
+typedef 'a prefix = "{p :: ('a \<times> nat) list. sorted (map snd p)}"
   by (auto intro!: exI[of _ "[]"])
 
 setup_lifting type_definition_prefix
 
-lift_definition pmap_\<Gamma> :: "('a set \<Rightarrow> 'b set) \<Rightarrow> 'a prefix \<Rightarrow> 'b prefix" is
+lift_definition pmap_\<Gamma> :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a prefix \<Rightarrow> 'b prefix" is
   "\<lambda>f. map (\<lambda>(x, i). (f x, i))"
   by (simp add: split_beta comp_def)
 
@@ -164,7 +164,7 @@ lift_definition pnil :: "'a prefix" is "[]" by simp
 
 lift_definition plen :: "'a prefix \<Rightarrow> nat" is "length" .
 
-lift_definition psnoc :: "'a prefix \<Rightarrow> 'a set \<times> nat \<Rightarrow> 'a prefix" is
+lift_definition psnoc :: "'a prefix \<Rightarrow> 'a \<times> nat \<Rightarrow> 'a prefix" is
   "\<lambda>p x. if (case p of [] \<Rightarrow> 0 | _ \<Rightarrow> snd (last p)) \<le> snd x then p @ [x] else []"
 proof (goal_cases sorted_psnoc)
   case (sorted_psnoc p x)
@@ -222,6 +222,9 @@ lemma prefix_of_psnocE: "prefix_of (psnoc p x) s \<Longrightarrow> last_ts p \<l
 lemma le_pnil[simp]: "pnil \<le> \<pi>"
   by transfer auto
 
+lemma le_psnocI: "last_ts \<pi> \<le> snd x \<Longrightarrow> \<pi> \<le> psnoc \<pi> x"
+  by transfer (simp split: list.split)
+
 lift_definition take_prefix :: "nat \<Rightarrow> 'a trace \<Rightarrow> 'a prefix" is stake
   by (auto dest: sorted_stake)
 
@@ -245,7 +248,7 @@ lemma prefix_of_antimono: "\<pi> \<le> \<pi>' \<Longrightarrow> prefix_of \<pi>'
 
 lemma prefix_of_imp_linear: "prefix_of \<pi> \<sigma> \<Longrightarrow> prefix_of \<pi>' \<sigma> \<Longrightarrow> \<pi> \<le> \<pi>' \<or> \<pi>' \<le> \<pi>"
 proof transfer
-  fix \<pi> \<pi>' and \<sigma> :: "('a set \<times> nat) stream"
+  fix \<pi> \<pi>' and \<sigma> :: "('a \<times> nat) stream"
   assume assms: "stake (length \<pi>) \<sigma> = \<pi>" "stake (length \<pi>') \<sigma> = \<pi>'"
   show "(\<exists>r. \<pi>' = \<pi> @ r) \<or> (\<exists>r. \<pi> = \<pi>' @ r)"
   proof (cases "length \<pi>" "length \<pi>'" rule: le_cases)
@@ -267,7 +270,7 @@ qed
 
 lemma ex_prefix_of: "\<exists>s. prefix_of p s"
 proof (transfer, intro bexI CollectI conjI)
-  fix p :: "('a set \<times> nat) list"
+  fix p :: "('a \<times> nat) list"
   assume *: "sorted (map snd p)"
   let ?\<sigma> = "p @- smap (Pair undefined) (fromN (snd (last p)))"
   show "stake (length p) ?\<sigma> = p" by (simp add: stake_shift)
@@ -340,7 +343,7 @@ qed
 
 lift_definition replace_prefix :: "'a prefix \<Rightarrow> 'a trace \<Rightarrow> 'a trace" is
    "\<lambda>\<pi> \<sigma>. if ssorted (smap snd (\<pi> @- sdrop (length \<pi>) \<sigma>)) then
-     \<pi> @- sdrop (length \<pi>) \<sigma> else smap (\<lambda>i. ({}, i)) nats"
+     \<pi> @- sdrop (length \<pi>) \<sigma> else smap (\<lambda>i. (undefined, i)) nats"
   by (auto split: if_splits simp: stream.map_comp stream.map_ident sdrop_smap[symmetric]
     simp del: sdrop_smap intro!: sincreasing_shift sincreasing_sdrop cong: stream.map_cong)
 
@@ -386,6 +389,15 @@ lift_definition pts :: "'a prefix \<Rightarrow> nat list" is "map snd" .
 
 lemma pts_pmap_\<Gamma>[simp]: "pts (pmap_\<Gamma> f \<pi>) = pts \<pi>"
   by (transfer fixing: f) (simp add: split_beta)
+
+lemma pts_psnoc: "last_ts \<pi> \<le> snd x \<Longrightarrow> pts (psnoc \<pi> x) = pts \<pi> @ [snd x]"
+  by transfer (simp split: list.split)
+
+lemma length_pts_eq_plen: "length (pts \<pi>) = plen \<pi>"
+  by transfer simp
+
+lemma nth_pts_eq_\<tau>: "prefix_of \<pi> \<sigma> \<Longrightarrow> i < plen \<pi> \<Longrightarrow> pts \<pi> ! i = \<tau> \<sigma> i"
+  by transfer (metis nth_map stake_nth)
 
 (*<*)
 end

@@ -46,17 +46,23 @@ let enabled = ref false
 (* --- predicate filter --- *)
 let predicate_filter = ref []
 
-let rec print_preds = function
-  | [] -> Printf.printf "\n"
+
+let rec string_of_preds = function
+  | [] -> "\n"
   | h :: t ->
-    Printf.printf "%s, " h;
-    print_preds t
+    h ^ ", " ^ string_of_preds t
+
+let print_preds l = Printf.printf "%s%!" (string_of_preds l)
+
+let eprint_preds l = Printf.eprintf "%s%!" (string_of_preds l)
 
 let get_predicates f =
   let rec get_preds bound preds = function
     | Equal (t1,t2)
     | Less (t1,t2)
-    | LessEq (t1,t2) -> preds
+    | LessEq (t1,t2)
+    | Matches (t1,t2)
+    | Substring (t1,t2) -> preds
     | Pred p ->
         let pn = Predicate.get_name p in
         if List.mem pn bound then preds else pn :: preds
@@ -81,6 +87,9 @@ let get_predicates f =
     | Let (p,f1,f2) ->
         let bound2 = Predicate.get_name p :: bound in
         get_preds bound2 (get_preds bound preds f1) f2
+    | LetPast (p,f1,f2) ->
+        let bound2 = Predicate.get_name p :: bound in
+        get_preds bound2 (get_preds bound preds f1) f2
   and get_re_preds bound preds = function
     | Wild -> preds
     | Test f -> get_preds bound preds f
@@ -94,8 +103,8 @@ let set_pred_names f =
   predicate_filter := get_predicates f;
   if Misc.debugging Dbg_filter then
     begin
-      Printf.printf "--- predicate_filter: ---\n";
-      print_preds !predicate_filter
+      Printf.eprintf "--- predicate_filter: ---\n";
+      eprint_preds !predicate_filter
     end
 
 let rel_OK p =
@@ -133,7 +142,9 @@ let get_tuple_filter f =
   let rec get_tuples bound tuples = function (* formula *)
     | Equal (t1,t2)
     | Less (t1,t2)
-    | LessEq (t1,t2) -> tuples
+    | LessEq (t1,t2)
+    | Substring (t1,t2)
+    | Matches (t1,t2) -> tuples
     | Pred p ->
         let pn = Predicate.get_name p in
         if List.mem pn bound
@@ -158,6 +169,9 @@ let get_tuple_filter f =
     | Frex (_,r)
     | Prex (_,r) -> get_re_tuples bound tuples r
     | Let (p,f1,f2) ->
+        let bound2 = Predicate.get_name p :: bound in
+        get_tuples bound2 (get_tuples bound tuples f1) f2
+    | LetPast (p,f1,f2) ->
         let bound2 = Predicate.get_name p :: bound in
         get_tuples bound2 (get_tuples bound tuples f1) f2
   and get_re_tuples bound tuples = function (* regex *)
@@ -192,31 +206,33 @@ let get_tuple_filter f =
 let is_cst_from_csts csts =
   remove_duplicates (List.map (fun (p,i,c) -> (p,i)) csts)
 
-let rec print_csts = function
-  | [] -> ()
-  | (p,i,c) :: t ->
-    Printf.printf "(%s,%d," p i;
-    Predicate.print_cst true c;
-    Printf.printf ")\n";
-    print_csts t
+let rec string_of_csts = function
+| [] -> ""
+| (p,i,c) :: t -> "(" ^ p ^ "," ^ (string_of_int i) ^ "," ^ Predicate.string_of_cst c ^ ")\n" ^
+  string_of_csts t
 
-let rec print_is_cst = function
-  | [] -> ()
-  | (p,i) :: t ->
-    Printf.printf "(%s,%d)\n" p i;
-    print_is_cst t
+let rec print_csts l = Printf.printf "%s" (string_of_csts l)
+
+let rec eprint_csts l = Printf.eprintf "%s" (string_of_csts l)
+
+let rec string_of_is_cst = function
+| [] -> ""
+| (p,i) :: t ->
+  "(" ^ p ^ "," ^ (string_of_int i) ^ ")\n" ^ string_of_is_cst t
+let print_is_cst l = Printf.printf "%s" (string_of_is_cst l)
+let eprint_is_cst l = Printf.eprintf "%s" (string_of_is_cst l)
 
 let set_tuples f =
   tuple_filter_csts := get_tuple_filter f;
   tuple_filter_is_cst := is_cst_from_csts !tuple_filter_csts;
   if Misc.debugging Dbg_filter then
     begin
-      Printf.printf "--- tuple_filter: is_cst ---\n";
-      print_is_cst !tuple_filter_is_cst;
-      Printf.printf "--- tuple_filter: csts ---\n";
-      print_csts !tuple_filter_csts;
-      Printf.printf "--- ---\n";
-      Printf.printf "%!"
+      Printf.eprintf "--- tuple_filter: is_cst ---\n";
+      eprint_is_cst !tuple_filter_is_cst;
+      Printf.eprintf "--- tuple_filter: csts ---\n";
+      eprint_csts !tuple_filter_csts;
+      Printf.eprintf "--- ---\n";
+      Printf.eprintf "%!"
     end
 
 let tuple_OK pred tuple =
@@ -263,7 +279,10 @@ let enable f =
   set_pred_names f;
   set_tuples f;
   if Misc.debugging Misc.Dbg_all then
-    Printf.eprintf "[Filter_rel.enable] Enabled\n"
+    begin
+    Printf.eprintf "[Filter_rel.enable] Enabled\n";
+    Printf.eprintf "%!";
+    end
 
 let get_all_filters _ =
   (!predicate_filter, !tuple_filter_is_cst, !tuple_filter_csts)
@@ -274,12 +293,12 @@ let set_all_filters (f1, f2, f3) =
   tuple_filter_csts := f3;
   if Misc.debugging Dbg_filter then
     begin
-      Printf.printf "--- predicate_filter: ---\n";
-      print_preds !predicate_filter;
-      Printf.printf "--- tuple_filter: is_cst ---\n";
-      print_is_cst !tuple_filter_is_cst;
-      Printf.printf "--- tuple_filter: csts ---\n";
-      print_csts !tuple_filter_csts;
-      Printf.printf "--- ---\n";
-      Printf.printf "%!"
+      Printf.eprintf "--- predicate_filter: ---\n";
+      eprint_preds !predicate_filter;
+      Printf.eprintf "--- tuple_filter: is_cst ---\n";
+      eprint_is_cst !tuple_filter_is_cst;
+      Printf.eprintf "--- tuple_filter: csts ---\n";
+      eprint_csts !tuple_filter_csts;
+      Printf.eprintf "--- ---\n";
+      Printf.eprintf "%!"
     end

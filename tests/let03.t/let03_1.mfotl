@@ -1,0 +1,3 @@
+LET A(x) = P(x) IN
+LET A(x) = Q(x) IN
+A(x) AND A(x)

@@ -39,7 +39,7 @@ locale event_separable_splitter =
   fixes event_splitter :: "'a \<Rightarrow> 'k :: finite set"
 begin
 
-lift_definition splitter :: "'a prefix \<Rightarrow> 'k \<Rightarrow> 'a prefix" is
+lift_definition splitter :: "'a set prefix \<Rightarrow> 'k \<Rightarrow> 'a set prefix" is
   "\<lambda>\<pi> k. map (\<lambda>(D, t). ({e \<in> D. k \<in> event_splitter e}, t)) \<pi>"
   by (auto simp: o_def split_beta)
 
