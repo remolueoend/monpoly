@@ -109,3 +109,13 @@ Note: division by zero is defined to be zero by VeriMon
   @100 (time point 0): ((10,1,2),(10,3,3),(10,4,6),(10,7,0),(10,10,1))
   At time point 1:
   @200 (time point 1): ((10,0,1))
+
+  $ echo 'S(a,b,c) AND NOT b = 0 AND a / b - c = 8' > test18_12.mfotl
+  $ monpoly -verified -sig test18.sig -formula test18_12.mfotl -log test18.log -verbose -nonewlastts
+  The analyzed formula is:
+    (S(a,b,c) AND (NOT b = 0)) AND (a / b) - c = 8
+  The sequence of free variables is: (a,b,c)
+  At time point 0:
+  @100 (time point 0): ((10,1,2))
+  At time point 1:
+  @200 (time point 1): ()
