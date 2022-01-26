@@ -166,7 +166,7 @@
 
 
 %left PLUS MINUS                                             /* lowest precedence */
-%left STAR DIV                                               /* medium precedence */
+%left STAR SLASH                                             /* medium precedence */
 %nonassoc UMINUS F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE /* highest precedence */
 
 %start formula
