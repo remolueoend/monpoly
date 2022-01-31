@@ -1502,7 +1502,7 @@ definition insert_into_db :: "string8 \<times> nat \<Rightarrow> event_data tupl
 definition rbt_fold :: "_ \<Rightarrow> event_data tuple set_rbt \<Rightarrow> _ \<Rightarrow> _" where
   "rbt_fold = RBT_Set2.fold"
 
-(*fun finite_multiset_insert_fun :: "event_data \<times> enat \<Rightarrow> bool \<Rightarrow> bool" where
+fun finite_multiset_insert_fun :: "event_data \<times> enat \<Rightarrow> bool \<Rightarrow> bool" where
   "finite_multiset_insert_fun (_, k) v = ((if k = infinity then False else True) \<and> v)"
 
 lemma finite_mset_insert_idem: 
@@ -1526,7 +1526,6 @@ lemma finite_multiset_eq:
   shows "finite_multiset M = 
          Finite_Set.fold finite_multiset_insert_fun True M"
 proof -
-  have "fold (\<and>) (map (\<lambda>(s, e). e \<noteq> infinity) (csorted_list_of_set M)) True"
   interpret comp_fun_idem finite_multiset_insert_fun
     using finite_mset_insert_idem by auto
   from assms show ?thesis
@@ -1545,10 +1544,11 @@ qed
 
 lift_definition finite_multiset_cfi :: "(event_data \<times> enat, bool) comp_fun_idem" is 
   "finite_multiset_insert_fun"
-  using finite_mset_insert_idem .*)
+  using finite_mset_insert_idem .
 
-lemma [code]: "finite_multiset M = (if True then True else False)"
-  sorry
+lemma finite_multiset_code[code]:
+  "finite_multiset M = (if finite M then set_fold_cfi finite_multiset_cfi True M else False)"
+  using finite_multiset_def finite_multiset_eq by transfer auto
 
 (*<*)
 end

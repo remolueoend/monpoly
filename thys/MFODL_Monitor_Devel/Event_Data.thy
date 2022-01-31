@@ -142,6 +142,22 @@ instance ..
 
 end
 
+lemma infinite_UNIV_event_data:
+  "\<not>finite (UNIV :: event_data set)"
+proof -
+  define f where "f = (\<lambda>k. EInt k)"
+  have inj: "inj_on f (UNIV :: integer set)"
+    unfolding f_def by (meson event_data.inject(1) injI)
+  show ?thesis using finite_imageD[OF _ inj] 
+    by (meson infinite_UNIV_char_0 infinite_iff_countable_subset top_greatest)
+qed
+
+instantiation event_data :: card_UNIV begin
+definition "finite_UNIV = Phantom(event_data) False"
+definition "card_UNIV = Phantom(event_data) 0"
+instance by intro_classes (simp_all add: finite_UNIV_event_data_def card_UNIV_event_data_def infinite_UNIV_event_data)
+end
+
 primrec integer_of_event_data :: "event_data \<Rightarrow> integer" where
   "integer_of_event_data (EInt _) = undefined"
 | "integer_of_event_data (EFloat x) = integer_of_double x"

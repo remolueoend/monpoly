@@ -7043,6 +7043,7 @@ next
   case 8
   from wf_envs have wty_envs: "wty_envs S \<sigma> V" by (simp add: wf_envs_def)
   let ?V' = "V((p, m) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>))"
+  thm ty_of_sat_safe
   let ?tys = "tabulate E 0 (Formula.nfv \<phi>)"
   {
     fix pa xs i
@@ -7084,8 +7085,8 @@ lemma wf_envs_update2:
   shows "wf_envs S \<sigma> j \<delta> (P((p, m) \<mapsto> i)) (P'((p, m) \<mapsto> i'))
     (V((p, m) \<mapsto> \<lambda>w j. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>') w j))
     (Mapping.update (p, m) xs db)"
-  unfolding wf_envs_def sorry
-(*proof (intro conjI ballI, goal_cases)
+  unfolding wf_envs_def 
+proof (intro conjI ballI, goal_cases)
   case 3
   from assms show ?case
     by (auto)
@@ -7112,7 +7113,10 @@ next
   qed
   ultimately show ?case
     by (auto simp add: list.rel_map image_iff lookup_update')
-qed (use assms in \<open>auto simp: wf_envs_def subset_iff\<close>)*)
+next
+  case (8)
+  show ?case sorry
+qed (use assms in \<open>auto simp: wf_envs_def subset_iff\<close>)
 
 lemma (in maux) letpast_meval_invar_post:
   assumes "safe_letpast (p, m) \<phi>' \<le> PastRec"

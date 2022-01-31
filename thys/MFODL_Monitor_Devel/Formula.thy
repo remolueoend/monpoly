@@ -23,6 +23,12 @@ instance by intro_classes
     (auto simp: ccompare_enat_def split: if_splits intro!: comparator.intro)
 end
 
+instantiation enat :: card_UNIV begin
+definition "finite_UNIV = Phantom(enat) False"
+definition "card_UNIV = Phantom(enat) 0"
+instance by intro_classes (simp_all add: finite_UNIV_enat_def card_UNIV_enat_def infinite_UNIV_char_0)
+end
+
 datatype rec_safety = Unused | PastRec | NonFutuRec | AnyRec
 
 instantiation rec_safety :: "{finite, bounded_semilattice_sup_bot, monoid_mult, mult_zero}"
