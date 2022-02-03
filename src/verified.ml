@@ -8119,43 +8119,15 @@ let rec arg_max_list _B
 
 let rec max_getIJ (_A1, _A2)
   q_pos q_neg v =
-    (let l =
-       sorted_list_of_set (ceq_nat, ccompare_nat, equal_nat, linorder_nat) v in
-      (if is_empty
-            ((card_UNIV_prod (card_UNIV_set card_UNIV_nat)
-               (card_UNIV_set card_UNIV_list)),
-              (ceq_prod
-                (ceq_set
-                  (cenum_nat, ceq_nat,
-                    cproper_interval_nat.ccompare_cproper_interval))
-                (ceq_set
-                  (cenum_list, (ceq_list (ceq_option _A1)),
-                    (cproper_interval_list
-                      (ccompare_option _A2)).ccompare_cproper_interval))),
-              (cproper_interval_prod
-                (cproper_interval_set
-                  (card_UNIV_nat, ceq_nat, cproper_interval_nat, set_impl_nat))
-                (cproper_interval_set
-                  (card_UNIV_list, (ceq_list (ceq_option _A1)),
-                    (cproper_interval_list (ccompare_option _A2)),
-                    set_impl_list))))
-            q_neg
-        then (let x = arg_max_list linorder_nat (score (_A1, _A2) q_pos) l in
-               (insert (ceq_nat, ccompare_nat) x
-                  (set_empty (ceq_nat, ccompare_nat)
-                    (of_phantom set_impl_nata)),
-                 minus_set (ceq_nat, ccompare_nat) v
-                   (insert (ceq_nat, ccompare_nat) x
-                     (set_empty (ceq_nat, ccompare_nat)
-                       (of_phantom set_impl_nata)))))
-        else (let x = arg_max_list linorder_nat (score (_A1, _A2) q_neg) l in
-               (minus_set (ceq_nat, ccompare_nat) v
-                  (insert (ceq_nat, ccompare_nat) x
-                    (set_empty (ceq_nat, ccompare_nat)
-                      (of_phantom set_impl_nata))),
-                 insert (ceq_nat, ccompare_nat) x
-                   (set_empty (ceq_nat, ccompare_nat)
-                     (of_phantom set_impl_nata))))));;
+    (let x =
+       arg_max_list linorder_nat (score (_A1, _A2) q_pos)
+         (sorted_list_of_set (ceq_nat, ccompare_nat, equal_nat, linorder_nat) v)
+       in
+      (insert (ceq_nat, ccompare_nat) x
+         (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)),
+        minus_set (ceq_nat, ccompare_nat) v
+          (insert (ceq_nat, ccompare_nat) x
+            (set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata)))));;
 
 let rec new_max_getIJ_genericJoin (_A1, _A2)
   v q_pos q_neg =
