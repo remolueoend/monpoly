@@ -13,10 +13,9 @@ let nat_of_int i = nat_of_integer (Z.of_int i)
 let enat_of_integer i = Enat (nat_of_integer i)
 
 let convert_cst = function
-  | Int x -> EInt (Z.of_int x)
+  | Int x -> EInt x
   | Str x -> EString x
   | Float x -> EFloat x
-  | ZInt x -> EInt x
   | Regexp _ -> unsupported "Regular expression constant are not supported"
 
 let convert_var fvl bvl a = nat_of_int (try (Misc.get_pos a bvl)
@@ -75,7 +74,7 @@ let convert_special_predicate fvl bvl = function
 
 let convert_formula dbschema cntr f =
   let free_vars = MFOTL.free_vars f in
-  let truth = Equal (Cst (Int 0), Cst (Int 0)) in
+  let truth = Equal (Cst (Int Z.zero), Cst (Int Z.zero)) in
   let rec createExists n cntr f = match n with
   | 0 -> f
   | n -> createExists (n-1) cntr (Exists (Verified.Monitor.TAny (nat_of_int (cntr + n - 1)), f))
@@ -196,8 +195,11 @@ type state =
             ((nat * ((event_data option) list) set) queue *
               ((nat * ((event_data option) list) set) queue *
                 (((event_data option) list) set *
-                  ((((event_data option) list), nat) mapping *
-                    (((event_data option) list), nat) mapping)))))))) *
+                  (event_data wf_table *
+                    ((((event_data option) list), nat) mapping *
+                      (event_data wf_table *
+                        (((event_data option) list), nat)
+                          mapping)))))))))) *
      aggaux option),
     ((nat *
        (nat queue *
@@ -220,7 +222,7 @@ type state =
 let init cf = minit_safe cf
 
 let cst_of_event_data = function
-  | EInt x -> (try Int (Z.to_int x) with Z.Overflow -> ZInt x)
+  | EInt x -> Int x
   | EFloat x -> Float x
   | EString x -> Str x
 

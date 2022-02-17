@@ -382,8 +382,8 @@ let rel_gen v all_rels max_const =
       rel >>= (fun r -> 
       (fun s -> match (List.length v) with
         | 2 ->  gRel r (Var (List.hd v)) (Var (List.hd (List.tl v)))
-        | 1 ->  gRel r (Var (List.hd v)) (Cst (Int c1))
-        | 0 ->  gRel r (Cst (Int c1)) (Cst (Int c2))
+        | 1 ->  gRel r (Var (List.hd v)) (Cst (Int (Z.of_int c1)))
+        | 0 ->  gRel r (Cst (Int (Z.of_int c1))) (Cst (Int (Z.of_int c2)))
         | _ -> failwith "Rigid predicates can have up to 2 variables"
       ))))
 

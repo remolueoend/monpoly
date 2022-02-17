@@ -151,14 +151,7 @@ lemma arg_max_list_element:
   by (induction l rule: induct_list012) (auto simp: Let_def)
 
 fun max_getIJ :: "'a query \<Rightarrow> 'a query \<Rightarrow> vertices \<Rightarrow> vertices \<times> vertices" where
-  "max_getIJ Q_pos Q_neg V = (
-  let l = sorted_list_of_set V in
-  if Set.is_empty Q_neg then
-    let x = arg_max_list (score Q_pos) l in
-    ({x}, V - {x})
-  else
-    let x = arg_max_list (score Q_neg) l in
-    (V - {x}, {x}))"
+  "max_getIJ Q_pos Q_neg V = (let x = arg_max_list (score Q_pos) (sorted_list_of_set V) in ({x}, V - {x}))"
 
 lemma max_getIJ_coreProperties:
   assumes "card V \<ge> 2"
@@ -170,28 +163,13 @@ proof -
   then have "length l \<ge> 1" by (metis Suc_1 Suc_le_lessD \<open>finite V\<close> assms(1) distinct_card
         distinct_sorted_list_of_set less_imp_le set_sorted_list_of_set)
   show ?thesis
-  proof (cases "Set.is_empty Q_neg")
-    case True
+  proof -
     define x where "x = arg_max_list (score Q_pos) l"
     then have "x \<in> (set l)" using \<open>1 \<le> length l\<close> arg_max_list_element by blast
     then have "x \<in> V" by (simp add: \<open>finite V\<close> l_def)
     moreover have "(I, J) = ({x}, V - {x})" 
     proof -
-      have "(I, J) =  (let l = sorted_list_of_set V in
-    let x = arg_max_list (score Q_pos) l in
-    ({x}, V - {x}))" by (simp add: True assms(2))
-      then show ?thesis by (metis l_def x_def)
-    qed
-    then show ?thesis using Pair_inject \<open>finite V\<close> assms(1) calculation by auto
-  next
-    case False
-    define x where "x = arg_max_list (score Q_neg) l"
-    then have "x \<in> (set l)" using \<open>1 \<le> length l\<close> arg_max_list_element by blast
-    then have "x \<in> V" by (simp add: \<open>finite V\<close> l_def)
-    moreover have "(I, J) = (V - {x}, {x})"
-    proof -
-      have "(I, J) = (let l = sorted_list_of_set V in
-  let x = arg_max_list (score Q_neg) l in (V - {x}, {x}))" by (simp add: False assms(2))
+      have "(I, J) =  (let x = arg_max_list (score Q_pos) (sorted_list_of_set V) in ({x}, V - {x}))" by (simp add: assms(2))
       then show ?thesis by (metis l_def x_def)
     qed
     then show ?thesis using Pair_inject \<open>finite V\<close> assms(1) calculation by auto

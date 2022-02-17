@@ -1207,10 +1207,10 @@ let add_index f i tsi db =
           (try Hashtbl.find db name
            with Not_found ->
            match name with
-           | "tp" -> Relation.singleton (Tuple.make_tuple [Int i])
-           | "ts" -> Relation.singleton (Tuple.make_tuple [Int (Z.to_int tsi)])
+           | "tp" -> Relation.singleton (Tuple.make_tuple [Int (Z.of_int i)])
+           | "ts" -> Relation.singleton (Tuple.make_tuple [Int tsi])
            | "tpts" ->
-             Relation.singleton (Tuple.make_tuple [Int i; Int (Z.to_int tsi)])
+             Relation.singleton (Tuple.make_tuple [Int (Z.of_int i); Int tsi])
            | _ -> Relation.empty
           )
         in

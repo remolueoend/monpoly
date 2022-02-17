@@ -1006,47 +1006,9 @@ lemma filter_Mapping[code]:
                      | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
   by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
 
-lemma filter_join_False_empty: "filter_join False {} m = m"
-  unfolding filter_join_def
-  by transfer (auto split: option.splits)
-
-lemma filter_join_False_insert: "filter_join False (Set.insert a A) m =
-  filter_join False A (Mapping.delete a m)"
-proof -
-  {
-    fix x
-    have "Mapping.lookup (filter_join False (Set.insert a A) m) x =
-      Mapping.lookup (filter_join False A (Mapping.delete a m)) x"
-      by (auto simp add: filter_join_def Mapping.lookup_filter Mapping_lookup_delete
-          split: option.splits)
-  }
-  then show ?thesis
-    by (simp add: mapping_eqI)
-qed
-
-lemma filter_join_False:
-  assumes "finite A"
-  shows "filter_join False A m = Finite_Set.fold Mapping.delete m A"
-proof -
-  interpret comp_fun_idem "Mapping.delete"
-    by (unfold_locales; transfer) (fastforce simp add: comp_def)+
-  from assms show ?thesis
-    by (induction A arbitrary: m rule: finite.induct)
-       (auto simp add: filter_join_False_empty filter_join_False_insert fold_fun_left_comm)
-qed
-
-lift_definition filter_not_in_cfi :: "('a, ('a, 'b) mapping) comp_fun_idem" is "Mapping.delete"
-  by (unfold_locales; transfer) (fastforce simp add: comp_def)+
-
-lemma filter_join_code[code]:
-  "filter_join pos A m =
-    (if \<not>pos \<and> finite A then set_fold_cfi filter_not_in_cfi m A
-    else Mapping.filter (join_filter_cond pos A) m)"
-  unfolding filter_join_def
-  by (transfer fixing: m) (use filter_join_False in \<open>auto simp add: filter_join_def\<close>)
-
 lemma mapping_delete_set_empty: "mapping_delete_set m {} = m"
-  unfolding mapping_delete_set_def by (simp add: Mapping.lookup.rep_eq rep_inverse)
+  unfolding mapping_delete_set_def
+  by (auto simp: Mapping_lookup_filter_Some intro!: mapping_eqI)
 
 lemma mapping_delete_set_insert: "mapping_delete_set m (Set.insert a X) = Mapping.delete a (mapping_delete_set m X)"
 proof(rule mapping_eqI)
@@ -1054,7 +1016,8 @@ proof(rule mapping_eqI)
   show "Mapping.lookup (mapping_delete_set m (Set.insert a X)) x =
         Mapping.lookup (Mapping.delete a (mapping_delete_set m X)) x"
     unfolding Optimized_MTL.Mapping_lookup_delete mapping_delete_set_def
-    by(auto simp: Mapping.lookup.rep_eq Mapping_inverse)
+    by (auto simp add: Mapping_lookup_filter_None)
+       (metis (mono_tags, lifting) Mapping_lookup_filter_None Mapping_lookup_filter_Some)
 qed
 
 lemma mapping_delete_fold:
@@ -1367,50 +1330,6 @@ lift_definition upd_nested_max_tstp_cfi ::
   by (unfold_locales; rule ext)
     (auto simp add: comp_def upd_nested_step_def Mapping.lookup_update'
       update_update max_tstp_d_d max_tstp_idem' split: option.splits)
-
-lemma filter_join'_False_empty: "filter_join' False {} m = (m, {})"
-  unfolding filter_join'_def filter_join_def
-  by transfer (auto split: option.splits)
-
-lemma filter_join'_False_insert: 
-  "filter_join' False (Set.insert a A) m = (case filter_join' False A m of
-   (m', X) \<Rightarrow> (Mapping.delete a m', case Mapping.lookup m' a of Some _ \<Rightarrow> Set.insert a X |
-                                    _ \<Rightarrow> X))"
-  unfolding filter_join'_def filter_join_def
-  by(transfer) (auto simp: Map_To_Mapping.map_apply_def split: option.splits if_splits)
-
-fun filter_join'_fold_fun where
-  "filter_join'_fold_fun x (m, X) = (Mapping.delete x m, case Mapping.lookup m x of Some _ \<Rightarrow> Set.insert x X |
-                                                                                      None \<Rightarrow> X)"
-
-lemma filter_join'_False:
-  assumes "finite A"
-  shows "filter_join' False A m = 
-         Finite_Set.fold filter_join'_fold_fun (m, {}) A"
-proof -
-  interpret comp_fun_idem "filter_join'_fold_fun"
-    by(unfold_locales; simp add:fun_eq_iff; transfer) (auto simp: Map_To_Mapping.map_apply_def split:option.splits if_splits)
-  from assms show ?thesis
-  proof (induction A arbitrary: m)
-    case empty
-    then show ?case using filter_join'_False_empty by auto
-  next
-    case (insert a A)
-    then show ?case using filter_join'_False_insert[of a A m]
-      by(simp only:fold_insert[OF insert(1-2)] split:option.splits prod.splits; simp)
-   qed 
-qed
-
-lift_definition filter_not_in_cfi' :: "('a, ('a, 'b) mapping \<times> 'a set) comp_fun_idem" is 
-  "filter_join'_fold_fun"
-  by(unfold_locales; simp add:fun_eq_iff; transfer) (auto simp: Map_To_Mapping.map_apply_def split:option.splits if_splits)
-
-lemma filter_join'_code[code]:
-  "filter_join' pos X m =
-    (if \<not>pos \<and> finite X then set_fold_cfi filter_not_in_cfi' (m, {}) X
-    else (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m)))"
-  unfolding filter_join'_def
-  by (transfer fixing: m) (use filter_join'_False in auto)
 
 lemma upd_nested_max_tstp_code[code]:
   "upd_nested_max_tstp m d X = (if finite X then set_fold_cfi (upd_nested_max_tstp_cfi d) m X

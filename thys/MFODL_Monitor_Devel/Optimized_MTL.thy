@@ -1,6 +1,6 @@
 (*<*)
 theory Optimized_MTL
-  imports Monitor
+  imports Monitor Wf_Table
 begin
 (*>*)
 
@@ -280,7 +280,7 @@ subsection \<open>Optimized data structure for Since\<close>
 
 type_synonym 'a mmsaux = "ts \<times> ts \<times> bool list \<times> bool list \<times>
   (ts \<times> 'a table) queue \<times> (ts \<times> 'a table) queue \<times>
-  'a table \<times> (('a tuple, ts) mapping) \<times> (('a tuple, ts) mapping)"
+  'a table \<times> 'a wf_table \<times> (('a tuple, ts) mapping) \<times> 'a wf_table \<times> (('a tuple, ts) mapping)"
 
 fun time_mmsaux :: "'a mmsaux \<Rightarrow> ts" where
   "time_mmsaux aux = (case aux of (nt, _) \<Rightarrow> nt)"
@@ -381,7 +381,7 @@ lemma safe_max_Some_dest_le: "finite X \<Longrightarrow> safe_max X = Some x \<L
   using Max_ge by (auto simp add: safe_max_def split: if_splits)
 
 fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a Monitor.msaux \<Rightarrow> bool" where
-  "valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) ys \<longleftrightarrow>
+  "valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) ys \<longleftrightarrow>
     (args_L args) \<subseteq> (args_R args) \<and>
     maskL = join_mask (args_n args) (args_L args) \<and>
     maskR = join_mask (args_n args) (args_R args) \<and>
@@ -389,6 +389,7 @@ fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow>
     table (args_n args) (args_R args) (Mapping.keys tuple_in) \<and>
     table (args_n args) (args_R args) (Mapping.keys tuple_since) \<and>
     (\<forall>as \<in> \<Union>(snd ` (set (linearize data_prev))). wf_tuple (args_n args) (args_R args) as) \<and>
+    (\<forall>as \<in> \<Union>(snd ` (set (linearize data_in))). wf_tuple (args_n args) (args_R args) as) \<and>
     cur = nt \<and>
     ts_tuple_rel (set ys) =
     {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
@@ -397,7 +398,11 @@ fun valid_mmsaux :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow>
     (\<forall>t \<in> fst ` set (linearize data_prev). t \<le> nt \<and> \<not> memL (args_ivl args) (nt - t)) \<and>
     sorted (map fst (linearize data_in)) \<and>
     (\<forall>t \<in> fst ` set (linearize data_in). t \<le> nt \<and> memL (args_ivl args) (nt - t)) \<and>
-    Mapping.keys tuple_in = table_in \<and>
+    table_in = Mapping.keys tuple_in \<and>
+    wf_table_sig wf_table_in = (args_n args, args_R args) \<and>
+    wf_table_set wf_table_in = Mapping.keys tuple_in \<and>
+    wf_table_sig wf_table_since = (args_n args, args_R args) \<and>
+    wf_table_set wf_table_since = Mapping.keys tuple_since \<and>
     (\<forall>as. Mapping.lookup tuple_in as = safe_max (fst `
     {tas \<in> ts_tuple_rel (set (linearize data_in)). valid_tuple tuple_since tas \<and> as = snd tas})) \<and>
     (\<forall>as \<in> Mapping.keys tuple_since. case Mapping.lookup tuple_since as of Some t \<Rightarrow> t \<le> nt)"
@@ -421,20 +426,36 @@ lemma Mapping_keys_intro: "Mapping.lookup f x \<noteq> None \<Longrightarrow> x 
   by (simp add: domIff keys_dom_lookup)
 
 lemma valid_mmsaux_tuple_in_keys: "valid_mmsaux args cur
-  (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) ys \<Longrightarrow>
+  (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) ys \<Longrightarrow>
   Mapping.keys tuple_in = snd ` {tas \<in> ts_tuple_rel (set (linearize data_in)).
   valid_tuple tuple_since tas}"
   by (auto intro!: Mapping_keys_intro safe_max_Some_intro
       dest!: Mapping_keys_dest safe_max_Some_dest_in[OF finite_fst_ts_tuple_rel])+
 
+definition wf_table_of_set_args :: "args \<Rightarrow> 'a table \<Rightarrow> 'a wf_table" where
+  "wf_table_of_set_args args X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_R args) (args_L args) X)"
+
+lemma wf_table_sig_args: "wf_table_sig (wf_table_of_set_args args X) = (args_n args, args_R args)"
+  by (auto simp: wf_table_of_set_args_def wf_idx_sig_of_set)
+
+lemma wf_table_of_set_args: "table (args_n args) (args_R args) X \<Longrightarrow>
+  wf_table_set (wf_table_of_set_args args X) = X"
+  by (auto simp: wf_table_of_set_args_def wf_idx_set_of_set table_def)
+
+lemma wf_table_of_set_args_wf_table_set: "wf_table_sig t = (args_n args, args_R args) \<Longrightarrow>
+  wf_table_of_set_args args (wf_table_set t) = t"
+  by (auto simp: wf_table_sig_args wf_table_of_set_args[OF wf_table_set_table] intro: wf_table_eqI)
+
 fun init_mmsaux :: "args \<Rightarrow> 'a mmsaux" where
   "init_mmsaux args = (0, 0, join_mask (args_n args) (args_L args),
-  join_mask (args_n args) (args_R args), empty_queue, empty_queue, {}, Mapping.empty, Mapping.empty)"
+  join_mask (args_n args) (args_R args), empty_queue, empty_queue,
+  {}, wf_table_of_idx (wf_idx_of_set (args_n args) (args_R args) (args_L args) {}), Mapping.empty,
+  wf_table_of_set_args args {}, Mapping.empty)"
 
 lemma valid_init_mmsaux: "L \<subseteq> R \<Longrightarrow> valid_mmsaux (init_args I n L R b agg) 0
   (init_mmsaux (init_args I n L R b agg)) []"
   by (auto simp add: init_args_def empty_queue_rep ts_tuple_rel_def join_mask_def
-       safe_max_def table_def)
+      safe_max_def table_def wf_table_of_set_args_def wf_idx_sig_of_set wf_idx_set_of_set)
 
 abbreviation "filter_cond X' ts t' \<equiv> (\<lambda>as _. \<not> (as \<in> X' \<and> Mapping.lookup ts as = Some t'))"
 
@@ -513,6 +534,17 @@ fun filter_set where "filter_set (t, X) (m, Y) =
   (let m' = Mapping.filter (filter_cond X m t) m in (m', Y \<union> (Mapping.keys m - Mapping.keys m')))"
 
 declare filter_set.simps[simp del]
+
+lemma filter_set_sub: "filter_set (t, X) (m, Y) = (m', Y') \<Longrightarrow> Y' \<subseteq> Y \<union> X"
+  by (auto simp: filter_set.simps Let_def Mapping_lookup_filter_Some domIff keys_dom_lookup)
+
+lemma fold_filter_set_sub: "fold filter_set xs (m, Y) = (m', Y') \<Longrightarrow> Y' \<subseteq> Y \<union> \<Union>(snd ` set xs)"
+proof (induction xs arbitrary: m Y)
+  case (Cons a xs)
+  show ?case
+    using Cons(2)
+    by (cases a; cases "filter_set a (m, Y)") (auto dest: Cons(1) filter_set_sub)
+qed auto
 
 lemma fold_filter_set_None: "Mapping.lookup ts as = None \<Longrightarrow>
   fold filter_set ds (ts, Y) = (ts', Y') \<Longrightarrow>
@@ -615,19 +647,21 @@ proof (induction ds arbitrary: ts Y)
 qed simp
 
 fun shift_end :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "shift_end args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+  "shift_end args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     (let I = args_ivl args;
     data_prev' = dropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_prev;
     (data_in, discard) = takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in;
     (tuple_in, del) = fold filter_set discard (tuple_in, {}) in
-    (t, gc, maskL, maskR, data_prev', data_in, table_in - del, tuple_in, tuple_since))"
+    (t, gc, maskL, maskR, data_prev', data_in,
+     table_in - del, wf_table_antijoin wf_table_in (wf_table_of_set_args args del), tuple_in,
+     wf_table_since, tuple_since))"
 
 lemma valid_shift_end_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux args cur
-    (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) auxlist"
+    (ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) auxlist"
   and nt_mono: "nt \<ge> cur"
   shows "valid_mmsaux args cur (shift_end args nt
-    (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since))
+    (ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since))
     (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
 proof -
   define I where "I = args_ivl args"
@@ -637,6 +671,8 @@ proof -
     dropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_prev"
   define discard where "discard \<equiv>
     snd (takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in)"
+  have set_discard: "\<Union>(snd ` set discard) \<subseteq> \<Union>(snd ` (set (linearize data_in)))"
+    by (auto simp: discard_def takedropWhile_queue_snd simp del: takedropWhile_queue.simps dest: set_takeWhileD)
   obtain tuple_in' del where fold_filter_set: "fold filter_set discard (tuple_in, {}) = (tuple_in', del)"
     by (cases "fold filter_set discard (tuple_in, {})") auto
   have tuple_in_Some_None: "Mapping.lookup tuple_in' as = None" "as \<in> del"
@@ -741,17 +777,35 @@ proof -
       qed
     qed
   qed
-  have table_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in')"
+  have table_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
+    and table_in': "table (args_n args) (args_R args) (Mapping.keys tuple_in')"
     using tuple_in'_keys valid_before by (auto simp add: table_def)
-  have "Mapping.keys tuple_in = table_in"
+  have keys_tuple_in: "table_in = Mapping.keys tuple_in"
     using valid_before
     by auto
-  then have keys_tuple_in': "Mapping.keys tuple_in' = table_in - del"
+  then have keys_tuple_in': "table_in - del = Mapping.keys tuple_in'"
     using tuple_in_None tuple_in'_keys tuple_in_Some_Some tuple_in_Some_None
-    apply (auto)
-     apply (metis Mapping_keys_dest option.distinct(1))
-    apply (metis Mapping_keys_dest domIff keys_dom_lookup)
-    done
+    by auto (metis Mapping_keys_dest Mapping_keys_intro option.distinct(1))+
+  have sig_in: "wf_table_sig wf_table_in = (args_n args, args_R args)"
+    and set_in: "wf_table_set wf_table_in = Mapping.keys tuple_in"
+    using valid_before
+    by auto
+  have sig_in'': "wf_table_sig (wf_table_antijoin wf_table_in (wf_table_of_set_args args del)) = (args_n args, args_R args)"
+    and sig_since: "wf_table_sig wf_table_since = (args_n args, args_R args)"
+    and keys_since: "wf_table_set wf_table_since = Mapping.keys tuple_since"
+    using valid_before
+    by (auto simp: wf_table_sig_antijoin)
+  have "table (args_n args) (args_R args) (\<Union>(snd ` (set (linearize data_in))))"
+    using valid_before
+    by (auto simp: table_def)
+  then have table_del: "table (args_n args) (args_R args) del"
+    using fold_filter_set_sub[OF fold_filter_set] set_discard New_max.wf_atable_subset
+    by fastforce
+  have keys_tuple_in'': "wf_table_set (wf_table_antijoin wf_table_in (wf_table_of_set_args args del)) = Mapping.keys tuple_in'"
+    by (auto simp: keys_tuple_in keys_tuple_in'[symmetric] set_in[symmetric]
+        wf_table_set_antijoin[OF sig_in wf_table_sig_args subset_refl]
+        join_False_alt join_eq[OF table_del wf_table_set_table[OF sig_in]]
+        wf_table_set_table[OF wf_table_sig_args] wf_table_of_set_args[OF table_del])
   have "ts_tuple_rel (set auxlist) =
     {as \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in)).
     valid_tuple tuple_since as}"
@@ -763,7 +817,7 @@ proof -
   then show ?thesis
     using data_prev'_def data_in'_def fold_filter_set discard_def valid_before nt_mono
       sorted_lin_data_prev' sorted_lin_data_in' lin_data_prev' lin_data_in' lookup_tuple_in'
-      table_in keys_tuple_in' unfolding I_def
+      table_in' keys_tuple_in' sig_in'' keys_tuple_in'' sig_since keys_since unfolding I_def
     by (auto simp only: valid_mmsaux.simps shift_end.simps Let_def split: prod.splits) auto
       (* takes long *)
 qed
@@ -860,6 +914,19 @@ fun upd_set_keys where "upd_set_keys Z (t, X) (m, Y) = (upd_set m (\<lambda>_. t
 
 declare upd_set_keys.simps[simp del]
 
+lemma upd_set_keys_sub: "upd_set_keys Z (t, X) (m, Y) = (m', Y') \<Longrightarrow> Y' \<subseteq> Y \<union> Z X t"
+  by (auto simp: upd_set_keys.simps Mapping_lookup_filter_Some domIff keys_dom_lookup)
+
+lemma fold_upd_set_keys_sub:
+  assumes Z_sub: "\<And>X t. Z X t \<subseteq> X"
+  shows "fold (upd_set_keys Z) xs (m, Y) = (m', Y') \<Longrightarrow> Y' \<subseteq> Y \<union> \<Union>(snd ` set xs)"
+proof (induction xs arbitrary: m Y)
+  case (Cons a xs)
+  show ?case
+    using Cons(2) Z_sub
+    by (cases a; cases "upd_set_keys Z a (m, Y)") (fastforce dest: Cons(1) upd_set_keys_sub)
+qed auto
+
 lemma fold_upd_set_keys:
   assumes "fold (upd_set_keys Z) mv (ts, {}) = (ts', Y)"
   shows "ts' = fold (\<lambda>(t, X) ts. upd_set ts (\<lambda>_. t) (Z X t)) mv ts"
@@ -892,12 +959,12 @@ proof -
 qed
 
 fun add_new_ts_mmsaux' :: "args \<Rightarrow> ts \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_ts_mmsaux' args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+  "add_new_ts_mmsaux' args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     (let I = args_ivl args;
     (data_prev, move) = takedropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev;
     data_in = fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in) move data_in;
     (tuple_in, add) = fold (upd_set_keys (\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)})) move (tuple_in, {}) in
-    (nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, tuple_in, tuple_since))"
+    (nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, wf_table_union wf_table_in (wf_table_of_set_args args add), tuple_in, wf_table_since, tuple_since))"
 
 lemma Mapping_keys_fold_upd_set: "k \<in> Mapping.keys (fold (\<lambda>(t, X) m. upd_set m (\<lambda>_. t) (Z t X))
   xs m) \<Longrightarrow> k \<in> Mapping.keys m \<or> (\<exists>(t, X) \<in> set xs. k \<in> Z t X)"
@@ -905,10 +972,10 @@ lemma Mapping_keys_fold_upd_set: "k \<in> Mapping.keys (fold (\<lambda>(t, X) m.
 
 lemma valid_add_new_ts_mmsaux'_unfolded:
   assumes valid_before: "valid_mmsaux args cur
-    (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) auxlist"
+    (ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) auxlist"
   and nt_mono: "nt \<ge> cur"
   shows "valid_mmsaux args nt (add_new_ts_mmsaux' args nt
-    (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)) auxlist"
+    (ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)) auxlist"
 proof -
   define I where "I = args_ivl args"
   define n where "n = args_n args"
@@ -1040,19 +1107,44 @@ proof -
     then show ?thesis
       by (auto simp add: table_def)
   qed
-  have tupe_in'_add: "Mapping.keys tuple_in' = table_in \<union> add"
+  have table_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
+    using valid_before by (auto simp add: table_def)
+  have keys_tuple_in: "table_in = Mapping.keys tuple_in"
     using valid_before
-    by (auto simp: add_def)
+    by auto
+  note keys_tuple_in' = add_def[symmetric]
+  have sig_in: "wf_table_sig wf_table_in = (args_n args, args_R args)"
+    and set_in: "wf_table_set wf_table_in = Mapping.keys tuple_in"
+    using valid_before
+    by auto
+  have sig_in'': "wf_table_sig (wf_table_union wf_table_in (wf_table_of_set_args args add)) = (args_n args, args_R args)"
+    and sig_since: "wf_table_sig wf_table_since = (args_n args, args_R args)"
+    and keys_since: "wf_table_set wf_table_since = Mapping.keys tuple_since"
+    using valid_before
+    by (auto simp: wf_table_sig_union wf_table_sig_args)
+  have "table (args_n args) (args_R args) (\<Union>(snd ` (set (linearize data_prev))))"
+    using valid_before
+    by (auto simp: table_def)
+  moreover have "\<Union> (snd ` set move) \<subseteq> \<Union> (snd ` set (linearize data_prev))"
+    by (auto simp: move_filter)
+  ultimately have table_add: "table (args_n args) (args_R args) add"
+    using fold_upd_set_keys_sub[OF _ aux] New_max.wf_atable_subset
+    by fastforce
+  have keys_tuple_in'': "wf_table_set (wf_table_union wf_table_in (wf_table_of_set_args args add)) = Mapping.keys tuple_in'"
+    by (auto simp: keys_tuple_in keys_tuple_in'[symmetric] set_in[symmetric]
+        wf_table_set_union[OF trans[OF sig_in wf_table_sig_args[symmetric]]]
+        wf_table_of_set_args[OF table_add])
   have data_prev'_move: "(data_prev', move) =
     takedropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev"
     using takedropWhile_queue_fst takedropWhile_queue_snd data_prev'_def move_def
     by (metis surjective_pairing)
   moreover have "valid_mmsaux args nt (nt, gc, maskL, maskR, data_prev', data_in', table_in \<union> add,
-    tuple_in', tuple_since) auxlist"
+    wf_table_union wf_table_in (wf_table_of_set_args args add), tuple_in', wf_table_since, tuple_since) auxlist"
     using lin_data_prev' sorted_lin_data_prev' lin_data_in' move_filter sorted_lin_data_in'
-      nt_mono valid_before ts_tuple_rel' lookup' table_in' tupe_in'_add unfolding I_def
+      nt_mono valid_before ts_tuple_rel' lookup'
+      table_in' keys_tuple_in' sig_in'' keys_tuple_in'' sig_since keys_since unfolding I_def
     apply (auto simp only: valid_mmsaux.simps Let_def n_def R_def split: option.splits)
-         apply (auto)
+          apply (auto)
     apply (auto simp: memL_mono)
     done
       (* takes long *)
@@ -1075,36 +1167,49 @@ lemma valid_add_new_ts_mmsaux:
   using valid_add_new_ts_mmsaux'[OF valid_shift_end_mmsaux[OF assms] assms(2)]
   unfolding add_new_ts_mmsaux_def .
 
-definition "filter_join pos X m = Mapping.filter (join_filter_cond pos X) m"
+definition mapping_delete_set :: "('a, 'b) mapping \<Rightarrow> 'a set \<Rightarrow> ('a, 'b) mapping" where
+  "mapping_delete_set m X = Mapping.filter (join_filter_cond False X) m"
 
-definition [simp]: "filter_join' pos X m = (filter_join pos X m, Mapping.keys m - Mapping.keys (filter_join pos X m))"
+lemma delete_set_lookup: "Mapping.lookup (mapping_delete_set m X) a = (if a \<in> X then
+  None else Mapping.lookup m a)"
+  by (auto simp: mapping_delete_set_def Mapping.lookup_filter split: option.splits)
+
+lemma delete_set_keys[simp]: "Mapping.keys (mapping_delete_set m X) = Mapping.keys m - X"
+  by (auto simp add: delete_set_lookup intro!: Mapping_keys_intro
+      dest!: Mapping_keys_dest split: if_splits)
 
 fun join_mmsaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+  "join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     (let pos = args_pos args in
-    (if maskL = maskR then
-      (let (tuple_in', to_del) = filter_join' pos X tuple_in;
-      table_in = table_in - to_del;   
-      tuple_since = filter_join pos X tuple_since in
-      (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in', tuple_since))
-    else if (\<forall>i \<in> set maskL. \<not>i) then
+    (if (\<forall>i \<in> set maskL. \<not>i) then
       (let nones = replicate (length maskL) None;
       take_all = (pos \<longleftrightarrow> nones \<in> X);
-      table_in = (if take_all then table_in else {});
-      tuple_in = (if take_all then tuple_in else Mapping.empty);
-      tuple_since = (if take_all then tuple_since else Mapping.empty) in
-      (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since))
-    else
-      (let tuple_in = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in;
-      tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since in
-      (t, gc, maskL, maskR, data_prev, data_in, Mapping.keys tuple_in, tuple_in, tuple_since))))"
+      table_in' = (if take_all then table_in else {});
+      wf_table_in' = (if take_all then wf_table_in else wf_table_of_set_args args {});
+      tuple_in' = (if take_all then tuple_in else Mapping.empty);
+      wf_table_since' = (if take_all then wf_table_since else wf_table_of_set_args args {});
+      tuple_since' = (if take_all then tuple_since else Mapping.empty) in
+      (t, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'))
+     else (let wf_X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) X);
+      wf_in_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_in wf_X;
+      in_del = wf_table_set wf_in_del;
+      tuple_in' = mapping_delete_set tuple_in in_del;
+      table_in' = table_in - in_del;
+      wf_table_in' = wf_table_antijoin wf_table_in wf_in_del;
+      wf_since_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_since wf_X;
+      since_del = wf_table_set wf_since_del;
+      tuple_since' = mapping_delete_set tuple_since since_del;
+      wf_table_since' = wf_table_antijoin wf_table_since wf_since_del in
+      (t, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'))))"
 
 fun join_mmsaux_abs :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "join_mmsaux_abs args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+  "join_mmsaux_abs args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     (let pos = args_pos args in
     (let tuple_in = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in;
     tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since in
-    (t, gc, maskL, maskR, data_prev, data_in, Mapping.keys tuple_in, tuple_in, tuple_since)))"
+    (t, gc, maskL, maskR, data_prev, data_in,
+     Mapping.keys tuple_in, wf_table_of_set_args args (Mapping.keys tuple_in), tuple_in,
+     wf_table_of_set_args args (Mapping.keys tuple_since), tuple_since)))"
 
 lemma Mapping_filter_cong:
   assumes cong: "(\<And>k v. k \<in> Mapping.keys m \<Longrightarrow> f k v = f' k v)"
@@ -1122,41 +1227,35 @@ lemma Mapping_keys_filter: "Mapping.keys (Mapping.filter (\<lambda>x _. P x) m) 
 
 lemma join_mmsaux_abs_eq:
   assumes valid_before: "valid_mmsaux args cur
-    (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) auxlist"
+    (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) auxlist"
   and table_left: "table (args_n args) (args_L args) X"
-  shows "join_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
-    join_mmsaux_abs args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
-proof (cases "maskL = maskR")
-  case True
-  define n where "n = args_n args"
-  define L where "L = args_L args"
-  define pos where "pos = args_pos args"
-  have keys_wf_in: "\<And>as. as \<in> Mapping.keys tuple_in \<Longrightarrow> wf_tuple n L as"
-    using wf_tuple_change_base valid_before True by (fastforce simp add: table_def n_def L_def)
-  have cong_in: "\<And>as n. as \<in> Mapping.keys tuple_in \<Longrightarrow>
-    proj_tuple_in_join pos maskL as X \<longleftrightarrow> join_cond pos X as"
-    using proj_tuple_in_join_mask_idle[OF keys_wf_in] valid_before
-    by (auto simp only: valid_mmsaux.simps n_def L_def pos_def)
-  have keys_wf_since: "\<And>as. as \<in> Mapping.keys tuple_since \<Longrightarrow> wf_tuple n L as"
-    using wf_tuple_change_base valid_before True by (fastforce simp add: table_def n_def L_def)
-  have cong_since: "\<And>as n. as \<in> Mapping.keys tuple_since \<Longrightarrow>
-    proj_tuple_in_join pos maskL as X \<longleftrightarrow> join_cond pos X as"
-    using proj_tuple_in_join_mask_idle[OF keys_wf_since] valid_before
-    by (auto simp only: valid_mmsaux.simps n_def L_def pos_def)
-  have table_in_def: "Mapping.keys tuple_in = table_in"
-    using valid_before
-    by auto
-  show ?thesis
-    using True Mapping_filter_cong[OF cong_in, of tuple_in "\<lambda>k _. k"]
-      Mapping_filter_cong[OF cong_since, of tuple_since "\<lambda>k _. k"]
-    by (auto simp add: pos_def filter_join_def) (auto simp add: Let_def Mapping_keys_filter table_in_def Set.filter_def)
-next
-  case False
+  shows "join_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
+    join_mmsaux_abs args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
+proof -
   define n where "n = args_n args"
   define L where "L = args_L args"
   define R where "R = args_R args"
   define pos where "pos = args_pos args"
-  from False show ?thesis
+  have L_R: "args_L args \<subseteq> args_R args"
+    and maskL_def: "join_mask (args_n args) (args_L args) = maskL"
+    using valid_before
+    by auto
+  have table_in_def: "Mapping.keys tuple_in = table_in"
+    and table_table_in: "table (args_n args) (args_R args) table_in"
+    and table_tuple_since: "table (args_n args) (args_R args) (Mapping.keys tuple_since)"
+    using valid_before
+    by auto
+  have sig_in: "wf_table_sig wf_table_in = (args_n args, args_R args)"
+    and set_in: "wf_table_set wf_table_in = Mapping.keys tuple_in"
+    and set_args_in: "wf_table_set (wf_table_of_set_args args table_in) = table_in"
+    using wf_table_of_set_args valid_before
+    by auto
+  have sig_since: "wf_table_sig wf_table_since = (args_n args, args_R args)"
+    and set_since: "wf_table_set wf_table_since = Mapping.keys tuple_since"
+    and set_args_since: "wf_table_set (wf_table_of_set_args args (Mapping.keys tuple_since)) = Mapping.keys tuple_since"
+    using wf_table_of_set_args valid_before
+    by auto
+  show ?thesis
   proof (cases "\<forall>i \<in> set maskL. \<not>i")
     case True
     have length_maskL: "length maskL = n"
@@ -1167,33 +1266,104 @@ next
       using valid_before by (auto simp add: table_def n_def R_def)
     have keys_wf_since: "\<And>as. as \<in> Mapping.keys tuple_since \<Longrightarrow> wf_tuple n R as"
       using valid_before by (auto simp add: table_def n_def R_def)
-    have table_in_def: "table_in = Mapping.keys tuple_in"
-      using valid_before
-      by auto
     have "\<And>as. Mapping.lookup (Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X)
       tuple_in) as = Mapping.lookup (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X)
       then tuple_in else Mapping.empty) as"
       using proj_rep[OF keys_wf_in]
       by (auto simp add: Mapping.lookup_filter proj_tuple_in_join_def
           Mapping_keys_intro split: option.splits)
-    moreover have "\<And>as. Mapping.lookup (Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X)
+    then have filter_in: "Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in =
+      (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X) then tuple_in else Mapping.empty)"
+      by (auto intro!: mapping_eqI)
+    have "\<And>as. Mapping.lookup (Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X)
       tuple_since) as = Mapping.lookup (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X)
       then tuple_since else Mapping.empty) as"
       using proj_rep[OF keys_wf_since]
       by (auto simp add: Mapping.lookup_filter proj_tuple_in_join_def
           Mapping_keys_intro split: option.splits)
-    ultimately show ?thesis
-      using False True
-      by (auto simp add: mapping_eqI Let_def pos_def table_in_def keys_dom_lookup Mapping.lookup_empty)
-  qed (auto simp add: Let_def)
+    then have filter_since: "Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since =
+      (if (pos \<longleftrightarrow> replicate (length maskL) None \<in> X) then tuple_since else Mapping.empty)"
+      by (auto intro!: mapping_eqI)
+    show ?thesis
+      using True
+      by (auto simp: Let_def pos_def[symmetric] filter_in filter_since table_in_def wf_table_sig_args
+          sig_in set_in set_args_in sig_since set_since set_args_since intro!: wf_table_eqI)
+  next
+    case False
+    define wf_X where "wf_X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) X)"
+    define wf_in_del where "wf_in_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_in wf_X"
+    define in_del where "in_del = wf_table_set wf_in_del"
+    define tuple_in' where "tuple_in' = mapping_delete_set tuple_in in_del"
+    define table_in' where "table_in' = table_in - in_del"
+    define wf_table_in' where "wf_table_in' = wf_table_antijoin wf_table_in wf_in_del"
+    define wf_since_del where "wf_since_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_since wf_X"
+    define since_del where "since_del = wf_table_set wf_since_del"
+    define tuple_since' where "tuple_since' = mapping_delete_set tuple_since since_del"
+    define wf_table_since' where "wf_table_since' = wf_table_antijoin wf_table_since wf_since_del"
+    have wf_in_set: "wf_table_set wf_table_in = table_in"
+      by (auto simp: set_in table_in_def)
+    have wf_X_sig: "wf_table_sig wf_X = (args_n args, args_L args)"
+      by (auto simp: wf_X_def wf_idx_sig_of_set)
+    have wf_X_set: "wf_table_set wf_X = X"
+      using table_left
+      by (auto simp: wf_X_def wf_idx_set_of_set table_def)
+    have wf_in_del_sig: "wf_table_sig wf_in_del = (args_n args, args_R args)"
+      using L_R
+      by (auto simp: wf_in_del_def wf_table_sig_join wf_table_sig_antijoin sig_in wf_X_sig)
+    have in_del_set: "in_del = join table_in (\<not>pos) X"
+      by (auto simp: in_del_def wf_in_del_def wf_table_set_antijoin[OF sig_in wf_X_sig L_R]
+          wf_table_set_join[OF sig_in wf_X_sig refl] wf_in_set wf_X_set)
+    have table_in': "Mapping.keys tuple_in' = table_in'"
+      using keys_filter
+      unfolding tuple_in'_def table_in'_def table_in_def[symmetric]
+      by auto
+    have wf_in'_sig: "wf_table_sig wf_table_in' = (args_n args, args_R args)"
+      by (auto simp: wf_table_in'_def wf_table_sig_antijoin sig_in)
+    have wf_in'_set: "wf_table_set wf_table_in' = table_in'"
+      unfolding wf_table_in'_def table_in'_def wf_table_set_antijoin[OF sig_in wf_in_del_sig subset_refl]
+        join_eq[OF wf_table_set_table[OF wf_in_del_sig] wf_table_set_table[OF sig_in]]
+      unfolding wf_in_set in_del_def
+      by auto
+    have tuple_in': "Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in = tuple_in'"
+      unfolding tuple_in'_def
+      by (cases pos) (auto simp: mapping_delete_set_def in_del_set table_in_def
+          join_sub[OF L_R table_left table_table_in] maskL_def proj_tuple_in_join_def intro!: Mapping_filter_cong)
+    have wf_since_del_sig: "wf_table_sig wf_since_del = (args_n args, args_R args)"
+      using L_R
+      by (auto simp: wf_since_del_def wf_table_sig_join wf_table_sig_antijoin sig_since wf_X_sig)
+    have since_del_set: "since_del = join (Mapping.keys tuple_since) (\<not>pos) X"
+      by (auto simp: since_del_def wf_since_del_def wf_table_set_antijoin[OF sig_since wf_X_sig L_R]
+          wf_table_set_join[OF sig_since wf_X_sig refl] set_since wf_X_set)
+    have wf_since'_sig: "wf_table_sig wf_table_since' = (args_n args, args_R args)"
+      by (auto simp: wf_table_since'_def wf_table_sig_antijoin sig_since)
+    have wf_since'_set: "wf_table_set wf_table_since' = Mapping.keys tuple_since'"
+      unfolding wf_table_since'_def wf_table_set_antijoin[OF sig_since wf_since_del_sig subset_refl]
+        join_eq[OF wf_table_set_table[OF wf_since_del_sig] wf_table_set_table[OF sig_since]]
+      unfolding tuple_since'_def since_del_def set_since
+      by auto
+    have table_tuple_since': "table (args_n args) (args_R args) (Mapping.keys tuple_since')"
+      using table_tuple_since
+      by (auto simp: tuple_since'_def table_def)
+    have tuple_since': "Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since = tuple_since'"
+      unfolding tuple_since'_def
+      by (cases pos) (auto simp: mapping_delete_set_def since_del_set
+          join_sub[OF L_R table_left table_tuple_since] maskL_def proj_tuple_in_join_def intro!: Mapping_filter_cong)
+    show ?thesis
+      using False
+      by (auto simp only:join_mmsaux.simps join_mmsaux_abs.simps Let_def pos_def[symmetric] wf_X_def[symmetric]
+          wf_in_del_def[symmetric] in_del_def[symmetric] tuple_in'_def[symmetric] table_in'_def[symmetric] wf_table_in'_def[symmetric]
+          wf_since_del_def[symmetric] since_del_def[symmetric] tuple_since'_def[symmetric] wf_table_since'_def[symmetric]
+          table_in' wf_in'_set[symmetric] wf_table_of_set_args_wf_table_set[OF wf_in'_sig] tuple_in'
+          wf_since'_set[symmetric] wf_table_of_set_args_wf_table_set[OF wf_since'_sig] tuple_since' split: if_splits)
+  qed
 qed
 
 lemma valid_join_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux args cur
-    (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) auxlist"
+    (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) auxlist"
   and table_left': "table (args_n args) (args_L args) X"
   shows "valid_mmsaux args cur
-    (join_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since))
+    (join_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since))
     (map (\<lambda>(t, rel). (t, join rel (args_pos args) X)) auxlist)"
 proof -
   define n where "n = args_n args"
@@ -1345,7 +1515,9 @@ proof -
     unfolding join_mmsaux_abs_eq[OF valid_before table_left']
     using valid_before ts_tuple_rel' lookup_tuple_in' tuple_in'_def tuple_since'_def table_join'
       Mapping_filter_keys[of tuple_since "\<lambda>as. case as of Some t \<Rightarrow> t \<le> nt"]
-      table_in' table_since' by (auto simp add: n_def L_def R_def pos_def table_def Let_def)
+      table_in' wf_table_of_set_args[OF table_in'[unfolded n_def R_def]]
+      table_since' wf_table_of_set_args[OF table_since'[unfolded n_def R_def]]
+    by (auto simp add: n_def L_def R_def pos_def table_def Let_def wf_table_sig_args)
 qed
 
 lemma valid_join_mmsaux: "valid_mmsaux args cur aux auxlist \<Longrightarrow>
@@ -1353,17 +1525,18 @@ lemma valid_join_mmsaux: "valid_mmsaux args cur aux auxlist \<Longrightarrow>
   (join_mmsaux args X aux) (map (\<lambda>(t, rel). (t, join rel (args_pos args) X)) auxlist)"
   using valid_join_mmsaux_unfolded by (cases aux) fast
 
-fun gc_mmsaux :: "'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "gc_mmsaux (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+fun gc_mmsaux :: "args \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
+  "gc_mmsaux args (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     (let all_tuples = \<Union>(snd ` (set (linearize data_prev) \<union> set (linearize data_in)));
     tuple_since' = Mapping.filter (\<lambda>as _. as \<in> all_tuples) tuple_since in
-    (nt, nt, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since'))"
+    (nt, nt, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in,
+     wf_table_of_set_args args (Mapping.keys tuple_since'), tuple_since'))"
 
 lemma valid_gc_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in,
-    table_in, tuple_in, tuple_since) ys"
-  shows "valid_mmsaux args cur (gc_mmsaux (nt, gc, maskL, maskR, data_prev, data_in,
-    table_in, tuple_in, tuple_since)) ys"
+    table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) ys"
+  shows "valid_mmsaux args cur (gc_mmsaux args (nt, gc, maskL, maskR, data_prev, data_in,
+    table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)) ys"
 proof -
   define n where "n = args_n args"
   define L where "L = args_L args"
@@ -1412,19 +1585,20 @@ proof -
         intro!: Mapping_keys_intro dest: Mapping_keys_dest)
   ultimately show ?thesis
     using all_tuples_def tuple_since'_def valid_before table_since'
-    by (auto simp add: n_def R_def)
+      wf_table_of_set_args[OF table_since'[unfolded n_def R_def]]
+    by (auto simp add: n_def R_def Let_def wf_table_sig_args)
 qed
 
-lemma valid_gc_mmsaux: "valid_mmsaux args cur aux ys \<Longrightarrow> valid_mmsaux args cur (gc_mmsaux aux) ys"
+lemma valid_gc_mmsaux: "valid_mmsaux args cur aux ys \<Longrightarrow> valid_mmsaux args cur (gc_mmsaux args aux) ys"
   using valid_gc_mmsaux_unfolded by (cases aux) fast
 
 fun gc_join_mmsaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "gc_join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
-    (if \<not> memR (args_ivl args) (t - gc) then join_mmsaux args X (gc_mmsaux (t, gc, maskL, maskR,
-      data_prev, data_in, table_in, tuple_in, tuple_since))
-    else join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since))"
+  "gc_join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
+    (if \<not> memR (args_ivl args) (t - gc) then join_mmsaux args X (gc_mmsaux args (t, gc, maskL, maskR,
+      data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since))
+    else join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since))"
 
-lemma gc_join_mmsaux_alt: "gc_join_mmsaux args rel1 aux = join_mmsaux args rel1 (gc_mmsaux aux) \<or>
+lemma gc_join_mmsaux_alt: "gc_join_mmsaux args rel1 aux = join_mmsaux args rel1 (gc_mmsaux args aux) \<or>
   gc_join_mmsaux args rel1 aux = join_mmsaux args rel1 aux"
   by (cases aux) (auto simp only: gc_join_mmsaux.simps split: if_splits)
 
@@ -1443,18 +1617,20 @@ lemma minus_keys_code[code]: "minus_keys X m = {x \<in> X. case Mapping.lookup m
   by (auto simp: minus_keys_def Mapping.keys_dom_lookup split: option.splits)
 
 fun add_new_table_mmsaux :: "args \<Rightarrow> 'a table \<Rightarrow> 'a mmsaux \<Rightarrow> 'a mmsaux" where
-  "add_new_table_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
-    (let tuple_since = upd_set tuple_since (\<lambda>_. t) (minus_keys X tuple_since) in
-    (if memL (args_ivl args) 0 then (t, gc, maskL, maskR, data_prev, append_queue (t, X) data_in,
-      table_in \<union> X, upd_set tuple_in (\<lambda>_. t) X, tuple_since)
-    else (t, gc, maskL, maskR, append_queue (t, X) data_prev, data_in, table_in, tuple_in, tuple_since)))"
+  "add_new_table_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
+    (let X' = (minus_keys X tuple_since);
+         wf_table_since' = wf_table_union wf_table_since (wf_table_of_set_args args X');
+         tuple_since' = upd_set tuple_since (\<lambda>_. t) X' in
+    (if memL (args_ivl args) 0 then
+      (t, gc, maskL, maskR, data_prev, append_queue (t, X) data_in, table_in \<union> X, wf_table_union wf_table_in (wf_table_of_set_args args X), upd_set tuple_in (\<lambda>_. t) X, wf_table_since', tuple_since')
+    else (t, gc, maskL, maskR, append_queue (t, X) data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since', tuple_since')))"
 
 lemma valid_add_new_table_mmsaux_unfolded:
   assumes valid_before: "valid_mmsaux args cur
-    (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) auxlist"
+    (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) auxlist"
   and table_X: "table (args_n args) (args_R args) X"
   shows "valid_mmsaux args cur (add_new_table_mmsaux args X
-    (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since))
+    (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since))
     (case auxlist of
       [] => [(cur, X)]
     | ((t, y) # ts) \<Rightarrow> if t = cur then (t, y \<union> X) # ts else (cur, X) # auxlist)"
@@ -1467,8 +1643,9 @@ proof -
   define R where "R = args_R args"
   define pos where "pos = args_pos args"
   define tuple_in' where "tuple_in' \<equiv> upd_set tuple_in (\<lambda>_. nt) X"
-  define tuple_since' where "tuple_since' \<equiv> upd_set tuple_since (\<lambda>_. nt)
-    (X - Mapping.keys tuple_since)"
+  define X' where "X' \<equiv> X - Mapping.keys tuple_since"
+  define wf_table_since' where "wf_table_since' \<equiv> wf_table_union wf_table_since (wf_table_of_set_args args X')"
+  define tuple_since' where "tuple_since' \<equiv> upd_set tuple_since (\<lambda>_. nt) X'"
   define data_prev' where "data_prev' \<equiv> append_queue (nt, X) data_prev"
   define data_in' where "data_in' \<equiv> append_queue (nt, X) data_in"
   define auxlist' where "auxlist' \<equiv> (case auxlist of
@@ -1479,7 +1656,7 @@ proof -
     by (auto simp add: table_def tuple_in'_def Mapping_upd_set_keys n_def R_def)
   have table_since': "table n R (Mapping.keys tuple_since')"
     using table_X valid_before
-    by (auto simp add: table_def tuple_since'_def Mapping_upd_set_keys n_def R_def)
+    by (auto simp add: table_def tuple_since'_def Mapping_upd_set_keys n_def R_def X'_def)
   have tuple_since'_keys: "Mapping.keys tuple_since \<subseteq> Mapping.keys tuple_since'"
     using Mapping_upd_set_keys by (fastforce simp add: tuple_since'_def)
   have lin_data_prev': "linearize data_prev' = linearize data_prev @ [(nt, X)]"
@@ -1502,10 +1679,10 @@ proof -
     using ts_tuple_rel_ext ts_tuple_rel_ext' ts_tuple_rel_ext_Cons ts_tuple_rel_ext_Cons'
     by (fastforce simp: ts_tuple_rel_def split: list.splits if_splits)
   have valid_tuple_nt_X: "\<And>tas. tas \<in> ts_tuple_rel {(nt, X)} \<Longrightarrow> valid_tuple tuple_since' tas"
-    using valid_before by (auto simp add: ts_tuple_rel_def valid_tuple_def tuple_since'_def
+    using valid_before by (auto simp add: X'_def ts_tuple_rel_def valid_tuple_def tuple_since'_def
         Mapping_lookup_upd_set dest: Mapping_keys_dest split: option.splits)
   have valid_tuple_mono: "\<And>tas. valid_tuple tuple_since tas \<Longrightarrow> valid_tuple tuple_since' tas"
-    by (auto simp add: valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
+    by (auto simp add: X'_def valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
         intro: Mapping_keys_intro split: option.splits)
   have ts_tuple_rel_auxlist': "ts_tuple_rel (set auxlist') =
     {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union> set (linearize data_in) \<union> {(nt, X)}).
@@ -1528,7 +1705,7 @@ proof -
       assume assm: "tas \<in> ts_tuple_rel {(nt, X)}"
       show "tas \<in> {tas \<in> ts_tuple_rel (set (linearize data_prev) \<union>
         set (linearize data_in) \<union> {(nt, X)}). valid_tuple tuple_since' tas}"
-        using assm valid_before by (auto simp add: ts_tuple_rel_Un tuple_since'_def
+        using assm valid_before by (auto simp add: X'_def ts_tuple_rel_Un tuple_since'_def
             valid_tuple_def Mapping_lookup_upd_set ts_tuple_rel_def dest: Mapping_keys_dest
             split: option.splits if_splits)
     qed
@@ -1558,13 +1735,13 @@ proof -
       proof (cases "as \<in> Mapping.keys tuple_since")
         case True
         then show ?thesis
-          using valid_tas tas_def by (auto simp add: valid_tuple_def tuple_since'_def
+          using valid_tas tas_def by (auto simp add: X'_def valid_tuple_def tuple_since'_def
               Mapping_lookup_upd_set split: option.splits if_splits)
       next
         case False
         then have "t = nt" "as \<in> X"
           using valid_tas t_le_nt unfolding tas_def
-          by (auto simp add: valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
+          by (auto simp add: X'_def valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
               intro: Mapping_keys_intro split: option.splits if_splits)
         then have "False"
           using assm' unfolding tas_def ts_tuple_rel_def by (auto simp only: ts_tuple_rel_def)
@@ -1575,13 +1752,56 @@ proof -
         using tas_in valid_before by (auto simp add: ts_tuple_rel_auxlist')
     qed (auto simp only: ts_tuple_rel_auxlist')
   qed
+  have table_since: "table (args_n args) (args_R args) (Mapping.keys tuple_since)"
+    using valid_before by (auto simp add: table_def)
+  have keys_tuple_since': "Mapping.keys tuple_since \<union> X' = Mapping.keys tuple_since'"
+    using valid_before
+    by (auto simp: tuple_since'_def Mapping_upd_set_keys)
+  have sig_since: "wf_table_sig wf_table_since = (args_n args, args_R args)"
+    and set_since: "wf_table_set wf_table_since = Mapping.keys tuple_since"
+    using valid_before
+    by auto
+  have sig_since'': "wf_table_sig (wf_table_union wf_table_since (wf_table_of_set_args args X')) = (args_n args, args_R args)"
+    and sig_since: "wf_table_sig wf_table_since = (args_n args, args_R args)"
+    and keys_since: "wf_table_set wf_table_since = Mapping.keys tuple_since"
+    using valid_before
+    by (auto simp: wf_table_sig_union wf_table_sig_args)
+  have table_X': "table (args_n args) (args_R args) X'"
+    using assms(2)
+    by (auto simp: X'_def table_def)
+  have keys_tuple_since'': "wf_table_set (wf_table_union wf_table_since (wf_table_of_set_args args X')) = Mapping.keys tuple_since'"
+    by (auto simp: keys_tuple_since'[symmetric] set_since[symmetric]
+        wf_table_set_union[OF trans[OF sig_since wf_table_sig_args[symmetric]]]
+        wf_table_of_set_args[OF table_X'])
+  have table_in: "table (args_n args) (args_R args) (Mapping.keys tuple_in)"
+    using valid_before by (auto simp add: table_def)
+  have keys_tuple_in: "table_in = Mapping.keys tuple_in"
+    using valid_before
+    by auto
+  have keys_tuple_in': "table_in \<union> X = Mapping.keys tuple_in'"
+    using valid_before
+    by (auto simp: tuple_in'_def Mapping_upd_set_keys)
+  have sig_in: "wf_table_sig wf_table_in = (args_n args, args_R args)"
+    and set_in: "wf_table_set wf_table_in = Mapping.keys tuple_in"
+    using valid_before
+    by auto
+  have sig_in'': "wf_table_sig (wf_table_union wf_table_in (wf_table_of_set_args args X)) = (args_n args, args_R args)"
+    and sig_since: "wf_table_sig wf_table_since = (args_n args, args_R args)"
+    and keys_since: "wf_table_set wf_table_since = Mapping.keys tuple_since"
+    using valid_before
+    by (auto simp: wf_table_sig_union wf_table_sig_args)
+  have keys_tuple_in'': "wf_table_set (wf_table_union wf_table_in (wf_table_of_set_args args X)) = Mapping.keys tuple_in'"
+    by (auto simp: keys_tuple_in keys_tuple_in'[symmetric] set_in[symmetric]
+        wf_table_set_union[OF trans[OF sig_in wf_table_sig_args[symmetric]]]
+        wf_table_of_set_args[OF table_X])
   show ?thesis
   proof (cases "memL I 0")
     case True
     then have add_def: "add_new_table_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in,
-      table_in, tuple_in, tuple_since) = (nt, gc, maskL, maskR, data_prev, data_in',
-      table_in \<union> X, tuple_in', tuple_since')"
-      using data_in'_def tuple_in'_def tuple_since'_def unfolding I_def by (auto simp: minus_keys_def)
+      table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) = (nt, gc, maskL, maskR, data_prev, data_in',
+      table_in \<union> X, wf_table_union wf_table_in (wf_table_of_set_args args X), tuple_in', wf_table_since', tuple_since')"
+      using data_in'_def tuple_in'_def tuple_since'_def
+      by (auto simp: Let_def I_def minus_keys_def wf_table_since'_def X'_def)
     have "\<forall>t \<in> fst ` set (linearize data_in'). t \<le> nt \<and> memL I (nt - t)"
       using valid_before True by (auto simp add: lin_data_in')
     moreover have "\<And>as. Mapping.lookup tuple_in' as = safe_max (fst `
@@ -1595,7 +1815,7 @@ proof -
       proof (cases "as \<in> X")
         case True
         have "valid_tuple tuple_since' (nt, as)"
-          using True valid_before by (auto simp add: valid_tuple_def tuple_since'_def
+          using True valid_before by (auto simp add: X'_def valid_tuple_def tuple_since'_def
               Mapping_lookup_upd_set dest: Mapping_keys_dest split: option.splits)
         moreover have "(nt, as) \<in> ts_tuple_rel (insert (nt, X) (set (linearize data_in)))"
           using True by (auto simp add: ts_tuple_rel_def)
@@ -1628,27 +1848,26 @@ proof -
           valid_tuple tuple_since tas \<and> as = snd tas} =
           {tas \<in> ts_tuple_rel (set (linearize data_in')).
           valid_tuple tuple_since' tas \<and> as = snd tas}"
-          using False by (fastforce simp add: lin_data_in' ts_tuple_rel_def valid_tuple_def
+          using False by (fastforce simp add: X'_def lin_data_in' ts_tuple_rel_def valid_tuple_def
               tuple_since'_def Mapping_lookup_upd_set intro: Mapping_keys_intro
               split: option.splits if_splits)
         then show ?thesis
           using valid_before False by (auto simp add: tuple_in'_def Mapping_lookup_upd_set)
       qed
     qed
-    moreover have "Mapping.keys tuple_in' = table_in \<union> X"
-      using valid_before
-      by (auto simp: tuple_in'_def Mapping_upd_set_keys)
     ultimately show ?thesis
       using assms table_auxlist' sorted_append[of "map fst (linearize data_in)"]
-        lookup_tuple_since' ts_tuple_rel_auxlist' table_in' table_since'
-      unfolding add_def auxlist'_def[symmetric] cur_nt I_def
-      by (auto simp only: valid_mmsaux.simps lin_data_in' n_def R_def) auto
+        lookup_tuple_since' ts_tuple_rel_auxlist'
+        table_in' keys_tuple_in' sig_in'' keys_tuple_in''
+        table_since' keys_tuple_since' sig_since'' keys_tuple_since''
+      unfolding add_def auxlist'_def[symmetric] wf_table_since'_def[symmetric] cur_nt I_def
+      by (auto simp only: valid_mmsaux.simps lin_data_in' n_def R_def) (auto simp: table_def)
   next
     case False
     then have add_def: "add_new_table_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in,
-      table_in, tuple_in, tuple_since) = (nt, gc, maskL, maskR, data_prev', data_in,
-      table_in, tuple_in, tuple_since')"
-      using data_prev'_def tuple_since'_def unfolding I_def by (auto simp: minus_keys_def)
+      table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) = (nt, gc, maskL, maskR, data_prev', data_in,
+      table_in, wf_table_in, tuple_in, wf_table_since', tuple_since')"
+      using data_prev'_def tuple_since'_def unfolding I_def by (auto simp: Let_def minus_keys_def X'_def wf_table_since'_def)
     have "\<forall>t \<in> fst ` set (linearize data_prev'). t \<le> nt \<and> \<not> memL I (nt - t)"
       using valid_before False by (auto simp add: lin_data_prev' I_def)
     moreover have "\<And>as. {tas \<in> ts_tuple_rel (set (linearize data_in)).
@@ -1672,15 +1891,15 @@ proof -
               Mapping_lookup_upd_set intro: Mapping_keys_intro split: option.splits if_splits)
         then show ?thesis
           using Z_def(3) valid_before \<open>\<not> memL I 0\<close> unfolding I_def by auto
-      qed (auto simp add: valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
+      qed (auto simp add: X'_def valid_tuple_def tuple_since'_def Mapping_lookup_upd_set
            dest: Mapping_keys_dest split: option.splits)
-    qed (auto simp add: Mapping_lookup_upd_set valid_tuple_def tuple_since'_def
+    qed (auto simp add: X'_def Mapping_lookup_upd_set valid_tuple_def tuple_since'_def
          intro: Mapping_keys_intro split: option.splits)
     ultimately show ?thesis
       using assms table_auxlist' sorted_append[of "map fst (linearize data_prev)"]
-        False lookup_tuple_since' ts_tuple_rel_auxlist' table_in' table_since' wf_data_prev'
-        valid_before
-      unfolding add_def auxlist'_def[symmetric] cur_nt I_def n_def R_def
+        False lookup_tuple_since' ts_tuple_rel_auxlist' wf_data_prev'
+        valid_before table_since' keys_tuple_since' sig_since'' keys_tuple_since'' table_in'
+      unfolding add_def auxlist'_def[symmetric] wf_table_since'_def[symmetric] cur_nt I_def n_def R_def
         valid_mmsaux.simps
       by (fastforce simp: lin_data_prev') (* SLOW *)
   qed
@@ -1705,15 +1924,15 @@ lemma image_snd: "(a, b) \<in> X \<Longrightarrow> b \<in> snd ` X"
   by force
 
 fun result_mmsaux :: "args \<Rightarrow> 'a mmsaux \<Rightarrow> 'a table" where
-  "result_mmsaux args (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) = table_in"
+  "result_mmsaux args (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) = table_in"
 
 lemma valid_result_mmsaux_unfolded:
   assumes "valid_mmsaux args cur
-    (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) auxlist"
-  shows "result_mmsaux args (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+    (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) auxlist"
+  shows "result_mmsaux args (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {}"
 proof -
-  have res: "result_mmsaux args (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) =
+  have res: "result_mmsaux args (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) =
     snd ` {tas \<in> ts_tuple_rel (set (linearize data_in)). valid_tuple tuple_since tas}"
     using assms valid_mmsaux_tuple_in_keys[OF assms]
     by auto
@@ -1869,18 +2088,6 @@ definition valid_mmuaux :: "args \<Rightarrow> ts \<Rightarrow> event_data mmuau
   bool" where
   "valid_mmuaux args cur = valid_mmuaux' args cur cur"
 
-lift_definition mapping_delete_set :: "('a, 'b) mapping \<Rightarrow> 'a set \<Rightarrow> ('a, 'b) mapping" is
-  "\<lambda>m X a. (if a \<in> X then None
-    else Mapping.lookup m a)" .
-
-lemma delete_set_lookup: "Mapping.lookup (mapping_delete_set m X) a = (if a \<in> X then
-  None else Mapping.lookup m a)"
-  by (simp add: Mapping.lookup.rep_eq mapping_delete_set.rep_eq)
-
-lemma delete_set_keys: "Mapping.keys (mapping_delete_set m X) = Mapping.keys m - X"
-  by (auto simp add: delete_set_lookup intro!: Mapping_keys_intro
-      dest!: Mapping_keys_dest split: if_splits)
-
 fun eval_step_mmuaux :: "args \<Rightarrow> event_data mmuaux \<Rightarrow> event_data mmuaux" where
   "eval_step_mmuaux args (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map,
     done, done_length) = (case safe_hd tss of (Some ts, tss') \<Rightarrow>
@@ -1924,6 +2131,8 @@ lemma list_all_split: "list_all (\<lambda>(x, y). f x y \<and> g x y) xs \<longl
 lemma list_all2_weaken: "list_all2 f xs ys \<Longrightarrow>
   (\<And>x y. (x, y) \<in> set (zip xs ys) \<Longrightarrow> f x y \<Longrightarrow> f' x y) \<Longrightarrow> list_all2 f' xs ys"
   by (induction xs ys rule: list_all2_induct) auto
+
+declare Map_To_Mapping.map_apply_def[simp]
 
 lemma Mapping_lookup_delete: "Mapping.lookup (Mapping.delete k m) k' =
   (if k = k' then None else Mapping.lookup m k')"
@@ -2602,8 +2811,9 @@ proof -
       then show ?thesis
       proof(cases "len = 1")
         case True
-        then have "Mapping.lookup a2_map'' tp' = Some Mapping.empty" using a
-        unfolding a2_map''_def a2_map'_def Mapping_lookup_delete by(auto) (metis One_nat_def a le_add_diff_inverse2 len_tp lookup_update)
+        then have "Mapping.lookup a2_map'' tp' = Some Mapping.empty" using a len_tp
+          unfolding a2_map''_def a2_map'_def Mapping_lookup_delete
+          by (auto simp: lookup_update')
         then show ?thesis by auto
       next
         case False
@@ -2690,8 +2900,8 @@ proof -
         then show ?thesis by auto
       next
         case False
-        then have "Mapping.lookup a2_map'' tp' = Mapping.lookup a2_map tp'" using a unfolding a2_map''_def a2_map'_def 
-          by (smt (z3) Mapping_lookup_delete Nat.le_imp_diff_is_add tp'_in add_le_same_cancel1 atLeastAtMost_iff len_tp lookup_update_neq not_one_le_zero)
+        then have "Mapping.lookup a2_map'' tp' = Mapping.lookup a2_map tp'" using a unfolding a2_map''_def a2_map'_def
+          by (smt (z3) Mapping.lookup_update_neq Mapping_lookup_delete a2_map''_def m_aux_def option.simps(3))
         then have *: "Mapping.lookup a2_map tp' = Some m_aux" using m_aux_def by auto
         have "\<forall>tp'\<in>{tp - len..tp}. case Mapping.lookup a2_map tp' of Some m \<Rightarrow> \<forall>xs\<in>Mapping.keys m. case Mapping.lookup m xs of Some tstp \<Rightarrow> \<exists>(table, tstp')\<in>set (linearize tables). tstp = tstp' \<and> xs \<in> table" using valid_before by auto
         then have old_cond: "\<forall>xs\<in>Mapping.keys m_aux. case Mapping.lookup m_aux xs of Some tstp \<Rightarrow> \<exists>(table, tstp')\<in>set (linearize tables). tstp = tstp' \<and> xs \<in> table"

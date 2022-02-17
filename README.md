@@ -21,7 +21,7 @@ Installation
 
 To compile and install MonPoly, you need the [OCaml compiler](https://ocaml.org)
 and the [Dune build system](https://dune.readthedocs.io). MonPoly has been
-tested with version 4.11.1 of [OCaml](https://ocaml.org) under Linux. It should
+tested with version 4.13.1 of [OCaml](https://ocaml.org) under Linux. It should
 also compile under other Unix-like operating systems (e.g., Apple macOS). For
 Microsoft Windows you may need to install the [Cygwin
 environment](https://www.cygwin.com/).
@@ -41,7 +41,7 @@ Use the following commands to prepare the compiler. You can use a different
 version of OCaml at your own risk.
 ```
 opam init  # skip this if you have used OPAM before
-opam switch create 4.11.1
+opam switch create 4.13.1
 eval $(opam env)
 ```
 

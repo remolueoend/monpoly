@@ -5,7 +5,7 @@ RUN sudo apt-get update \
         libgmp-dev \
         m4 \
     && opam update \
-    && opam switch create "ocaml-variants.4.11.2+flambda" \
+    && opam switch create "ocaml-variants.4.13.1+flambda" \
     && eval $(opam env)
 
 COPY --chown=opam:opam . build

@@ -28,8 +28,8 @@ fun valid_maggaux' :: "aggargs \<Rightarrow> aggaux option \<Rightarrow> event_d
   "valid_maggaux' args (Some aux) X = valid_maggaux args aux X"
 
 fun valid_mmasaux :: "args \<Rightarrow> ts \<Rightarrow> mmasaux \<Rightarrow> event_data Monitor.msaux \<Rightarrow> bool" where
-  "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) ys =
-   (valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) ys \<and>
+  "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) ys =
+   (valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) ys \<and>
     (case args_agg args of
       Some aggargs \<Rightarrow> valid_maggaux' aggargs aggaux table_in |
       None \<Rightarrow> True))"
@@ -40,8 +40,8 @@ fun init_mmasaux :: "args \<Rightarrow> mmasaux" where
       None \<Rightarrow> (init_mmsaux args, None))"
 
 fun add_new_table_mmasaux :: "args \<Rightarrow> event_data table \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
-  "add_new_table_mmasaux args X ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) = 
-    (let msaux' = add_new_table_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) in
+  "add_new_table_mmasaux args X ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) = 
+    (let msaux' = add_new_table_mmsaux args X (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) in
     (case args_agg args of 
       None \<Rightarrow> (msaux', aggaux) |
       Some aggargs \<Rightarrow> (msaux', if (memL (args_ivl args) 0) 
@@ -49,65 +49,68 @@ fun add_new_table_mmasaux :: "args \<Rightarrow> event_data table \<Rightarrow> 
                                       else aggaux)))" 
 
 fun join_mmasaux :: "args \<Rightarrow> event_data table \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
-  "join_mmasaux args X ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) =
+  "join_mmasaux args X ((t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) =
     (case args_agg args of 
-      None \<Rightarrow> (join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) |
-      Some aggargs \<Rightarrow>
-    (let pos = args_pos args in
-    (if maskL = maskR then       
-      (let (tuple_in', to_del) = filter_join' pos X tuple_in;
-      table_in = table_in - to_del;   
-      tuple_since = filter_join pos X tuple_since in
-      ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in', tuple_since), delete_maggaux' aggargs to_del aggaux))
-    else if (\<forall>i \<in> set maskL. \<not>i) then
-      (let nones = replicate (length maskL) None;
-      take_all = (pos \<longleftrightarrow> nones \<in> X); 
-      table_in = (if take_all then table_in else {});
-      tuple_in' = (if take_all then tuple_in else Mapping.empty);
-      aggaux' = (if take_all then aggaux else init_maggaux' aggargs);
-      tuple_since = (if take_all then tuple_since else Mapping.empty) in
-      ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in', tuple_since), aggaux'))
-    else
-      (let tuple_in' = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_in;
-      tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join pos maskL as X) tuple_since in
-      ((t, gc, maskL, maskR, data_prev, data_in, Mapping.keys tuple_in', tuple_in', tuple_since), delete_maggaux' aggargs (Mapping.keys tuple_in - Mapping.keys tuple_in') aggaux)))))"
+      None \<Rightarrow> (join_mmsaux args X (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) |
+      Some aggargs \<Rightarrow> (let pos = args_pos args in
+        (if (\<forall>i \<in> set maskL. \<not>i) then
+          (let nones = replicate (length maskL) None;
+          take_all = (pos \<longleftrightarrow> nones \<in> X);
+          table_in' = (if take_all then table_in else {});
+          wf_table_in' = (if take_all then wf_table_in else wf_table_of_set_args args {});
+          tuple_in' = (if take_all then tuple_in else Mapping.empty);
+          aggaux' = (if take_all then aggaux else init_maggaux' aggargs);
+          wf_table_since' = (if take_all then wf_table_since else wf_table_of_set_args args {});
+          tuple_since' = (if take_all then tuple_since else Mapping.empty) in
+          ((t, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'), aggaux'))
+       else (let wf_X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) X);
+          wf_in_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_in wf_X;
+          in_del = wf_table_set wf_in_del;
+          tuple_in' = mapping_delete_set tuple_in in_del;
+          table_in' = table_in - in_del;
+          wf_table_in' = wf_table_antijoin wf_table_in wf_in_del;
+          wf_since_del = (if pos then wf_table_antijoin else wf_table_join) wf_table_since wf_X;
+          since_del = wf_table_set wf_since_del;
+          tuple_since' = mapping_delete_set tuple_since since_del;
+          wf_table_since' = wf_table_antijoin wf_table_since wf_since_del in
+          ((t, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'), delete_maggaux' aggargs in_del aggaux)))))"
 
 fun gc_join_mmasaux :: "args \<Rightarrow> event_data table \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
-  "gc_join_mmasaux args X ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aux) =
-    (if \<not> memR (args_ivl args) (t - gc) then join_mmasaux args X ((gc_mmsaux (t, gc, maskL, maskR,
-      data_prev, data_in, table_in, tuple_in, tuple_since), aux))
-    else join_mmasaux args X ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aux))"
+  "gc_join_mmasaux args X ((t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aux) =
+    (if \<not> memR (args_ivl args) (t - gc) then join_mmasaux args X ((gc_mmsaux args (t, gc, maskL, maskR,
+      data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aux))
+    else join_mmasaux args X ((t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aux))"
 
 fun shift_end_mmasaux :: "args \<Rightarrow> ts \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
-  "shift_end_mmasaux args nt ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) =
+  "shift_end_mmasaux args nt ((t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) =
     (case args_agg args of 
-      None \<Rightarrow> (shift_end args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) |
+      None \<Rightarrow> (shift_end args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) |
       Some aggargs \<Rightarrow>
-    (let I = args_ivl args;
-    data_prev' = dropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_prev;
-    (data_in, discard) = takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in;
-    (tuple_in, del) =  fold filter_set discard (tuple_in, {});
-    aggaux = delete_maggaux' aggargs del aggaux in
-    ((t, gc, maskL, maskR, data_prev', data_in, table_in - del, tuple_in, tuple_since), aggaux)))"
+        (let I = args_ivl args;
+         data_prev' = dropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_prev;
+         (data_in, discard) = takedropWhile_queue (\<lambda>(t, X). \<not> memR I (nt - t)) data_in;
+         (tuple_in, del) = fold filter_set discard (tuple_in, {}) in
+         ((t, gc, maskL, maskR, data_prev', data_in,
+          table_in - del, wf_table_antijoin wf_table_in (wf_table_of_set_args args del), tuple_in,
+          wf_table_since, tuple_since), delete_maggaux' aggargs del aggaux)))"
 
 fun add_new_ts_mmasaux' :: "args \<Rightarrow> ts \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
-  "add_new_ts_mmasaux' args nt ((t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) =
+  "add_new_ts_mmasaux' args nt ((t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) =
     (case args_agg args of 
-      None \<Rightarrow> (add_new_ts_mmsaux' args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) |
+      None \<Rightarrow> (add_new_ts_mmsaux' args nt (t, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) |
       Some aggargs \<Rightarrow>
-    (let I = args_ivl args; 
-    (data_prev, move) = takedropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev;
-    data_in = fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in) move data_in;
-    (tuple_in', add) = fold (upd_set_keys (\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)})) move (tuple_in, {});
-    aggaux = insert_maggaux' aggargs (add - Mapping.keys tuple_in) aggaux in
-    
-    ((nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, tuple_in', tuple_since), aggaux)))"
+        (let I = args_ivl args;
+         (data_prev, move) = takedropWhile_queue (\<lambda>(t, X). memL I (nt - t)) data_prev;
+          data_in = fold (\<lambda>(t, X) data_in. append_queue (t, X) data_in) move data_in;
+         (tuple_in', add) = fold (upd_set_keys (\<lambda>X t. {as \<in> X. valid_tuple tuple_since (t, as)})) move (tuple_in, {}) in
+         ((nt, gc, maskL, maskR, data_prev, data_in, table_in \<union> add, wf_table_union wf_table_in (wf_table_of_set_args args add), tuple_in', wf_table_since, tuple_since),
+         insert_maggaux' aggargs (add - Mapping.keys tuple_in) aggaux)))"
 
 definition add_new_ts_mmasaux :: "args \<Rightarrow> ts \<Rightarrow> mmasaux \<Rightarrow> mmasaux" where
   "add_new_ts_mmasaux args nt aux = add_new_ts_mmasaux' args nt (shift_end_mmasaux args nt aux)"
 
 fun result_mmasaux :: "args \<Rightarrow> mmasaux \<Rightarrow> event_data table" where
-  "result_mmasaux args ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) =
+  "result_mmasaux args ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) =
     (case (args_agg args, aggaux) of 
       (Some aggargs, Some aux) \<Rightarrow> result_maggaux aggargs aux |
       (Some aggargs, None) \<Rightarrow> eval_aggargs aggargs table_in |
@@ -127,16 +130,16 @@ next
 qed
 
 lemma valid_add_new_table_mmasaux_unfolded:
-  assumes "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) auxlist"
+  assumes "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) auxlist"
   and "table (args_n args) (args_R args) rel2"
-  shows "valid_mmasaux args cur (add_new_table_mmasaux args rel2 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux))
+  shows "valid_mmasaux args cur (add_new_table_mmasaux args rel2 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux))
     (case auxlist of [] => [(cur, rel2)] | 
     ((t, y) # ts) \<Rightarrow> if t = cur then (t, y \<union> rel2) # ts else (cur, rel2) # auxlist)"
 proof -
-  let ?msaux = "(nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+  let ?msaux = "(nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
   let ?msaux' = "add_new_table_mmsaux args rel2 ?msaux"
-  obtain nt' gc' maskL' maskR' data_prev' data_in' tuple_in' tuple_since' table_in'
-    where split: "?msaux' = (nt', gc', maskL', maskR', data_prev', data_in', table_in', tuple_in', tuple_since')" by fastforce 
+  obtain nt' gc' maskL' maskR' data_prev' data_in' table_in' wf_table_in' tuple_in' wf_table_since' tuple_since'
+    where split: "?msaux' = (nt', gc', maskL', maskR', data_prev', data_in', table_in', wf_table_in', tuple_in', wf_table_since', tuple_since')" by fastforce 
   have valid_msaux: "valid_mmsaux args cur ?msaux auxlist" using assms(1) by(auto split:option.splits) 
   note valid_msaux' = valid_add_new_table_mmsaux[OF valid_msaux assms(2)] 
   show ?thesis
@@ -163,7 +166,8 @@ proof -
         case (Some a)
         then obtain aux where [simp]: "aggaux = Some aux" using new_def some_aggargs by(cases aggaux) (auto split:if_splits) 
         then have valid_maggaux: "valid_maggaux aggargs aux (Mapping.keys tuple_in)" 
-          using assms(1) some_aggargs by simp
+          using assms(1) some_aggargs
+          by auto
         show ?thesis
         proof(cases "memL (args_ivl args) 0")
           case True
@@ -198,17 +202,20 @@ lemma mapping_filter_keys_diff: "Mapping.keys (Mapping.filter p m) = Mapping.key
   by (simp add: double_diff keys_filter)
 
 lemma valid_join_mmasaux_unfolded:
-  assumes "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) auxlist"
+  assumes "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) auxlist"
   and "table (args_n args) (args_L args) rel1"
-  shows "valid_mmasaux args cur (join_mmasaux args rel1 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux))
+  shows "valid_mmasaux args cur (join_mmasaux args rel1 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux))
     (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)"
 proof -
-  let ?msaux = "(nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+  let ?msaux = "(nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
   let ?msaux' = "join_mmsaux args rel1 ?msaux"
   let ?p1 = "join_filter_cond (args_pos args) rel1"
   let ?p2 = "\<lambda>k _. proj_tuple_in_join (args_pos args) maskL k rel1"
   have valid_msaux: "valid_mmsaux args cur ?msaux auxlist" using assms(1) by(auto split:option.splits) 
   note valid_msaux' = valid_join_mmsaux[OF valid_msaux assms(2)]
+  have keys_in: "Mapping.keys tuple_in = table_in"
+    using valid_msaux
+    by auto
   show ?thesis
   proof(cases "args_agg args")
     case None
@@ -217,58 +224,60 @@ proof -
     case (Some aggargs)
     then have some_aggargs: "args_agg args = Some aggargs" by auto
     show ?thesis 
-    proof(cases "maskL = maskR")
+    proof(cases "(\<forall>i \<in> set maskL. \<not>i)")
       case True
-      then show ?thesis 
+      let ?temp = "let nones = replicate (length maskL) None;
+      take_all = (args_pos args \<longleftrightarrow> nones \<in> rel1); 
+      table_in' = (if take_all then table_in else {});
+      wf_table_in' = (if take_all then wf_table_in else wf_table_of_set_args args {});
+      tuple_in' = (if take_all then tuple_in else Mapping.empty);
+      aggaux' = (if take_all then aggaux else init_maggaux' aggargs);
+      wf_table_since' = (if take_all then wf_table_since else wf_table_of_set_args args {});
+      tuple_since = (if take_all then tuple_since else Mapping.empty) in
+      ((nt, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since), aggaux')"
+      have *: "join_mmasaux args rel1 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) = ?temp" 
+        using Some True by auto
+      have "valid_mmasaux args cur ?temp (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)"
+        using valid_msaux' True valid_init_maggaux assms(1) some_aggargs
+        by(simp del:valid_mmsaux.simps init_maggaux.simps split:if_splits option.splits prod.splits) (metis case_prodD)
+      then show ?thesis using * by presburger
+    next
+      case False
+      let ?temp = "let wf_X = wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) rel1);
+        wf_in_del = (if args_pos args then wf_table_antijoin else wf_table_join) wf_table_in wf_X;
+        in_del = wf_table_set wf_in_del;
+        tuple_in' = mapping_delete_set tuple_in in_del;
+        table_in' = table_in - in_del;
+        wf_table_in' = wf_table_antijoin wf_table_in wf_in_del;
+        wf_since_del = (if args_pos args then wf_table_antijoin else wf_table_join) wf_table_since wf_X;
+        since_del = wf_table_set wf_since_del;
+        tuple_since' = mapping_delete_set tuple_since since_del;
+        wf_table_since' = wf_table_antijoin wf_table_since wf_since_del in
+        ((nt, gc, maskL, maskR, data_prev, data_in, table_in', wf_table_in', tuple_in', wf_table_since', tuple_since'), delete_maggaux' aggargs in_del aggaux)"
+      have *: "join_mmasaux args rel1 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) = ?temp" 
+        using False some_aggargs by auto
+      have "valid_mmasaux args cur ?temp (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)" 
       proof(cases aggaux)
         case None
-        then show ?thesis using Some valid_msaux' True by(auto simp del:valid_mmsaux.simps) 
+        then show ?thesis using some_aggargs valid_msaux' False by(simp del:valid_mmsaux.simps) 
       next
         case (Some a)
         then have valid_maggaux: "valid_maggaux aggargs a (Mapping.keys tuple_in)" using some_aggargs assms(1) by auto
-        show ?thesis using True valid_msaux' some_aggargs mapping_filter_keys_diff[of _ tuple_in, symmetric] Some
-          valid_delete_maggaux[OF valid_maggaux, of "Mapping.keys tuple_in - Mapping.keys (Mapping.filter ?p1 tuple_in)"]
-          by(simp add: filter_join_def split:if_splits prod.splits) 
+        have L_R: "args_L args \<subseteq> args_R args"
+          and sig_in: "wf_table_sig wf_table_in = (args_n args, args_R args)"
+          and table_in: "wf_table_set wf_table_in = table_in"
+          using valid_msaux
+          by auto
+        note aux = trans[OF wf_table_sig_of_idx wf_idx_sig_of_set]
+        show ?thesis using
+            valid_delete_maggaux[OF valid_maggaux,
+              where ?Y="wf_table_set ((if args_pos args then wf_table_antijoin else wf_table_join) wf_table_in (wf_table_of_idx (wf_idx_of_set (args_n args) (args_L args) (args_L args) rel1)))"]
+              some_aggargs Some valid_msaux' False mapping_filter_keys_diff[of _ tuple_in, symmetric]
+          by (auto simp del:delete_maggaux.simps valid_mmsaux.simps simp: keys_in table_in
+              wf_table_set_antijoin[OF sig_in aux L_R, unfolded join_sub[OF L_R wf_table_set_table[OF aux] wf_table_set_table[OF sig_in]]]
+              wf_table_set_join[OF sig_in aux refl, where ?A'="args_L args", unfolded join_sub[OF L_R wf_table_set_table[OF aux] wf_table_set_table[OF sig_in]]] split:option.splits prod.splits if_splits)
       qed
-    next
-      case False
-      then have neq: "maskL \<noteq> maskR" by auto
-      then show ?thesis 
-      proof(cases "(\<forall>i \<in> set maskL. \<not>i)")
-        case True
-        let ?temp = "let nones = replicate (length maskL) None;
-      take_all = (args_pos args \<longleftrightarrow> nones \<in> rel1); 
-      table_in' = (if take_all then table_in else {});
-      tuple_in' = (if take_all then tuple_in else Mapping.empty);
-      aggaux' = (if take_all then aggaux else init_maggaux' aggargs);
-      tuple_since = (if take_all then tuple_since else Mapping.empty) in
-      ((nt, gc, maskL, maskR, data_prev, data_in, table_in', tuple_in', tuple_since), aggaux')"
-        have *: "join_mmasaux args rel1 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) = ?temp" 
-          using False Some True by simp blast
-        have "valid_mmasaux args cur ?temp (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)"
-          using valid_msaux' neq True valid_init_maggaux assms(1) some_aggargs
-          by(simp del:valid_mmsaux.simps init_maggaux.simps split:if_splits option.splits prod.splits) (metis case_prodD)
-        then show ?thesis using * by presburger
-      next
-        case False
-        let ?temp = "let tuple_in' = Mapping.filter (\<lambda>as _. proj_tuple_in_join (args_pos args) maskL as rel1) tuple_in;
-      tuple_since = Mapping.filter (\<lambda>as _. proj_tuple_in_join (args_pos args) maskL as rel1) tuple_since in
-      ((nt, gc, maskL, maskR, data_prev, data_in, Mapping.keys tuple_in', tuple_in', tuple_since), delete_maggaux' aggargs (Mapping.keys tuple_in - Mapping.keys tuple_in') aggaux)"
-        have *: "join_mmasaux args rel1 ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) = ?temp" 
-          using False neq some_aggargs by simp blast
-        have "valid_mmasaux args cur ?temp (map (\<lambda>(t, rel). (t, join rel (args_pos args) rel1)) auxlist)" 
-        proof(cases aggaux)
-          case None
-          then show ?thesis using some_aggargs valid_msaux' neq False by(simp del:valid_mmsaux.simps) 
-        next
-          case (Some a)
-          then have valid_maggaux: "valid_maggaux aggargs a (Mapping.keys tuple_in)" using some_aggargs assms(1) by auto
-          show ?thesis using valid_delete_maggaux[OF valid_maggaux, of "Mapping.keys tuple_in - Mapping.keys (Mapping.filter ?p2 tuple_in)"] 
-            some_aggargs Some valid_msaux' neq False mapping_filter_keys_diff[of _ tuple_in, symmetric]
-            by(simp del:delete_maggaux.simps valid_mmsaux.simps split:option.splits prod.splits if_splits)
-        qed
-        then show ?thesis using * by presburger
-      qed
+      then show ?thesis using * by presburger
     qed
   qed
 qed
@@ -278,24 +287,24 @@ lemma valid_join_mmasaux: "valid_mmasaux args cur (mmsaux, aux) auxlist \<Longri
   (join_mmasaux args X (mmsaux, aux)) (map (\<lambda>(t, rel). (t, join rel (args_pos args) X)) auxlist)"
   using valid_join_mmasaux_unfolded by (cases mmsaux) fast
 
-lemma gc_join_mmasaux_alt: "gc_join_mmasaux args rel1 (mmsaux, aux) = join_mmasaux args rel1 ((gc_mmsaux mmsaux), aux) \<or>
+lemma gc_join_mmasaux_alt: "gc_join_mmasaux args rel1 (mmsaux, aux) = join_mmasaux args rel1 ((gc_mmsaux args mmsaux), aux) \<or>
   gc_join_mmasaux args rel1 (mmsaux, aux) = join_mmasaux args rel1 (mmsaux, aux)"
   by(cases mmsaux) (auto simp only: gc_join_mmasaux.simps split: if_splits)
 
 lemma valid_gc_mmasaux_unfolded:
-  assumes valid_before: "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in,
-    tuple_in, tuple_since), aux) ys"
-  shows "valid_mmasaux args cur (gc_mmsaux (nt, gc, maskL, maskR, data_prev, data_in, table_in,
-    tuple_in, tuple_since), aux) ys"
+  assumes valid_before: "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in,
+    tuple_in, wf_table_since, tuple_since), aux) ys"
+  shows "valid_mmasaux args cur (gc_mmsaux args (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in,
+    tuple_in, wf_table_since, tuple_since), aux) ys"
 proof -
-  have valid_msaux: "valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since) ys" using valid_before
+  have valid_msaux: "valid_mmsaux args cur (nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since) ys" using valid_before
     by(simp del:valid_mmsaux.simps split:option.splits)
   note valid_msaux' = valid_gc_mmsaux_unfolded[OF valid_msaux]
   show ?thesis using valid_gc_mmsaux_unfolded[OF valid_msaux] valid_before
     by(simp split:option.splits prod.splits) 
 qed
 
-lemma valid_gc_mmasaux: "valid_mmasaux args cur (mmsaux, aux) ys \<Longrightarrow> valid_mmasaux args cur ((gc_mmsaux mmsaux), aux) ys"
+lemma valid_gc_mmasaux: "valid_mmasaux args cur (mmsaux, aux) ys \<Longrightarrow> valid_mmasaux args cur ((gc_mmsaux args mmsaux), aux) ys"
   using valid_gc_mmasaux_unfolded by (cases mmsaux) fast
 
 lemma valid_gc_join_mmasaux:
@@ -312,19 +321,20 @@ lemma fold_pair_extract:
 
 lemma valid_shift_end_mmasaux_unfolded:
   assumes valid_before: "valid_mmasaux args cur
-    ((ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) auxlist"
+    ((ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) auxlist"
   and nt_mono: "nt \<ge> cur"
   shows "valid_mmasaux args cur (shift_end_mmasaux args nt
-    ((ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux))
+    ((ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux))
     (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
 proof -
-  let ?msaux = "(ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+  let ?msaux = "(ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
   obtain data_in' discard where takedrop_def: "(data_in', discard) = takedropWhile_queue (\<lambda>(t, X). \<not> memR (args_ivl args) (nt - t)) data_in"
     by (metis old.prod.exhaust)
-  obtain msaux' aggaux' where updated_def: "shift_end_mmasaux args nt ((ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) = (msaux', aggaux')"
+  obtain msaux' aggaux' where updated_def: "shift_end_mmasaux args nt ((ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) = (msaux', aggaux')"
     by fastforce
-  then obtain ot' gc' maskL' maskR' data_prev' data_in' table_in' tuple_in' tuple_since' where split:
-    "msaux' = (ot', gc', maskL', maskR', data_prev', data_in', table_in', tuple_in', tuple_since')" using gc_mmsaux.cases by blast
+  then obtain ot' gc' maskL' maskR' data_prev' data_in' table_in' wf_table_in' tuple_in' wf_table_since' tuple_since' where split:
+    "msaux' = (ot', gc', maskL', maskR', data_prev', data_in', table_in', wf_table_in', tuple_in', wf_table_since', tuple_since')"
+    by (cases msaux') auto
   have tbl: "table_in = Mapping.keys tuple_in" using valid_before by auto
   have valid_msaux: "valid_mmsaux args cur ?msaux auxlist" using assms(1) by(auto split:option.splits) 
   show ?thesis
@@ -341,7 +351,7 @@ proof -
       "table_in' = table_in - to_del"
       using split updated_def Some takedrop_def empty_def 
       by(auto simp del: takedropWhile_queue.simps dropWhile_queue.simps split:prod.splits option.splits)
-    then have "msaux' = shift_end args nt (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+    then have "msaux' = shift_end args nt (ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
       using  valid_before Some split updated_def takedrop_def
       by(auto simp del: valid_mmsaux.simps dropWhile_queue.simps takedropWhile_queue.simps split:prod.splits)
     then have valid_msaux': "valid_mmsaux args cur msaux' (filter (\<lambda>(t, rel). memR (args_ivl args) (nt - t)) auxlist)"
@@ -377,18 +387,19 @@ lemma valid_shift_end_mmasaux: "valid_mmasaux args cur (mmsaux, aux) auxlist \<L
   using valid_shift_end_mmasaux_unfolded by (cases mmsaux) fast
 
 lemma valid_add_new_ts_mmasaux'_unfolded:
-  assumes valid_before: "valid_mmasaux args cur ((ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) auxlist"
+  assumes valid_before: "valid_mmasaux args cur ((ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) auxlist"
   and nt_mono: "nt \<ge> cur"
   shows "valid_mmasaux args nt (add_new_ts_mmasaux' args nt
-    ((ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux)) auxlist"
+    ((ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux)) auxlist"
 proof -
-  let ?msaux = "(ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+  let ?msaux = "(ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
   obtain data_prev' move where takedrop_def: "(data_prev', move) = takedropWhile_queue (\<lambda>(t, X). memL (args_ivl args) (nt - t)) data_prev"
     by (metis old.prod.exhaust)
-  obtain msaux' aggaux' where updated_def: "add_new_ts_mmasaux' args nt ((ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) = (msaux', aggaux')"
+  obtain msaux' aggaux' where updated_def: "add_new_ts_mmasaux' args nt ((ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) = (msaux', aggaux')"
     by fastforce
-  then obtain ot' gc' maskL' maskR' data_prev' data_in' table_in' tuple_in' tuple_since' where split:
-    "msaux' = (ot', gc', maskL', maskR', data_prev', data_in', table_in', tuple_in', tuple_since')" using gc_mmsaux.cases by blast
+  then obtain ot' gc' maskL' maskR' data_prev' data_in' table_in' wf_table_in' tuple_in' wf_table_since' tuple_since' where split:
+    "msaux' = (ot', gc', maskL', maskR', data_prev', data_in', table_in', wf_table_in', tuple_in', wf_table_since', tuple_since')"
+    by (cases msaux') auto
   have valid_msaux: "valid_mmsaux args cur ?msaux auxlist" using assms(1) by(auto split:option.splits) 
   have tbl: "Mapping.keys tuple_in = table_in" using valid_before by auto
   show ?thesis
@@ -404,7 +415,7 @@ proof -
       using split updated_def Some takedrop_def by(auto simp: empty_def split:prod.splits)
     then have agg': "aggaux' = insert_maggaux' aggargs (add - table_in) aggaux"
       using split updated_def Some takedrop_def tbl by(auto simp: empty_def split:prod.splits)
-    have "msaux' = add_new_ts_mmsaux' args nt (ot, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+    have "msaux' = add_new_ts_mmsaux' args nt (ot, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
       using valid_before Some split updated_def takedrop_def
       by(auto simp del: valid_mmsaux.simps dropWhile_queue.simps takedropWhile_queue.simps split:prod.splits)
     then have valid_msaux': "valid_mmsaux args nt msaux' auxlist"
@@ -436,10 +447,10 @@ lemma valid_add_new_ts_mmasaux:
   unfolding add_new_ts_mmasaux_def by (smt (z3) assms(2) valid_mmasaux.elims(1))
 
 lemma valid_result_mmasaux_unfolded:
-  assumes "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) auxlist"
-  shows "result_mmasaux args ((nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since), aggaux) = eval_args_agg args (foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {})"
+  assumes "valid_mmasaux args cur ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) auxlist"
+  shows "result_mmasaux args ((nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since), aggaux) = eval_args_agg args (foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {})"
 proof -
-  let ?msaux = "(nt, gc, maskL, maskR, data_prev, data_in, table_in, tuple_in, tuple_since)"
+  let ?msaux = "(nt, gc, maskL, maskR, data_prev, data_in, table_in, wf_table_in, tuple_in, wf_table_since, tuple_since)"
   have valid_msaux: "valid_mmsaux args cur ?msaux auxlist" using assms by(auto split:option.splits) 
   have tuple_in_rel: "foldr (\<union>) [rel. (t, rel) \<leftarrow> auxlist, memL (args_ivl args) (cur - t)] {} = table_in"
     using valid_result_mmsaux[OF valid_msaux] by auto
@@ -548,9 +559,8 @@ fun add_new_mmauaux :: "args \<Rightarrow> event_data table \<Rightarrow> event_
     a1_map = (if pos then Mapping.filter (\<lambda>as _. as \<in> rel1)
       (upd_set a1_map (\<lambda>_. tp) (rel1 - Mapping.keys a1_map)) else upd_set a1_map (\<lambda>_. tp) rel1);
     to_add = {b. (tp - len, b) \<in> tmp \<and> Mapping.lookup m b = None};
-    aggaux = insert_maggaux' aggargs to_add aggaux;
     tss = append_queue nt tss in
-    ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done, done_length), aggaux)))"
+    ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done, done_length), insert_maggaux' aggargs to_add aggaux)))"
 
 fun length_mmauaux :: "args \<Rightarrow> mmauaux \<Rightarrow> nat" where
   "length_mmauaux args ((tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done, done_length), auxs) =
@@ -683,9 +693,9 @@ proof -
         using valid_delete_maggaux[OF * subs] Some unfolding delete_set_keys by(auto simp del:delete_maggaux.simps split:prod.splits if_splits)
     qed
     have aux: "Suc (tp - Suc 0) = tp" using len_pos len_tp by fastforce
-    then have a2_map_split: "Mapping.lookup  a2_map' (tp - len + 1) = (if len = 1 then Some Mapping.empty else Some (Mapping.combine max_tstp ?m' to_ins))" 
-      using takedrop_split m'_def m_def split updated_def safe_hd_eq aargs lookup_delete[of _ "Mapping.update tp Mapping.empty a2_map"] lookup_update'[of _ _ a2_map]
-      lookup_delete[of "tp - len" "Mapping.update (tp - len + 1) (Mapping.combine max_tstp m'' m') a2_map" "tp - len + 1"]
+    then have a2_map_split: "Mapping.lookup  a2_map' (tp - len + 1) = (if len = 1 then Some Mapping.empty else Some (Mapping.combine max_tstp ?m' to_ins))"
+      using takedrop_split m'_def m_def split updated_def safe_hd_eq aargs Mapping.lookup_delete[of _ "Mapping.update tp Mapping.empty a2_map"] lookup_update'[of _ _ a2_map]
+        Mapping.lookup_delete_neq[of "tp - len" "tp - len + 1" "Mapping.update (tp - len + 1) (Mapping.combine max_tstp m'' m') a2_map"]
       unfolding m''_def to_del_def to_del_approx_def to_ins_def I_def ts'_def 
       by(auto simp del: takedropWhile_queue.simps split:prod.splits) (simp split:option.splits)
     let ?to_ins = "Mapping.filter (\<lambda>k v. Mapping.lookup m'' k = None) to_ins"
@@ -856,7 +866,7 @@ proof -
     "?muaux_i = shift_mmuaux args nt ?muaux"
     using valid_shift_mmauaux'[OF * nt_mono] inter_def by(auto simp del:valid_mmauaux'.simps shift_mmauaux.simps shift_mmuaux.simps) 
   define new_tstp where "new_tstp = (if memL (args_ivl args) 0 then Inr tp_i else Inl nt)"
-  define tstp_map' where "tstp_map' = Mapping.update tp_i nt tstp_map_i"
+  define tstp_map'' where "tstp_map'' = Mapping.update tp_i nt tstp_map_i"
   define tmp where "tmp = \<Union>((\<lambda>as. case Mapping.lookup a1_map_i (proj_tuple maskL_i as) of None \<Rightarrow>
       (if \<not>(args_pos args) then {(tp_i - len_i, as)} else {})
       | Some tp' \<Rightarrow> if (args_pos args) then {(max (tp_i - len_i) tp', as)}
@@ -864,8 +874,10 @@ proof -
   define tmp' where "tmp' = Set.filter (\<lambda>(tp, as). case Mapping.lookup tstp_map' tp of Some ts \<Rightarrow> memL (args_ivl args) (nt - ts)) tmp"
   have "tp_i - len_i \<in> Mapping.keys a2_map_i" using valid_shift(1) by(auto)
   then obtain m where m_def: "Mapping.lookup a2_map_i (tp_i - len_i) = Some m" by transfer auto
-  have muaux'_def: "?muaux' = add_new_mmuaux args rel1 rel2 nt ?muaux" 
-    using updated_def inter_def valid_shift(2) by(auto simp del:shift_mmauaux.simps shift_mmuaux.simps split:option.splits prod.splits)
+  have muaux'_def: "add_new_mmuaux args rel1 rel2 nt ?muaux = ?muaux'"
+    using updated_def inter_def[folded valid_shift(2)[symmetric]]
+    by (cases "shift_mmuaux args nt (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done, done_length)")
+       (auto simp only: add_new_mmauaux.simps add_new_mmuaux.simps Let_def split: option.splits)
   have valid_old: "valid_mmuaux args cur ?muaux auxlist" using assms(1) unfolding valid_mmauaux_def valid_mmuaux_def by auto
   have valid_muaux: "valid_mmuaux args nt ?muaux' (update_until args rel1 rel2 nt auxlist)" 
     using valid_add_new_mmuaux[OF valid_old tabs nt_mono] muaux'_def by simp
@@ -877,13 +889,13 @@ proof -
     case aargs: (Some aggargs)
     have upd_defs: "a2_map' = Mapping.update (tp_i + 1) Mapping.empty (upd_nested a2_map_i new_tstp (max_tstp new_tstp) tmp')"
      "done' = done_i" "tp' = tp_i + 1" "len' = len_i + 1"
-      using aargs updated_def unfolding tmp'_def tstp_map'_def tmp_def new_tstp_def add_new_mmauaux.simps unfolding inter_def  by(auto)
+      using aargs updated_def unfolding tmp'_def tstp_map''_def tmp_def new_tstp_def add_new_mmauaux.simps unfolding inter_def  by(auto)
     have "(tp_i + 1 = tp_i - len_i) = False" by auto
     then obtain m' where m'_def: "Mapping.lookup a2_map' (tp' - len') = Some m'" "m' = (upd_set' m new_tstp (max_tstp new_tstp) {b. (tp_i - len_i, b) \<in> tmp'})"
       using m_def upd_defs(3-4) unfolding upd_defs(1) lookup_update' upd_nested_lookup by auto
     define to_add where "to_add = {b. (tp_i - len_i, b) \<in> tmp' \<and> Mapping.lookup m b = None}"
     have upd_agg: "aggaux' = insert_maggaux' aggargs to_add aggaux_i"
-      using m_def aargs updated_def unfolding to_add_def tmp'_def tstp_map'_def tmp_def new_tstp_def add_new_mmauaux.simps inter_def by auto
+      using m_def aargs updated_def unfolding to_add_def tmp'_def tstp_map''_def tmp_def new_tstp_def add_new_mmauaux.simps inter_def by auto
     have *: "Mapping.keys m \<inter> {b. (tp_i - len_i, b) \<in> tmp' \<and> Mapping.lookup m b = None} = {}" by(auto; transfer; auto)
     have "valid_maggaux' aggargs aggaux' (Mapping.keys m')"
     proof(cases aggaux_i)

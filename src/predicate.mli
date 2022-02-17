@@ -46,10 +46,9 @@ type var = string
 
 (** Constants are nonnegative integers or strings. *)
 type cst =
-  | Int of int
+  | Int of Z.t
   | Str of string
   | Float of float
-  | ZInt of Z.t
   | Regexp of (string * Str.regexp)
 
 (** Three (constant) types are supported: integers, strings and floats *)

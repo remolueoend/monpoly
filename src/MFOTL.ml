@@ -133,7 +133,7 @@ let aggreg_default_value op t = match op, t with
   | Min, TFloat -> Float infinity
   | Max, TFloat -> Float neg_infinity
   | _, TFloat -> Float 0.
-  | _, TInt -> Int 0
+  | _, TInt -> Int Z.zero
   | _, TStr -> Str ""
   | _, TRegexp -> Regexp ("", Str.regexp "")
 
@@ -421,15 +421,43 @@ let rec substitute_vars m =
       let no_bv = (List.filter (fun (x,_) -> not (List.mem x bvars)) m) in
       let m' = no_bv @ List.map (fun (a, b) -> (a, Var b)) fresh_var_map in
 
+      (* Temporaries for substitution of y and/or g by non-variables *)
+      let avoid_vars = Misc.union (y :: g) tvars in
+      let tmp_y = fresh_var avoid_vars in
+      let (_, tmp_gm) = fresh_var_mapping (tmp_y :: avoid_vars) g in
+
+      (* Note: We could continue the substitution with the original m' and
+         instead remove the variables that are replaced by constants from g.
+         However, if g was nonempty but becomes empty after the substitution,
+         the semantics changes! To prevent this we must add a fake grouping
+         variable, which must occur in f, etc. Possible, but not simpler. *)
+      let m'' = List.map (fun (v, t) ->
+        match t with
+        | Var _ -> (v, t)
+        | _ ->
+            (match List.assoc_opt v tmp_gm with
+            | None -> (v, t)
+            | Some tmp -> (v, Var tmp))
+        ) m' in
+
       let subst m v = try List.assoc v m with Not_found -> Var v in
-      let unvar = function
-        | Var x -> x
-        | _ -> failwith "[MFOTL.substitute_vars] not implemented"
+      let unvar tmp = function
+        | Var x -> (x, [])
+        | t -> (tmp, [(tmp, t)])
       in
-      let y = unvar (subst m y) in
+      let (y, y_constrs) = unvar tmp_y (subst m y) in
       let x = try List.assoc x fresh_var_map with Not_found -> x in
-      let g = List.map (fun x -> unvar (subst m' x)) g in
-      Aggreg (rty, y,op,x,g, substitute_vars m' f)
+      let (g, g_constrss) = List.split
+        (List.map (fun (x, tmp) -> unvar tmp (subst m' x)) tmp_gm) in
+      let f_agg = Aggreg (rty, y,op,x,g, substitute_vars m'' f) in
+
+      let constrs = y_constrs @ List.flatten g_constrss in
+      let f_agg = List.fold_left (fun f (v, t) ->
+        And (f, Equal (Var v, t))) f_agg constrs in
+      if constrs = [] then
+        f_agg
+      else
+        Exists (List.map fst constrs, f_agg)
   | Prev (i, f) -> Prev (i,substitute_vars m f)
   | Next (i, f) -> Next (i,substitute_vars m f)
   | Once (i, f) -> Once (i, substitute_vars m f)
