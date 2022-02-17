@@ -138,26 +138,24 @@ let main () =
         let sign = Log_parser.parse_signature_file !sigfile in
         let _ = if is_mfodl f then Misc.verified := true else () in
 
-        if !Misc.verified then
-          let fv = MFOTL.free_vars f in
-          Algorithm_verified.monitor sign !logfile fv f
-        else
-          let is_mon, pf, vartypes = check_formula sign f in
-          let fv = List.map fst vartypes in
-          if !sigout then
-            Predicate.print_vartypes_list vartypes
-          else if is_mon && not !Misc.checkf then
-            begin
-              if not !nofilterrelopt then
-                Filter_rel.enable pf;
-              if not !nofilteremptytpopt && not !Misc.verified then
-                Filter_empty_tp.enable pf;
-              if !Algorithm.resumefile <> "" then
-                Algorithm.resume sign !logfile
-              else if !Algorithm.combine_files <> "" then
-                Algorithm.combine sign !logfile
-              else
-                Algorithm.monitor sign !logfile fv pf
+        let is_mon, pf, vartypes = check_formula sign f in
+        let fv = List.map fst vartypes in
+        if !sigout then
+          Predicate.print_vartypes_list vartypes
+        else if is_mon && not !Misc.checkf then
+          begin
+            if not !nofilterrelopt then
+              Filter_rel.enable pf;
+            if not !nofilteremptytpopt && not !Misc.verified then
+              Filter_empty_tp.enable pf;
+            if !Algorithm.resumefile <> "" then
+              Algorithm.resume sign !logfile
+            else if !Algorithm.combine_files <> "" then
+              Algorithm.combine sign !logfile
+            else if !Misc.verified then
+              Algorithm_verified.monitor sign !logfile fv pf
+            else
+              Algorithm.monitor sign !logfile fv pf
           end
       end
 

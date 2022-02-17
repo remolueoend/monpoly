@@ -12,9 +12,9 @@ export_code
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
   interval empty_db insert_into_db RBT_set rbt_fold
   (*term, formula, and regex constructors*)
-  EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild
+  EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild Typing.TAny Formula.TInt
   (*main functions*)
-  convert_multiway mmonitorable_exec minit_safe mstep
+  convert_multiway mmonitorable_exec minit_safe mstep type_check
   in OCaml module_name Monitor file_prefix "verified"
 
 (*<*)

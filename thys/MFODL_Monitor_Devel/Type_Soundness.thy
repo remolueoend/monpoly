@@ -45,7 +45,6 @@ lemma eval_agg_op_sound:
     "S, E \<turnstile> formula.Agg y (agg_op,d) tys f \<phi> " 
     "wty_envs S \<sigma> V"
     "fv_trm f \<subseteq> fv \<phi>"
-    "Formula.nfv \<phi> \<le> length tys + length v"
     "safe_formula \<phi>" 
   shows "eval_agg_op (agg_op,d) M = eval_agg_op' (agg_op,d) M"
 proof -
@@ -86,7 +85,6 @@ lemma soundness: (*Theorem 3.12 helper*)
     "S,E \<turnstile> \<phi>"
     "\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y"
     "wty_envs S \<sigma> V"
-    "Formula.nfv \<phi> \<le> length v"
   shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
   using assms 
 proof (induction arbitrary: v V i S E rule: safe_formula_induct)
@@ -121,25 +119,25 @@ next
     then show ?thesis
       using a2 a1 by (smt (z3) Let.hyps(1) Let.hyps(2) Let.prems(3) add.left_neutral atLeastLessThan_iff dual_order.refl length_tabulate less_nat_zero_code not_less nth_tabulate phi_wty subset_eq ty_of_sat'_safe ty_of_sat_safe)
   qed
-  have phi_case: "length v5 = Formula.nfv \<phi> \<Longrightarrow>  sat' \<sigma> V v5 i5 \<phi> = Formula.sat \<sigma> V v5 i5 \<phi> " for v5 i5
+  have phi_case: "sat' \<sigma> V v5 i5 \<phi> = Formula.sat \<sigma> V v5 i5 \<phi> " for v5 i5
   proof -
-    assume len_v5: "length v5 = Formula.nfv \<phi>"
     {
       assume sat: " Formula.sat \<sigma> V v5 i5 \<phi>"
       have "y \<in> fv \<phi> \<Longrightarrow> ty_of (v5 ! y) = E' y" for y 
-        apply (rule ty_of_sat_safe) using Let sat len_v5 phi_wty by auto
+        thm ty_of_sat_safe
+        apply (rule ty_of_sat_safe) using Let sat phi_wty by auto
       then have " Formula.sat \<sigma> V v5 i5 \<phi> = sat' \<sigma> V v5 i5 \<phi> " 
-        using phi_wty Let len_v5 by auto
+        using phi_wty Let by auto
     } moreover {
       assume sat': "sat' \<sigma> V v5 i5 \<phi>"
       have "y \<in> fv \<phi> \<Longrightarrow> ty_of (v5 ! y) = E' y" for y 
-        apply (rule ty_of_sat'_safe) using Let sat' len_v5 phi_wty by auto
+        apply (rule ty_of_sat'_safe) using Let sat' phi_wty by auto
       then have " Formula.sat \<sigma> V v5 i5 \<phi> = sat' \<sigma> V v5 i5 \<phi> "   
-        using phi_wty Let len_v5 by auto
+        using phi_wty Let by auto
     } ultimately show ?thesis by auto
   qed
   have V_eq: "V((p, Formula.nfv \<phi>) \<mapsto> (\<lambda>v i. Formula.sat \<sigma> V v i \<phi>)) = V((p, Formula.nfv \<phi>) \<mapsto> (\<lambda>v i. sat' \<sigma> V v i \<phi>))"
-    using phi_case sorry
+    using phi_case by auto
   have "Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> (\<lambda>v i. Formula.sat \<sigma> V v i \<phi>))) v i \<psi> = sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> (\<lambda>v i. sat' \<sigma> V v i \<phi>))) v i \<psi>"  
     unfolding V_eq
     apply (rule Let.IH(2))
@@ -168,14 +166,14 @@ next
   then show ?case using And_Not by (auto elim: wty_formula.cases)
 next
   case (Ands l pos neg)
-  have pos_IH: "\<phi> \<in> set pos \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y) \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow>  wty_envs S \<sigma> V
+  have pos_IH: "\<phi> \<in> set pos \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)  \<Longrightarrow>  wty_envs S \<sigma> V
 \<Longrightarrow>  Formula.sat \<sigma> V v i \<phi> = sat' \<sigma> V v i \<phi>" for \<phi> using Ands.IH(1) Ball_set_list_all   by (smt (verit, best))
   have pos_case: "\<phi> \<in> set pos \<Longrightarrow>  Formula.sat \<sigma> V v i \<phi> = sat' \<sigma> V v i \<phi> " for \<phi> using Ands pos_IH by (auto elim: wty_formula.cases)
-  have neg_IH: "\<phi> \<in> set (map remove_neg neg) \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y) \<Longrightarrow> Formula.nfv \<phi> \<le> length v \<Longrightarrow>  wty_envs S \<sigma> V
+  have neg_IH: "\<phi> \<in> set (map remove_neg neg) \<Longrightarrow> S, E \<turnstile> \<phi> \<Longrightarrow> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y) \<Longrightarrow>  wty_envs S \<sigma> V
 \<Longrightarrow>  Formula.sat \<sigma> V v i \<phi> = sat' \<sigma> V v i \<phi>" for \<phi> using Ands.IH(2) Ball_set_list_all 
     by (smt (verit, best))
-  have "\<phi> \<in> set ( neg) \<Longrightarrow> S, E \<turnstile> \<phi> \<and> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y) \<and> Formula.nfv \<phi> \<le> length v " for \<phi> using Ands by (auto elim: wty_formula.cases)
-  then have "\<phi> \<in> set ( map remove_neg neg) \<Longrightarrow> S, E \<turnstile> \<phi> \<and> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y) \<and> Formula.nfv \<phi> \<le> length v" for \<phi> 
+  have "\<phi> \<in> set ( neg) \<Longrightarrow> S, E \<turnstile> \<phi> \<and> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> using Ands by (auto elim: wty_formula.cases)
+  then have "\<phi> \<in> set ( map remove_neg neg) \<Longrightarrow> S, E \<turnstile> \<phi> \<and> (\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> 
     apply (auto simp add: Formula.nfv_def )
     subgoal for x by (cases x) (auto elim: wty_formula.cases) done
   then have remove_neg_case: "\<phi> \<in> set (map remove_neg neg) \<Longrightarrow>  Formula.sat \<sigma> V v i \<phi> = sat' \<sigma> V v i \<phi> " for \<phi> using Ands.prems(3) neg_IH by auto
@@ -190,53 +188,47 @@ next
     fix za
     assume assm: "Formula.sat \<sigma> V (za # v) i \<phi>" 
     from Exists.prems(1) have wty: "S, case_nat t E \<turnstile> \<phi>" by cases
-    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(7) nfv_exists[of \<phi> t] by auto
     have "0 \<in> fv \<phi> \<Longrightarrow> ty_of za = t" 
       using ty_of_sat_safe[where ?E="case_nat t E" and ?S=S and ?\<phi>=\<phi> and ?v="za#v" and ?V=V and ?i=i and ?\<sigma>=\<sigma> and ?x=0]  
-      Exists(1,6)  nfv assm wty by auto 
+      Exists(1,6) assm wty by auto 
     then have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using  Exists.prems(2)   by (auto simp add:  fvi_Suc split: nat.splits )
-    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(6) wty nfv assm by auto
+    from this  have "local.sat' \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(6) wty assm by auto
   } moreover {
     fix za
     assume assm: "sat' \<sigma> V (za # v) i \<phi>" 
     from Exists.prems(1) have wty: "S, case_nat t E \<turnstile> \<phi>" by cases
-    have nfv: " Formula.nfv \<phi> \<le> Suc (length v)" using Exists(7) nfv_exists[of \<phi> t] by auto
     have "0 \<in> fv \<phi> \<Longrightarrow> ty_of za = t" 
       using ty_of_sat'_safe[where ?E="case_nat t E" and ?S=S and ?\<phi>=\<phi> and ?v="za#v" and ?V=V and ?i=i and ?\<sigma>=\<sigma> and ?x=0]  
-      Exists(1,6)  nfv assm wty by auto 
+      Exists(1,6) assm wty by auto 
     then have "\<forall>y\<in>fv \<phi>. ty_of ((za # v) ! y) = (case y of 0 \<Rightarrow> t | Suc x \<Rightarrow> E x)" using  Exists.prems(2)   by (auto simp add:  fvi_Suc split: nat.splits )
-    from this  have "Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(6) wty nfv assm by auto
+    from this  have "Formula.sat \<sigma> V (za # v) i \<phi>" using Exists.IH[of S "case_nat t E" "za#v" V i] Exists(6) wty assm by auto
   }
   ultimately show ?case by auto 
 next
   case (Agg y \<omega> tys f \<phi>) 
   have phi_wty: "S, agg_env E tys \<turnstile> \<phi>" using Agg.prems(1) by (auto elim: wty_formula.cases)
-  have " a \<in> fv \<phi> \<Longrightarrow> Suc a \<le> length tys + length v" for a 
-    using Agg(9)  fvi_plus_bound[of 0 "length tys" \<phi> "length v"] apply (auto simp add: Formula.nfv_def)
-    by (metis Un_iff not_less not_less_eq_eq)  
-  then have nfv:" Formula.nfv \<phi> \<le> length tys + length v" by (auto simp add: Formula.nfv_def)
   have phi_case: "length zs = length tys \<Longrightarrow> Formula.sat \<sigma> V (zs @ v) i \<phi> =  sat' \<sigma> V (zs @ v) i \<phi>" for zs 
   proof -
     assume len_zs:"length zs = length tys"
     {
       assume sat: " Formula.sat \<sigma> V (zs @ v) i \<phi>"
       have fv_wty: "y \<in> fv \<phi> \<Longrightarrow> ty_of ((zs @ v) ! y) = agg_env E tys y" for y
-        using ty_of_sat_safe Agg(4,8) sat len_zs phi_wty nfv by  (auto simp add: Formula.nfv_def)
+        using ty_of_sat_safe Agg(4,8) sat len_zs phi_wty  by  (auto simp add: Formula.nfv_def)
       have " Formula.sat \<sigma> V (zs @ v) i \<phi> = sat' \<sigma> V (zs @ v) i \<phi> " 
-        using phi_wty Agg(4,5,8) len_zs nfv fv_wty by auto 
+        using phi_wty Agg(4,5,8) len_zs fv_wty by auto 
     } moreover{
       assume sat':"sat' \<sigma> V (zs @ v) i \<phi>"
       have fv_wty: "y \<in> fv \<phi> \<Longrightarrow> ty_of ((zs @ v) ! y) = agg_env E tys y" for y 
-        using ty_of_sat'_safe Agg(4,8) sat' len_zs phi_wty nfv by  (auto simp add: Formula.nfv_def)
+        using ty_of_sat'_safe Agg(4,8) sat' len_zs phi_wty by  (auto simp add: Formula.nfv_def)
       have " Formula.sat \<sigma> V (zs @ v) i \<phi> = sat' \<sigma> V (zs @ v) i \<phi> " 
-        using phi_wty Agg(4,5,8) len_zs nfv fv_wty by auto 
+        using phi_wty Agg(4,5,8) len_zs fv_wty by auto 
     }
     ultimately show ?thesis by auto
   qed
   have "Formula.eval_trm (zs @ v) f = eval_trm' (zs @ v) f"  if a1:"Formula.sat \<sigma> V (zs @ v) i \<phi>" and a2:"length zs = length tys" for zs
   proof -
     have fv_wty: "y\<in>fv_trm f \<Longrightarrow> ty_of ((zs @ v) ! y) = agg_env E tys y" for y 
-      using ty_of_sat_safe  Agg(3,4,8) a1 a2 phi_wty nfv by auto 
+      using ty_of_sat_safe  Agg(3,4,8) a1 a2 phi_wty by auto 
     show ?thesis using Agg.prems(1) fv_wty by (auto dest: eval_trm_sound elim: wty_formula.cases) 
   qed
   then have 
@@ -246,7 +238,7 @@ next
   moreover obtain agg_op d where omega_def:"\<omega> = (agg_op,d)" using Agg.prems(1) by cases auto
   moreover have eval_agg_op_case: "M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> Formula.sat \<sigma> V (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
  \<Longrightarrow> eval_agg_op (agg_op,d) M = eval_agg_op' (agg_op,d) M" for M
-    apply (rule eval_agg_op_sound) using omega_def nfv Agg(3,4,6,8) by auto 
+    apply (rule eval_agg_op_sound) using omega_def Agg(3,4,6,8) by auto 
   ultimately show ?case by auto
 next
   case (Since \<phi> I \<psi>)
@@ -279,7 +271,7 @@ next
     apply auto apply (induction r) 
         apply (auto) subgoal for x y apply (cases "safe_formula x") by (auto split: formula.splits  ) done
   from this  MatchP have IH: "\<phi>\<in>atms r \<Longrightarrow>Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5
-    using match_safe_wty_nfv[of \<phi> r I S E v  ] by auto
+    using match_safe_wty_nfv[of \<phi> r I S E] by auto
   have other_IH: "\<phi> \<in> regex.atms r \<Longrightarrow> Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5 
     using atms_regex_atms[of \<phi>] IH by auto 
   then show ?case  using match_cong[OF refl other_IH, where ?r=r] by auto 
@@ -293,13 +285,68 @@ next
   from MatchF(4) have  " (\<phi> \<in> atms r \<Longrightarrow>\<forall>y\<in>fv \<phi>. ty_of (v ! y) = E y)" for \<phi> apply auto apply (induction r ) 
         apply (auto) subgoal for x y apply (cases "safe_formula x") by (auto split: formula.splits  ) done
   from this  MatchF have IH: "\<phi>\<in>atms r \<Longrightarrow>Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5
-    using match_safe_wty_nfv[of \<phi> r I S E v  ] by auto
+    using match_safe_wty_nfv[of \<phi> r I S E] by auto
   have other_IH: "\<phi> \<in> regex.atms r \<Longrightarrow> Formula.sat \<sigma> V v i5 \<phi> = sat' \<sigma> V v i5 \<phi>" for \<phi> i5 
     using atms_regex_atms[of \<phi>] IH by auto 
   then show ?case using match_cong[OF refl other_IH, where ?r=r] by auto 
 next
   case (LetPast p \<phi> \<psi>)
-  then show ?case apply(auto simp:Let_def) sorry
+  obtain E' where 
+    psi_wty: "S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>)), E \<turnstile> \<psi>" and
+    phi_wty: "S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>)), E' \<turnstile> \<phi>" using LetPast.prems(1) by cases auto
+  have wtyenv: "x \<in> \<Gamma> \<sigma> i \<Longrightarrow> (case x of (p, xs) \<Rightarrow> (p, length xs) \<notin> dom V \<longrightarrow> (case S (p, length xs) of None \<Rightarrow> False | Some ts \<Rightarrow> wty_tuple ts xs))" for x i
+    using LetPast.prems(3) by (auto simp add: wty_envs_def wty_event_def wty_tuple_def) 
+  let ?V' = "(V((p, Formula.nfv \<phi>) \<mapsto> letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)))"
+  let ?V'' = "(V((p, Formula.nfv \<phi>) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)))"
+  have wty_envs: "wty_envs (S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>))) \<sigma> ?V'"
+    using wty_envs_update[OF LetPast(3) LetPast(9) phi_wty LetPast(2)] ty_of_sat'_safe[OF LetPast(3)] by blast
+  then have wty_envs': "wty_envs (S((p, Formula.nfv \<phi>) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>))) \<sigma>
+ (V((p, Formula.nfv \<phi>) \<mapsto> \<lambda>w j. j < i \<and> letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) w j))" for i
+    unfolding wty_envs_def by(auto simp:domI) 
+  have "(letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)) v i =
+        (letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)) v i" for v i
+  proof(induction i arbitrary: v rule:less_induct)
+    case (less x)
+    then show ?case
+    proof -
+      assume "(\<And>y v. y < x \<Longrightarrow>
+          letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) v y =
+          letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) v y)"
+      then have eq: "(\<lambda>w j. j < x \<and> letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) w j) =
+             (\<lambda>w j. j < x \<and> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) w j)"
+        by auto
+      {
+        assume sat: "(letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)) v x"
+        have *: "Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> \<lambda>w j. j < x \<and> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) w j)) v x \<phi>"
+          using iffD1[OF letpast_sat.simps sat] LetPast(5)[OF phi_wty _ wty_envs', of v x x]
+          ty_of_sat'_safe[OF LetPast(3) phi_wty wty_envs' iffD1[OF letpast_sat.simps sat]] unfolding eq by blast
+        have "letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) v x" 
+          using iffD1[OF letpast_sat.simps[of "(\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)", symmetric], OF *] by auto
+      } moreover {
+        assume sat: "letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) v x"
+        have *: "sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> \<lambda>w j. j < x \<and> letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>) w j)) v x \<phi>"
+          using ty_of_sat_safe[OF LetPast(3) phi_wty wty_envs', of x, unfolded eq, OF iffD1[OF letpast_sat.simps sat]]
+            iffD1[OF letpast_sat.simps sat] LetPast(5)[OF phi_wty _ wty_envs', of v x x]  unfolding eq by blast
+        have "(letpast_sat (\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)) v x" 
+          using iffD1[OF letpast_sat.simps[of "(\<lambda>X v i. sat' \<sigma> (V((p, Formula.nfv \<phi>) \<mapsto> X)) v i \<phi>)", symmetric], OF *] by auto
+      } ultimately show ?thesis by fastforce
+    qed
+  qed
+  then have V_eq: "?V' = ?V''" by force
+  have "Formula.sat \<sigma> ?V' v i \<psi> = sat' \<sigma> ?V' v i \<psi>" unfolding V_eq[symmetric] 
+  proof -
+    {
+      assume sat: " Formula.sat \<sigma> ?V' v i \<psi>"
+      have "Formula.sat \<sigma> ?V' v i \<psi> = sat' \<sigma> ?V' v i \<psi>" 
+        using ty_of_sat_safe[OF LetPast(4) psi_wty wty_envs sat] LetPast(6)[OF psi_wty _ wty_envs] by blast
+    } moreover {
+      assume sat': "sat' \<sigma> ?V' v i \<psi>"
+      have " Formula.sat \<sigma> ?V' v i \<psi> = sat' \<sigma> ?V' v i \<psi>"   
+        using ty_of_sat'_safe[OF LetPast(4) psi_wty wty_envs sat'] LetPast(6)[OF psi_wty _ wty_envs] by blast
+    } ultimately show ?thesis by auto
+  qed
+  then have "Formula.sat \<sigma> ?V'' v i \<psi> = sat' \<sigma> ?V' v i \<psi>" unfolding V_eq[symmetric] by auto
+  then show ?case by(auto simp:Let_def) 
 next
   case (TP t)
   then show ?case by(auto simp:trm.is_Var_def trm.is_Const_def) 
@@ -313,10 +360,10 @@ lemma soundness2: (*Theorem 3.12*)
     "safe_formula \<phi>"
     "S,E \<turnstile> \<phi>"
     "wty_envs S \<sigma> V"
-    "Formula.nfv \<phi> \<le> length v"
   shows "Formula.sat \<sigma> V v i \<phi> \<longleftrightarrow> sat' \<sigma> V v i \<phi>" 
-  using  soundness[OF assms(1-2) _ assms(3-4)] ty_of_sat_safe[OF assms(1-3)]
-    ty_of_sat'_safe[OF assms(1-3)] 
-  by auto  
+  using  soundness[OF assms(1-2) _ assms(3)]
+    ty_of_sat_safe[OF assms(1-3), of v i]
+    ty_of_sat'_safe[OF assms(1-3), of v i] 
+  by auto
 end
 end

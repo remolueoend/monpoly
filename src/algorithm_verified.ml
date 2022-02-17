@@ -60,13 +60,18 @@ let monitor dbschema logfile fv f =
   let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
   assert (List.length fv_pos = List.length fv);
 
-  let cf = Verified_adapter.convert_formula dbschema f in
-  let cf = if !no_mw then cf else Verified.Monitor.convert_multiway cf in
-  let ctxt = Monitor.{
-    fv_pos;
-    cur_tp = 0;
-    cur_ts = MFOTL.ts_invalid;
-    cur_db = Verified_adapter.empty_db;
-    cur_state = Verified_adapter.init cf;
-  } in
-  ignore (P.parse_file dbschema logfile ctxt)
+  let cf = Verified_adapter.convert_formula dbschema (List.length fv) f in
+  let tf = Verified_adapter.type_check_formula dbschema cf in
+  match tf with
+    Some cf ->
+      let cf = if !no_mw then cf else Verified.Monitor.convert_multiway cf in
+      let ctxt = Monitor.{
+        fv_pos;
+        cur_tp = 0;
+        cur_ts = MFOTL.ts_invalid;
+        cur_db = Verified_adapter.empty_db;
+        cur_state = Verified_adapter.init cf;
+      } in
+      ignore (P.parse_file dbschema logfile ctxt)
+  | None -> prerr_endline "Error during verified type checking";
+            exit 1

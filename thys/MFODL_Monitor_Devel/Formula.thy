@@ -493,6 +493,11 @@ fun letpast_sat where
   "letpast_sat sat v (i::nat) = sat (\<lambda>w j. j < i \<and> letpast_sat sat w j) v i"
 declare letpast_sat.simps[simp del]
 
+lemma V_subst_letpast_sat:
+  "(\<And>X v j. j \<le> i \<Longrightarrow> f X v j = g X v j) \<Longrightarrow>
+  Formula.letpast_sat f v i = Formula.letpast_sat g v i"
+  by (induct f v i rule: letpast_sat.induct) (subst (1 2) letpast_sat.simps, auto cong: conj_cong)
+
 qualified fun sat :: "trace \<Rightarrow> (name \<times> nat \<rightharpoonup> env \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> ty formula \<Rightarrow> bool" where
   "sat \<sigma> V v i (Pred r ts) = (case V (r, length ts) of
        None \<Rightarrow> (r, map (eval_trm v) ts) \<in> \<Gamma> \<sigma> i

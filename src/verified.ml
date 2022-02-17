@@ -89,6 +89,7 @@ module Monitor : sig
   type enat = Enat of nat | Infinity_enat
   type rec_safety
   type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med
+  type ty = TInt | TFloat | TString
   type i
   type 'a queue
   type ('a, 'b) mapping
@@ -97,21 +98,27 @@ module Monitor : sig
     Times of 'a regex * 'a regex | Star of 'a regex
   type safety
   type ('a, 'b) sum
+  type tysym = TAny of nat | TNum of nat | TCst of ty
   type modality
-  type formula = Pred of string * trm list | Let of string * formula * formula |
-    LetPast of string * formula * formula | Eq of trm * trm | Less of trm * trm
-    | LessEq of trm * trm | Neg of formula | Or of formula * formula |
-    And of formula * formula | Ands of formula list | Exists of formula |
-    Agg of nat * (agg_type * event_data) * nat * trm * formula |
-    Prev of i * formula | Next of i * formula | Since of formula * i * formula |
-    Until of formula * i * formula | MatchF of i * formula regex |
-    MatchP of i * formula regex | TP of trm | TS of trm
+  type 'a formula = Pred of string * trm list |
+    Let of string * 'a formula * 'a formula |
+    LetPast of string * 'a formula * 'a formula | Eq of trm * trm |
+    Less of trm * trm | LessEq of trm * trm | Neg of 'a formula |
+    Or of 'a formula * 'a formula | And of 'a formula * 'a formula |
+    Ands of 'a formula list | Exists of 'a * 'a formula |
+    Agg of nat * (agg_type * 'a) * 'a list * trm * 'a formula |
+    Prev of i * 'a formula | Next of i * 'a formula |
+    Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula
+    | MatchF of i * 'a formula regex | MatchP of i * 'a formula regex |
+    TP of trm | TS of trm
   type ('a, 'b) mformula
   type aggaux
   type ('a, 'b, 'c) mstate_ext
   val wild : 'a regex
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
+  val type_check :
+    (string * nat -> (tysym list) option) -> tysym formula -> ty formula option
   val mstep :
     ((string * nat), (((event_data option) list) set list)) mapping * nat ->
       (((nat *
@@ -173,9 +180,9 @@ module Monitor : sig
   val rbt_fold :
     ((event_data option) list -> 'a -> 'a) ->
       (((event_data option) list), unit) mapping_rbt -> 'a -> 'a
-  val mmonitorable_exec : formula -> bool
+  val mmonitorable_exec : 'a formula -> bool
   val minit_safe :
-    formula ->
+    ty formula ->
       (((nat *
           (nat *
             (bool list *
@@ -203,7 +210,7 @@ module Monitor : sig
           aggaux option),
         unit)
         mstate_ext
-  val convert_multiway : formula -> formula
+  val convert_multiway : 'a formula -> 'a formula
   val insert_into_db :
     string * nat ->
       (event_data option) list ->
@@ -3086,6 +3093,10 @@ let set_impl_enata : (enat, set_impla) phantom = Phantom Set_RBT;;
 
 let set_impl_enat = ({set_impl = set_impl_enata} : enat set_impl);;
 
+let finite_UNIV_enata : (enat, bool) phantom = Phantom false;;
+
+let finite_UNIV_enat = ({finite_UNIV = finite_UNIV_enata} : enat finite_UNIV);;
+
 let rec less_enat x0 q = match x0, q with Infinity_enat, q -> false
                     | Enat m, Infinity_enat -> true
                     | Enat m, Enat n -> less_nat m n;;
@@ -3263,14 +3274,14 @@ let equal_event_data = ({equal = equal_event_dataa} : event_data equal);;
 
 let rec less_eq_event_data
   x0 x1 = match x0, x1 with EInt x, EInt y -> Z.leq x y
-    | EInt x, EFloat y -> Stdlib.(<=) (Z.to_float x) y
-    | EInt uu, EString uv -> false
-    | EFloat x, EInt y -> Stdlib.(<=) x (Z.to_float y)
     | EFloat x, EFloat y -> Stdlib.(<=) x y
-    | EFloat uw, EString ux -> false
     | EString x, EString y -> Stdlib.(<=) x y
-    | EString uy, EInt v -> false
-    | EString uy, EFloat v -> false;;
+    | EFloat v, EInt va -> failwith "undefined"
+    | EFloat v, EString va -> failwith "undefined"
+    | EString v, EInt va -> failwith "undefined"
+    | EString v, EFloat va -> failwith "undefined"
+    | EInt va, EFloat v -> failwith "undefined"
+    | EInt va, EString v -> failwith "undefined";;
 
 let rec less_event_data
   x y = less_eq_event_data x y && not (less_eq_event_data y x);;
@@ -3288,6 +3299,11 @@ let set_impl_event_dataa : (event_data, set_impla) phantom = Phantom Set_RBT;;
 let set_impl_event_data =
   ({set_impl = set_impl_event_dataa} : event_data set_impl);;
 
+let finite_UNIV_event_dataa : (event_data, bool) phantom = Phantom false;;
+
+let finite_UNIV_event_data =
+  ({finite_UNIV = finite_UNIV_event_dataa} : event_data finite_UNIV);;
+
 let ccompare_event_dataa : (event_data -> event_data -> ordera) option
   = Some comparator_event_data;;
 
@@ -3296,9 +3312,11 @@ let ccompare_event_data =
 
 type agg_type = Agg_Cnt | Agg_Min | Agg_Max | Agg_Sum | Agg_Avg | Agg_Med;;
 
+type ty = TInt | TFloat | TString;;
+
 type 'a aggargs_ext =
   Aggargs_ext of
-    nat set * nat * bool * nat * (agg_type * event_data) * nat * trm * 'a;;
+    nat set * nat * bool * nat * (agg_type * ty) * ty list * trm * 'a;;
 
 type i = Abs_I of ((nat -> bool) * ((nat -> bool) * bool));;
 
@@ -3430,16 +3448,21 @@ type safety = Strict | Lax;;
 
 type ('a, 'b) sum = Inl of 'a | Inr of 'b;;
 
+type tysym = TAny of nat | TNum of nat | TCst of ty;;
+
 type modality = Past | Futu;;
 
-type formula = Pred of string * trm list | Let of string * formula * formula |
-  LetPast of string * formula * formula | Eq of trm * trm | Less of trm * trm |
-  LessEq of trm * trm | Neg of formula | Or of formula * formula |
-  And of formula * formula | Ands of formula list | Exists of formula |
-  Agg of nat * (agg_type * event_data) * nat * trm * formula |
-  Prev of i * formula | Next of i * formula | Since of formula * i * formula |
-  Until of formula * i * formula | MatchF of i * formula regex |
-  MatchP of i * formula regex | TP of trm | TS of trm;;
+type 'a formula = Pred of string * trm list |
+  Let of string * 'a formula * 'a formula |
+  LetPast of string * 'a formula * 'a formula | Eq of trm * trm |
+  Less of trm * trm | LessEq of trm * trm | Neg of 'a formula |
+  Or of 'a formula * 'a formula | And of 'a formula * 'a formula |
+  Ands of 'a formula list | Exists of 'a * 'a formula |
+  Agg of nat * (agg_type * 'a) * 'a list * trm * 'a formula |
+  Prev of i * 'a formula | Next of i * 'a formula |
+  Since of 'a formula * i * 'a formula | Until of 'a formula * i * 'a formula |
+  MatchF of i * 'a formula regex | MatchP of i * 'a formula regex | TP of trm |
+  TS of trm;;
 
 type ('a, 'b) mformula = Rep_meformula of ('a, 'b) meformula;;
 
@@ -3988,13 +4011,14 @@ let rec fvi
                          set_impl_nat)),
                      set_impl_set)
                 xs)))
-    | b, Exists phi -> fvi (suc b) phi
-    | ba, Agg (y, omega, b, f, phi) ->
+    | b, Exists (t, phi) -> fvi (suc b) phi
+    | b, Agg (y, omega, tys, f, phi) ->
         sup_seta (ceq_nat, ccompare_nat)
-          (sup_seta (ceq_nat, ccompare_nat) (fvi (plus_nata ba b) phi)
-            (fvi_trm (plus_nata ba b) f))
-          (if less_eq_nat ba y
-            then insert (ceq_nat, ccompare_nat) (minus_nata y ba)
+          (sup_seta (ceq_nat, ccompare_nat)
+            (fvi (plus_nata b (size_lista tys)) phi)
+            (fvi_trm (plus_nata b (size_lista tys)) f))
+          (if less_eq_nat b y
+            then insert (ceq_nat, ccompare_nat) (minus_nata y b)
                    (set_empty (ceq_nat, ccompare_nat)
                      (of_phantom set_impl_nata))
             else set_empty (ceq_nat, ccompare_nat) (of_phantom set_impl_nata))
@@ -4185,6 +4209,320 @@ let rec rPDs
           (set_empty (ceq_mregex, ccompare_mregex)
             (of_phantom set_impl_mregexa)));;
 
+let rec map_regex
+  f x1 = match f, x1 with f, Skip x1 -> Skip x1
+    | f, Test x2 -> Test (f x2)
+    | f, Plusa (x31, x32) -> Plusa (map_regex f x31, map_regex f x32)
+    | f, Times (x41, x42) -> Times (map_regex f x41, map_regex f x42)
+    | f, Star x5 -> Star (map_regex f x5);;
+
+let rec map_formula
+  f x1 = match f, x1 with f, Pred (x11, x12) -> Pred (x11, x12)
+    | f, Let (x21, x22, x23) -> Let (x21, map_formula f x22, map_formula f x23)
+    | f, LetPast (x31, x32, x33) ->
+        LetPast (x31, map_formula f x32, map_formula f x33)
+    | f, Eq (x41, x42) -> Eq (x41, x42)
+    | f, Less (x51, x52) -> Less (x51, x52)
+    | f, LessEq (x61, x62) -> LessEq (x61, x62)
+    | f, Neg x7 -> Neg (map_formula f x7)
+    | f, Or (x81, x82) -> Or (map_formula f x81, map_formula f x82)
+    | f, And (x91, x92) -> And (map_formula f x91, map_formula f x92)
+    | f, Ands x10 -> Ands (mapa (map_formula f) x10)
+    | f, Exists (x111, x112) -> Exists (f x111, map_formula f x112)
+    | f, Agg (x121, x122, x123, x124, x125) ->
+        Agg (x121, map_prod id f x122, mapa f x123, x124, map_formula f x125)
+    | f, Prev (x131, x132) -> Prev (x131, map_formula f x132)
+    | f, Next (x141, x142) -> Next (x141, map_formula f x142)
+    | f, Since (x151, x152, x153) ->
+        Since (map_formula f x151, x152, map_formula f x153)
+    | f, Until (x161, x162, x163) ->
+        Until (map_formula f x161, x162, map_formula f x163)
+    | f, MatchF (x171, x172) -> MatchF (x171, map_regex (map_formula f) x172)
+    | f, MatchP (x181, x182) -> MatchP (x181, map_regex (map_formula f) x182)
+    | f, TP x19 -> TP x19
+    | f, TS x20 -> TS x20;;
+
+let rec map_sig f s = comp (map_option (mapa f)) s;;
+
+let rec check_two_formulas
+  check s e phi psi =
+    (match check s e phi with None -> None
+      | Some f ->
+        (match check (map_sig f s) (comp f e) (map_formula f psi)
+          with None -> None | Some fa -> Some (comp fa f)));;
+
+let rec new_type_symbol
+  t = (match t with TAny n -> TAny (suc n) | TNum n -> TNum (suc n)
+        | TCst a -> TCst a);;
+
+let rec equal_ty x0 x1 = match x0, x1 with TFloat, TString -> false
+                   | TString, TFloat -> false
+                   | TInt, TString -> false
+                   | TString, TInt -> false
+                   | TInt, TFloat -> false
+                   | TFloat, TInt -> false
+                   | TString, TString -> true
+                   | TFloat, TFloat -> true
+                   | TInt, TInt -> true;;
+
+let rec equal_tysym x0 x1 = match x0, x1 with TNum x2, TCst x3 -> false
+                      | TCst x3, TNum x2 -> false
+                      | TAny x1, TCst x3 -> false
+                      | TCst x3, TAny x1 -> false
+                      | TAny x1, TNum x2 -> false
+                      | TNum x2, TAny x1 -> false
+                      | TCst x3, TCst y3 -> equal_ty x3 y3
+                      | TNum x2, TNum y2 -> equal_nata x2 y2
+                      | TAny x1, TAny y1 -> equal_nata x1 y1;;
+
+let rec update_env
+  x e = (let (tnew, told) = x in
+          (fun v -> (if equal_tysym v told then tnew else v)));;
+
+let rec min_type
+  x0 x1 = match x0, x1 with
+    TNum a, TNum b ->
+      Some (if less_eq_nat a b then (TNum a, TNum b) else (TNum b, TNum a))
+    | TAny a, TAny b ->
+        Some (if less_eq_nat a b then (TAny a, TAny b) else (TAny b, TAny a))
+    | TNum v, TAny y -> Some (TNum v, TAny y)
+    | TCst v, TAny y -> Some (TCst v, TAny y)
+    | TAny y, TNum v -> Some (TNum v, TAny y)
+    | TAny y, TCst v -> Some (TCst v, TAny y)
+    | TCst TString, TNum uu -> None
+    | TNum uv, TCst TString -> None
+    | TCst TInt, TNum y -> Some (TCst TInt, TNum y)
+    | TCst TFloat, TNum y -> Some (TCst TFloat, TNum y)
+    | TNum y, TCst TInt -> Some (TCst TInt, TNum y)
+    | TNum y, TCst TFloat -> Some (TCst TFloat, TNum y)
+    | TCst x, TCst y -> (if equal_ty x y then Some (TCst x, TCst y) else None);;
+
+let rec clash_propagate2
+  t1 t2 e = map_option (fun x -> update_env x e) (min_type t1 t2);;
+
+let rec check_binop2
+  check_trm e typ t1 t2 exp_typ =
+    (match clash_propagate2 exp_typ typ e with None -> None
+      | Some f ->
+        (match check_trm (comp f e) (f typ) t1 with None -> None
+          | Some fa ->
+            (match check_trm (comp (comp fa f) e) (comp fa f typ) t2
+              with None -> None | Some fb -> Some (comp (comp fb fa) f))));;
+
+let rec ty_of = function EInt uu -> TInt
+                | EFloat uv -> TFloat
+                | EString uw -> TString;;
+
+let rec check_trm
+  e typ x2 = match e, typ, x2 with e, typ, Var v -> clash_propagate2 (e v) typ e
+    | e, typ, Const c -> clash_propagate2 (TCst (ty_of c)) typ e
+    | e, typ, F2i t ->
+        (match clash_propagate2 typ (TCst TInt) e with None -> None
+          | Some f ->
+            (match check_trm (comp f e) (TCst TFloat) t with None -> None
+              | Some fa ->
+                Some (fun ta ->
+                       (if equal_tysym ta typ then TCst TInt
+                         else comp fa f ta))))
+    | e, typ, I2f t ->
+        (match clash_propagate2 typ (TCst TFloat) e with None -> None
+          | Some f ->
+            (match check_trm (comp f e) (TCst TInt) t with None -> None
+              | Some fa ->
+                Some (fun ta ->
+                       (if equal_tysym ta typ then TCst TFloat
+                         else comp fa f ta))))
+    | e, typ, UMinus t ->
+        (match
+          clash_propagate2 (TNum zero_nata) (new_type_symbol typ)
+            (comp new_type_symbol e)
+          with None -> None
+          | Some f ->
+            (match
+              check_trm (comp (comp f new_type_symbol) e)
+                (f (new_type_symbol typ)) t
+              with None -> None
+              | Some fa -> Some (comp (comp fa f) new_type_symbol)))
+    | e, typ, Plus (t1, t2) ->
+        (match
+          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
+            t1 t2 (TNum zero_nata)
+          with None -> None | Some f -> Some (comp f new_type_symbol))
+    | e, typ, Minus (t1, t2) ->
+        (match
+          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
+            t1 t2 (TNum zero_nata)
+          with None -> None | Some f -> Some (comp f new_type_symbol))
+    | e, typ, Mult (t1, t2) ->
+        (match
+          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
+            t1 t2 (TNum zero_nata)
+          with None -> None | Some f -> Some (comp f new_type_symbol))
+    | e, typ, Div (t1, t2) ->
+        (match
+          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
+            t1 t2 (TNum zero_nata)
+          with None -> None | Some f -> Some (comp f new_type_symbol))
+    | e, typ, Mod (t1, t2) -> check_binop2 check_trm e typ t1 t2 (TCst TInt);;
+
+let rec check_comparison
+  e t1 t2 =
+    (match check_trm (comp new_type_symbol e) (TAny zero_nata) t1
+      with None -> None
+      | Some f ->
+        (match
+          check_trm (comp (comp f new_type_symbol) e) (f (TAny zero_nata)) t2
+          with None -> None
+          | Some fa -> Some (comp (comp fa f) new_type_symbol)));;
+
+let rec agg_trm_tysym = function Agg_Sum -> TNum zero_nata
+                        | Agg_Cnt -> TAny zero_nata
+                        | Agg_Avg -> TNum zero_nata
+                        | Agg_Med -> TNum zero_nata
+                        | Agg_Min -> TAny zero_nata
+                        | Agg_Max -> TAny zero_nata;;
+
+let rec t_res_tysym x0 t = match x0, t with Agg_Sum, t -> t
+                      | Agg_Cnt, uu -> TCst TInt
+                      | Agg_Avg, uv -> TCst TFloat
+                      | Agg_Med, uw -> TCst TFloat
+                      | Agg_Min, t -> t
+                      | Agg_Max, t -> t;;
+
+let rec check_regex
+  check s e x3 = match check, s, e, x3 with check, s, e, Skip l -> Some id
+    | check, s, e, Test phi -> check s e phi
+    | check, sa, e, Plusa (r, s) ->
+        (match check_regex check sa e r with None -> None
+          | Some f ->
+            (match
+              check_regex check (map_sig f sa) (comp f e)
+                (map_regex (map_formula f) s)
+              with None -> None | Some fa -> Some (comp fa f)))
+    | check, sa, e, Times (r, s) ->
+        (match check_regex check sa e r with None -> None
+          | Some f ->
+            (match
+              check_regex check (map_sig f sa) (comp f e)
+                (map_regex (map_formula f) s)
+              with None -> None | Some fa -> Some (comp fa f)))
+    | check, s, e, Star r -> check_regex check s e r;;
+
+let rec check_pred
+  e x1 x2 = match e, x1, x2 with
+    e, trm :: trms, t :: ts ->
+      (match check_trm e t trm with None -> None
+        | Some f ->
+          (match check_pred (comp f e) trms (mapa f ts) with None -> None
+            | Some fa -> Some (comp fa f)))
+    | e, [], [] -> Some id
+    | e, [], v :: va -> None
+    | e, v :: va, [] -> None;;
+
+let rec check_ands_f
+  check s e =
+    (fun phi a ->
+      (match a with None -> None
+        | Some f ->
+          (match check (map_sig f s) (comp f e) (map_formula f phi)
+            with None -> None | Some fa -> Some (comp fa f))));;
+
+let rec check_ands
+  check s e phi_s = foldr (check_ands_f check s e) phi_s (Some id);;
+
+let rec agg_tysenv
+  e tys =
+    (fun z ->
+      (if less_nat z (size_lista tys) then nth tys z
+        else e (minus_nata z (size_lista tys))));;
+
+let rec tabulate
+  f x n =
+    (if equal_nata n zero_nata then []
+      else f x :: tabulate f (suc x) (minus_nata n one_nata));;
+
+let rec check
+  s e x2 = match s, e, x2 with
+    s, e, Pred (r, ts) ->
+      (match s (r, size_lista ts) with None -> None
+        | Some a -> check_pred e ts a)
+    | s, e, Let (p, phi, psi) ->
+        (let f0 = funpow (nfv phi) new_type_symbol in
+          (match check (map_sig f0 s) (fun a -> TAny a) (map_formula f0 phi)
+            with None -> None
+            | Some f1 ->
+              (match
+                check (map_sig f1
+                        (fun_upd (equal_prod equal_string8 equal_nat)
+                          (map_sig f0 s) (p, nfv phi)
+                          (Some (mapa (fun a -> TAny a)
+                                  (upt zero_nata (nfv phi))))))
+                  (comp (comp f1 f0) e) (map_formula (comp f1 f0) psi)
+                with None -> None | Some f2 -> Some (comp (comp f2 f1) f0))))
+    | s, e, Eq (t1, t2) -> check_comparison e t1 t2
+    | s, e, Less (t1, t2) -> check_comparison e t1 t2
+    | s, e, LessEq (t1, t2) -> check_comparison e t1 t2
+    | s, e, Neg phi -> check s e phi
+    | s, e, Or (phi, psi) -> check_two_formulas check s e phi psi
+    | s, e, And (phi, psi) -> check_two_formulas check s e phi psi
+    | s, e, Ands phi_s -> check_ands check s e phi_s
+    | s, e, Exists (t, phi) ->
+        check s
+          (fun n ->
+            (if equal_nata n zero_nata then t else e (minus_nata n one_nata)))
+          phi
+    | s, e, Agg (y, (agg_type, d), tys, trm, phi) ->
+        (match
+          check_trm (comp new_type_symbol (agg_tysenv e tys))
+            (agg_trm_tysym agg_type) trm
+          with None -> None
+          | Some f ->
+            (match
+              check (map_sig (comp f new_type_symbol) s)
+                (comp (comp f new_type_symbol) (agg_tysenv e tys))
+                (map_formula (comp f new_type_symbol) phi)
+              with None -> None
+              | Some fa ->
+                (match
+                  check_trm (comp (comp (comp fa f) new_type_symbol) e)
+                    (comp fa f (t_res_tysym agg_type (agg_trm_tysym agg_type)))
+                    (Var y)
+                  with None -> None
+                  | Some fb ->
+                    (match
+                      check_trm
+                        (comp (comp (comp (comp fb fa) f) new_type_symbol) e)
+                        (comp (comp (comp fb fa) f) new_type_symbol d) (Var y)
+                      with None -> None
+                      | Some fc ->
+                        Some (comp (comp (comp (comp fc fb) fa) f)
+                               new_type_symbol)))))
+    | s, e, Prev (i, phi) -> check s e phi
+    | s, e, Next (i, phi) -> check s e phi
+    | s, e, Since (phi, i, psi) -> check_two_formulas check s e phi psi
+    | s, e, Until (phi, i, psi) -> check_two_formulas check s e phi psi
+    | s, e, MatchF (i, r) -> check_regex check s e r
+    | s, e, MatchP (i, r) -> check_regex check s e r
+    | s, e, LetPast (p, phi, psi) ->
+        (let f0 = funpow (nfv phi) new_type_symbol in
+          (match
+            check (fun_upd (equal_prod equal_string8 equal_nat) (map_sig f0 s)
+                    (p, nfv phi)
+                    (Some (tabulate (fun a -> TAny a) zero_nata (nfv phi))))
+              (fun a -> TAny a) (map_formula f0 phi)
+            with None -> None
+            | Some f1 ->
+              (match
+                check (map_sig f1
+                        (fun_upd (equal_prod equal_string8 equal_nat)
+                          (map_sig f0 s) (p, nfv phi)
+                          (Some (mapa (fun a -> TAny a)
+                                  (upt zero_nata (nfv phi))))))
+                  (comp (comp f1 f0) e) (map_formula (comp f1 f0) psi)
+                with None -> None | Some f2 -> Some (comp (comp f2 f1) f0))))
+    | s, e, TP t -> check_trm e (TCst TInt) t
+    | s, e, TS t -> check_trm e (TCst TInt) t;;
+
 let rec filterb xb xc = Alist (filtera xb (impl_of xc));;
 
 let rec lookup _A xa = map_of _A (impl_of xa);;
@@ -4297,11 +4635,6 @@ let rec updateb (_A1, _A2)
     | k, v, Assoc_List_Mapping al -> Assoc_List_Mapping (updatea _A2 k v al)
     | k, v, Mapping m -> Mapping (fun_upd _A2 m k (Some v));;
 
-let rec tabulate
-  f x n =
-    (if equal_nata n zero_nata then []
-      else f x :: tabulate f (suc x) (minus_nata n one_nata));;
-
 let rec singleton_table (_A1, _A2)
   n i x =
     insert ((ceq_list (ceq_option _A1)), (ccompare_list (ccompare_option _A2)))
@@ -4412,18 +4745,32 @@ let rec list_update
 
 let rec plus_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.add x y)
-    | EInt x, EFloat y -> EFloat (Stdlib.(+.) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Stdlib.(+.) x (Z.to_float y))
     | EFloat x, EFloat y -> EFloat (Stdlib.(+.) x y)
-    | EFloat v, EString va -> EFloat Stdlib.nan
-    | EString v, uv -> EFloat Stdlib.nan
-    | uu, EString v -> EFloat Stdlib.nan;;
+    | EFloat v, EInt va -> failwith "undefined"
+    | EFloat v, EString va -> failwith "undefined"
+    | EString v, uv -> failwith "undefined"
+    | EInt va, EFloat v -> failwith "undefined"
+    | uu, EString v -> failwith "undefined";;
+
+let rec double_of_event_data_agg = function EInt x -> Z.to_float x
+                                   | EFloat x -> x
+                                   | EString uu -> failwith "undefined";;
 
 let rec integer_of_int (Int_of_integer k) = k;;
 
-let rec double_of_event_data = function EInt x -> Z.to_float x
-                               | EFloat x -> x
-                               | EString uu -> Stdlib.nan;;
+let rec aggreg_default_value
+  op t =
+    (match (op, t) with (Agg_Cnt, TInt) -> EInt Z.zero
+      | (Agg_Cnt, TFloat) -> EFloat 0.0 | (Agg_Cnt, TString) -> EString ""
+      | (Agg_Min, TInt) -> EInt Z.zero
+      | (Agg_Min, TFloat) -> EFloat Stdlib.infinity
+      | (Agg_Min, TString) -> EString "" | (Agg_Max, TInt) -> EInt Z.zero
+      | (Agg_Max, TFloat) -> EFloat (Stdlib.(~-.) Stdlib.infinity)
+      | (Agg_Max, TString) -> EString "" | (Agg_Sum, TInt) -> EInt Z.zero
+      | (Agg_Sum, TFloat) -> EFloat 0.0 | (Agg_Sum, TString) -> EString ""
+      | (Agg_Avg, TInt) -> EInt Z.zero | (Agg_Avg, TFloat) -> EFloat 0.0
+      | (Agg_Avg, TString) -> EString "" | (Agg_Med, TInt) -> EInt Z.zero
+      | (Agg_Med, TFloat) -> EFloat 0.0 | (Agg_Med, TString) -> EString "");;
 
 let rec int_of_nat n = Int_of_integer (integer_of_nat n);;
 
@@ -4438,6 +4785,24 @@ let rec flatten_multiset
             (ccompare_prod ccompare_event_data ccompare_enat))
           m);;
 
+let rec finite_multiset_insert_fun
+  (uu, k) v = (if equal_enat k Infinity_enat then false else true) && v;;
+
+let finite_multiset_cfi : ((event_data * enat), bool) comp_fun_idem
+  = Abs_comp_fun_idem finite_multiset_insert_fun;;
+
+let rec finite_multiset
+  m = (if finite
+            ((finite_UNIV_prod finite_UNIV_event_data finite_UNIV_enat),
+              (ceq_prod ceq_event_data ceq_enat),
+              (ccompare_prod ccompare_event_data ccompare_enat))
+            m
+        then set_fold_cfi
+               ((ceq_prod ceq_event_data ceq_enat),
+                 (ccompare_prod ccompare_event_data ccompare_enat))
+               finite_multiset_cfi true m
+        else false);;
+
 let rec dvd (_A1, _A2)
   a b = eq _A1
           (modulo _A2.semiring_modulo_semidom_modulo.modulo_semiring_modulo b a)
@@ -4445,44 +4810,63 @@ let rec dvd (_A1, _A2)
 
 let rec eval_agg_op
   x0 m = match x0, m with
-    (Agg_Cnt, y0), m ->
-      (match flatten_multiset m with [] -> y0
-        | a :: lista ->
-          EInt (integer_of_int (int_of_nat (size_lista (a :: lista)))))
-    | (Agg_Min, y0), m ->
-        (match flatten_multiset m with [] -> y0
-          | a :: b -> foldl (min ord_event_data) a b)
-    | (Agg_Max, y0), m ->
-        (match flatten_multiset m with [] -> y0
-          | a :: b -> foldl (max ord_event_data) a b)
-    | (Agg_Sum, y0), m ->
-        (match flatten_multiset m with [] -> y0
-          | a :: b -> foldl plus_event_data a b)
-    | (Agg_Avg, y0), m ->
-        (match flatten_multiset m with [] -> y0
-          | x :: xs ->
-            EFloat
-              (Stdlib.(/.) (double_of_event_data (foldl plus_event_data x xs))
-                (double_of_int (int_of_nat (size_lista (x :: xs))))))
-    | (Agg_Med, y0), m ->
-        (match flatten_multiset m with [] -> y0
-          | a :: lista ->
-            EFloat
-              (let u = size_lista (a :: lista) in
-               let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
-                (if dvd (equal_nat, semidom_modulo_nat)
-                      (nat_of_integer (Z.of_int 2)) u
-                  then Stdlib.(/.)
-                         (Stdlib.(+.)
-                           (double_of_event_data
-                             (nth (a :: lista) (minus_nata ua one_nata)))
-                           (double_of_event_data (nth (a :: lista) ua)))
-                         (double_of_int (Int_of_integer (Z.of_int 2)))
-                  else double_of_event_data (nth (a :: lista) ua))));;
+    (Agg_Cnt, ty), m ->
+      (let y0 = aggreg_default_value Agg_Cnt ty in
+        (match (flatten_multiset m, finite_multiset m) with ([], true) -> y0
+          | ([], false) -> y0
+          | (a :: lista, true) ->
+            EInt (integer_of_int (int_of_nat (size_lista (a :: lista))))
+          | (_ :: _, false) -> y0))
+    | (Agg_Min, ty), m ->
+        (let y0 = aggreg_default_value Agg_Min ty in
+          (match (flatten_multiset m, finite_multiset m) with ([], true) -> y0
+            | ([], false) -> y0
+            | (a :: lista, true) -> foldl (min ord_event_data) a lista
+            | (_ :: _, false) -> y0))
+    | (Agg_Max, ty), m ->
+        (let y0 = aggreg_default_value Agg_Max ty in
+          (match (flatten_multiset m, finite_multiset m) with ([], true) -> y0
+            | ([], false) -> y0
+            | (a :: lista, true) -> foldl (max ord_event_data) a lista
+            | (_ :: _, false) -> y0))
+    | (Agg_Sum, ty), m ->
+        (let y0 = aggreg_default_value Agg_Sum ty in
+          (match (flatten_multiset m, finite_multiset m) with ([], true) -> y0
+            | ([], false) -> y0
+            | (a :: lista, true) -> foldl plus_event_data a lista
+            | (_ :: _, false) -> y0))
+    | (Agg_Avg, ty), m ->
+        (let y0 = aggreg_default_value Agg_Avg ty in
+          (match (flatten_multiset m, finite_multiset m) with ([], true) -> y0
+            | ([], false) -> y0
+            | (a :: lista, true) ->
+              EFloat
+                (Stdlib.(/.)
+                  (double_of_event_data_agg (foldl plus_event_data a lista))
+                  (double_of_int (int_of_nat (size_lista (a :: lista)))))
+            | (_ :: _, false) -> y0))
+    | (Agg_Med, ty), m ->
+        (let y0 = aggreg_default_value Agg_Med ty in
+          (match (flatten_multiset m, finite_multiset m) with ([], true) -> y0
+            | ([], false) -> y0
+            | (a :: lista, true) ->
+              EFloat
+                (let u = size_lista (a :: lista) in
+                 let ua = divide_nata u (nat_of_integer (Z.of_int 2)) in
+                  (if dvd (equal_nat, semidom_modulo_nat)
+                        (nat_of_integer (Z.of_int 2)) u
+                    then Stdlib.(/.)
+                           (Stdlib.(+.)
+                             (double_of_event_data_agg
+                               (nth (a :: lista) (minus_nata ua one_nata)))
+                             (double_of_event_data_agg (nth (a :: lista) ua)))
+                           (double_of_int (Int_of_integer (Z.of_int 2)))
+                    else double_of_event_data_agg (nth (a :: lista) ua)))
+            | (_ :: _, false) -> y0));;
 
 let rec uminus_event_data = function EInt x -> EInt (Z.neg x)
                             | EFloat x -> EFloat (Stdlib.(~-.) x)
-                            | EString v -> EFloat Stdlib.nan;;
+                            | EString v -> failwith "undefined";;
 
 let rec mod_to_zero
   x y = (let z =
@@ -4494,10 +4878,10 @@ let rec mod_to_zero
 
 let rec modulo_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (mod_to_zero x y)
-    | EFloat v, uv -> EFloat Stdlib.nan
-    | EString v, uv -> EFloat Stdlib.nan
-    | uu, EFloat v -> EFloat Stdlib.nan
-    | uu, EString v -> EFloat Stdlib.nan;;
+    | EFloat v, uv -> failwith "undefined"
+    | EString v, uv -> failwith "undefined"
+    | uu, EFloat v -> failwith "undefined"
+    | uu, EString v -> failwith "undefined";;
 
 let rec div_to_zero
   x y = (let z =
@@ -4510,34 +4894,38 @@ let rec div_to_zero
 
 let rec divide_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (div_to_zero x y)
-    | EInt x, EFloat y -> EFloat (Stdlib.(/.) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Stdlib.(/.) x (Z.to_float y))
     | EFloat x, EFloat y -> EFloat (Stdlib.(/.) x y)
-    | EFloat v, EString va -> EFloat Stdlib.nan
-    | EString v, uv -> EFloat Stdlib.nan
-    | uu, EString v -> EFloat Stdlib.nan;;
+    | EFloat v, EInt va -> failwith "undefined"
+    | EFloat v, EString va -> failwith "undefined"
+    | EString v, uv -> failwith "undefined"
+    | EInt va, EFloat v -> failwith "undefined"
+    | uu, EString v -> failwith "undefined";;
 
 let rec times_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.mul x y)
-    | EInt x, EFloat y -> EFloat (Stdlib.( *. ) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Stdlib.( *. ) x (Z.to_float y))
     | EFloat x, EFloat y -> EFloat (Stdlib.( *. ) x y)
-    | EFloat v, EString va -> EFloat Stdlib.nan
-    | EString v, uv -> EFloat Stdlib.nan
-    | uu, EString v -> EFloat Stdlib.nan;;
+    | EFloat v, EInt va -> failwith "undefined"
+    | EFloat v, EString va -> failwith "undefined"
+    | EString v, uv -> failwith "undefined"
+    | EInt va, EFloat v -> failwith "undefined"
+    | uu, EString v -> failwith "undefined";;
 
 let rec minus_event_data
   uu uv = match uu, uv with EInt x, EInt y -> EInt (Z.sub x y)
-    | EInt x, EFloat y -> EFloat (Stdlib.(-.) (Z.to_float x) y)
-    | EFloat x, EInt y -> EFloat (Stdlib.(-.) x (Z.to_float y))
     | EFloat x, EFloat y -> EFloat (Stdlib.(-.) x y)
-    | EFloat v, EString va -> EFloat Stdlib.nan
-    | EString v, uv -> EFloat Stdlib.nan
-    | uu, EString v -> EFloat Stdlib.nan;;
+    | EFloat v, EInt va -> failwith "undefined"
+    | EFloat v, EString va -> failwith "undefined"
+    | EString v, uv -> failwith "undefined"
+    | EInt va, EFloat v -> failwith "undefined"
+    | uu, EString v -> failwith "undefined";;
 
-let rec integer_of_event_data = function EInt x -> x
+let rec integer_of_event_data = function EInt uu -> failwith "undefined"
                                 | EFloat x -> Z.of_float x
-                                | EString uu -> Z.zero;;
+                                | EString uv -> failwith "undefined";;
+
+let rec double_of_event_data = function EInt x -> Z.to_float x
+                               | EFloat uu -> failwith "undefined"
+                               | EString uv -> failwith "undefined";;
 
 let rec meval_trm
   x0 v = match x0, v with Var x, v -> the (nth v x)
@@ -4595,7 +4983,7 @@ let rec images _A (_B1, _B2, _B3, _B4)
                     t)))));;
 
 let rec eval_agg
-  n g0 y omega b f rel =
+  n g0 y omega tys f rel =
     (if g0 && is_empty
                 (card_UNIV_list, (ceq_list (ceq_option ceq_event_data)),
                   (cproper_interval_list (ccompare_option ccompare_event_data)))
@@ -4679,7 +5067,7 @@ let rec eval_agg
                      (ccompare_list (ccompare_option ccompare_event_data))
                      (ccompare_list (ccompare_option ccompare_event_data))),
                    (set_impl_prod set_impl_list set_impl_list))
-                 (fun t -> (drop b t, t)) rel)));;
+                 (fun t -> (drop (size_lista tys) t, t)) rel)));;
 
 let rec rbt_product
   f rbt1 rbt2 =
@@ -5028,7 +5416,7 @@ let rec safe_assignment
       | Eq (I2f _, Mod (_, _)) -> false | Eq (I2f _, F2i _) -> false
       | Eq (I2f _, I2f _) -> false | Less (_, _) -> false
       | LessEq (_, _) -> false | Neg _ -> false | Or (_, _) -> false
-      | And (_, _) -> false | Ands _ -> false | Exists _ -> false
+      | And (_, _) -> false | Ands _ -> false | Exists (_, _) -> false
       | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
       | Next (_, _) -> false | Since (_, _, _) -> false
       | Until (_, _, _) -> false | MatchF (_, _) -> false
@@ -5050,7 +5438,7 @@ let rec is_constraint = function Eq (t1, t2) -> true
                         | Neg (Or (va, vb)) -> false
                         | Neg (And (va, vb)) -> false
                         | Neg (Ands va) -> false
-                        | Neg (Exists va) -> false
+                        | Neg (Exists (va, vb)) -> false
                         | Neg (Agg (va, vb, vc, vd, ve)) -> false
                         | Neg (Prev (va, vb)) -> false
                         | Neg (Next (va, vb)) -> false
@@ -5063,7 +5451,7 @@ let rec is_constraint = function Eq (t1, t2) -> true
                         | Or (v, va) -> false
                         | And (v, va) -> false
                         | Ands v -> false
-                        | Exists v -> false
+                        | Exists (v, va) -> false
                         | Agg (v, va, vb, vc, vd) -> false
                         | Prev (v, va) -> false
                         | Next (v, va) -> false
@@ -5113,13 +5501,6 @@ let rec sup_rec_safety x0 uu = match x0, uu with AnyRec, uu -> AnyRec
                          | Unused, PastRec -> PastRec
                          | Unused, Unused -> Unused;;
 
-let rec map_regex
-  f x1 = match f, x1 with f, Skip x1 -> Skip x1
-    | f, Test x2 -> Test (f x2)
-    | f, Plusa (x31, x32) -> Plusa (map_regex f x31, map_regex f x32)
-    | f, Times (x41, x42) -> Times (map_regex f x41, map_regex f x42)
-    | f, Star x5 -> Star (map_regex f x5);;
-
 let rec safe_letpast
   p x1 = match p, x1 with
     p, MatchF (i, r) ->
@@ -5145,7 +5526,7 @@ let rec safe_letpast
     | p, Next (i, phi) -> times_rec_safety AnyRec (safe_letpast p phi)
     | p, Prev (i, phi) -> times_rec_safety PastRec (safe_letpast p phi)
     | p, Agg (y, omega, b, f, phi) -> safe_letpast p phi
-    | p, Exists phi -> safe_letpast p phi
+    | p, Exists (t, phi) -> safe_letpast p phi
     | p, Ands l -> fold (comp sup_rec_safety (safe_letpast p)) l Unused
     | p, And (phi, psi) ->
         sup_rec_safety (safe_letpast p phi) (safe_letpast p psi)
@@ -5192,7 +5573,7 @@ let rec remove_neg = function Neg phi -> phi
                      | Or (v, va) -> Or (v, va)
                      | And (v, va) -> And (v, va)
                      | Ands v -> Ands v
-                     | Exists v -> Exists v
+                     | Exists (v, va) -> Exists (v, va)
                      | Agg (v, va, vb, vc, vd) -> Agg (v, va, vb, vc, vd)
                      | Prev (v, va) -> Prev (v, va)
                      | Next (v, va) -> Next (v, va)
@@ -5207,7 +5588,6 @@ let rec safe_formula
   = function
     Eq (t1, t2) ->
       is_Const t1 && (is_Const t2 || is_Var t2) || is_Var t1 && is_Const t2
-    | Neg (Eq (Var x, Var y)) -> equal_nata x y
     | Less (t1, t2) -> false
     | LessEq (t1, t2) -> false
     | Pred (e, ts) -> list_all (fun t -> is_Var t || is_Const t) ts
@@ -5223,154 +5603,10 @@ let rec safe_formula
                (upt zero_nata (nfv phi)))
              (fvi zero_nata phi) &&
             (safe_formula phi && safe_formula psi))
-    | Neg (Pred (v, va)) ->
+    | Neg phi ->
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Pred (v, va))) &&
-          safe_formula (Pred (v, va))
-    | Neg (Let (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Let (v, va, vb))) &&
-          safe_formula (Let (v, va, vb))
-    | Neg (LetPast (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (LetPast (v, va, vb))) &&
-          safe_formula (LetPast (v, va, vb))
-    | Neg (Eq (Const vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Const vb, va))) &&
-          safe_formula (Eq (Const vb, va))
-    | Neg (Eq (Plus (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Plus (vb, vc), va))) &&
-          safe_formula (Eq (Plus (vb, vc), va))
-    | Neg (Eq (Minus (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Minus (vb, vc), va))) &&
-          safe_formula (Eq (Minus (vb, vc), va))
-    | Neg (Eq (UMinus vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (UMinus vb, va))) &&
-          safe_formula (Eq (UMinus vb, va))
-    | Neg (Eq (Mult (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Mult (vb, vc), va))) &&
-          safe_formula (Eq (Mult (vb, vc), va))
-    | Neg (Eq (Div (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Div (vb, vc), va))) &&
-          safe_formula (Eq (Div (vb, vc), va))
-    | Neg (Eq (Mod (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Mod (vb, vc), va))) &&
-          safe_formula (Eq (Mod (vb, vc), va))
-    | Neg (Eq (F2i vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (F2i vb, va))) &&
-          safe_formula (Eq (F2i vb, va))
-    | Neg (Eq (I2f vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (I2f vb, va))) &&
-          safe_formula (Eq (I2f vb, va))
-    | Neg (Eq (v, Const vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Const vb))) &&
-          safe_formula (Eq (v, Const vb))
-    | Neg (Eq (v, Plus (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Plus (vb, vc)))) &&
-          safe_formula (Eq (v, Plus (vb, vc)))
-    | Neg (Eq (v, Minus (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Minus (vb, vc)))) &&
-          safe_formula (Eq (v, Minus (vb, vc)))
-    | Neg (Eq (v, UMinus vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, UMinus vb))) &&
-          safe_formula (Eq (v, UMinus vb))
-    | Neg (Eq (v, Mult (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Mult (vb, vc)))) &&
-          safe_formula (Eq (v, Mult (vb, vc)))
-    | Neg (Eq (v, Div (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Div (vb, vc)))) &&
-          safe_formula (Eq (v, Div (vb, vc)))
-    | Neg (Eq (v, Mod (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Mod (vb, vc)))) &&
-          safe_formula (Eq (v, Mod (vb, vc)))
-    | Neg (Eq (v, F2i vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, F2i vb))) &&
-          safe_formula (Eq (v, F2i vb))
-    | Neg (Eq (v, I2f vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, I2f vb))) &&
-          safe_formula (Eq (v, I2f vb))
-    | Neg (Less (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Less (v, va))) &&
-          safe_formula (Less (v, va))
-    | Neg (LessEq (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (LessEq (v, va))) &&
-          safe_formula (LessEq (v, va))
-    | Neg (Neg v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Neg v)) &&
-          safe_formula (Neg v)
-    | Neg (Or (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Or (v, va))) &&
-          safe_formula (Or (v, va))
-    | Neg (And (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (And (v, va))) &&
-          safe_formula (And (v, va))
-    | Neg (Ands v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Ands v)) &&
-          safe_formula (Ands v)
-    | Neg (Exists v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Exists v)) &&
-          safe_formula (Exists v)
-    | Neg (Agg (v, va, vb, vc, vd)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Agg (v, va, vb, vc, vd))) &&
-          safe_formula (Agg (v, va, vb, vc, vd))
-    | Neg (Prev (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Prev (v, va))) &&
-          safe_formula (Prev (v, va))
-    | Neg (Next (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Next (v, va))) &&
-          safe_formula (Next (v, va))
-    | Neg (Since (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Since (v, va, vb))) &&
-          safe_formula (Since (v, va, vb))
-    | Neg (Until (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Until (v, va, vb))) &&
-          safe_formula (Until (v, va, vb))
-    | Neg (MatchF (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (MatchF (v, va))) &&
-          safe_formula (MatchF (v, va))
-    | Neg (MatchP (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (MatchP (v, va))) &&
-          safe_formula (MatchP (v, va))
-    | Neg (TP v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (TP v)) &&
-          safe_formula (TP v)
-    | Neg (TS v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (TS v)) &&
-          safe_formula (TS v)
+          (fvi zero_nata phi) &&
+          safe_formula phi
     | Or (phi, psi) ->
         set_eq (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata psi)
           (fvi zero_nata phi) &&
@@ -5386,11 +5622,12 @@ let rec safe_formula
                     | LetPast (_, _, _) -> false | Eq (_, _) -> false
                     | Less (_, _) -> false | LessEq (_, _) -> false
                     | Neg a -> safe_formula a | Or (_, _) -> false
-                    | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                    | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                    | Next (_, _) -> false | Since (_, _, _) -> false
-                    | Until (_, _, _) -> false | MatchF (_, _) -> false
-                    | MatchP (_, _) -> false | TP _ -> false | TS _ -> false))))
+                    | And (_, _) -> false | Ands _ -> false
+                    | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                    | Prev (_, _) -> false | Next (_, _) -> false
+                    | Since (_, _, _) -> false | Until (_, _, _) -> false
+                    | MatchF (_, _) -> false | MatchP (_, _) -> false
+                    | TP _ -> false | TS _ -> false))))
     | Ands l ->
         (let (pos, neg) = partition safe_formula l in
           not (null pos) &&
@@ -5418,13 +5655,16 @@ let rec safe_formula
                              set_impl_nat)),
                          set_impl_set)
                     (mapa (fvi zero_nata) pos)))))
-    | Exists phi -> safe_formula phi
-    | Agg (y, omega, b, f, phi) ->
+    | Exists (t, phi) ->
         safe_formula phi &&
-          (not (member (ceq_nat, ccompare_nat) (plus_nata y b)
+          member (ceq_nat, ccompare_nat) zero_nata (fvi zero_nata phi)
+    | Agg (y, omega, tys, f, phi) ->
+        safe_formula phi &&
+          (not (member (ceq_nat, ccompare_nat) (plus_nata y (size_lista tys))
                  (fvi zero_nata phi)) &&
             (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
-               (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b))
+               (set (ceq_nat, ccompare_nat, set_impl_nat)
+                 (upt zero_nata (size_lista tys)))
                (fvi zero_nata phi) &&
               less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                 (fvi_trm zero_nata f) (fvi zero_nata phi)))
@@ -5438,7 +5678,7 @@ let rec safe_formula
                | LetPast (_, _, _) -> false | Eq (_, _) -> false
                | Less (_, _) -> false | LessEq (_, _) -> false
                | Neg a -> safe_formula a | Or (_, _) -> false
-               | And (_, _) -> false | Ands _ -> false | Exists _ -> false
+               | And (_, _) -> false | Ands _ -> false | Exists (_, _) -> false
                | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                | Next (_, _) -> false | Since (_, _, _) -> false
                | Until (_, _, _) -> false | MatchF (_, _) -> false
@@ -5452,7 +5692,7 @@ let rec safe_formula
                | LetPast (_, _, _) -> false | Eq (_, _) -> false
                | Less (_, _) -> false | LessEq (_, _) -> false
                | Neg a -> safe_formula a | Or (_, _) -> false
-               | And (_, _) -> false | Ands _ -> false | Exists _ -> false
+               | And (_, _) -> false | Ands _ -> false | Exists (_, _) -> false
                | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                | Next (_, _) -> false | Since (_, _, _) -> false
                | Until (_, _, _) -> false | MatchF (_, _) -> false
@@ -5470,11 +5710,12 @@ let rec safe_formula
                   | LetPast (_, _, _) -> false | Eq (_, _) -> false
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> safe_formula a | Or (_, _) -> false
-                  | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                  | Next (_, _) -> false | Since (_, _, _) -> false
-                  | Until (_, _, _) -> false | MatchF (_, _) -> false
-                  | MatchP (_, _) -> false | TP _ -> false | TS _ -> false))
+                  | And (_, _) -> false | Ands _ -> false
+                  | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                  | Prev (_, _) -> false | Next (_, _) -> false
+                  | Since (_, _, _) -> false | Until (_, _, _) -> false
+                  | MatchF (_, _) -> false | MatchP (_, _) -> false
+                  | TP _ -> false | TS _ -> false))
           Past Strict r
     | MatchF (i, r) ->
         safe_regex
@@ -5488,11 +5729,12 @@ let rec safe_formula
                   | LetPast (_, _, _) -> false | Eq (_, _) -> false
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> safe_formula a | Or (_, _) -> false
-                  | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                  | Next (_, _) -> false | Since (_, _, _) -> false
-                  | Until (_, _, _) -> false | MatchF (_, _) -> false
-                  | MatchP (_, _) -> false | TP _ -> false | TS _ -> false))
+                  | And (_, _) -> false | Ands _ -> false
+                  | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                  | Prev (_, _) -> false | Next (_, _) -> false
+                  | Since (_, _, _) -> false | Until (_, _, _) -> false
+                  | MatchF (_, _) -> false | MatchP (_, _) -> false
+                  | TP _ -> false | TS _ -> false))
           Futu Strict r
     | TP t -> is_Var t || is_Const t
     | TS t -> is_Var t || is_Const t;;
@@ -5511,7 +5753,7 @@ let rec to_mregex_exec
                  | Or (_, _) -> (MSkip zero_nata, xs)
                  | And (_, _) -> (MSkip zero_nata, xs)
                  | Ands _ -> (MSkip zero_nata, xs)
-                 | Exists _ -> (MSkip zero_nata, xs)
+                 | Exists (_, _) -> (MSkip zero_nata, xs)
                  | Agg (_, _, _, _, _) -> (MSkip zero_nata, xs)
                  | Prev (_, _) -> (MSkip zero_nata, xs)
                  | Next (_, _) -> (MSkip zero_nata, xs)
@@ -5571,6 +5813,53 @@ let rec pop_aux
          (pop_t (rep_queue xa));;
 
 let rec pop x = rep_isom (pop_aux x);;
+
+let rec check_wty_regex
+  check_wty_formula x1 = match check_wty_formula, x1 with
+    check_wty_formula, Skip l -> true
+    | check_wty_formula, Test phi -> check_wty_formula phi
+    | check_wty_formula, Plusa (r, s) ->
+        check_wty_regex check_wty_formula r &&
+          check_wty_regex check_wty_formula s
+    | check_wty_formula, Times (r, s) ->
+        check_wty_regex check_wty_formula r &&
+          check_wty_regex check_wty_formula s
+    | check_wty_formula, Star r -> check_wty_regex check_wty_formula r;;
+
+let rec check_wty_formula
+  = function Let (p, phi, psi) -> check_wty_formula phi && check_wty_formula psi
+    | Neg phi -> check_wty_formula phi
+    | Or (phi, psi) -> check_wty_formula phi && check_wty_formula psi
+    | And (phi, psi) -> check_wty_formula phi && check_wty_formula psi
+    | Ands phi_s -> foldl (fun a x -> a && check_wty_formula x) true phi_s
+    | Exists (t, phi) -> check_wty_formula phi
+    | Agg (y, (agg_type, d), tys, trm, phi) ->
+        (match d with TAny _ -> false | TNum _ -> false
+          | TCst _ -> check_wty_formula phi)
+    | Prev (i, phi) -> check_wty_formula phi
+    | Next (i, phi) -> check_wty_formula phi
+    | Since (phi, i, psi) -> check_wty_formula phi && check_wty_formula psi
+    | Until (phi, i, psi) -> check_wty_formula phi && check_wty_formula psi
+    | MatchF (i, r) -> check_wty_regex check_wty_formula r
+    | MatchP (i, r) -> check_wty_regex check_wty_formula r
+    | LetPast (p, phi, psi) -> check_wty_formula phi && check_wty_formula psi
+    | Pred (v, va) -> true
+    | Eq (v, va) -> true
+    | Less (v, va) -> true
+    | LessEq (v, va) -> true
+    | TP v -> true
+    | TS v -> true;;
+
+let rec convert_tysym = function TCst a -> a
+                        | TAny v -> TFloat
+                        | TNum v -> TFloat;;
+
+let rec type_check
+  s phi =
+    (match check s (fun a -> TAny a) phi with None -> None
+      | Some f ->
+        (if check_wty_formula (map_formula f phi)
+          then Some (map_formula (comp convert_tysym f) phi) else None));;
 
 let rec comp_fun_commute_apply (Abs_comp_fun_commute x) = x;;
 
@@ -5683,6 +5972,12 @@ let rec mrtabulate (_A1, _A2)
                     then None else Some (k, fk))))
               xs)));;
 
+let rec aggargs_tys
+  (Aggargs_ext
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_tys,
+      aggargs_f, more))
+    = aggargs_tys;;
+
 let rec rep_wf_wbt _A (Abs_wf_wbt x) = x;;
 
 let rec size_wbt = function Leaf -> zero_nata
@@ -5742,15 +6037,9 @@ let rec insert_treelist (_A1, _A2)
 
 let rec aggargs_f
   (Aggargs_ext
-    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_tys,
       aggargs_f, more))
     = aggargs_f;;
-
-let rec aggargs_b
-  (Aggargs_ext
-    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
-      aggargs_f, more))
-    = aggargs_b;;
 
 let rec empty_tree _A = Abs_wf_wbt Leaf;;
 
@@ -5758,7 +6047,7 @@ let rec empty_treelist _A = Collapse (empty_tree _A);;
 
 let rec insert_rank
   args typea t (v, m) =
-    (if v then (let group = drop (aggargs_b args) t in
+    (if v then (let group = drop (size_lista (aggargs_tys args)) t in
                 let term = meval_trm (aggargs_f args) t in
                 let (new_v, new_list) =
                   (match
@@ -5821,7 +6110,7 @@ let rec insert_rank_cfc xb xc = Abs_comp_fun_commute (insert_rank xb xc);;
 
 let rec insert_sum
   args t (v, m) =
-    (if v then (let group = drop (aggargs_b args) t in
+    (if v then (let group = drop (size_lista (aggargs_tys args)) t in
                 let term = meval_trm (aggargs_f args) t in
                  (match
                    (lookupa
@@ -5867,7 +6156,7 @@ let rec insert_sum_cfc xa = Abs_comp_fun_commute (insert_sum xa);;
 
 let rec insert_cnt
   args t (v, m) =
-    (if v then (v, (let group = drop (aggargs_b args) t in
+    (if v then (v, (let group = drop (size_lista (aggargs_tys args)) t in
                      (match
                        lookupa
                          ((ccompare_list (ccompare_option ccompare_event_data)),
@@ -5973,7 +6262,7 @@ let rec get_length
         | LString a -> length_treelist linorder_string8 a);;
 
 let rec result_maggaux
-  (Aggargs_ext (cols, n, g0, y, omega, b, f, ())) aux =
+  (Aggargs_ext (cols, n, g0, y, omega, tys, f, ())) aux =
     (match aux
       with CntAux m ->
         (if g0 && is_empty
@@ -6066,13 +6355,13 @@ let rec result_maggaux
                                 (nat_of_integer (Z.of_int 2)) u
                             then Stdlib.(/.)
                                    (Stdlib.(+.)
-                                     (double_of_event_data
+                                     (double_of_event_data_agg
                                        (get_edata_list k
  (minus_nata ua one_nata)))
-                                     (double_of_event_data
+                                     (double_of_event_data_agg
                                        (get_edata_list k ua)))
                                    (double_of_int (Int_of_integer (Z.of_int 2)))
-                            else double_of_event_data (get_edata_list k ua))
+                            else double_of_event_data_agg (get_edata_list k ua))
                           in
                          EFloat a)))));;
 
@@ -6143,7 +6432,7 @@ let rec remove_treelist (_A1, _A2)
 
 let rec delete_rank
   args typea t (v, m) =
-    (if v then (let group = drop (aggargs_b args) t in
+    (if v then (let group = drop (size_lista (aggargs_tys args)) t in
                 let term = meval_trm (aggargs_f args) t in
                 let a =
                   (match
@@ -6248,7 +6537,7 @@ let rec delete_rank_cfc xb xc = Abs_comp_fun_commute (delete_rank xb xc);;
 
 let rec delete_sum
   args t (v, m) =
-    (if v then (let group = drop (aggargs_b args) t in
+    (if v then (let group = drop (size_lista (aggargs_tys args)) t in
                 let term = meval_trm (aggargs_f args) t in
                  (match
                    (lookupa
@@ -6291,7 +6580,7 @@ let rec delete_sum_cfc xa = Abs_comp_fun_commute (delete_sum xa);;
 
 let rec delete_cnt
   args t (v, m) =
-    (if v then (v, (let group = drop (aggargs_b args) t in
+    (if v then (v, (let group = drop (size_lista (aggargs_tys args)) t in
                      (match
                        lookupa
                          ((ccompare_list (ccompare_option ccompare_event_data)),
@@ -6352,7 +6641,7 @@ let rec delete_maggauxa
 
 let rec aggargs_omega
   (Aggargs_ext
-    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_tys,
       aggargs_f, more))
     = aggargs_omega;;
 
@@ -6367,96 +6656,96 @@ let rec init_maggaux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Min, EInt _) ->
+        | (Agg_Min, TInt) ->
           (true,
             RankAux
               (mapping_empty
                  (ccompare_list (ccompare_option ccompare_event_data))
                  (of_phantom mapping_impl_lista),
                 IntT))
-        | (Agg_Min, EFloat _) ->
+        | (Agg_Min, TFloat) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Min, EString _) ->
+        | (Agg_Min, TString) ->
           (true,
             RankAux
               (mapping_empty
                  (ccompare_list (ccompare_option ccompare_event_data))
                  (of_phantom mapping_impl_lista),
                 StringT))
-        | (Agg_Max, EInt _) ->
+        | (Agg_Max, TInt) ->
           (true,
             RankAux
               (mapping_empty
                  (ccompare_list (ccompare_option ccompare_event_data))
                  (of_phantom mapping_impl_lista),
                 IntT))
-        | (Agg_Max, EFloat _) ->
+        | (Agg_Max, TFloat) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Max, EString _) ->
+        | (Agg_Max, TString) ->
           (true,
             RankAux
               (mapping_empty
                  (ccompare_list (ccompare_option ccompare_event_data))
                  (of_phantom mapping_impl_lista),
                 StringT))
-        | (Agg_Sum, EInt _) ->
+        | (Agg_Sum, TInt) ->
           (true,
             SumAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Sum, EFloat _) ->
+        | (Agg_Sum, TFloat) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Sum, EString _) ->
+        | (Agg_Sum, TString) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Avg, EInt _) ->
+        | (Agg_Avg, TInt) ->
           (true,
             SumAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Avg, EFloat _) ->
+        | (Agg_Avg, TFloat) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Avg, EString _) ->
+        | (Agg_Avg, TString) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Med, EInt _) ->
+        | (Agg_Med, TInt) ->
           (false,
             CntAux
               (mapping_empty
                 (ccompare_list (ccompare_option ccompare_event_data))
                 (of_phantom mapping_impl_lista)))
-        | (Agg_Med, EFloat _) ->
+        | (Agg_Med, TFloat) ->
           (true,
             RankAux
               (mapping_empty
                  (ccompare_list (ccompare_option ccompare_event_data))
                  (of_phantom mapping_impl_lista),
                 IntT))
-        | (Agg_Med, EString _) ->
+        | (Agg_Med, TString) ->
           (false,
             CntAux
               (mapping_empty
@@ -6533,26 +6822,26 @@ let rec args_agg
 
 let rec aggargs_g0
   (Aggargs_ext
-    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_tys,
       aggargs_f, more))
     = aggargs_g0;;
 
 let rec aggargs_y
   (Aggargs_ext
-    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_tys,
       aggargs_f, more))
     = aggargs_y;;
 
 let rec aggargs_n
   (Aggargs_ext
-    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_b,
+    (aggargs_cols, aggargs_n, aggargs_g0, aggargs_y, aggargs_omega, aggargs_tys,
       aggargs_f, more))
     = aggargs_n;;
 
 let rec eval_aggargs
   args =
     eval_agg (aggargs_n args) (aggargs_g0 args) (aggargs_y args)
-      (aggargs_omega args) (aggargs_b args) (aggargs_f args);;
+      (aggargs_omega args) (aggargs_tys args) (aggargs_f args);;
 
 let rec eval_args_agg
   args x =
@@ -9714,7 +10003,8 @@ let rec meeval
                       else zs),
                      MPrev (i, phia, false, buf, ntsa)))))
     | j, n, ts, db, MAgg (argsa, phi) ->
-        (let (xs, phia) = meeval j (plus_nata (aggargs_b argsa) n) ts db phi in
+        (let (xs, phia) =
+           meeval j (plus_nata (size_lista (aggargs_tys argsa)) n) ts db phi in
           (mapa (eval_aggargs argsa) xs, MAgg (argsa, phia)))
     | j, n, ts, db, MExists phi ->
         (let (xs, phia) = meeval j (suc n) ts db phi in
@@ -9971,7 +10261,7 @@ let rec split_constraint
     | Neg (Or (va, vb)) -> failwith "undefined"
     | Neg (And (va, vb)) -> failwith "undefined"
     | Neg (Ands va) -> failwith "undefined"
-    | Neg (Exists va) -> failwith "undefined"
+    | Neg (Exists (va, vb)) -> failwith "undefined"
     | Neg (Agg (va, vb, vc, vd, ve)) -> failwith "undefined"
     | Neg (Prev (va, vb)) -> failwith "undefined"
     | Neg (Next (va, vb)) -> failwith "undefined"
@@ -9984,7 +10274,7 @@ let rec split_constraint
     | Or (v, va) -> failwith "undefined"
     | And (v, va) -> failwith "undefined"
     | Ands v -> failwith "undefined"
-    | Exists v -> failwith "undefined"
+    | Exists (v, va) -> failwith "undefined"
     | Agg (v, va, vb, vc, vd) -> failwith "undefined"
     | Prev (v, va) -> failwith "undefined"
     | Next (v, va) -> failwith "undefined"
@@ -10028,7 +10318,7 @@ let rec split_assignment
     | uu, Or (v, va) -> failwith "undefined"
     | uu, And (v, va) -> failwith "undefined"
     | uu, Ands v -> failwith "undefined"
-    | uu, Exists v -> failwith "undefined"
+    | uu, Exists (v, va) -> failwith "undefined"
     | uu, Agg (v, va, vb, vc, vd) -> failwith "undefined"
     | uu, Prev (v, va) -> failwith "undefined"
     | uu, Next (v, va) -> failwith "undefined"
@@ -10061,7 +10351,7 @@ let rec pred_mode_of
       else (if is_simple_pattern ts zero_nata then Simple else Match));;
 
 let rec init_aggargs
-  cols n g0 y omega b f = Aggargs_ext (cols, n, g0, y, omega, b, f, ());;
+  cols n g0 y omega tys f = Aggargs_ext (cols, n, g0, y, omega, tys, f, ());;
 
 let rec mtrm_of_trm = function Var x -> MVar x
                       | Const x -> MConst x
@@ -10143,7 +10433,7 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                                  MRel (empty_table
 ((ceq_list (ceq_option ceq_event_data)),
   (ccompare_list (ccompare_option ccompare_event_data)), set_impl_list))
-                               | Exists _ ->
+                               | Exists (_, _) ->
                                  MRel (empty_table
 ((ceq_list (ceq_option ceq_event_data)),
   (ccompare_list (ccompare_option ccompare_event_data)), set_impl_list))
@@ -10191,22 +10481,22 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
          let vneg = mapa (fvi zero_nata) neg in
           MAnds (vpos, vneg, mpos @ mneg,
                   replicate (size_lista l) mbuf_t_empty))
-    | n, Exists phi -> MExists (meinit0 (suc n) phi)
-    | n, Agg (y, omega, b, f, phi) ->
+    | n, Exists (t, phi) -> MExists (meinit0 (suc n) phi)
+    | n, Agg (y, omega, tys, f, phi) ->
         (let default =
            MAgg (init_aggargs (fvi zero_nata phi) n
                    (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                      (fvi zero_nata phi)
                      (set (ceq_nat, ccompare_nat, set_impl_nat)
-                       (upt zero_nata b)))
-                   y omega b f,
-                  meinit0 (plus_nata b n) phi)
+                       (upt zero_nata (size_lista tys))))
+                   y omega tys f,
+                  meinit0 (plus_nata (size_lista tys) n) phi)
            in
           (match phi with Pred (_, _) -> default | Let (_, _, _) -> default
             | LetPast (_, _, _) -> default | Eq (_, _) -> default
             | Less (_, _) -> default | LessEq (_, _) -> default
             | Neg _ -> default | Or (_, _) -> default | And (_, _) -> default
-            | Ands _ -> default | Exists _ -> default
+            | Ands _ -> default | Exists (_, _) -> default
             | Agg (_, _, _, _, _) -> default | Prev (_, _) -> default
             | Next (_, _) -> default
             | Since (phia, i, psi) ->
@@ -10215,18 +10505,19 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                         (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                           (fvi zero_nata phi)
                           (set (ceq_nat, ccompare_nat, set_impl_nat)
-                            (upt zero_nata b)))
-                        y omega b f)
+                            (upt zero_nata (size_lista tys))))
+                        y omega tys f)
                  in
                let args =
                  (fun k ->
-                   init_args i (plus_nata b n) (fvi zero_nata phia)
-                     (fvi zero_nata psi) k agg)
+                   init_args i (plus_nata (size_lista tys) n)
+                     (fvi zero_nata phia) (fvi zero_nata psi) k agg)
                  in
                 (if safe_formula phia
                   then MSince
-                         (args true, meinit0 (plus_nata b n) phia,
-                           meinit0 (plus_nata b n) psi,
+                         (args true,
+                           meinit0 (plus_nata (size_lista tys) n) phia,
+                           meinit0 (plus_nata (size_lista tys) n) psi,
                            (mbuf_t_empty,
                              (mbuf_t_empty, (mbuf_t_empty, false))),
                            init_mmasaux (args true))
@@ -10269,8 +10560,9 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                                     set_impl_list))
                          | Neg phib ->
                            MSince
-                             (args false, meinit0 (plus_nata b n) phib,
-                               meinit0 (plus_nata b n) psi,
+                             (args false,
+                               meinit0 (plus_nata (size_lista tys) n) phib,
+                               meinit0 (plus_nata (size_lista tys) n) psi,
                                (mbuf_t_empty,
                                  (mbuf_t_empty, (mbuf_t_empty, false))),
                                init_mmasaux (args false))
@@ -10292,7 +10584,7 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                                     (ccompare_list
                                       (ccompare_option ccompare_event_data)),
                                     set_impl_list))
-                         | Exists _ ->
+                         | Exists (_, _) ->
                            MRel (empty_table
                                   ((ceq_list (ceq_option ceq_event_data)),
                                     (ccompare_list
@@ -10358,18 +10650,19 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                         (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                           (fvi zero_nata phi)
                           (set (ceq_nat, ccompare_nat, set_impl_nat)
-                            (upt zero_nata b)))
-                        y omega b f)
+                            (upt zero_nata (size_lista tys))))
+                        y omega tys f)
                  in
                let args =
                  (fun k ->
-                   init_args i (plus_nata b n) (fvi zero_nata phia)
-                     (fvi zero_nata psi) k agg)
+                   init_args i (plus_nata (size_lista tys) n)
+                     (fvi zero_nata phia) (fvi zero_nata psi) k agg)
                  in
                 (if safe_formula phia
                   then MUntil
-                         (args true, meinit0 (plus_nata b n) phia,
-                           meinit0 (plus_nata b n) psi,
+                         (args true,
+                           meinit0 (plus_nata (size_lista tys) n) phia,
+                           meinit0 (plus_nata (size_lista tys) n) psi,
                            (mbuf_t_empty, mbuf_t_empty), mbuf_t_empty,
                            zero_nata, init_mmauaux (args true))
                   else (match phia
@@ -10411,8 +10704,9 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                                     set_impl_list))
                          | Neg phib ->
                            MUntil
-                             (args false, meinit0 (plus_nata b n) phib,
-                               meinit0 (plus_nata b n) psi,
+                             (args false,
+                               meinit0 (plus_nata (size_lista tys) n) phib,
+                               meinit0 (plus_nata (size_lista tys) n) psi,
                                (mbuf_t_empty, mbuf_t_empty), mbuf_t_empty,
                                zero_nata, init_mmauaux (args false))
                          | Or (_, _) ->
@@ -10433,7 +10727,7 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                                     (ccompare_list
                                       (ccompare_option ccompare_event_data)),
                                     set_impl_list))
-                         | Exists _ ->
+                         | Exists (_, _) ->
                            MRel (empty_table
                                   ((ceq_list (ceq_option ceq_event_data)),
                                     (ccompare_list
@@ -10572,7 +10866,7 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                             (ccompare_list
                               (ccompare_option ccompare_event_data)),
                             set_impl_list))
-                 | Exists _ ->
+                 | Exists (_, _) ->
                    MRel (empty_table
                           ((ceq_list (ceq_option ceq_event_data)),
                             (ccompare_list
@@ -10706,7 +11000,7 @@ fvi zero_nata psia, meinit0 n psia, (mbuf_t_empty, mbuf_t_empty))
                             (ccompare_list
                               (ccompare_option ccompare_event_data)),
                             set_impl_list))
-                 | Exists _ ->
+                 | Exists (_, _) ->
                    MRel (empty_table
                           ((ceq_list (ceq_option ceq_event_data)),
                             (ccompare_list
@@ -10831,7 +11125,7 @@ let rec get_and_list = function Ands l -> (if null l then [Ands l] else l)
                        | Neg v -> [Neg v]
                        | Or (v, va) -> [Or (v, va)]
                        | And (v, va) -> [And (v, va)]
-                       | Exists v -> [Exists v]
+                       | Exists (v, va) -> [Exists (v, va)]
                        | Agg (v, va, vb, vc, vd) -> [Agg (v, va, vb, vc, vd)]
                        | Prev (v, va) -> [Prev (v, va)]
                        | Next (v, va) -> [Next (v, va)]
@@ -10866,7 +11160,6 @@ let rec rbt_fold
 
 let rec mmonitorable_exec
   = function Eq (t1, t2) -> is_simple_eq t1 t2
-    | Neg (Eq (Var x, Var y)) -> equal_nata x y
     | Pred (e, ts) -> list_all (fun t -> is_Var t || is_Const t) ts
     | Let (p, phi, psi) ->
         less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
@@ -10880,154 +11173,10 @@ let rec mmonitorable_exec
                (upt zero_nata (nfv phi)))
              (fvi zero_nata phi) &&
             (mmonitorable_exec phi && mmonitorable_exec psi))
-    | Neg (Pred (v, va)) ->
+    | Neg phi ->
         is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Pred (v, va))) &&
-          mmonitorable_exec (Pred (v, va))
-    | Neg (Let (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Let (v, va, vb))) &&
-          mmonitorable_exec (Let (v, va, vb))
-    | Neg (LetPast (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (LetPast (v, va, vb))) &&
-          mmonitorable_exec (LetPast (v, va, vb))
-    | Neg (Eq (Const vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Const vb, va))) &&
-          mmonitorable_exec (Eq (Const vb, va))
-    | Neg (Eq (Plus (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Plus (vb, vc), va))) &&
-          mmonitorable_exec (Eq (Plus (vb, vc), va))
-    | Neg (Eq (Minus (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Minus (vb, vc), va))) &&
-          mmonitorable_exec (Eq (Minus (vb, vc), va))
-    | Neg (Eq (UMinus vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (UMinus vb, va))) &&
-          mmonitorable_exec (Eq (UMinus vb, va))
-    | Neg (Eq (Mult (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Mult (vb, vc), va))) &&
-          mmonitorable_exec (Eq (Mult (vb, vc), va))
-    | Neg (Eq (Div (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Div (vb, vc), va))) &&
-          mmonitorable_exec (Eq (Div (vb, vc), va))
-    | Neg (Eq (Mod (vb, vc), va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (Mod (vb, vc), va))) &&
-          mmonitorable_exec (Eq (Mod (vb, vc), va))
-    | Neg (Eq (F2i vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (F2i vb, va))) &&
-          mmonitorable_exec (Eq (F2i vb, va))
-    | Neg (Eq (I2f vb, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (I2f vb, va))) &&
-          mmonitorable_exec (Eq (I2f vb, va))
-    | Neg (Eq (v, Const vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Const vb))) &&
-          mmonitorable_exec (Eq (v, Const vb))
-    | Neg (Eq (v, Plus (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Plus (vb, vc)))) &&
-          mmonitorable_exec (Eq (v, Plus (vb, vc)))
-    | Neg (Eq (v, Minus (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Minus (vb, vc)))) &&
-          mmonitorable_exec (Eq (v, Minus (vb, vc)))
-    | Neg (Eq (v, UMinus vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, UMinus vb))) &&
-          mmonitorable_exec (Eq (v, UMinus vb))
-    | Neg (Eq (v, Mult (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Mult (vb, vc)))) &&
-          mmonitorable_exec (Eq (v, Mult (vb, vc)))
-    | Neg (Eq (v, Div (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Div (vb, vc)))) &&
-          mmonitorable_exec (Eq (v, Div (vb, vc)))
-    | Neg (Eq (v, Mod (vb, vc))) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, Mod (vb, vc)))) &&
-          mmonitorable_exec (Eq (v, Mod (vb, vc)))
-    | Neg (Eq (v, F2i vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, F2i vb))) &&
-          mmonitorable_exec (Eq (v, F2i vb))
-    | Neg (Eq (v, I2f vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Eq (v, I2f vb))) &&
-          mmonitorable_exec (Eq (v, I2f vb))
-    | Neg (Less (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Less (v, va))) &&
-          mmonitorable_exec (Less (v, va))
-    | Neg (LessEq (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (LessEq (v, va))) &&
-          mmonitorable_exec (LessEq (v, va))
-    | Neg (Neg v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Neg v)) &&
-          mmonitorable_exec (Neg v)
-    | Neg (Or (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Or (v, va))) &&
-          mmonitorable_exec (Or (v, va))
-    | Neg (And (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (And (v, va))) &&
-          mmonitorable_exec (And (v, va))
-    | Neg (Ands v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Ands v)) &&
-          mmonitorable_exec (Ands v)
-    | Neg (Exists v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Exists v)) &&
-          mmonitorable_exec (Exists v)
-    | Neg (Agg (v, va, vb, vc, vd)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Agg (v, va, vb, vc, vd))) &&
-          mmonitorable_exec (Agg (v, va, vb, vc, vd))
-    | Neg (Prev (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Prev (v, va))) &&
-          mmonitorable_exec (Prev (v, va))
-    | Neg (Next (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Next (v, va))) &&
-          mmonitorable_exec (Next (v, va))
-    | Neg (Since (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Since (v, va, vb))) &&
-          mmonitorable_exec (Since (v, va, vb))
-    | Neg (Until (v, va, vb)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (Until (v, va, vb))) &&
-          mmonitorable_exec (Until (v, va, vb))
-    | Neg (MatchF (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (MatchF (v, va))) &&
-          mmonitorable_exec (MatchF (v, va))
-    | Neg (MatchP (v, va)) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (MatchP (v, va))) &&
-          mmonitorable_exec (MatchP (v, va))
-    | Neg (TP v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (TP v)) &&
-          mmonitorable_exec (TP v)
-    | Neg (TS v) ->
-        is_empty (card_UNIV_nat, ceq_nat, cproper_interval_nat)
-          (fvi zero_nata (TS v)) &&
-          mmonitorable_exec (TS v)
+          (fvi zero_nata phi) &&
+          mmonitorable_exec phi
     | Or (phi, psi) ->
         set_eq (cenum_nat, ceq_nat, ccompare_nat) (fvi zero_nata phi)
           (fvi zero_nata psi) &&
@@ -11043,11 +11192,12 @@ let rec mmonitorable_exec
                     | LetPast (_, _, _) -> false | Eq (_, _) -> false
                     | Less (_, _) -> false | LessEq (_, _) -> false
                     | Neg a -> mmonitorable_exec a | Or (_, _) -> false
-                    | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                    | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                    | Next (_, _) -> false | Since (_, _, _) -> false
-                    | Until (_, _, _) -> false | MatchF (_, _) -> false
-                    | MatchP (_, _) -> false | TP _ -> false | TS _ -> false))))
+                    | And (_, _) -> false | Ands _ -> false
+                    | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                    | Prev (_, _) -> false | Next (_, _) -> false
+                    | Since (_, _, _) -> false | Until (_, _, _) -> false
+                    | MatchF (_, _) -> false | MatchP (_, _) -> false
+                    | TP _ -> false | TS _ -> false))))
     | Ands l ->
         (let (pos, neg) = partition mmonitorable_exec l in
           not (null pos) &&
@@ -11075,13 +11225,16 @@ let rec mmonitorable_exec
                              set_impl_nat)),
                          set_impl_set)
                     (mapa (fvi zero_nata) pos)))))
-    | Exists phi -> mmonitorable_exec phi
-    | Agg (y, omega, b, f, phi) ->
+    | Exists (t, phi) ->
+        member (ceq_nat, ccompare_nat) zero_nata (fvi zero_nata phi) &&
+          mmonitorable_exec phi
+    | Agg (y, omega, tys, f, phi) ->
         mmonitorable_exec phi &&
-          (not (member (ceq_nat, ccompare_nat) (plus_nata y b)
+          (not (member (ceq_nat, ccompare_nat) (plus_nata y (size_lista tys))
                  (fvi zero_nata phi)) &&
             (less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
-               (set (ceq_nat, ccompare_nat, set_impl_nat) (upt zero_nata b))
+               (set (ceq_nat, ccompare_nat, set_impl_nat)
+                 (upt zero_nata (size_lista tys)))
                (fvi zero_nata phi) &&
               less_eq_set (cenum_nat, ceq_nat, ccompare_nat)
                 (fvi_trm zero_nata f) (fvi zero_nata phi)))
@@ -11095,7 +11248,7 @@ let rec mmonitorable_exec
                | LetPast (_, _, _) -> false | Eq (_, _) -> false
                | Less (_, _) -> false | LessEq (_, _) -> false
                | Neg a -> mmonitorable_exec a | Or (_, _) -> false
-               | And (_, _) -> false | Ands _ -> false | Exists _ -> false
+               | And (_, _) -> false | Ands _ -> false | Exists (_, _) -> false
                | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
                | Next (_, _) -> false | Since (_, _, _) -> false
                | Until (_, _, _) -> false | MatchF (_, _) -> false
@@ -11110,11 +11263,12 @@ let rec mmonitorable_exec
                  | LetPast (_, _, _) -> false | Eq (_, _) -> false
                  | Less (_, _) -> false | LessEq (_, _) -> false
                  | Neg a -> mmonitorable_exec a | Or (_, _) -> false
-                 | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                 | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                 | Next (_, _) -> false | Since (_, _, _) -> false
-                 | Until (_, _, _) -> false | MatchF (_, _) -> false
-                 | MatchP (_, _) -> false | TP _ -> false | TS _ -> false)) &&
+                 | And (_, _) -> false | Ands _ -> false
+                 | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                 | Prev (_, _) -> false | Next (_, _) -> false
+                 | Since (_, _, _) -> false | Until (_, _, _) -> false
+                 | MatchF (_, _) -> false | MatchP (_, _) -> false
+                 | TP _ -> false | TS _ -> false)) &&
               mmonitorable_exec psi))
     | MatchP (i, r) ->
         safe_regex
@@ -11128,11 +11282,12 @@ let rec mmonitorable_exec
                   | LetPast (_, _, _) -> false | Eq (_, _) -> false
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> mmonitorable_exec a | Or (_, _) -> false
-                  | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                  | Next (_, _) -> false | Since (_, _, _) -> false
-                  | Until (_, _, _) -> false | MatchF (_, _) -> false
-                  | MatchP (_, _) -> false | TP _ -> false | TS _ -> false))
+                  | And (_, _) -> false | Ands _ -> false
+                  | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                  | Prev (_, _) -> false | Next (_, _) -> false
+                  | Since (_, _, _) -> false | Until (_, _, _) -> false
+                  | MatchF (_, _) -> false | MatchP (_, _) -> false
+                  | TP _ -> false | TS _ -> false))
           Past Strict r
     | MatchF (i, r) ->
         safe_regex
@@ -11146,11 +11301,12 @@ let rec mmonitorable_exec
                   | LetPast (_, _, _) -> false | Eq (_, _) -> false
                   | Less (_, _) -> false | LessEq (_, _) -> false
                   | Neg a -> mmonitorable_exec a | Or (_, _) -> false
-                  | And (_, _) -> false | Ands _ -> false | Exists _ -> false
-                  | Agg (_, _, _, _, _) -> false | Prev (_, _) -> false
-                  | Next (_, _) -> false | Since (_, _, _) -> false
-                  | Until (_, _, _) -> false | MatchF (_, _) -> false
-                  | MatchP (_, _) -> false | TP _ -> false | TS _ -> false))
+                  | And (_, _) -> false | Ands _ -> false
+                  | Exists (_, _) -> false | Agg (_, _, _, _, _) -> false
+                  | Prev (_, _) -> false | Next (_, _) -> false
+                  | Since (_, _, _) -> false | Until (_, _, _) -> false
+                  | MatchF (_, _) -> false | MatchP (_, _) -> false
+                  | TP _ -> false | TS _ -> false))
           Futu Strict r &&
           bounded i
     | TP t -> is_Var t || is_Const t
@@ -11181,7 +11337,7 @@ let rec convert_multiway
                         else Ands (convert_multiway psi ::
                                     get_and_list (convert_multiway phi)))))
     | Ands phi_s -> Ands (mapa convert_multiway phi_s)
-    | Exists phi -> Exists (convert_multiway phi)
+    | Exists (t, phi) -> Exists (t, convert_multiway phi)
     | Agg (y, omega, b, f, phi) -> Agg (y, omega, b, f, convert_multiway phi)
     | Prev (i, phi) -> Prev (i, convert_multiway phi)
     | Next (i, phi) -> Next (i, convert_multiway phi)

@@ -1239,8 +1239,8 @@ lemma letpast_meval0_cong[fundef_cong]:
   assumes "(\<And>ts db \<psi>. size \<psi> = size \<phi> \<Longrightarrow>  eval ts db \<psi> = eval' ts db \<psi>)"
   shows "letpast_meval0 eval j i ys xs p ts db \<phi> = letpast_meval0 eval' j i ys xs p ts db \<phi>"
   using assms
-  apply (induct eval j i ys xs p ts db \<phi> arbitrary: eval' rule: letpast_meval0.induct)
-  subgoal premises IH for eval j i ys xs p ts db \<phi> eval'
+  apply (induct eval j i ys xs p ts db \<phi>  rule: letpast_meval0.induct)
+  subgoal premises IH for eval j i ys xs p ts db \<phi> 
     apply (subst (1 2) letpast_meval0.simps)
     apply (auto split: prod.splits list.splits simp: Let_def IH)
     done
@@ -3511,11 +3511,6 @@ proof -
   ultimately show ?thesis unfolding letpast_meval_invar_def
     by (simp add: Let_def)
 qed
-
-lemma V_subst_letpast_sat:
-  "(\<And>X v j. j \<le> i \<Longrightarrow> f X v j = g X v j) \<Longrightarrow>
-  Formula.letpast_sat f v i = Formula.letpast_sat g v i"
-  by (induct f v i rule: letpast_sat.induct) (subst (1 2) letpast_sat.simps, auto cong: conj_cong)
 
 lemma V_subst_letpast_gen:
   "safe_letpast p \<phi> \<le> NonFutuRec \<Longrightarrow>
@@ -7041,34 +7036,8 @@ next
     by (auto simp add: list.rel_map lookup_update')
 next
   case 8
-  from wf_envs have wty_envs: "wty_envs S \<sigma> V" by (simp add: wf_envs_def)
-  let ?V' = "V((p, m) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>))"
-  thm ty_of_sat_safe
-  let ?tys = "tabulate E 0 (Formula.nfv \<phi>)"
-  {
-    fix pa xs i
-    assume asm: "(pa, xs) \<in> \<Gamma> \<sigma> i " "(pa, length xs) \<notin> dom ?V'"
-    then have "wty_event (S((p, m) \<mapsto> ?tys)) pa xs"
-      using wty_envs wty_envs_def wty_event_def by fastforce
-  } moreover {
-    fix pa xs i
-    assume in_V': "(pa, length xs) \<in> dom ?V'" and
-      valid: "the (?V' (pa, length xs)) xs i"
-    have "wty_event (S((p, m) \<mapsto> ?tys)) pa xs"
-    proof(cases "(pa, length xs) = (p, m)")
-      case True
-      then have "letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>) xs i" using valid by auto
-      thm letpast_sat.simps[of "(\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>)" xs i]
-      have "wty_tuple ?tys xs"
-        unfolding wty_tuple_def sorry
-      then show ?thesis unfolding wty_event_def True by auto
-    next
-      case False
-      then show ?thesis using valid  in_V' wty unfolding wty_envs_def wty_event_def
-        by (metis (no_types, lifting) domIff fun_upd_other wty_envs wty_envs_def wty_event_def)
-    qed
-  }
-  ultimately show ?case unfolding wty_envs_def by blast
+  have wty_envs: "wty_envs S \<sigma> V" using wf_envs by (auto simp:wf_envs_def)
+  show ?case using wty_envs_letpast_update[OF in_fv[unfolded m_eq] safe wty[unfolded m_eq] wty_envs] m_eq by auto
 qed (use assms in \<open>auto simp: wf_envs_def subset_iff\<close>)
 
 lemma wf_envs_update2:
@@ -7080,10 +7049,12 @@ lemma wf_envs_update2:
     and "i\<le>j"
     and "i'\<le>j+\<delta>"
     and xs: "list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>) (mem_restr UNIV)
-      (\<lambda>v. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>') (map the v) i))
+      (\<lambda>v. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>) (map the v) i))
       [i..<i'] xs"
-  shows "wf_envs S \<sigma> j \<delta> (P((p, m) \<mapsto> i)) (P'((p, m) \<mapsto> i'))
-    (V((p, m) \<mapsto> \<lambda>w j. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>') w j))
+    and safe: "safe_formula \<phi>"
+    and wty: "S((p, m) \<mapsto> tabulate E 0 (Formula.nfv \<phi>)), E \<turnstile> \<phi>"
+  shows "wf_envs (S((p, m) \<mapsto> tabulate E 0 (Formula.nfv \<phi>))) \<sigma> j \<delta> (P((p, m) \<mapsto> i)) (P'((p, m) \<mapsto> i'))
+    (V((p, m) \<mapsto> \<lambda>w j. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>) w j))
     (Mapping.update (p, m) xs db)"
   unfolding wf_envs_def 
 proof (intro conjI ballI, goal_cases)
@@ -7095,7 +7066,7 @@ next
   with assms show ?case by (cases "p' \<in> dom P") (auto simp: wf_envs_def lookup_update')
 next
   case (7 p')
-  from xs in_fv have "list_all2 (\<lambda>x y. y = map Some ` {v. length v = m \<and> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> X)) v i \<phi>') v x})
+  from xs in_fv have "list_all2 (\<lambda>x y. y = map Some ` {v. length v = m \<and> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V(p' \<mapsto> X)) v i \<phi>) v x})
       [i..<i'] xs" if "(p, m) = p'"
     using that
     apply (elim list.rel_mono_strong)
@@ -7115,7 +7086,8 @@ next
     by (auto simp add: list.rel_map image_iff lookup_update')
 next
   case (8)
-  show ?case sorry
+  have wty_envs: "wty_envs S \<sigma> V" using wf_envs by (auto simp:wf_envs_def)
+  show ?case using wty_envs_letpast_update in_fv wty safe m_eq wty_envs by auto 
 qed (use assms in \<open>auto simp: wf_envs_def subset_iff\<close>)
 
 lemma (in maux) letpast_meval_invar_post:
@@ -7135,11 +7107,13 @@ lemma (in maux) letpast_meval_invar_post:
     list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>'))
     [progress \<sigma> P \<phi>' (j-length us)..<progress \<sigma> P' \<phi>' j] xs'"
   assumes "length ts \<le> j"
+  assumes "S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>')), E' \<turnstile> \<phi>'"
+  assumes "safe_formula \<phi>'"
   shows "letpast_meval_invar n V \<sigma> P \<phi>' m j i ys xs p ts db \<phi> k\<Longrightarrow>
   (ys', i', buf', \<phi>f) = letpast_meval m j i ys xs (p, m) ts db \<phi> \<Longrightarrow>
   letpast_meval_post n V \<sigma> P' \<phi>' m j i' ys' buf' p \<phi>f k"
-  using assms sorry
-(*proof (induction i ys xs "(p, m)" ts db \<phi> arbitrary: p i' buf' ys' \<phi>f P P' taking: m j rule: letpast_meval_induct)
+  using assms
+proof (induction i ys xs "(p, m)" ts db \<phi> arbitrary: p i' buf' ys' \<phi>f P P' taking: m j rule: letpast_meval_induct)
   case (step i ys xs ts db \<phi>)
   note invar = step.prems(1)
   note eq = step.prems(2)
@@ -7149,10 +7123,12 @@ lemma (in maux) letpast_meval_invar_post:
   note mformula = step.prems(9)
   note envs = step.prems(10)
   note meval = step.prems(11)
+  note wty = step.prems(13)
+  note safe_formula = step.prems(14)
   define ysp where "ysp = meval j m ts (Mapping.update (p, m) xs db) \<phi>"
   let ?P = "P((p, m) \<mapsto> i)"
   let ?V = "V((p, m) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>'))"
-  thm meval[of \<phi> ts ?P ?V]
+  let ?S = "S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>'))"
   have i'_j: "i + length xs \<le> j - length ts"
     using invar letpast_progress_le[OF PP'(1), of \<sigma>] 
     unfolding letpast_meval_invar_def Let_def
@@ -7176,10 +7152,11 @@ lemma (in maux) letpast_meval_invar_post:
     have "case ysp of (ys, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j ?P' ?V m UNIV \<phi>\<^sub>n \<phi>' \<and>
       list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> ?V (map the v) i \<phi>'))
       [progress \<sigma> ?P \<phi>' (j-length ts)..<progress \<sigma> ?P' \<phi>' j] ys"
-    proof (rule meval[of \<phi> ts ?P ?V ?P' xs db, folded ysp_def])
+    proof (rule meval[of \<phi> ts ?P ?V ?S ?P' xs db, folded ysp_def])
       show "wf_mformula \<sigma> (j - length ts) ?P ?V m UNIV \<phi> \<phi>'" by fact
-      show "wf_envs \<sigma> (j - length ts) (length ts) ?P ?P' ?V (Mapping.update (p, m) xs db)"
+      show "wf_envs ?S \<sigma> (j - length ts) (length ts) ?P ?P' ?V (Mapping.update (p, m) xs db)"
         unfolding eqs by (intro wf_envs_update2) (fact | use i'_j in simp)+
+      show " S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>')), E' \<turnstile> \<phi>'" using wty by auto
     qed simp_all
     then have ysp: "case ysp of (ys, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j ?P' ?V m UNIV \<phi>\<^sub>n \<phi>' \<and>
       list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>') (map the v) i))
@@ -7211,10 +7188,11 @@ lemma (in maux) letpast_meval_invar_post:
     have "case ysp of (ys, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j ?P' ?V m UNIV \<phi>\<^sub>n \<phi>' \<and>
       list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. Formula.sat \<sigma> ?V (map the v) i \<phi>'))
       [progress \<sigma> ?P \<phi>' (j-length ts)..<progress \<sigma> ?P' \<phi>' j] ys"
-    proof (rule meval[of \<phi> ts ?P ?V ?P' xs db, folded ysp_def])
+    proof (rule meval[of \<phi> ts ?P ?V ?S ?P' xs db, folded ysp_def])
       show "wf_mformula \<sigma> (j - length ts) ?P ?V m UNIV \<phi> \<phi>'" by fact
-      show "wf_envs \<sigma> (j - length ts) (length ts) ?P ?P' ?V (Mapping.update (p, m) xs db)"
+      show "wf_envs ?S \<sigma> (j - length ts) (length ts) ?P ?P' ?V (Mapping.update (p, m) xs db)"
         by (intro wf_envs_update2) (fact | use i'_j in simp)+
+      show "S((p, m) \<mapsto> tabulate E' 0 (Formula.nfv \<phi>')), E' \<turnstile> \<phi>'" using wty by auto
     qed simp_all
     then have ysp: "case ysp of (ys, \<phi>\<^sub>n) \<Rightarrow> wf_mformula \<sigma> j ?P' ?V m UNIV \<phi>\<^sub>n \<phi>' \<and>
       list_all2 (\<lambda>i. qtable m (Formula.fv \<phi>') (mem_restr UNIV) (\<lambda>v. letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>') (map the v) i))
@@ -7250,10 +7228,9 @@ lemma (in maux) letpast_meval_invar_post:
         apply simp
         apply (metis diff_add envs step.prems(12) wf_envs_empty)
        apply (rule meval; simp add: ysp_def size_snd_meval)
-      apply simp
-      done
+      apply simp using wty safe_formula by auto
   qed
-qed*)
+qed 
 
 lemma wf_envs_P_simps[simp]:
    "wf_envs S \<sigma> j \<delta> P P' V db \<Longrightarrow> pred_mapping (\<lambda>i. i \<le> j) P"
@@ -7693,11 +7670,8 @@ next
  (V((p, m) \<mapsto> letpast_sat (\<lambda>X v i. Formula.sat \<sigma> (V((p, m) \<mapsto> X)) v i \<phi>1'))) m UNIV \<phi>1 \<phi>1'" by (simp add: "1")
   have wf_envs: "wf_envs S \<sigma> (j + \<delta> - length (map (\<tau> \<sigma>) [j..<j + \<delta>])) (length (map (\<tau> \<sigma>) [j..<j + \<delta>])) P P' V db" 
     using MLetPast.prems(2) by force
-
-  thm MLetPast.IH(1)
-  thm letpast_meval_invar_post[OF safe pred_alt pred_alt_2 rel_map fv wf_form wf_envs _ _ invar e_letpast]
   have post: "letpast_meval_post n V \<sigma> P' \<phi>1' m (j+\<delta>) i' ys' buf' p \<phi>f1 (letpast_progress \<sigma> P ?pn \<phi>1' j)"
-    apply(rule letpast_meval_invar_post[OF safe pred_alt pred_alt_2 rel_map fv wf_form wf_envs _ _ invar e_letpast])
+    apply(rule letpast_meval_invar_post[OF safe pred_alt pred_alt_2 rel_map fv wf_form wf_envs _ _ wty1 safe1 invar e_letpast])
     subgoal for xs db \<phi>_m us P P' V S
       apply(cases "us=[]")
        apply simp_all

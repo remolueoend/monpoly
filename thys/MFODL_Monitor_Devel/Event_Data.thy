@@ -41,6 +41,7 @@ code_printing
   | constant "HOL.equal :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(=)"
   | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<=)"
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<)"
+  | constant "empty_string :: string8" \<rightharpoonup> (OCaml) "\"\""
 
 ML \<open>
 structure String8 =

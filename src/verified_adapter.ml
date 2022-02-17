@@ -73,14 +73,14 @@ let convert_special_predicate fvl bvl = function
   | ("tpts", _, [t1; t2]) -> And (TP (convert_term fvl bvl t1), TS (convert_term fvl bvl t2))
   | _ -> failwith "[convert_special_predicate] internal error"
 
-let convert_formula dbschema f =
+let convert_formula dbschema cntr f =
   let free_vars = MFOTL.free_vars f in
   let truth = Equal (Cst (Int 0), Cst (Int 0)) in
-  let rec createExists n f = match n with
+  let rec createExists n cntr f = match n with
   | 0 -> f
-  | n -> createExists (n-1) (Exists f)
+  | n -> createExists (n-1) cntr (Exists (Verified.Monitor.TAny (nat_of_int (cntr + n - 1)), f))
   in
-  let rec convert_formula_vars fvl bvl lets = function
+  let rec convert_formula_vars fvl bvl lets cntr = function
   | Equal (t1,t2) -> Eq (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | Less (t1,t2) -> Less (convert_term fvl bvl t1, convert_term fvl bvl t2)
   | LessEq (t1,t2) -> LessEq (convert_term fvl bvl t1, convert_term fvl bvl t2)
@@ -93,47 +93,51 @@ let convert_formula dbschema f =
       let (n,a,ts) = Predicate.get_info p in
       let fvl1 = List.flatten (List.map Predicate.tvars ts) in
       let lets2 = (n, a) :: lets in
-      Let (n, convert_formula_vars fvl1 [] lets f1, convert_formula_vars fvl bvl lets2 f2)
+      Let (n, convert_formula_vars fvl1 [] lets cntr f1, convert_formula_vars fvl bvl lets2 cntr f2)
   | LetPast (p,f1,f2) ->
       let (n,a,ts) = Predicate.get_info p in
       let fvl1 = List.flatten (List.map Predicate.tvars ts) in
       let lets' = (n, a) :: lets in
-      LetPast (n, convert_formula_vars fvl1 [] lets' f1, convert_formula_vars fvl bvl lets' f2)
-  | Neg f -> Neg (convert_formula_vars fvl bvl lets f)
-  | And (f1,f2) -> And (convert_formula_vars fvl bvl lets f1, convert_formula_vars fvl bvl lets f2)
-  | Or (f1,f2) -> Or (convert_formula_vars fvl bvl lets f1, convert_formula_vars fvl bvl lets f2)
-  | Implies (f1,f2) -> convert_formula_vars fvl bvl lets (Or ((Neg f1), f2))
-  | Equiv (f1,f2) -> convert_formula_vars fvl bvl lets (And (Implies (f1,f2),Implies(f2,f2)))
-  | Exists (v,f) -> createExists (List.length v) (convert_formula_vars fvl (v@bvl) lets f)
-  | ForAll (v,f) -> convert_formula_vars fvl bvl lets (Neg (Exists (v,(Neg f))))
+      LetPast (n, convert_formula_vars fvl1 [] lets' cntr f1, convert_formula_vars fvl bvl lets' cntr f2)
+  | Neg f -> Neg (convert_formula_vars fvl bvl lets cntr f)
+  | And (f1,f2) -> And (convert_formula_vars fvl bvl lets cntr f1, convert_formula_vars fvl bvl lets cntr f2)
+  | Or (f1,f2) -> Or (convert_formula_vars fvl bvl lets cntr f1, convert_formula_vars fvl bvl lets cntr f2)
+  | Implies (f1,f2) -> convert_formula_vars fvl bvl lets cntr (Or ((Neg f1), f2))
+  | Equiv (f1,f2) -> convert_formula_vars fvl bvl lets cntr (And (Implies (f1,f2),Implies(f2,f2)))
+  | Exists (v,f) -> createExists (List.length v) cntr (convert_formula_vars fvl (v@bvl) lets (cntr + (List.length v)) f)
+  | ForAll (v,f) -> convert_formula_vars fvl bvl lets cntr (Neg (Exists (v,(Neg f))))
   | Aggreg (t_y, y,op,x,glist,f) ->
       let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
       let attr = MFOTL.free_vars f in
       let bound = Misc.diff attr glist in
       let bvl_f = bound @ bvl in
+      let rec createTysymList n cntr = match n with
+      | 0 -> []
+      | n -> (Verified.Monitor.TAny (nat_of_int cntr)) :: createTysymList (n - 1) (cntr + 1) 
+      in 
       Agg (convert_var fvl bvl y,
-        (convert_agg_op op, convert_cst (aggreg_default_value op t_y)),
-        nat_of_int (List.length bound),
+        (convert_agg_op op, Verified.Monitor.TAny (nat_of_int cntr)),
+        createTysymList (List.length bound) (cntr + 1),
         convert_term fvl bvl_f (Var x),
-        convert_formula_vars fvl bvl_f lets f)
-  | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars fvl bvl lets f))
-  | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars fvl bvl lets f))
-  | Since (intv,f1,f2) -> Since (convert_formula_vars fvl bvl lets f1,convert_interval intv,convert_formula_vars fvl bvl lets f2)
-  | Until (intv,f1,f2) -> Until (convert_formula_vars fvl bvl lets f1,convert_interval intv,convert_formula_vars fvl bvl lets f2)
-  | Eventually (intv,f) -> convert_formula_vars fvl bvl lets (Until (intv,truth,f))
-  | Once (intv,f) -> convert_formula_vars fvl bvl lets (Since (intv,truth,f))
-  | Always (intv,f) -> convert_formula_vars fvl bvl lets (Neg (Eventually (intv,(Neg f))))
-  | PastAlways (intv,f) -> convert_formula_vars fvl bvl lets (Neg (Once (intv,(Neg f))))
-  | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars fvl bvl lets r)
-  | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars fvl bvl lets r)
+        convert_formula_vars fvl bvl_f lets (cntr + 1 + List.length bound) f)
+  | Prev (intv,f) -> Prev ((convert_interval intv), (convert_formula_vars fvl bvl lets cntr f))
+  | Next (intv,f) -> Next ((convert_interval intv), (convert_formula_vars fvl bvl lets cntr f))
+  | Since (intv,f1,f2) -> Since (convert_formula_vars fvl bvl lets cntr f1,convert_interval intv,convert_formula_vars fvl bvl lets cntr f2)
+  | Until (intv,f1,f2) -> Until (convert_formula_vars fvl bvl lets cntr f1,convert_interval intv,convert_formula_vars fvl bvl lets cntr f2)
+  | Eventually (intv,f) -> convert_formula_vars fvl bvl lets cntr (Until (intv,truth,f))
+  | Once (intv,f) -> convert_formula_vars fvl bvl lets cntr (Since (intv,truth,f))
+  | Always (intv,f) -> convert_formula_vars fvl bvl lets cntr (Neg (Eventually (intv,(Neg f))))
+  | PastAlways (intv,f) -> convert_formula_vars fvl bvl lets cntr (Neg (Once (intv,(Neg f))))
+  | Frex (intv, r) -> MatchF (convert_interval intv, convert_re_vars fvl bvl lets cntr r)
+  | Prex (intv, r) -> MatchP (convert_interval intv, convert_re_vars fvl bvl lets cntr r)
   | f -> unsupported (string_of_formula "Unsupported formula " f)
-and convert_re_vars fvl bvl lets = function
+and convert_re_vars fvl bvl lets cntr = function
   | Wild -> wild
-  | Test f -> Test (convert_formula_vars fvl bvl lets f)
-  | Concat (r1,r2) -> Times (convert_re_vars fvl bvl lets r1, convert_re_vars fvl bvl lets r2)
-  | Plus (r1,r2) -> Plusa (convert_re_vars fvl bvl lets r1, convert_re_vars fvl bvl lets r2)
-  | Star r -> Star (convert_re_vars fvl bvl lets r)
-  in convert_formula_vars free_vars [] [] f
+  | Test f -> Test (convert_formula_vars fvl bvl lets cntr f)
+  | Concat (r1,r2) -> Times (convert_re_vars fvl bvl lets cntr r1, convert_re_vars fvl bvl lets cntr r2)
+  | Plus (r1,r2) -> Plusa (convert_re_vars fvl bvl lets cntr r1, convert_re_vars fvl bvl lets cntr r2)
+  | Star r -> Star (convert_re_vars fvl bvl lets cntr r)
+  in convert_formula_vars free_vars [] [] cntr f
 
 let convert_tuple (pname, tl) sl =
   let pos = ref 0 in
@@ -159,12 +163,30 @@ let convert_tuple (pname, tl) sl =
     tl sl
 
 type db = ((string * nat), (((event_data option) list) set list)) mapping
+type tyssig = string * nat -> (tysym list) option
 
 let empty_db = empty_db
 
 let insert_into_db ((pname, tl) as schema) sl db =
   let a = nat_of_int (List.length tl) in
   insert_into_db (pname, a) (convert_tuple schema sl) db
+
+let convert_into_tysym ty = 
+  match ty with
+    TInt -> Verified.Monitor.TCst (Verified.Monitor.TInt)
+  | TFloat -> Verified.Monitor.TCst (Verified.Monitor.TFloat)
+  | TStr -> Verified.Monitor.TCst (Verified.Monitor.TString)
+  | TRegexp -> unsupported "Regular expressions constants are not supported"
+
+let rec convert_schema_into_sig sch = 
+  match sch with
+    (pname, tl) :: rest -> (fun k -> if k = (pname, nat_of_int (List.length tl))
+                                      then Some (List.map convert_into_tysym (List.map snd tl))
+                                      else (convert_schema_into_sig rest) k)
+  | [] -> (fun k -> None)
+
+let type_check_formula dbschema f =
+  type_check (convert_schema_into_sig dbschema) f
 
 type state =
   (((nat *
@@ -220,5 +242,5 @@ let step t db st =
   (unconvert_violations vs, st')
 
 let is_monitorable dbschema f =
-  let s = mmonitorable_exec (convert_formula dbschema f) in
+  let s = mmonitorable_exec (convert_formula dbschema 0 f) in
   (s, (if s then None else Some (f, "MFODL formula is not monitorable")))
