@@ -360,10 +360,12 @@ Safe-range:
   The analyzed formula is:
     T() AND (NOT x = x)
   The sequence of free variables is: (x)
-  At time point 0:
-  @100 (time point 0): ()
-  At time point 1:
-  @200 (time point 1): ()
+  The analyzed formula is NOT monitorable, because of the subformula:
+    T() AND (NOT x = x)
+  MFODL formula is not monitorable
+  However, the input (and also the analyzed) formula is safe-range, 
+  hence one should be able to rewrite it into a monitorable formula.
+  By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent:
   $ echo 'T() AND NOT (x = y)' > test3_32.mfotl

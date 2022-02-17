@@ -479,12 +479,12 @@ Safe-range:
   The analyzed formula is:
     P(y) AND (NOT x = x)
   The sequence of free variables is: (y,x)
-  At time point 0:
-  @100 (time point 0): ()
-  At time point 1:
-  @200 (time point 1): ()
-  At time point 2:
-  @300 (time point 2): ()
+  The analyzed formula is NOT monitorable, because of the subformula:
+    P(y) AND (NOT x = x)
+  MFODL formula is not monitorable
+  However, the input (and also the analyzed) formula is safe-range, 
+  hence one should be able to rewrite it into a monitorable formula.
+  By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent:
   $ echo 'P(y) AND NOT (x = y)' > test4_39.mfotl
