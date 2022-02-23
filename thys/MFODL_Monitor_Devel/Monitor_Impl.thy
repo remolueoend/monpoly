@@ -1339,7 +1339,7 @@ lemma upd_nested_max_tstp_code[code]:
 
 lemma [code]: 
   "add_new_mmuaux args rel1 rel2 nt aux =
-    (let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done, done_length) =
+    (let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done) =
     shift_mmuaux args nt aux;
     I = args_ivl args; pos = args_pos args;
     new_tstp = (if memL I 0 then Inr tp else Inl nt);
@@ -1356,16 +1356,16 @@ lemma [code]:
     a1_map = (if pos then Mapping.filter (\<lambda>as _. as \<in> rel1)
       (upd_set a1_map (\<lambda>_. tp) (rel1 - Mapping.keys a1_map)) else upd_set a1_map (\<lambda>_. tp) rel1);
     tss = append_queue nt tss in
-    (tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map, tstp_map, done, done_length))" 
+    (tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map, tstp_map, done))" 
   by(auto simp: upd_nested_max_tstp_def split:option.splits prod.splits)
 
 lemma [code]:
   "add_new_mmauaux args rel1 rel2 nt (mmuaux, aggaux) =
     (case args_agg args of 
-     None \<Rightarrow> let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done, done_length) = add_new_mmuaux args rel1 rel2 nt mmuaux in
-  ((tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done, done_length), aggaux) |
+     None \<Rightarrow> let (tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done) = add_new_mmuaux args rel1 rel2 nt mmuaux in
+  ((tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done), aggaux) |
      Some aggargs \<Rightarrow>
-    (let ((tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done, done_length), aggaux) = shift_mmauaux args nt (mmuaux, aggaux);
+    (let ((tp, tss, tables, len, maskL, maskR, result, a1_map, a2_map, tstp_map, done), aggaux) = shift_mmauaux args nt (mmuaux, aggaux);
     I = args_ivl args; pos = args_pos args;
     new_tstp = (if memL I 0 then Inr tp else Inl nt);
     tstp_map = Mapping.update tp nt tstp_map;
@@ -1384,7 +1384,7 @@ lemma [code]:
     to_add = to_add_set (tp - len) m tmp;
     aggaux = insert_maggaux' aggargs to_add aggaux;
     tss = append_queue nt tss in
-    ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done, done_length), aggaux)))"
+    ((tp + 1, tss, tables, len + 1, maskL, maskR, result \<union> snd ` (Set.filter (\<lambda>(t, x). t = tp - len) tmp), a1_map, a2_map', tstp_map, done), aggaux)))"
   by(auto simp del: add_new_mmuaux.simps simp add: to_add_set_def  upd_nested_max_tstp_def split:option.splits prod.splits)
 
 
