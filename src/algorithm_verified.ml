@@ -63,7 +63,7 @@ let monitor dbschema logfile fv f =
   let cf = Verified_adapter.convert_formula dbschema (List.length fv) f in
   let tf = Verified_adapter.type_check_formula dbschema cf in
   match tf with
-    Some cf ->
+    Verified.Monitor.Inr cf ->
       let cf = if !no_mw then cf else Verified.Monitor.convert_multiway cf in
       let ctxt = Monitor.{
         fv_pos;
@@ -73,5 +73,4 @@ let monitor dbschema logfile fv f =
         cur_state = Verified_adapter.init cf;
       } in
       ignore (P.parse_file dbschema logfile ctxt)
-  | None -> prerr_endline "Error during verified type checking";
-            exit 1
+  | Verified.Monitor.Inl e -> failwith ("Error during verified type checking: " ^ e)

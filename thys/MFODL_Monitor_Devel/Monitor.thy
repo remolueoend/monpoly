@@ -8615,7 +8615,7 @@ proof -
     by (auto simp add: tdb_eqs state_eqs)
   then have
     length_Vs: "length Vs = ?p' - ?p"
-    and set_Vs: "\<forall>i<?p'-?p. v \<in> Vs ! i \<longleftrightarrow>
+    and set_Vs: "\<forall>i < ?p'-?p. v \<in> Vs ! i \<longleftrightarrow>
       wf_tuple (Formula.nfv \<phi>) (Formula.fv \<phi>) v \<and> Formula.sat \<sigma> Map.empty (map the v) (?p + i) \<phi>"
     using assms(5)
     by (auto simp add: list_all2_conv_all_nth in_set_conv_nth elim!: in_qtableE in_qtableI)

@@ -97,7 +97,7 @@ module Monitor : sig
   type 'a regex = Skip of nat | Test of 'a | Plusa of 'a regex * 'a regex |
     Times of 'a regex * 'a regex | Star of 'a regex
   type safety
-  type ('a, 'b) sum
+  type ('a, 'b) sum = Inl of 'a | Inr of 'b
   type tysym = TAny of nat | TNum of nat | TCst of ty
   type modality
   type 'a formula = Pred of string * trm list |
@@ -119,7 +119,8 @@ module Monitor : sig
   val integer_of_int : int -> Z.t
   val interval : nat -> enat -> i
   val type_check :
-    (string * nat -> (tysym list) option) -> tysym formula -> ty formula option
+    (string * nat -> (tysym list) option) ->
+      tysym formula -> (string, ty formula) sum
   val mstep :
     ((string * nat), (((event_data option) list) set list)) mapping * nat ->
       (((nat *
@@ -4256,14 +4257,16 @@ let rec map_formula
     | f, TP x19 -> TP x19
     | f, TS x20 -> TS x20;;
 
+let rec binda m f = (match m with Inl a -> Inl a | Inr a -> f a);;
+
 let rec map_sig f s = comp (map_option (mapa f)) s;;
 
 let rec check_two_formulas
   check s e phi psi =
-    (match check s e phi with None -> None
-      | Some f ->
-        (match check (map_sig f s) (comp f e) (map_formula f psi)
-          with None -> None | Some fa -> Some (comp fa f)));;
+    binda (check s e phi)
+      (fun f ->
+        binda (check (map_sig f s) (comp f e) (map_formula f psi))
+          (fun fa -> Inr (comp fa f)));;
 
 let rec new_type_symbol
   t = (match t with TAny n -> TAny (suc n) | TNum n -> TNum (suc n)
@@ -4289,6 +4292,14 @@ let rec equal_tysym x0 x1 = match x0, x1 with TNum x2, TCst x3 -> false
                       | TNum x2, TNum y2 -> equal_nata x2 y2
                       | TAny x1, TAny y1 -> equal_nata x1 y1;;
 
+let rec catch_error m f = (match m with Inl a -> f a | Inr a -> Inr a);;
+
+let rec str_of_tysym = function TCst TInt -> "int"
+                       | TCst TFloat -> "float"
+                       | TCst TString -> "string"
+                       | TNum uu -> "numeric"
+                       | TAny uv -> "any";;
+
 let rec update_env
   x e = (let (tnew, told) = x in
           (fun v -> (if equal_tysym v told then tnew else v)));;
@@ -4296,98 +4307,93 @@ let rec update_env
 let rec min_type
   x0 x1 = match x0, x1 with
     TNum a, TNum b ->
-      Some (if less_eq_nat a b then (TNum a, TNum b) else (TNum b, TNum a))
+      Inr (if less_eq_nat a b then (TNum a, TNum b) else (TNum b, TNum a))
     | TAny a, TAny b ->
-        Some (if less_eq_nat a b then (TAny a, TAny b) else (TAny b, TAny a))
-    | TNum v, TAny y -> Some (TNum v, TAny y)
-    | TCst v, TAny y -> Some (TCst v, TAny y)
-    | TAny y, TNum v -> Some (TNum v, TAny y)
-    | TAny y, TCst v -> Some (TCst v, TAny y)
-    | TCst TString, TNum uu -> None
-    | TNum uv, TCst TString -> None
-    | TCst TInt, TNum y -> Some (TCst TInt, TNum y)
-    | TCst TFloat, TNum y -> Some (TCst TFloat, TNum y)
-    | TNum y, TCst TInt -> Some (TCst TInt, TNum y)
-    | TNum y, TCst TFloat -> Some (TCst TFloat, TNum y)
-    | TCst x, TCst y -> (if equal_ty x y then Some (TCst x, TCst y) else None);;
+        Inr (if less_eq_nat a b then (TAny a, TAny b) else (TAny b, TAny a))
+    | TNum v, TAny y -> Inr (TNum v, TAny y)
+    | TCst v, TAny y -> Inr (TCst v, TAny y)
+    | TAny y, TNum v -> Inr (TNum v, TAny y)
+    | TAny y, TCst v -> Inr (TCst v, TAny y)
+    | TCst TString, TNum uu -> Inl ""
+    | TNum uv, TCst TString -> Inl ""
+    | TCst TInt, TNum y -> Inr (TCst TInt, TNum y)
+    | TCst TFloat, TNum y -> Inr (TCst TFloat, TNum y)
+    | TNum y, TCst TInt -> Inr (TCst TInt, TNum y)
+    | TNum y, TCst TFloat -> Inr (TCst TFloat, TNum y)
+    | TCst x, TCst y ->
+        (if equal_ty x y then Inr (TCst x, TCst y) else Inl "");;
 
-let rec clash_propagate2
-  t1 t2 e = map_option (fun x -> update_env x e) (min_type t1 t2);;
+let rec clash_propagate
+  t1 t2 e =
+    catch_error (binda (min_type t1 t2) (fun k -> Inr (update_env k e)))
+      (fun _ ->
+        Inl ((("clash of types " ^ str_of_tysym t1) ^ " and ") ^
+              str_of_tysym t2));;
 
-let rec check_binop2
+let rec check_binop
   check_trm e typ t1 t2 exp_typ =
-    (match clash_propagate2 exp_typ typ e with None -> None
-      | Some f ->
-        (match check_trm (comp f e) (f typ) t1 with None -> None
-          | Some fa ->
-            (match check_trm (comp (comp fa f) e) (comp fa f typ) t2
-              with None -> None | Some fb -> Some (comp (comp fb fa) f))));;
+    binda (clash_propagate exp_typ typ e)
+      (fun f ->
+        binda (check_trm (comp f e) (f typ) t1)
+          (fun fa ->
+            binda (check_trm (comp (comp fa f) e) (comp fa f typ) t2)
+              (fun fb -> Inr (comp (comp fb fa) f))));;
 
 let rec ty_of = function EInt uu -> TInt
                 | EFloat uv -> TFloat
                 | EString uw -> TString;;
 
 let rec check_trm
-  e typ x2 = match e, typ, x2 with e, typ, Var v -> clash_propagate2 (e v) typ e
-    | e, typ, Const c -> clash_propagate2 (TCst (ty_of c)) typ e
+  e typ x2 = match e, typ, x2 with e, typ, Var v -> clash_propagate (e v) typ e
+    | e, typ, Const c -> clash_propagate (TCst (ty_of c)) typ e
     | e, typ, F2i t ->
-        (match clash_propagate2 typ (TCst TInt) e with None -> None
-          | Some f ->
-            (match check_trm (comp f e) (TCst TFloat) t with None -> None
-              | Some fa ->
-                Some (fun ta ->
-                       (if equal_tysym ta typ then TCst TInt
-                         else comp fa f ta))))
+        binda (clash_propagate typ (TCst TInt) e)
+          (fun f ->
+            binda (check_trm (comp f e) (TCst TFloat) t)
+              (fun fa ->
+                Inr (fun ta ->
+                      (if equal_tysym ta typ then TCst TInt
+                        else comp fa f ta))))
     | e, typ, I2f t ->
-        (match clash_propagate2 typ (TCst TFloat) e with None -> None
-          | Some f ->
-            (match check_trm (comp f e) (TCst TInt) t with None -> None
-              | Some fa ->
-                Some (fun ta ->
-                       (if equal_tysym ta typ then TCst TFloat
-                         else comp fa f ta))))
+        binda (clash_propagate typ (TCst TFloat) e)
+          (fun f ->
+            binda (check_trm (comp f e) (TCst TInt) t)
+              (fun fa ->
+                Inr (fun ta ->
+                      (if equal_tysym ta typ then TCst TFloat
+                        else comp fa f ta))))
     | e, typ, UMinus t ->
-        (match
-          clash_propagate2 (TNum zero_nata) (new_type_symbol typ)
-            (comp new_type_symbol e)
-          with None -> None
-          | Some f ->
-            (match
-              check_trm (comp (comp f new_type_symbol) e)
-                (f (new_type_symbol typ)) t
-              with None -> None
-              | Some fa -> Some (comp (comp fa f) new_type_symbol)))
+        binda (clash_propagate (TNum zero_nata) (new_type_symbol typ)
+                (comp new_type_symbol e))
+          (fun f ->
+            binda (check_trm (comp (comp f new_type_symbol) e)
+                    (f (new_type_symbol typ)) t)
+              (fun fa -> Inr (comp (comp fa f) new_type_symbol)))
     | e, typ, Plus (t1, t2) ->
-        (match
-          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
-            t1 t2 (TNum zero_nata)
-          with None -> None | Some f -> Some (comp f new_type_symbol))
+        binda (check_binop check_trm (comp new_type_symbol e)
+                (new_type_symbol typ) t1 t2 (TNum zero_nata))
+          (fun f -> Inr (comp f new_type_symbol))
     | e, typ, Minus (t1, t2) ->
-        (match
-          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
-            t1 t2 (TNum zero_nata)
-          with None -> None | Some f -> Some (comp f new_type_symbol))
+        binda (check_binop check_trm (comp new_type_symbol e)
+                (new_type_symbol typ) t1 t2 (TNum zero_nata))
+          (fun f -> Inr (comp f new_type_symbol))
     | e, typ, Mult (t1, t2) ->
-        (match
-          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
-            t1 t2 (TNum zero_nata)
-          with None -> None | Some f -> Some (comp f new_type_symbol))
+        binda (check_binop check_trm (comp new_type_symbol e)
+                (new_type_symbol typ) t1 t2 (TNum zero_nata))
+          (fun f -> Inr (comp f new_type_symbol))
     | e, typ, Div (t1, t2) ->
-        (match
-          check_binop2 check_trm (comp new_type_symbol e) (new_type_symbol typ)
-            t1 t2 (TNum zero_nata)
-          with None -> None | Some f -> Some (comp f new_type_symbol))
-    | e, typ, Mod (t1, t2) -> check_binop2 check_trm e typ t1 t2 (TCst TInt);;
+        binda (check_binop check_trm (comp new_type_symbol e)
+                (new_type_symbol typ) t1 t2 (TNum zero_nata))
+          (fun f -> Inr (comp f new_type_symbol))
+    | e, typ, Mod (t1, t2) -> check_binop check_trm e typ t1 t2 (TCst TInt);;
 
 let rec check_comparison
   e t1 t2 =
-    (match check_trm (comp new_type_symbol e) (TAny zero_nata) t1
-      with None -> None
-      | Some f ->
-        (match
-          check_trm (comp (comp f new_type_symbol) e) (f (TAny zero_nata)) t2
-          with None -> None
-          | Some fa -> Some (comp (comp fa f) new_type_symbol)));;
+    binda (check_trm (comp new_type_symbol e) (TAny zero_nata) t1)
+      (fun f ->
+        binda (check_trm (comp (comp f new_type_symbol) e) (f (TAny zero_nata))
+                t2)
+          (fun fa -> Inr (comp (comp fa f) new_type_symbol)));;
 
 let rec agg_trm_tysym = function Agg_Sum -> TNum zero_nata
                         | Agg_Cnt -> TAny zero_nata
@@ -4404,45 +4410,43 @@ let rec t_res_tysym x0 t = match x0, t with Agg_Sum, t -> t
                       | Agg_Max, t -> t;;
 
 let rec check_regex
-  check s e x3 = match check, s, e, x3 with check, s, e, Skip l -> Some id
+  check s e x3 = match check, s, e, x3 with check, s, e, Skip l -> Inr id
     | check, s, e, Test phi -> check s e phi
     | check, sa, e, Plusa (r, s) ->
-        (match check_regex check sa e r with None -> None
-          | Some f ->
-            (match
-              check_regex check (map_sig f sa) (comp f e)
-                (map_regex (map_formula f) s)
-              with None -> None | Some fa -> Some (comp fa f)))
+        binda (check_regex check sa e r)
+          (fun f ->
+            binda (check_regex check (map_sig f sa) (comp f e)
+                    (map_regex (map_formula f) s))
+              (fun fa -> Inr (comp fa f)))
     | check, sa, e, Times (r, s) ->
-        (match check_regex check sa e r with None -> None
-          | Some f ->
-            (match
-              check_regex check (map_sig f sa) (comp f e)
-                (map_regex (map_formula f) s)
-              with None -> None | Some fa -> Some (comp fa f)))
+        binda (check_regex check sa e r)
+          (fun f ->
+            binda (check_regex check (map_sig f sa) (comp f e)
+                    (map_regex (map_formula f) s))
+              (fun fa -> Inr (comp fa f)))
     | check, s, e, Star r -> check_regex check s e r;;
 
 let rec check_pred
-  e x1 x2 = match e, x1, x2 with
-    e, trm :: trms, t :: ts ->
-      (match check_trm e t trm with None -> None
-        | Some f ->
-          (match check_pred (comp f e) trms (mapa f ts) with None -> None
-            | Some fa -> Some (comp fa f)))
-    | e, [], [] -> Some id
-    | e, [], v :: va -> None
-    | e, v :: va, [] -> None;;
+  p e x2 x3 = match p, e, x2, x3 with
+    p, e, trm :: trms, t :: ts ->
+      binda (check_trm e t trm)
+        (fun f ->
+          binda (check_pred p (comp f e) trms (mapa f ts))
+            (fun fa -> Inr (comp fa f)))
+    | p, e, [], [] -> Inr id
+    | p, e, [], v :: va -> Inl ("wrong arity for predicate " ^ id p)
+    | p, e, v :: va, [] -> Inl ("wrong arity for predicate " ^ id p);;
 
 let rec check_ands_f
   check s e =
-    (fun phi a ->
-      (match a with None -> None
-        | Some f ->
-          (match check (map_sig f s) (comp f e) (map_formula f phi)
-            with None -> None | Some fa -> Some (comp fa f))));;
+    (fun phi f_op ->
+      binda f_op
+        (fun f ->
+          binda (check (map_sig f s) (comp f e) (map_formula f phi))
+            (fun fa -> Inr (comp fa f))));;
 
 let rec check_ands
-  check s e phi_s = foldr (check_ands_f check s e) phi_s (Some id);;
+  check s e phi_s = foldr (check_ands_f check s e) phi_s (Inr id);;
 
 let rec agg_tysenv
   e tys =
@@ -4458,21 +4462,21 @@ let rec tabulate
 let rec check
   s e x2 = match s, e, x2 with
     s, e, Pred (r, ts) ->
-      (match s (r, size_lista ts) with None -> None
-        | Some a -> check_pred e ts a)
+      (match s (r, size_lista ts)
+        with None -> Inl (("unknown predicate " ^ id r) ^ " in input formula")
+        | Some a -> check_pred r e ts a)
     | s, e, Let (p, phi, psi) ->
         (let f0 = funpow (nfv phi) new_type_symbol in
-          (match check (map_sig f0 s) (fun a -> TAny a) (map_formula f0 phi)
-            with None -> None
-            | Some f1 ->
-              (match
-                check (map_sig f1
+          binda (check (map_sig f0 s) (fun a -> TAny a) (map_formula f0 phi))
+            (fun f1 ->
+              binda (check
+                      (map_sig f1
                         (fun_upd (equal_prod equal_string8 equal_nat)
                           (map_sig f0 s) (p, nfv phi)
                           (Some (mapa (fun a -> TAny a)
                                   (upt zero_nata (nfv phi))))))
-                  (comp (comp f1 f0) e) (map_formula (comp f1 f0) psi)
-                with None -> None | Some f2 -> Some (comp (comp f2 f1) f0))))
+                      (comp (comp f1 f0) e) (map_formula (comp f1 f0) psi))
+                (fun f2 -> Inr (comp (comp f2 f1) f0))))
     | s, e, Eq (t1, t2) -> check_comparison e t1 t2
     | s, e, Less (t1, t2) -> check_comparison e t1 t2
     | s, e, LessEq (t1, t2) -> check_comparison e t1 t2
@@ -4486,31 +4490,26 @@ let rec check
             (if equal_nata n zero_nata then t else e (minus_nata n one_nata)))
           phi
     | s, e, Agg (y, (agg_type, d), tys, trm, phi) ->
-        (match
-          check_trm (comp new_type_symbol (agg_tysenv e tys))
-            (agg_trm_tysym agg_type) trm
-          with None -> None
-          | Some f ->
-            (match
-              check (map_sig (comp f new_type_symbol) s)
-                (comp (comp f new_type_symbol) (agg_tysenv e tys))
-                (map_formula (comp f new_type_symbol) phi)
-              with None -> None
-              | Some fa ->
-                (match
-                  check_trm (comp (comp (comp fa f) new_type_symbol) e)
-                    (comp fa f (t_res_tysym agg_type (agg_trm_tysym agg_type)))
-                    (Var y)
-                  with None -> None
-                  | Some fb ->
-                    (match
-                      check_trm
-                        (comp (comp (comp (comp fb fa) f) new_type_symbol) e)
-                        (comp (comp (comp fb fa) f) new_type_symbol d) (Var y)
-                      with None -> None
-                      | Some fc ->
-                        Some (comp (comp (comp (comp fc fb) fa) f)
-                               new_type_symbol)))))
+        binda (check_trm (comp new_type_symbol (agg_tysenv e tys))
+                (agg_trm_tysym agg_type) trm)
+          (fun f ->
+            binda (check (map_sig (comp f new_type_symbol) s)
+                    (comp (comp f new_type_symbol) (agg_tysenv e tys))
+                    (map_formula (comp f new_type_symbol) phi))
+              (fun fa ->
+                binda (check_trm (comp (comp (comp fa f) new_type_symbol) e)
+                        (comp fa f
+                          (t_res_tysym agg_type (agg_trm_tysym agg_type)))
+                        (Var y))
+                  (fun fb ->
+                    binda (check_trm
+                            (comp (comp (comp (comp fb fa) f) new_type_symbol)
+                              e)
+                            (comp (comp (comp fb fa) f) new_type_symbol d)
+                            (Var y))
+                      (fun fc ->
+                        Inr (comp (comp (comp (comp fc fb) fa) f)
+                              new_type_symbol)))))
     | s, e, Prev (i, phi) -> check s e phi
     | s, e, Next (i, phi) -> check s e phi
     | s, e, Since (phi, i, psi) -> check_two_formulas check s e phi psi
@@ -4519,21 +4518,20 @@ let rec check
     | s, e, MatchP (i, r) -> check_regex check s e r
     | s, e, LetPast (p, phi, psi) ->
         (let f0 = funpow (nfv phi) new_type_symbol in
-          (match
-            check (fun_upd (equal_prod equal_string8 equal_nat) (map_sig f0 s)
+          binda (check
+                  (fun_upd (equal_prod equal_string8 equal_nat) (map_sig f0 s)
                     (p, nfv phi)
                     (Some (tabulate (fun a -> TAny a) zero_nata (nfv phi))))
-              (fun a -> TAny a) (map_formula f0 phi)
-            with None -> None
-            | Some f1 ->
-              (match
-                check (map_sig f1
+                  (fun a -> TAny a) (map_formula f0 phi))
+            (fun f1 ->
+              binda (check
+                      (map_sig f1
                         (fun_upd (equal_prod equal_string8 equal_nat)
                           (map_sig f0 s) (p, nfv phi)
                           (Some (mapa (fun a -> TAny a)
                                   (upt zero_nata (nfv phi))))))
-                  (comp (comp f1 f0) e) (map_formula (comp f1 f0) psi)
-                with None -> None | Some f2 -> Some (comp (comp f2 f1) f0))))
+                      (comp (comp f1 f0) e) (map_formula (comp f1 f0) psi))
+                (fun f2 -> Inr (comp (comp f2 f1) f0))))
     | s, e, TP t -> check_trm e (TCst TInt) t
     | s, e, TS t -> check_trm e (TCst TInt) t;;
 
@@ -5926,10 +5924,11 @@ let rec convert_tysym = function TCst a -> a
 
 let rec type_check
   s phi =
-    (match check s (fun a -> TAny a) phi with None -> None
-      | Some f ->
+    binda (check s (fun a -> TAny a) phi)
+      (fun f ->
         (if check_wty_formula (map_formula f phi)
-          then Some (map_formula (comp convert_tysym f) phi) else None));;
+          then Inr (map_formula (comp convert_tysym f) phi)
+          else Inl "failed to infer ground type for aggregation result"));;
 
 let rec mapping_join _B
   f (RBT_Mapping t) (RBT_Mapping u) =

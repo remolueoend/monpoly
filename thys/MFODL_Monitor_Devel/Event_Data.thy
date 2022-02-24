@@ -15,6 +15,7 @@ setup_lifting type_definition_string8
 
 lift_definition empty_string :: string8 is "[]" .
 lift_definition string8_literal :: "String.literal \<Rightarrow> string8" is String.explode .
+lift_definition literal_string8:: "string8 \<Rightarrow> String.literal" is String.Abs_literal .
 declare [[coercion string8_literal]]
 
 instantiation string8 :: "{equal, linorder}"
@@ -32,7 +33,7 @@ end
 
 lifting_forget string8.lifting
 
-declare [[code drop: string8_literal "HOL.equal :: string8 \<Rightarrow> _"
+declare [[code drop: literal_string8 string8_literal  "HOL.equal :: string8 \<Rightarrow> _"
       "(\<le>) :: string8 \<Rightarrow> _" "(<) :: string8 \<Rightarrow> _"
       "Code_Evaluation.term_of :: string8 \<Rightarrow> _"]]
 
@@ -42,6 +43,8 @@ code_printing
   | constant "(\<le>) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<=)"
   | constant "(<) :: string8 \<Rightarrow> string8 \<Rightarrow> bool" \<rightharpoonup> (OCaml) "Stdlib.(<)"
   | constant "empty_string :: string8" \<rightharpoonup> (OCaml) "\"\""
+  | constant "string8_literal :: String.literal \<Rightarrow> string8" \<rightharpoonup> (OCaml) "id"
+  | constant "literal_string8 :: string8 \<Rightarrow> String.literal" \<rightharpoonup> (OCaml) "id"
 
 ML \<open>
 structure String8 =

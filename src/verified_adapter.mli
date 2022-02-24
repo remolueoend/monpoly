@@ -13,7 +13,7 @@ val insert_into_db: Table.schema -> string list -> db -> db
 type tyssig 
 val convert_into_tysym: tcst -> Verified.Monitor.tysym
 val convert_schema_into_sig: Db.schema -> tyssig
-val type_check_formula: Db.schema -> Verified.Monitor.tysym Verified.Monitor.formula -> Verified.Monitor.ty Verified.Monitor.formula option
+val type_check_formula: Db.schema -> Verified.Monitor.tysym Verified.Monitor.formula -> (string, Verified.Monitor.ty Verified.Monitor.formula) Verified.Monitor.sum
 
 type state
 val init: Verified.Monitor.ty Verified.Monitor.formula -> state
