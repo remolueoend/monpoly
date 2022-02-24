@@ -10,7 +10,7 @@ export_code convert_multiway mmonitorable_exec vminit_safe minit_safe vmstep mst
 export_code
   (*basic types*)
   nat_of_integer integer_of_nat int_of_integer integer_of_int enat
-  interval empty_db insert_into_db RBT_set rbt_fold
+  interval empty_db insert_into_db RBT_set rbt_fold Sum_Type.Inl
   (*term, formula, and regex constructors*)
   EInt Formula.Var Formula.Agg_Cnt Formula.Pred Regex.Skip Regex.Wild Typing.TAny Formula.TInt
   (*main functions*)
