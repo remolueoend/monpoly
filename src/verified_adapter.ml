@@ -213,8 +213,7 @@ type state =
                               mapping)
                         mapping *
                        ((nat, nat) mapping *
-                         (((event_data option) list) set list *
-                           nat))))))))))) *
+                         ((event_data option) list) set list)))))))))) *
       aggaux option),
     unit)
     mstate_ext

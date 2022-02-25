@@ -148,8 +148,7 @@ module Monitor : sig
                                   mapping)
                             mapping *
                            ((nat, nat) mapping *
-                             (((event_data option) list) set list *
-                               nat))))))))))) *
+                             ((event_data option) list) set list)))))))))) *
           aggaux option),
         unit)
         mstate_ext ->
@@ -179,8 +178,7 @@ module Monitor : sig
                                       mapping)
                                 mapping *
                                ((nat, nat) mapping *
-                                 (((event_data option) list) set list *
-                                   nat))))))))))) *
+                                 ((event_data option) list) set list)))))))))) *
               aggaux option),
             unit)
             mstate_ext
@@ -216,8 +214,7 @@ module Monitor : sig
                                   mapping)
                             mapping *
                            ((nat, nat) mapping *
-                             (((event_data option) list) set list *
-                               nat))))))))))) *
+                             ((event_data option) list) set list)))))))))) *
           aggaux option),
         unit)
         mstate_ext
@@ -7016,9 +7013,7 @@ let rec eval_step_mmuaux
                     (len, (maskL,
                             (maskR,
                               (result,
-                                (a1_map,
-                                  (a2_map,
-                                    (tstp_map, (donea, done_length)))))))))))
+                                (a1_map, (a2_map, (tstp_map, donea))))))))))
     = (let (Some _, tssa) = safe_hd tss in
        let Some m = lookupa (ccompare_nat, equal_nat) a2_map (minus_nata tp len)
          in
@@ -7128,20 +7123,14 @@ let rec eval_step_mmuaux
                    (maskL,
                      (maskR,
                        (resulta,
-                         (a1_map,
-                           (a2_mapb,
-                             (tstp_mapa,
-                               (t :: donea,
-                                 plus_nata done_length one_nata))))))))))));;
+                         (a1_map, (a2_mapb, (tstp_mapa, t :: donea)))))))))));;
 
 let rec eval_step_mmauaux
   args ((tp, (tss, (tables,
                      (len, (maskL,
                              (maskR,
                                (result,
-                                 (a1_map,
-                                   (a2_map,
-                                     (tstp_map, (donea, done_length))))))))))),
+                                 (a1_map, (a2_map, (tstp_map, donea)))))))))),
          aggaux)
     = (let (Some _, tssa) = safe_hd tss in
         (match args_agg args
@@ -7151,7 +7140,7 @@ let rec eval_step_mmauaux
                             (len, (maskL,
                                     (maskR,
                                       (result,
-(a1_map, (a2_map, (tstp_map, (donea, done_length))))))))))),
+(a1_map, (a2_map, (tstp_map, donea)))))))))),
               aggaux)
           | Some aggargs ->
             (let Some m =
@@ -7303,10 +7292,7 @@ let rec eval_step_mmauaux
                             (maskR,
                               (resulta,
                                 (a1_map,
-                                  (a2_mapb,
-                                    (tstp_mapa,
-                                      (t :: donea,
-plus_nata done_length one_nata))))))))))),
+                                  (a2_mapb, (tstp_mapa, t :: donea)))))))))),
                 a))));;
 
 let rec prepend_queue_t a x1 = match a, x1 with a, ([], []) -> ([], [a])
@@ -7333,9 +7319,7 @@ let rec shift_mmauaux
                   (len, (maskL,
                           (maskR,
                             (result,
-                              (a1_map,
-                                (a2_map,
-                                  (tstp_map, (donea, done_length))))))))))),
+                              (a1_map, (a2_map, (tstp_map, donea)))))))))),
       auxs)
     = (let (tss_queue, tssa) =
          takeWhile_queue (fun t -> not (memR (args_ivl args) (minus_nata nt t)))
@@ -7347,9 +7331,7 @@ let rec shift_mmauaux
                     (len, (maskL,
                             (maskR,
                               (result,
-                                (a1_map,
-                                  (a2_map,
-                                    (tstp_map, (donea, done_length))))))))))),
+                                (a1_map, (a2_map, (tstp_map, donea)))))))))),
             auxs)
           (linearize tss_queue));;
 
@@ -7531,9 +7513,7 @@ let rec add_new_mmuaux
                       (len, (maskL,
                               (maskR,
                                 (result,
-                                  (a1_map,
-                                    (a2_map,
-                                      (tstp_map, (donea, done_length)))))))))))
+                                  (a1_map, (a2_map, (tstp_map, donea))))))))))
        = shift_mmuaux args nt aux in
      let i = args_ivl args in
      let pos = args_pos args in
@@ -7741,8 +7721,7 @@ let rec add_new_mmuaux
                                    (ccompare_option ccompare_event_data))))
                              (fun (t, _) -> equal_nata t (minus_nata tp len))
                              tmpa)),
-                    (a1_mapa,
-                      (a2_mapa, (tstp_mapa, (donea, done_length))))))))))));;
+                    (a1_mapa, (a2_mapa, (tstp_mapa, donea)))))))))));;
 
 let rec to_add_set_fun _A (_B1, _B2, _B3)
   a m elem s =
@@ -7775,15 +7754,14 @@ let rec add_new_mmauaux
                                   (maskR,
                                     (result,
                                       (a1_map,
-(a2_map, (tstp_map, (donea, done_length)))))))))))
+(a2_map, (tstp_map, donea))))))))))
            = add_new_mmuaux args rel1 rel2 nt mmuaux in
           ((tp, (tss, (tables,
                         (len, (maskL,
                                 (maskR,
                                   (result,
                                     (a1_map,
-                                      (a2_map,
-(tstp_map, (donea, done_length))))))))))),
+                                      (a2_map, (tstp_map, donea)))))))))),
             aggaux))
       | Some aggargs ->
         (let a = shift_mmauaux args nt (mmuaux, aggaux) in
@@ -7792,7 +7770,7 @@ let rec add_new_mmauaux
                             (len, (maskL,
                                     (maskR,
                                       (result,
-(a1_map, (a2_map, (tstp_map, (donea, done_length)))))))))))
+(a1_map, (a2_map, (tstp_map, donea))))))))))
              = aa in
             (fun aggauxa ->
               (let i = args_ivl args in
@@ -8026,9 +8004,7 @@ asa)
   (ccompare_prod ccompare_nat
     (ccompare_list (ccompare_option ccompare_event_data))))
 (fun (t, _) -> equal_nata t (minus_nata tp len)) tmpa)),
-                               (a1_mapa,
-                                 (a2_mapa,
-                                   (tstp_mapa, (donea, done_length))))))))))),
+                               (a1_mapa, (a2_mapa, (tstp_mapa, donea)))))))))),
                   aggauxb))))
             b));;
 
@@ -8040,8 +8016,7 @@ let rec eval_mmauaux
                         (len, (maskL,
                                 (maskR,
                                   (result,
-                                    (a1_map,
-                                      (a2_map, (tstp_map, (donea, _)))))))))))
+                                    (a1_map, (a2_map, (tstp_map, donea))))))))))
          = aa in
         (fun auxs ->
           (rev donea,
@@ -8049,8 +8024,7 @@ let rec eval_mmauaux
                           (len, (maskL,
                                   (maskR,
                                     (result,
-                                      (a1_map,
-(a2_map, (tstp_map, ([], zero_nata))))))))))),
+                                      (a1_map, (a2_map, (tstp_map, [])))))))))),
               auxs))))
         b);;
 
@@ -10633,7 +10607,7 @@ let rec init_mmuaux
                          (of_phantom mapping_impl_nata)),
                       (mapping_empty ccompare_nat
                          (of_phantom mapping_impl_nata),
-                        ([], zero_nata)))))))))));;
+                        []))))))))));;
 
 let rec init_mmauaux
   args =
