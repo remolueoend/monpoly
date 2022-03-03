@@ -333,6 +333,7 @@ let rec string_of_cst c =
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
 
 let print_cst c = print_string (string_of_cst c)
+let prerr_cst c = prerr_string (string_of_cst c)
 
 
 
@@ -366,6 +367,7 @@ let rec string_of_term term =
   t2s true term
 
 let print_term t = print_string (string_of_term t)
+let prerr_term t = prerr_string (string_of_term t)
 
 
 let string_of_predicate (p,ar,args) =
@@ -374,6 +376,10 @@ let string_of_predicate (p,ar,args) =
 let print_predicate (p,ar,args) =
   print_var p;
   Misc.print_list print_term args
+
+let prerr_predicate (p,ar,args) =
+  prerr_string p;
+  Misc.prerr_list prerr_term args
 
 let print_vartypes_list vartypes_list =
   Misc.print_list_ext "" "" ", "

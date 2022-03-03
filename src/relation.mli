@@ -162,3 +162,5 @@ val print_rel4: string -> relation -> unit
 val print_reln: string -> relation -> unit
 val print_bigrel: relation -> unit
 val print_orel: relation option -> unit
+val prerr_rel: string -> relation -> unit
+val prerr_reln: string -> relation -> unit

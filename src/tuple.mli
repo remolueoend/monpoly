@@ -156,3 +156,4 @@ val join_rev: int list -> (int * cst) list -> tuple -> tuple -> tuple
 val string_of_tuple: tuple -> string
 (* val output_tuple: out_channel -> tuple -> unit *)
 val print_tuple: tuple -> unit
+val prerr_tuple: tuple -> unit

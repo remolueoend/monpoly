@@ -110,16 +110,15 @@ let check_log_end i last_ts =
   let now = Unix.time() in
   Printf.eprintf " (%2.0f  %5.0f s) \n%!" (now -. !last_time_i) (now -. start_time)
 
-(* prints stats to STDOUT, we may want to change it to STDERR *)
 let dump_stats starttime =
   let now = Unix.time() in
   let diff = now -. starttime in
-  Printf.printf "===STATS=== time: %.0f\n" diff;
+  Printf.eprintf "===STATS=== time: %.0f\n" diff;
   let times = Unix.times() in
-  Printf.printf "===STATS=== times: (u:%.0f s:%.0f t:%.0f)\n"
+  Printf.eprintf "===STATS=== times: (u:%.0f s:%.0f t:%.0f)\n"
     times.tms_utime times.tms_stime
     (times.tms_utime +. times.tms_stime);
-  Printf.printf "===STATS=== mem: %s kB\n" (Misc.mem_max ())
+  Printf.eprintf "===STATS=== mem: %s kB\n" (Misc.mem_max ())
 
 
 type profile_state = {

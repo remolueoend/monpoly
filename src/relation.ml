@@ -62,6 +62,11 @@ let print_rel str rel =
   let rel' = Tuple_set.elements rel in
   Misc.print_list Tuple.print_tuple rel'
 
+let prerr_rel str rel =
+  prerr_string str;
+  let rel' = Tuple_set.elements rel in
+  Misc.prerr_list Tuple.prerr_tuple rel'
+
 let print_rel4 str rel =
   print_string str;
   let rel' = Tuple_set.elements rel in
@@ -71,6 +76,9 @@ let print_reln str rel =
   print_rel str rel;
   print_newline()
 
+let prerr_reln str rel =
+  prerr_rel str rel;
+  prerr_newline()
 
 let print_bigrel rel =
   let rel' = Tuple_set.elements rel in

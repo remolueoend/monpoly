@@ -55,6 +55,9 @@ let usage_string =
                [-ignore_parse_errors] [-stop_at_out_of_order_ts]
                [-stop_at_first_viol] [-load <file>]"
 
+let print_usage_and_exit () =
+  prerr_endline usage_string;
+  exit 2
 
 
 let formulafile = ref ""
@@ -93,7 +96,7 @@ let starttime = Unix.time()
 let sigusr1_handler =
   (Sys.Signal_handle
      (fun _ ->
-        print_endline "SIGUSR1 handler: exiting...";
+        prerr_endline "SIGUSR1 handler: exiting...";
         exit 0))
 
 let sigusr2_handler =
@@ -125,13 +128,13 @@ let main () =
   if !displayver then
     print_banner ()
   else if !formulafile = "" then
-    print_endline usage_string
+    print_usage_and_exit ()
   else
     (* read formula file *)
     let f = analyze_formulafile () in
     let f = if !negate then Neg f else f in
     if !sigfile = "" then
-      print_endline usage_string
+      print_usage_and_exit ()
     else
       begin
         (* read signature file *)

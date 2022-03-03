@@ -73,13 +73,13 @@ type extformula =
 
 val contains_eventually: extformula -> bool
 
-val print_auxel:  int * Relation.relation -> unit
-val print_sauxel: MFOTL.timestamp * Relation.relation -> unit
+val prerr_auxel:  int * Relation.relation -> unit
+val prerr_sauxel: MFOTL.timestamp * Relation.relation -> unit
 
-val print_predinf: string -> info -> unit
-val print_uinf: string -> uinfo -> unit
+val prerr_predinf: string -> info -> unit
+val prerr_uinf: string -> uinfo -> unit
 
-val print_einfn: string -> einfo -> unit
-val print_ezinf: string -> ezinfo -> unit
+val prerr_einfn: string -> einfo -> unit
+val prerr_ezinf: string -> ezinfo -> unit
 
-val print_extf: string -> extformula -> unit
+val prerr_extf: string -> extformula -> unit

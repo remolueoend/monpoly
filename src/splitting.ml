@@ -437,7 +437,7 @@ let pred_list_to_string l =
   !str
 
 let split_debug f op =
-  Printf.printf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (Mformula.free_vars f)) op
+  Printf.eprintf "Predicate Names: (%s) for formula: '%s' \n" (list_to_string (Mformula.free_vars f)) op
 
 let get_1 (a,_) = a
 let get_2 (_,b) = b

@@ -224,10 +224,17 @@ let print_list2 f l = print_list_ext "| " " |" " | " f l
 let print_list3 f l = print_list_ext "" "\n" "\n" f l
 let print_list4 f l = print_list_ext "" "" " "  f l
 
+let prerr_list f l = output_list stderr (fun _ -> f) l
+
 let printnl_list str f l =
   print_string str;
   print_list f l;
   print_newline()
+
+let prerrnl_list str f l =
+  prerr_string str;
+  prerr_list f l;
+  prerr_newline()
 
 
 let print_queue print_el q =
@@ -236,14 +243,23 @@ let print_queue print_el q =
   lq := List.rev !lq;
   print_list print_el !lq
 
+let prerr_queue prerr_el q =
+  let lq = ref [] in
+  Queue.iter (fun el -> lq := el::!lq) q;
+  lq := List.rev !lq;
+  prerr_list prerr_el !lq
+
 let print_mqueue print_el q =
   let lq = ref [] in
   Mqueue.iter (fun el -> lq := el::!lq) q;
   lq := List.rev !lq;
   print_list print_el !lq
 
-let print_dllist f l =
-  Dllist.iter f l
+let prerr_mqueue prerr_el q =
+  let lq = ref [] in
+  Mqueue.iter (fun el -> lq := el::!lq) q;
+  lq := List.rev !lq;
+  prerr_list prerr_el !lq
 
 
 

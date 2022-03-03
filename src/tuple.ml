@@ -363,3 +363,4 @@ let join_rev pos2 posval t2 t1 =
 
 let string_of_tuple = Misc.string_of_list string_of_cst
 let print_tuple = Misc.print_list print_cst
+let prerr_tuple = Misc.prerr_list prerr_cst

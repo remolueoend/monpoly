@@ -262,14 +262,14 @@ let tuple_OK pred tuple =
 
 let debug_tuple_csts_OK pred tuple =
   let res = tuple_OK pred tuple in
-  Printf.printf "filter: pred %s tuple" pred;
-  Tuple.print_tuple tuple;
-  Printf.printf " ->";
+  Printf.eprintf "filter: pred %s tuple" pred;
+  Tuple.prerr_tuple tuple;
+  Printf.eprintf " ->";
   if res
-  then Printf.printf "true"
-  else Printf.printf "false"
+  then Printf.eprintf "true"
+  else Printf.eprintf "false"
   ;
-  Printf.printf "\n";
+  Printf.eprintf "\n";
   res
 
 (* ------------------- *)

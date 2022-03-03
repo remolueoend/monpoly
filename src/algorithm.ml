@@ -254,8 +254,8 @@ let update_once_zero intv q tsq inf rel2 discard =
     in
     if Misc.debugging Dbg_eval then
       begin
-        Printf.printf "[update_once_zero] lw = %d rw = %d " lw rw;
-        Misc.printnl_list "subseq = " print_auxel subseq;
+        Printf.eprintf "[update_once_zero] lw = %d rw = %d " lw rw;
+        Misc.prerrnl_list "subseq = " prerr_auxel subseq;
       end;
     let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.oztree in
     inf.oztree <- newt;
@@ -304,10 +304,10 @@ let update_once intv tsq inf discard =
       in
       if Misc.debugging Dbg_eval then
         begin
-          Printf.printf "[update_once] lw = %s rw = %s "
+          Printf.eprintf "[update_once] lw = %s rw = %s "
             (MFOTL.string_of_ts lw)
             (MFOTL.string_of_ts rw);
-          Misc.printnl_list "subseq = " print_sauxel subseq;
+          Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
         end;
       let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.otree in
       inf.otree <- newt;
@@ -386,7 +386,7 @@ let update_old_until q tsq i intv inf discard  =
       if (not discard) && not (Relation.is_empty relq) then
         inf.ures <- Relation.union inf.ures relq;
       if Misc.debugging Dbg_eval then
-        Relation.print_reln "[update_aux] res: " inf.ures;
+        Relation.prerr_reln "[update_aux] res: " inf.ures;
   ) inf.raux;
 
   (* saux holds elements (k,relk) for the last seen index,
@@ -443,7 +443,7 @@ let get_relq q rels =
 
 let update_until q tsq i tsi intv rel1 rel2 inf comp discard =
   if Misc.debugging Dbg_eval then
-    print_uinf "[update_until] inf: " inf;
+    prerr_uinf "[update_until] inf: " inf;
   assert(i >= q);
   let nsaux = combine2 Relation.inter i inf.saux rel1 in
   if (MFOTL.in_right_ext (MFOTL.ts_minus tsi tsq) intv) &&
@@ -545,8 +545,8 @@ let rec eval f crt discard =
 
   if Misc.debugging Dbg_eval then
     begin
-      print_extf "\n[eval] evaluating formula\n" f;
-      Printf.printf "at (%d,%s) with discard=%b\n%!"
+      prerr_extf "\n[eval] evaluating formula\n" f;
+      Printf.eprintf "at (%d,%s) with discard=%b\n%!"
         q (MFOTL.string_of_ts tsq) discard
     end;
 
@@ -556,9 +556,9 @@ let rec eval f crt discard =
   | EPred (p,_,inf) ->
     if Misc.debugging Dbg_eval then
       begin
-        print_string "[eval,Pred] ";
-        Predicate.print_predicate p;
-        print_predinf  ": " inf
+        prerr_string "[eval,Pred] ";
+        Predicate.prerr_predicate p;
+        prerr_predinf  ": " inf
       end;
 
     if Queue.is_empty inf
@@ -668,7 +668,7 @@ let rec eval f crt discard =
 
   | EPrev (intv,f1,inf) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
+      Printf.eprintf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
 
     if q = 0 then
       Some Relation.empty
@@ -689,7 +689,7 @@ let rec eval f crt discard =
 
   | ENext (intv,f1,inf) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Next] inf.init=%b\n%!" inf.init;
+      Printf.eprintf "[eval,Next] inf.init=%b\n%!" inf.init;
 
     if inf.init then
       begin
@@ -716,7 +716,7 @@ let rec eval f crt discard =
 
   | ESinceA (comp,intv,f1,f2,inf) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,SinceA] q=%d\n%!" q;
+      Printf.eprintf "[eval,SinceA] q=%d\n%!" q;
 
     let eval_f1 rel2 comp2 =
       (match eval f1 crt false with
@@ -742,7 +742,7 @@ let rec eval f crt discard =
 
   | ESince (comp,intv,f1,f2,inf) ->
     if Misc.debugging Dbg_eval then
-      Printf.printf "[eval,Since] q=%d\n" q;
+      Printf.eprintf "[eval,Since] q=%d\n" q;
 
     let eval_f1 rel2 comp2 =
       (match eval f1 crt false with
@@ -772,7 +772,7 @@ let rec eval f crt discard =
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
-         Printf.printf "[eval,OnceA] q=%d\n" q;
+         Printf.eprintf "[eval,OnceA] q=%d\n" q;
 
        if c = CBnd MFOTL.ts_null then
          begin
@@ -809,7 +809,7 @@ let rec eval f crt discard =
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
-         Printf.printf "[eval,OnceZ] q=%d\n" q;
+         Printf.eprintf "[eval,OnceZ] q=%d\n" q;
 
        Some (update_once_zero intv q tsq inf rel2 discard)
     )
@@ -819,7 +819,7 @@ let rec eval f crt discard =
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
-         Printf.printf "[eval,Once] q=%d\n" q;
+         Printf.eprintf "[eval,Once] q=%d\n" q;
 
        if not (Relation.is_empty rel2) then
          dllist_add_last inf.oauxrels tsq rel2;
@@ -842,7 +842,7 @@ let rec eval f crt discard =
     if Misc.debugging Dbg_eval then
       begin
         let str = Printf.sprintf "[eval,Until] q=%d inf: " q in
-        print_uinf str inf
+        prerr_uinf str inf
       end;
 
     if inf.ufirst then
@@ -851,7 +851,7 @@ let rec eval f crt discard =
         let (i,_) = Neval.get_data inf.ulast in
         update_old_until q tsq i intv inf discard;
         if Misc.debugging Dbg_eval then
-          print_uinf "[eval,Until,after_update] inf: " inf
+          prerr_uinf "[eval,Until,after_update] inf: " inf
       end;
 
     (* we first evaluate f2, and then f1 *)
@@ -878,7 +878,7 @@ let rec eval f crt discard =
           (* we have the lookahead, we can compute the result *)
           begin
             if Misc.debugging Dbg_eval then
-              Printf.printf "[eval,Until] evaluation possible q=%d tsq=%s\n"
+              Printf.eprintf "[eval,Until] evaluation possible q=%d tsq=%s\n"
                 q (MFOTL.string_of_ts tsq);
             let res = inf.ures in
             inf.ures <- Relation.empty;
@@ -1023,7 +1023,7 @@ let rec eval f crt discard =
        eauxrels: info       the auxiliary relations (up to elastev)
     *)
     if Misc.debugging Dbg_eval then
-      print_ezinf "[eval,EventuallyZ] inf: " inf;
+      prerr_ezinf "[eval,EventuallyZ] inf: " inf;
 
     let rec ez_update () =
       if Neval.is_last inf.ezlastev then
@@ -1031,12 +1031,12 @@ let rec eval f crt discard =
       else
         let ncrt = Neval.get_next inf.ezlastev in
         let (i,tsi) = Neval.get_data ncrt in
-        (* Printf.printf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
+        (* Printf.eprintf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
             if Misc.debugging Dbg_eval then
-              Printf.printf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
+              Printf.eprintf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
 
             let auxrels = inf.ezauxrels in
@@ -1080,8 +1080,8 @@ let rec eval f crt discard =
 
                 if Misc.debugging Dbg_eval then
                   begin
-                    Printf.printf "[eval,EventuallyZ] lw = %d rw = %d " lw rw;
-                    Misc.printnl_list "subseq = " print_auxel subseq;
+                    Printf.eprintf "[eval,EventuallyZ] lw = %d rw = %d " lw rw;
+                    Misc.prerrnl_list "subseq = " prerr_auxel subseq;
                   end;
 
                 let newt = Sliding.slide string_of_int Relation.union subseq (lw, rw) inf.eztree in
@@ -1118,7 +1118,7 @@ let rec eval f crt discard =
        eauxrels: info        the auxiliary relations (up to elastev)
     *)
     if Misc.debugging Dbg_eval then
-      print_einfn "[eval,Eventually] inf: " inf;
+      prerr_einfn "[eval,Eventually] inf: " inf;
 
     (* we could in principle do this update less often: that is, we
        can do after each evaluation, but we need to find out the
@@ -1131,12 +1131,12 @@ let rec eval f crt discard =
       else
         let ncrt = Neval.get_next inf.elastev in
         let (i,tsi) = Neval.get_data ncrt in
-        (* Printf.printf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
+        (* Printf.eprintf "[eval,Eventually] e_update: ncrt.i = %d\n%!" i; *)
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
             if Misc.debugging Dbg_eval then
-              Printf.printf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
+              Printf.eprintf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
 
             let auxrels = inf.eauxrels in
@@ -1162,10 +1162,10 @@ let rec eval f crt discard =
                 in
                 if Misc.debugging Dbg_eval then
                   begin
-                    Printf.printf "[eval,Eventually] lw = %s rw = %s "
+                    Printf.eprintf "[eval,Eventually] lw = %s rw = %s "
                       (MFOTL.string_of_ts lw)
                       (MFOTL.string_of_ts rw);
-                    Misc.printnl_list "subseq = " print_sauxel subseq;
+                    Misc.prerrnl_list "subseq = " prerr_sauxel subseq;
                   end;
                 let newt = Sliding.slide MFOTL.string_of_ts Relation.union subseq (lw, rw) inf.etree in
                 inf.etree <- newt;
@@ -1607,7 +1607,6 @@ let split_save filename state =
     dump_to_file (format_filename index) mstate
   ) result;
   Printf.printf "%s\n%!" saved_state_msg
-  (*Printf.printf "%s to file with substr: %s \n%!" saved_state_msg filename*)
 
 (* Convert comma separated filenames to list of strings *)
 let files_to_list f =
@@ -1676,13 +1675,13 @@ module Monitor = struct
     else
       if !Misc.stop_at_out_of_order_ts then
         begin
-          Printf.eprintf "Error: Out of order timestamp %s (previous: %s)\n"
+          Printf.eprintf "ERROR: Out of order timestamp %s (previous: %s)\n"
             (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
           exit 1
         end
       else
         begin
-          Printf.eprintf "Warning: Skipping out of order timestamp %s\
+          Printf.eprintf "WARNING: Skipping out of order timestamp %s\
             \ (previous: %s)\n"
             (MFOTL.string_of_ts ts) (MFOTL.string_of_ts ctxt.s_log_ts);
           ctxt.s_log_tp <- ctxt.s_log_tp - 1;
@@ -1697,12 +1696,12 @@ module Monitor = struct
       let tuple =
         try Tuple.make_tuple2 sl tl with
         | Invalid_argument _ ->
-          Printf.eprintf "Error: Wrong tuple length for predicate %s\
+          Printf.eprintf "ERROR: Wrong tuple length for predicate %s\
             \ (expected: %d, actual: %d)\n"
             name (List.length tl) (List.length sl);
           exit 1
         | Type_error msg ->
-          Printf.eprintf "Error: Wrong type for predicate %s: %s\n"
+          Printf.eprintf "ERROR: Wrong type for predicate %s: %s\n"
             name msg;
           exit 1
       in
@@ -1731,14 +1730,16 @@ module Monitor = struct
   let command ctxt name params =
     match name with
     | "print" ->
-        print_extf "Current extended formula:\n" ctxt.s_extf;
-        print_newline ()
+        (* TODO: Should be printed to stdout. *)
+        prerr_extf "Current extended formula:\n" ctxt.s_extf;
+        prerr_newline ()
     | "terminate" ->
         Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
         raise Log_parser.Stop_parser
     | "print_and_exit" ->
-        print_extf "Current extended formula:\n" ctxt.s_extf;
-        print_newline ();
+        (* TODO: Should be printed to stdout. *)
+        prerr_extf "Current extended formula:\n" ctxt.s_extf;
+        prerr_newline ();
         Printf.printf "Terminated at timepoint: %d\n%!" ctxt.s_log_tp;
         raise Log_parser.Stop_parser
     | "get_pos" ->
@@ -1749,7 +1750,7 @@ module Monitor = struct
             marshal filename ctxt;
             Printf.printf "%s\n%!" saved_state_msg
         | _ ->
-            prerr_endline "Error: Bad arguments for save_state command";
+            prerr_endline "ERROR: Bad arguments for save_state command";
             if not !Misc.ignore_parse_errors then exit 1)
     | "save_and_exit" ->
         (match params with
@@ -1758,22 +1759,22 @@ module Monitor = struct
             Printf.printf "%s\n%!" saved_state_msg;
             raise Log_parser.Stop_parser
         | _ ->
-            prerr_endline "Error: Bad arguments for save_and_exit command";
+            prerr_endline "ERROR: Bad arguments for save_and_exit command";
             exit 1)
     | "set_slicer" ->
         (match params with
         | Some (SplitSave sp) -> set_slicer_parameters sp
         | _ ->
-            prerr_endline "Error: Bad arguments for set_slicer command";
+            prerr_endline "ERROR: Bad arguments for set_slicer command";
             if not !Misc.ignore_parse_errors then exit 1)
     | "split_save" ->
         (match params with
         | Some (Argument filename) -> split_save filename ctxt
         | _ ->
-            prerr_endline "Error: Bad arguments for split_save command";
+            prerr_endline "ERROR: Bad arguments for split_save command";
             if not !Misc.ignore_parse_errors then exit 1)
     | _ ->
-        Printf.eprintf "Error: Unrecognized command: %s\n" name;
+        Printf.eprintf "ERROR: Unrecognized command: %s\n" name;
         if not !Misc.ignore_parse_errors then exit 1
 
   let end_log ctxt =
@@ -1786,7 +1787,7 @@ module Monitor = struct
       Perf.check_log_end ctxt.s_log_tp ctxt.s_log_ts
 
   let parse_error ctxt pos msg =
-    prerr_endline "Error while parsing log:";
+    prerr_endline "ERROR while parsing log:";
     prerr_endline (Log_parser.string_of_position pos ^ ": " ^ msg);
     if not !Misc.ignore_parse_errors then exit 1
 

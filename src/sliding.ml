@@ -58,46 +58,46 @@ let stree_res = function
     | Some v -> v
     | None -> failwith "[stree_res] empty node"
 
-let print_node f g a =
+let prerr_node f g a =
   match a.res with
-  | None -> Printf.printf "(%s,%s -> *)" (f a.l) (f a.r)
+  | None -> Printf.eprintf "(%s,%s -> *)" (f a.l) (f a.r)
   | Some v ->
-    Printf.printf "(%s,%s -> " (f a.l) (f a.r);
+    Printf.eprintf "(%s,%s -> " (f a.l) (f a.r);
     g v;
-    print_string ")"
+    prerr_string ")"
 
 
-let print_stree f g str t =
-  print_endline str;
+let prerr_stree f g str t =
+  prerr_endline str;
   let rec print indent t =
-    print_string indent;
+    prerr_string indent;
     match t with
     | LNode a ->
-      print_node f g a;
-      print_newline ()
+      prerr_node f g a;
+      prerr_newline ()
     | INode (a,l,r) ->
-      print_node f g a;
-      print_newline ();
+      prerr_node f g a;
+      prerr_newline ();
       let new_indent = " " ^ indent in
       print new_indent l;
       print new_indent r
   in
   print " " t
 
-let print_stree_int str t = print_stree string_of_int str t
+let prerr_stree_int str t = prerr_stree string_of_int str t
 
-let print_list f str seq =
-  print_string str;
+let prerr_list f str seq =
+  prerr_string str;
   let rec print = function
     | [] -> ()
     | [a] -> f a
-    | h::t -> f h; print_string ", "; print t
+    | h::t -> f h; prerr_string ", "; print t
   in
-  print_string "[";
+  prerr_string "[";
   print seq;
-  print_string "]\n"
+  prerr_string "]\n"
 
-let print_list_int = print_list print_int
+let prerr_list_int = prerr_list prerr_int
 
 
 

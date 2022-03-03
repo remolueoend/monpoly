@@ -546,8 +546,8 @@ let string_of_ts ts =
     else
       Z.to_string ts
 
-let print_ts ts =
-  print_string (string_of_ts ts)
+let print_ts ts = print_string (string_of_ts ts)
+let prerr_ts ts = prerr_string (string_of_ts ts)
 
 let string_of_interval (a,b) =
   (match a with
@@ -560,8 +560,8 @@ let string_of_interval (a,b) =
   | CBnd b -> Printf.sprintf "%s]" (Z.to_string b)
   | Inf -> Printf.sprintf "*)")
 
-let print_interval (a,b) =
-  Printf.printf "%s" (string_of_interval (a,b))
+let print_interval (a,b) = Printf.printf "%s" (string_of_interval (a,b))
+let prerr_interval (a,b) = Printf.eprintf "%s" (string_of_interval (a,b))
 
 let string_of_agg_op = function
   | Cnt -> "CNT"
@@ -1173,9 +1173,13 @@ let string_of_formula str g =
       in
     str ^ (string_f_rec true false g)
 
-let print_formula str f =
-  print_string (string_of_formula str f)
+let print_formula str f = print_string (string_of_formula str f)
+let prerr_formula str f = prerr_string (string_of_formula str f)
 
 let printnl_formula str f =
   print_formula str f;
   print_newline()
+
+let prerrnl_formula str f =
+  prerr_formula str f;
+  prerr_newline()

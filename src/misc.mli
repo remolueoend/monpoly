@@ -195,10 +195,13 @@ val print_list2: ('a -> unit) -> 'a list -> unit
 val print_list3: ('a -> unit) -> 'a list -> unit
 val print_list4: ('a -> unit) -> 'a list -> unit
 val printnl_list: string -> ('a -> unit) -> 'a list -> unit
+val prerr_list: ('a -> unit) -> 'a list -> unit
+val prerrnl_list: string -> ('a -> unit) -> 'a list -> unit
 
 val print_queue: ('a -> unit) -> 'a Queue.t -> unit
 val print_mqueue: ('a -> unit) -> 'a Mqueue.t -> unit
-val print_dllist: ('a -> unit) -> 'a dllist -> unit
+val prerr_queue: ('a -> unit) -> 'a Queue.t -> unit
+val prerr_mqueue: ('a -> unit) -> 'a Mqueue.t -> unit
 
 
 (** Functions for reporting memory consumption: *)

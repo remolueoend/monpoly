@@ -411,13 +411,13 @@ let max_once empty_val intv result_pos arg_pos group_posl =
     result_pos arg_pos group_posl in
   new once_aggregator window intv
 
-let print_bool b =
+let prerr_bool b =
   if b then
-    print_string "true"
+    prerr_string "true"
   else
-    print_string "false"
-let print_state (oaggr:once_aggregator):unit =
-  print_string "empty_rel=";
-  print_bool oaggr#get_result.empty_rel;
-  print_string "; rel=";
-  Relation.print_rel "" oaggr#get_result.rel
+    prerr_string "false"
+let prerr_state (oaggr:once_aggregator):unit =
+  prerr_string "empty_rel=";
+  prerr_bool oaggr#get_result.empty_rel;
+  prerr_string "; rel=";
+  Relation.prerr_rel "" oaggr#get_result.rel

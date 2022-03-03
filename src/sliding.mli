@@ -51,4 +51,4 @@ val stree_res: ('a, 'b) stree -> 'b
 val slide: ('a -> string) -> ('b -> 'b -> 'b) -> ('a * 'b) list -> ('a * 'a) -> ('a,'b) stree -> ('a,'b) stree
 val build_rl_tree_from_seq: ('a -> 'a -> 'a) -> ('b * 'a) list -> ('b, 'a option) node tree
 
-val print_stree: ('a -> string) -> ('b -> unit) -> string -> ('a, 'b) stree -> unit
+val prerr_stree: ('a -> string) -> ('b -> unit) -> string -> ('a, 'b) stree -> unit
