@@ -1,8 +1,9 @@
+⚠️ **This is a fork of the [development repository](https://bitbucket.org/jshs/monpoly).** ⚠️
+
+The purpose of this fork is to investigate and develop support for monitoring complex data types.
+
 MonPoly
 =======
-
-**This is a development fork of the [original
-repository](https://bitbucket.org/monpoly/monpoly).**
 
 MonPoly is a prototype monitoring tool. It checks the compliance of log files
 with respect to policies that are specified by formulas in Metric First-Order
