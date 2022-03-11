@@ -907,13 +907,6 @@ lemma tabulate_rbt_code[code]: "Monitor.mrtabulate (xs :: mregex list) f =
   unfolding mrtabulate.abs_eq RBT_Mapping_def
   by (auto split: option.splits)
 
-lemma combine_Mapping[code]:
-  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
-  "Mapping.combine f (RBT_Mapping t) (RBT_Mapping u) =
-  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''combine RBT_Mapping: ccompare = None'') (\<lambda>_. Mapping.combine f (RBT_Mapping t) (RBT_Mapping u))
-                     | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.join (\<lambda>_. f) t u))"
-  by (auto simp add: Mapping.combine.abs_eq Mapping_inject lookup_join split: option.split)
-
 lemma upd_set_empty[simp]: "upd_set m f {} = m"
   by transfer auto
 
@@ -975,7 +968,7 @@ lemma filter_set_empty[simp]: "filter_set (t, {}) (m, Y) = (m, Y)"
 lemma filter_set_insert[simp]: "filter_set (t, Set.insert x A) (m, Y) = (let (m', Y') = filter_set (t, A) (m, Y) in
   case Mapping.lookup m' x of Some u \<Rightarrow> if t = u then (Mapping.delete x m', Y' \<union> {x}) else (m', Y') | _ \<Rightarrow> (m', Y'))"
   unfolding filter_set.simps
-  by transfer (auto simp: fun_eq_iff Let_def Map_To_Mapping.map_apply_def split: option.splits)
+  by transfer (auto simp: fun_eq_iff Let_def split: option.splits)
 
 lemma filter_set_fold:
   assumes "finite A"
@@ -985,7 +978,7 @@ proof -
   interpret comp_fun_idem "\<lambda>a (m, Y).
     case Mapping.lookup m a of Some u \<Rightarrow> if t = u then (Mapping.delete a m, Y \<union> {a}) else (m, Y) | _ \<Rightarrow> (m, Y)"
     by unfold_locales
-      (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+      (transfer; auto simp: fun_eq_iff split: option.splits)+
   from assms show ?thesis
     by (induct A arbitrary: m rule: finite.induct) (auto simp: Let_def)
 qed
@@ -993,18 +986,11 @@ qed
 lift_definition filter_cfi :: "'b \<Rightarrow> ('a, ('a, 'b) mapping \<times> 'a set) comp_fun_idem"
   is "\<lambda>t a (m, Y).
     case Mapping.lookup m a of Some u \<Rightarrow> if t = u then (Mapping.delete a m, Y \<union> {a}) else (m, Y) | _ \<Rightarrow> (m, Y)"
-  by unfold_locales (transfer; auto simp: fun_eq_iff Map_To_Mapping.map_apply_def split: option.splits)+
+  by unfold_locales (transfer; auto simp: fun_eq_iff split: option.splits)+
 
 lemma filter_set_code[code]:
   "filter_set (t, A) (m, Y) = (if finite A then set_fold_cfi (filter_cfi t) (m, Y) A else Code.abort (STR ''upd_set: infinite'') (\<lambda>_. filter_set (t, A) (m, Y)))"
   by (transfer fixing: m) (auto simp: filter_set_fold)
-
-lemma filter_Mapping[code]:
-  fixes t :: "('a :: ccompare, 'b) mapping_rbt" shows
-  "Mapping.filter P (RBT_Mapping t) = 
-  (case ID CCOMPARE('a) of None \<Rightarrow> Code.abort (STR ''filter RBT_Mapping: ccompare = None'') (\<lambda>_. Mapping.filter P (RBT_Mapping t))
-                     | Some _ \<Rightarrow> RBT_Mapping (RBT_Mapping2.filter (case_prod P) t))"
-  by (auto simp add: Mapping.filter.abs_eq Mapping_inject split: option.split)
 
 lemma mapping_delete_set_empty: "mapping_delete_set m {} = m"
   unfolding mapping_delete_set_def
@@ -1234,7 +1220,7 @@ declare insert_maggaux'.simps [code del]
 declare insert_maggaux'.simps [folded finite'_def, code]
 
 lemma [code_unfold]: "X - Mapping.keys tuple_in = Set.filter (\<lambda>k. Mapping.lookup tuple_in k = None) X"
-  by(transfer) (auto simp: Map_To_Mapping.map_apply_def) 
+  by(transfer) auto
 
 instantiation treelist :: (equal) equal begin
 lift_definition equal_treelist :: "'a treelist \<Rightarrow> 'a treelist \<Rightarrow> bool" is "(=)" .
@@ -1260,7 +1246,7 @@ lemma to_add_set_empty: "to_add_set a m {} = {}"
 
 lemma to_add_set_insert: "to_add_set a m (Set.insert x X) = to_add_set_fun a m x (to_add_set a m X) "
   unfolding to_add_set_def to_add_set_fun_def
-  by transfer (auto simp: Map_To_Mapping.map_apply_def)
+  by transfer auto
 
 lemma to_add_set_fold:
   assumes "finite tmp"
@@ -1395,7 +1381,7 @@ lemma update_mapping_with_alt: "update_mapping_with f k v m =
   (case Mapping.lookup m k of
       None \<Rightarrow> Mapping.update k v m
     | Some v' \<Rightarrow> Mapping.update k (f k v' v) m)"
-  by transfer (simp add: Map_To_Mapping.map_apply_def)
+  by transfer simp
 
 lift_definition mapping_rbt_insertwk :: "('a::ccompare \<Rightarrow> 'b \<Rightarrow> 'b \<Rightarrow> 'b) \<Rightarrow> 'a \<Rightarrow> 'b \<Rightarrow> ('a, 'b) mapping_rbt \<Rightarrow> ('a, 'b) mapping_rbt" is
   "rbt_comp_insert_with_key ccomp"

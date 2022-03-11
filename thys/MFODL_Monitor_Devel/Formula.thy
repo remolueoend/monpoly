@@ -871,7 +871,7 @@ qed auto
 
 subsection \<open>Well-formed formulas\<close>
 
-fun wf_formula :: "'a formula \<Rightarrow> bool" where
+fun wf_formula :: "'t formula \<Rightarrow> bool" where
 
   "wf_formula (Let p \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> wf_formula \<phi> \<and> wf_formula \<psi>)"
 | "wf_formula (LetPast p \<phi> \<psi>) = ({0..<nfv \<phi>} \<subseteq> fv \<phi> \<and> wf_formula \<phi> \<and> wf_formula \<psi>)"
@@ -1083,7 +1083,7 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
     qed (auto 0 3 simp: 16 elim!: disjE_Not2 intro: Until Not_Until) (*SLOW*)
   next
     case (17 I r)
-    have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> x
+    have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> :: "'t formula" and x
       by (auto split: formula.splits)
     {
       fix \<psi>
@@ -1103,7 +1103,7 @@ using assms(1) proof (induction "size \<phi>" arbitrary: \<phi> rule: nat_less_i
       by (auto simp: 17 intro!: MatchP)
   next
     case (18 I r)
-    have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> x
+    have case_Neg: "\<phi> \<in> (case x of Neg \<phi>' \<Rightarrow> {\<phi>'} | _ \<Rightarrow> {}) \<Longrightarrow> x = Neg \<phi>" for \<phi> :: "'t formula" and x
       by (auto split: formula.splits)
     {
       fix \<psi>
@@ -1657,7 +1657,7 @@ next
   by (smt (verit, del_insts) convert_multiway_remove_neg fv_convert_multiway fvi_remove_neg)
 next
   case (Neg \<phi>)
-  have "safe_formula (Neg \<phi>') \<longleftrightarrow> safe_formula \<phi>'" if "fv \<phi>' = {}" for \<phi>'
+  have "safe_formula (Neg \<phi>') \<longleftrightarrow> safe_formula \<phi>'" if "fv \<phi>' = {}" for \<phi>' :: "'t formula"
     using that by (cases "Neg \<phi>'" rule: safe_formula.cases) simp_all
   with Neg show ?case 
     by (simp add: \<open>\<And>\<phi>'. fv \<phi>' = {} \<Longrightarrow> safe_formula (Neg \<phi>') = safe_formula \<phi>'\<close> fv_convert_multiway)(*simp add: fv_convert_multiway*)
@@ -1781,7 +1781,7 @@ next
   have sat_remove_neg: "(sat \<sigma> V v i (remove_neg \<phi>) \<longleftrightarrow> sat \<sigma> V v i (remove_neg \<psi>)) \<longleftrightarrow>
         (sat \<sigma> V v i \<phi> \<longleftrightarrow> sat \<sigma> V v i \<psi>)" if "is_Neg \<phi> \<longleftrightarrow> is_Neg \<psi>" for V v i \<phi> \<psi>
     using that by (cases \<phi>; cases \<psi>) (auto simp add: is_Neg_def)
-  have is_Neg_cm: "is_Neg (convert_multiway \<phi>) \<longleftrightarrow> is_Neg \<phi>" for \<phi>
+  have is_Neg_cm: "is_Neg (convert_multiway \<phi>) \<longleftrightarrow> is_Neg \<phi>" for \<phi> :: "'t formula"
     by (cases \<phi>) auto
   from Ands show ?case
     by (fastforce simp: list.pred_set convert_multiway_remove_neg sat_remove_neg[OF is_Neg_cm])

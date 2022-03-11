@@ -4341,7 +4341,8 @@ fun check_wty_regex :: "(tysym Formula.formula \<Rightarrow> bool) \<Rightarrow>
 | "check_wty_regex check_wty_formula (Regex.Star r)  = check_wty_regex check_wty_formula r"
 
 
-lemma [fundef_cong]: "(\<And>\<phi>'. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check_wty_formula \<phi>' = check_wty_formula' \<phi>') \<Longrightarrow> check_wty_regex check_wty_formula r = check_wty_regex check_wty_formula' r"
+lemma check_wty_regex_cong[fundef_cong]:
+  "(\<And>\<phi>'. size \<phi>' \<le> regex.size_regex size r \<Longrightarrow> check_wty_formula \<phi>' = check_wty_formula' \<phi>') \<Longrightarrow> check_wty_regex check_wty_formula r = check_wty_regex check_wty_formula' r"
   by (induction check_wty_formula r  rule: check_wty_regex.induct) (auto split: option.splits) 
 
 fun check_wty_formula :: "tysym Formula.formula \<Rightarrow> bool"

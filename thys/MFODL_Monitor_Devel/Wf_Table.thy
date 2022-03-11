@@ -147,7 +147,7 @@ lemma wf_table_set_permute: "wf_table_set (wf_table_permute ns t) = permute ns `
 
 typedef 'a wf_idx = "{(n :: nat, A :: nat set, I :: nat set, T :: ('a option list, 'a option list set) mapping) |
   n A I T. I \<subseteq> A \<and> (\<forall>x Y. Mapping.lookup T x = Some Y \<longrightarrow> table n A Y \<and> Y \<noteq> {} \<and> (\<forall>z \<in> Y. x = restrict I z))}"
-  by (rule exI[of _ "(0, {}, {}, Mapping.empty)"]) (auto simp: table_def Mapping.lookup_empty)
+  by (rule exI[of _ "(0, {}, {}, Mapping.empty)"]) (auto simp: table_def)
 
 setup_lifting type_definition_wf_idx
 

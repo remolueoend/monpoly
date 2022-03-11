@@ -246,6 +246,7 @@ primrec tvars where
 primrec rr :: "nat \<Rightarrow> 'a rformula \<Rightarrow> nat set" where
   "rr b (RPred r ts) = (\<Union>t\<in>set ts. Formula.fvi_trm b t)"
 | "rr b (RLet p \<phi> \<psi>) = rr b \<psi>"
+| "rr b (RLetPast p \<phi> \<psi>) = rr b \<psi>"
 | "rr  b(REq t1 t2) = (case (t1,t2) of
                              (Formula.Var x,Formula.Const _) \<Rightarrow> {x-b}
                             |(Formula.Const _,Formula.Var x) \<Rightarrow> {x-b}
@@ -277,6 +278,8 @@ primrec rr :: "nat \<Rightarrow> 'a rformula \<Rightarrow> nat set" where
 | "rr b (RDiamondB I \<alpha>) = rr b \<alpha>"
 | "rr b (RSquareW I \<alpha>) = (if excl_zero I then {} else rr b \<alpha>)"
 | "rr b (RSquareB I \<alpha>) = (if excl_zero I then {} else rr b \<alpha>)"
+| "rr b (RTP t) = Formula.fvi_trm b t"
+| "rr b (RTS t) = Formula.fvi_trm b t"
 
 abbreviation fvi_r where
       "fvi_r b r \<equiv> Formula.fvi b (project r)"
@@ -1442,7 +1445,8 @@ lemma trans2_3: "f_conr2 P \<Longrightarrow> \<exists>P'. trans2 P P'"
 lemma rsub_2: "f_conr2 P \<Longrightarrow> (\<And>v i. rsat \<sigma> V v i a1 = rsat \<sigma> V v i b1) \<Longrightarrow> (\<And>v i. rsat \<sigma> V v i a2 = rsat \<sigma> V v i b2) \<Longrightarrow> rsat \<sigma> V v i (P a1 a2) = rsat \<sigma> V v i (P b1 b2)"
 proof -
   assume A: "f_conr2 P" "(\<And>v i. rsat \<sigma> V v i a1 = rsat \<sigma> V v i b1)" "(\<And>v i. rsat \<sigma> V v i a2 = rsat \<sigma> V v i b2)"
-  then obtain P2 where P2: "trans2 P P2" using trans2_3[OF A(1)] by auto
+  then obtain P2 :: "('t Formula.formula \<Rightarrow> 't Formula.formula \<Rightarrow> 't Formula.formula)"
+    where P2: "trans2 P P2" using trans2_3[OF A(1)] by auto
   moreover have L1: "f_con2 P2" using trans2_1[OF P2] by auto
   moreover have L2:"(\<And>v i. Formula.sat \<sigma> V v i (project a1) = Formula.sat \<sigma> V v i (project b1))" using A(2) by (simp add:rsat_def)
   moreover have L3:"(\<And>v i. Formula.sat \<sigma> V v i (project a2) = Formula.sat \<sigma> V v i (project b2))" using A(3) by (simp add:rsat_def)

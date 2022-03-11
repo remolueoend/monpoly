@@ -134,7 +134,7 @@ proof -
     unfolding Q_def Q_neg_def by (simp del: New_max.wrapperGenericJoin.simps)
   moreover have "card Q \<ge> 1"
     unfolding Q_def using assms(1,2)
-    by (auto simp: Suc_le_eq card_gt_0_iff zip_eq_Nil_iff)
+    by (auto simp: Suc_le_eq card_gt_0_iff)
   moreover have "\<forall>(A, X)\<in>(Q \<union> Q_neg). table n A X \<and> wf_set n A"
     unfolding Q_alt Q_neg_def using assms(2) by (simp add: zip_append1 list_all2_iff)
   ultimately have "z \<in> ?r \<longleftrightarrow> wf_tuple n (\<Union>(A, X)\<in>Q. A) z \<and>

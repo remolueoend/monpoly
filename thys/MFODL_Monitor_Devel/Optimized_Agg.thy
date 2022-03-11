@@ -2075,17 +2075,17 @@ proof -
     have elem_in: "drop b elem \<in> Mapping.keys m" using in_set valid valid_before b_def by auto
     then obtain l where lookup_def: "Mapping.lookup m (drop b elem) = Some l" "valid_list_aux l (group_multiset (drop b elem) b f X) type"
       using True del_def valid valid_before b_def by(auto simp: keys_is_none_rep split:option.splits list_aux.splits list.splits event_data.splits)
-    then have l_def: "valid_list_aux l (group_multiset (drop b elem) b f X) type" using finite_X length_flatten_multiset' by blast
     obtain i s where meval_def: "meval_trm f elem = EInt i \<or> meval_trm f elem = EString s" 
       using valid True del_def by(auto split:event_data.splits option.splits list_aux.splits list.splits)
+    note * = subst[where P="\<lambda>x. x \<in> _", OF _ meval_in_set[OF in_set refl finite_X, of f]]
     have new_map_def: "m' = (case (l, meval_trm f elem) of
                             (LString t', EString term') \<Rightarrow> if term' \<in> set_treelist t' then let l' = remove_treelist term' t' in if l' = empty_treelist then Mapping.delete (drop b elem) m else Mapping.update (drop b elem) (LString l') m
                                                            else Mapping.empty |
                             (LInt t', EInt term') \<Rightarrow> if term' \<in> set_treelist t' then let l' = remove_treelist term' t' in if l' = empty_treelist then Mapping.delete (drop b elem) m else Mapping.update (drop b elem) (LInt l') m
                                                      else Mapping.empty)"
       using del_def valid meval_def True b_def lookup_def
-      by(auto simp:lookup_def split:event_data.splits option.splits list_aux.splits list.splits type.splits) 
-         (metis finite_X in_mset_in_list_int in_mset_in_list_str in_set l_def meval_in_set)+
+        in_mset_in_list_int[OF * finite_X] in_mset_in_list_str[OF * finite_X]
+      by (auto simp:lookup_def split:event_data.splits option.splits list_aux.splits list.splits type.splits)
     have restr: "l \<in> range LInt \<longleftrightarrow> meval_trm f elem \<in> range EInt" 
       using True del_def valid lookup_def b_def by(auto split: list_aux.splits event_data.splits list.splits)
     have elem_in_treelist: "case (l, meval_trm f elem) of
@@ -2094,14 +2094,14 @@ proof -
     proof(cases l)
       case (LInt x1)
       then obtain i where i_def: "meval_trm f elem = EInt i" using restr by auto
-      have type_def: "type = IntT" using LInt by (smt (z3) l_def list_aux.case(1) type.exhaust type.simps(4) valid_list_aux_def)
+      have type_def: "type = IntT" using LInt by (smt (z3) lookup_def(2) list_aux.case(1) type.exhaust type.simps(4) valid_list_aux_def)
       have k_id: "drop b elem = drop b elem" by auto
       have in_s: "meval_trm f elem \<in> set (flatten_multiset (group_multiset (drop b elem) b f X))" using meval_in_set[OF in_set k_id finite_X, of f] by auto
       then show ?thesis using in_mset_in_list_int[OF in_s[unfolded i_def] finite_X lookup_def(2)[unfolded LInt type_def]]  LInt i_def by auto
     next
       case (LString x2)
       then obtain s where s_def: "meval_trm f elem = EString s" using restr meval_def by auto
-      have type_def: "type = StringT" using LString by (smt (z3) l_def list_aux.simps(6) type.exhaust type.simps(3) valid_list_aux_def)
+      have type_def: "type = StringT" using LString by (smt (z3) lookup_def(2) list_aux.simps(6) type.exhaust type.simps(3) valid_list_aux_def)
       have k_id: "drop b elem = drop b elem" by auto
       have in_s: "meval_trm f elem \<in> set (flatten_multiset (group_multiset (drop b elem) b f X))" using meval_in_set[OF in_set k_id finite_X, of f] by auto
       then show ?thesis using in_mset_in_list_str[OF in_s[unfolded s_def] finite_X lookup_def(2)[unfolded LString type_def]] LString s_def by auto
@@ -2120,7 +2120,7 @@ proof -
         then obtain k' where "k' \<in> X" "k' \<noteq> elem" "drop b k' = k" using assm by fastforce
         then have "card (Set.filter (\<lambda>x. drop b x = drop b elem) X) > 1" by (smt (verit, del_insts) DiffE Diff_cancel Set.member_filter True card_0_eq card_eq_Suc_0_ex1 finite_X finite_filter in_set)
         then have geq1: "get_length l > 1" using True length_flatten_multiset'[OF finite_X, of k b f] 
-          valid_list_aux_length_eq[OF l_def finite_X] by auto
+          valid_list_aux_length_eq[OF lookup_def(2) finite_X] by auto
         show ?thesis 
         proof(cases l)
           case (LInt x1)
@@ -2150,7 +2150,7 @@ proof -
         case True
         then have not_1: "get_length l \<noteq> 1" using assm new_map_def elem_in meval_def restr treelist_del1
           apply(auto simp:get_length_def split:list_aux.splits list.splits if_splits) by(blast) (simp add: treelist_del1)
-        then have "card (group k b X) \<noteq> 1" using True valid_list_aux_length_eq[OF l_def finite_X] length_flatten_multiset'[OF finite_X, of k b f] by(auto)
+        then have "card (group k b X) \<noteq> 1" using True valid_list_aux_length_eq[OF lookup_def(2) finite_X] length_flatten_multiset'[OF finite_X, of k b f] by(auto)
         moreover have "group k b X \<noteq> {}" using True assms by auto
         ultimately obtain k' where "k' \<in> group k b X" "k' \<noteq> elem" by (metis is_singletonI' is_singleton_altdef)
         then show ?thesis by auto
@@ -2186,9 +2186,9 @@ proof -
         then have k_def: "drop b elem = k" by auto
         have leq: "l = laux" using lookup_def(1) lookup_old k_def by auto
         then have "get_length l \<noteq> 1" using lookup_new[unfolded new_map_def] meval_def restr treelist_del1[of _ i] treelist_del1[of _ s]
-          by(auto simp:get_length_def Mapping.lookup_empty lookup_delete k_def split:list_aux.splits list.splits if_splits) 
+          by(auto simp:get_length_def lookup_delete k_def split:list_aux.splits list.splits if_splits) 
         moreover have "get_length l \<noteq> 0"using lookup_new[unfolded new_map_def] meval_def restr treelist_empty
-          apply(auto simp:get_length_def Mapping.lookup_empty lookup_delete k_def lookup_update split:list_aux.splits list.splits if_splits)
+          apply(auto simp:get_length_def lookup_delete k_def split:list_aux.splits list.splits if_splits)
           by(blast) (metis empty_iff neq0_conv treelist_empty)
         ultimately have geq1: "get_length l > 1" by auto
         have list_elem_restr: "\<forall>l. Mapping.lookup m k = Some (LInt l) \<longrightarrow> meval_trm f elem \<in> range EInt"

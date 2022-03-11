@@ -1423,14 +1423,15 @@ lemma letpast_meval_induct[case_names step]:
     "\<And>i ys xs p ts db \<phi>.
       (\<And>ys' \<phi>'.
           (ys', \<phi>') = meval j m ts (Mapping.update p xs db) \<phi> \<Longrightarrow>
-          size \<phi>' = size \<phi> \<Longrightarrow>
           ys' \<noteq> [] \<Longrightarrow>
           Suc (i + length xs) < j \<Longrightarrow>
           P (i + length xs) (ys @ ys') ys' p [] (Mapping.map_values (\<lambda>_ _. []) db) \<phi>') \<Longrightarrow>
       P i ys xs p ts db \<phi>"
   shows "P i ys xs p ts db \<phi>"
-  by (induction eval\<equiv>"meval j m" j\<equiv>j i ys xs p ts db \<phi> rule: letpast_meval0.induct)
-    (rule step, auto simp: neq_Nil_conv)
+  apply (induction eval\<equiv>"meval j m" j\<equiv>j i ys xs p ts db \<phi> rule: letpast_meval0.induct)
+  apply (rule step, auto simp: neq_Nil_conv)
+  apply (metis size_snd_meval snd_conv)
+  done
 
 end
 
@@ -1895,7 +1896,8 @@ lemma image_eqD: "f ` A = B \<Longrightarrow> \<forall>x\<in>A. f x \<in> B"
   by blast
 
 lemma safe_letpast_progress_upd':
-  "safe_letpast p \<phi> \<le> NonFutuRec \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
+  fixes \<phi> :: "'t Formula.formula"
+  shows "safe_letpast p \<phi> \<le> NonFutuRec \<Longrightarrow> pred_mapping (\<lambda>x. x \<le> j) P \<Longrightarrow> x \<le> j \<Longrightarrow>
   y = (if safe_letpast p \<phi> = NonFutuRec then x else min (Suc x) j) \<Longrightarrow>
   Monitor.progress \<sigma> (P(p \<mapsto> x)) \<phi> j \<ge> min y (Monitor.progress \<sigma> P \<phi> j)"
 proof (induction \<phi> arbitrary: P p x y)
@@ -2096,8 +2098,8 @@ next
 next
   case (Ands l)
   {
-    fix \<phi>
-    let ?y\<phi> = "if safe_letpast p (\<phi> :: 'a Formula.formula) = NonFutuRec then x else min (Suc x) j"
+    fix \<phi> :: "'t Formula.formula"
+    let ?y\<phi> = "if safe_letpast p \<phi> = NonFutuRec then x else min (Suc x) j"
     assume "\<phi> \<in> set l"
     then have "min ?y\<phi> (progress \<sigma> P \<phi> j) \<le> progress \<sigma> (P(p \<mapsto> x)) \<phi> j"
       using Ands.IH[of \<phi> p P x] Ands.prems
@@ -2170,8 +2172,8 @@ next
 next
   case (MatchP I r)
   {
-    fix \<phi>
-    let ?y\<phi> = "if safe_letpast p (\<phi> :: 'a Formula.formula) = NonFutuRec then x else min (Suc x) j"
+    fix \<phi> :: "'t Formula.formula"
+    let ?y\<phi> = "if safe_letpast p \<phi> = NonFutuRec then x else min (Suc x) j"
     assume "\<phi> \<in> regex.atms r"
     then have "min ?y\<phi> (progress \<sigma> P \<phi> j) \<le> progress \<sigma> (P(p \<mapsto> x)) \<phi> j"
       using MatchP.IH[of \<phi> p P x] MatchP.prems
@@ -2251,7 +2253,9 @@ lemma range_mapping_to_pred_mapping: "range_mapping a j P \<Longrightarrow> pred
 lemma letpast_progress_ignore_upd: "letpast_progress \<sigma> (P(p := x)) p \<phi> j = letpast_progress \<sigma> P p \<phi> j"
   by (simp add: letpast_progress_def)
 
-lemma progress_ge_gen: "Formula.future_bounded \<phi> \<Longrightarrow>
+lemma progress_ge_gen:
+  fixes \<phi> :: "'t Formula.formula"
+  shows "Formula.future_bounded \<phi> \<Longrightarrow>
    \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j"
 proof (induction \<phi> arbitrary: i S)
   case (Pred e ts)
@@ -2555,7 +2559,7 @@ next
         (auto split: if_splits simp: pred_mapping_alt regex.pred_set)
   next
     case False
-    define pick where "pick = (\<lambda>\<phi> :: 'a Formula.formula. SOME Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and>
+    define pick where "pick = (\<lambda>\<phi> :: 't Formula.formula. SOME Pj. dom (fst Pj) = S \<and> range_mapping i (snd Pj) (fst Pj) \<and>
        i \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj))"
     let ?pickP = "fst o pick" let ?pickj = "snd o pick"
     from MatchP have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> dom (?pickP \<phi>) = S \<and>
@@ -2591,7 +2595,7 @@ next
   next
     case False
     then obtain \<phi> where \<phi>: "\<phi> \<in> regex.atms r" by auto
-    define pick where "pick = (\<lambda>\<phi> :: 'a Formula.formula. SOME Pj. dom (fst Pj) = S \<and> range_mapping (Suc i') (snd Pj) (fst Pj) \<and>
+    define pick where "pick = (\<lambda>\<phi> :: 't Formula.formula. SOME Pj. dom (fst Pj) = S \<and> range_mapping (Suc i') (snd Pj) (fst Pj) \<and>
       Suc i' \<le> progress \<sigma> (fst Pj) \<phi> (snd Pj))"
     define pickP where "pickP = fst o pick" define pickj where "pickj = snd o pick"
     from MatchF have pick: "\<phi> \<in> regex.atms r \<Longrightarrow> dom (pickP \<phi>) = S \<and>
@@ -2693,6 +2697,7 @@ proof (induct rule: rtranclp_induct)
 qed auto
 
 lemma sat_prefix_conv_gen:
+  fixes \<phi> :: "ty Formula.formula"
   assumes "prefix_of \<pi> \<sigma>" and "prefix_of \<pi> \<sigma>'"
   shows "i < progress \<sigma> P \<phi> (plen \<pi>) \<Longrightarrow> dom V = dom V' \<Longrightarrow> dom P = dom V \<Longrightarrow>
     pred_mapping (\<lambda>x. x \<le> plen \<pi>) P \<Longrightarrow>
@@ -3911,8 +3916,8 @@ lemma (in maux) invar_recursion_post:
 lemma (in maux) letpast_meval_ys: "(ys', i', buf', \<phi>f) = letpast_meval m j i ys xs p ts db \<phi> \<Longrightarrow> \<exists> zs. ys' = ys@zs"
   apply (induction i ys xs p ts db \<phi> arbitrary: i' buf' ys' \<phi>f taking: m j rule: letpast_meval_induct)
   apply(subst(asm)(2) letpast_meval_code)
-  apply(auto simp add: Let_def split:prod.splits list.splits if_splits)
-  by (metis size_snd_meval snd_conv)
+  apply(fastforce simp add: Let_def split:prod.splits list.splits if_splits)
+  done
 
 subsubsection \<open>Initialisation\<close>
 
@@ -7206,7 +7211,6 @@ proof (induction i ys xs "(p, m)" ts db \<phi> arbitrary: p i' buf' ys' \<phi>f 
     show ?thesis
       apply (rule step.hyps[of "fst ysp" "snd ysp" P'])
                      apply (simp add: ysp_def)
-                    apply (simp add: ysp_def size_snd_meval)
       using cont apply simp
       using cont apply simp
       subgoal
@@ -7404,7 +7408,7 @@ proof -
     proof -
       have \<tau>_min:  "\<tau> \<sigma> (min (j + \<delta> - 1) k) = min (\<tau> \<sigma> (j + \<delta> - 1)) (\<tau> \<sigma> k)" for k
         by (simp add: min_of_mono monoI)
-      have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi>
+      have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi> :: "'t Formula.formula"
         using wf_envs_progress_le[OF wf_envs, of \<phi>] by auto
       let ?X = "{i. \<forall>k. k < j + \<delta> \<and> k \<le> min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
       let ?min = "min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))"
@@ -8225,7 +8229,7 @@ next
       proof -
         have \<tau>_min:  "\<tau> \<sigma> (min (j + \<delta> - 1) k) = min (\<tau> \<sigma> (j + \<delta> - 1)) (\<tau> \<sigma> k)" for k
           by (simp add: min_of_mono monoI)
-        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi>
+        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi> :: "'t Formula.formula"
           using wf_envs_progress_le[OF MUntil.prems(2), of \<phi>] by auto
         let ?X = "{i. \<forall>k. k < j + \<delta> \<and> k \<le> min (progress \<sigma> P' \<phi>''' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"
         let ?min = "min (j + \<delta> - 1) (min (progress \<sigma> P' \<phi>'' (j + \<delta>)) (progress \<sigma> P' \<psi>'' (j + \<delta>)))"
@@ -8460,7 +8464,7 @@ next
       proof -
         have \<tau>_min:  "\<tau> \<sigma> (min (j + \<delta> - 1) k) = min (\<tau> \<sigma> (j + \<delta> - 1) ) (\<tau> \<sigma> k)" for k
           by (simp add: min_of_mono monoI)
-        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi>
+        have le_progress_iff[simp]: "j + \<delta> \<le> progress \<sigma> P' \<phi> (j + \<delta>) \<longleftrightarrow> progress \<sigma> P' \<phi> (j + \<delta>) = (j + \<delta>)" for \<phi> :: "'t Formula.formula"
           using wf_envs_progress_le[OF MMatchF.prems(2), of \<phi>] by auto
         have min_Suc[simp]: "min j (j + \<delta>) = j" by auto
         let ?X = "{i. \<forall>k. k < j + \<delta> \<and> k \<le> progress_regex \<sigma> P' r (j + \<delta>) \<longrightarrow> memR I (\<tau> \<sigma> k - \<tau> \<sigma> i)}"

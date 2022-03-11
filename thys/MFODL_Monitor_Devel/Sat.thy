@@ -2,6 +2,28 @@ theory Sat
   imports Monitor
 begin
 
+lemma ex_prefix_of': "\<exists>\<sigma>. prefix_of (\<pi> :: ('a \<Rightarrow> 'b set) prefix) \<sigma> \<and> (\<forall>x. \<forall>i \<ge> plen \<pi>. \<Gamma> \<sigma> i x = {})"
+proof (transfer, intro bexI CollectI conjI)
+  fix p :: "(('a \<Rightarrow> 'b set) \<times> nat) list"
+  assume *: "sorted (map snd p)"
+  let ?\<sigma> = "p @- smap (Pair (\<lambda>_::'a. {} :: 'b set)) (fromN (snd (last p)))"
+  show "stake (length p) ?\<sigma> = p" by (simp add: stake_shift)
+  have le_last: "snd (p ! i) \<le> snd (last p)" if "i < length p" for i
+    using sorted_nth_mono[OF *, of i "length p - 1"] that
+    by (cases p) (auto simp: last_conv_nth nth_Cons')
+  with * show "ssorted (smap snd ?\<sigma>)"
+    by (force simp: ssorted_iff_mono sorted_iff_nth_mono shift_snth)
+  show "sincreasing (smap snd ?\<sigma>)"
+  proof (rule sincreasingI)
+    fix x
+    have "x < smap snd ?\<sigma> !! Suc (length p + x)"
+      by simp (metis Suc_pred add.commute diff_Suc_Suc length_greater_0_conv less_add_Suc1 less_diff_conv)
+    then show "\<exists>i. x < smap snd ?\<sigma> !! i" ..
+  qed
+  show "\<forall>x i. length p \<le> i \<longrightarrow> fst (?\<sigma> !! i) x = {}"
+    by auto
+qed
+
 lemma smap2_const[simp]: "smap2 (\<lambda>_. f) s t = smap f t"
   by (coinduction arbitrary: s t) auto
 
@@ -49,7 +71,7 @@ translations
 
 context begin
 
-fun preds :: "Formula.formula \<Rightarrow> (Formula.name \<times> nat) set" where
+fun preds :: "'t Formula.formula \<Rightarrow> (Formula.name \<times> nat) set" where
    "preds (Formula.Eq t1 t2) = {}"
 |  "preds (Formula.Less t1 t2) = {}"
 |  "preds (Formula.LessEq t1 t2) = {}"
@@ -62,8 +84,8 @@ fun preds :: "Formula.formula \<Rightarrow> (Formula.name \<times> nat) set" whe
 |  "preds (Formula.Or \<phi> \<psi>) = (preds \<phi> \<union> preds \<psi>)"
 |  "preds (Formula.And \<phi> \<psi>) = (preds \<phi> \<union> preds \<psi>)"
 |  "preds (Formula.Ands l) = (\<Union>\<phi>\<in>set l. preds \<phi>)"
-|  "preds (Formula.Exists \<phi>) = preds \<phi>"
-|  "preds (Formula.Agg y \<omega> b' f \<phi>) = preds \<phi>"
+|  "preds (Formula.Exists ty \<phi>) = preds \<phi>"
+|  "preds (Formula.Agg y \<omega> tys f \<phi>) = preds \<phi>"
 |  "preds (Formula.Prev I \<phi>) = preds \<phi>"
 |  "preds (Formula.Next I \<phi>) = preds \<phi>"
 |  "preds (Formula.Since \<phi> I \<psi>) = (preds \<phi> \<union> preds \<psi>)"
@@ -87,7 +109,7 @@ lemma subst_letpast_sat:
   "(\<And>X v j. j \<le> i \<Longrightarrow> f X j = g X j) \<Longrightarrow> letpast_sat f i = letpast_sat g i"
   by (induct f i rule: letpast_sat.induct) (subst (1 2) letpast_sat.simps, auto cong: if_cong)
 
-fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> Formula.formula \<Rightarrow> bool" where
+fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> ty Formula.formula \<Rightarrow> bool" where
   "sat \<sigma> v i (Formula.Pred r ts) = (map (Formula.eval_trm v) ts \<in> \<Gamma> \<sigma> i (r, length ts))"
 | "sat \<sigma> v i (Formula.Let p \<phi> \<psi>) =
     (let pn = (p, Formula.nfv \<phi>) in
@@ -102,10 +124,10 @@ fun sat :: "trace \<Rightarrow> Formula.env \<Rightarrow> nat \<Rightarrow> Form
 | "sat \<sigma> v i (Formula.Or \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<or> sat \<sigma> v i \<psi>)"
 | "sat \<sigma> v i (Formula.And \<phi> \<psi>) = (sat \<sigma> v i \<phi> \<and> sat \<sigma> v i \<psi>)"
 | "sat \<sigma> v i (Formula.Ands l) = (\<forall>\<phi> \<in> set l. sat \<sigma> v i \<phi>)"
-| "sat \<sigma> v i (Formula.Exists \<phi>) = (\<exists>z. sat \<sigma> (z # v) i \<phi>)"
-| "sat \<sigma> v i (Formula.Agg y \<omega> b f \<phi>) =
-    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = b \<and> sat \<sigma> (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
-    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<b}) \<and> v ! y = eval_agg_op \<omega> M)"
+| "sat \<sigma> v i (Formula.Exists ty \<phi>) = (\<exists>z. sat \<sigma> (z # v) i \<phi>)"
+| "sat \<sigma> v i (Formula.Agg y \<omega> tys f \<phi>) =
+    (let M = {(x, ecard Zs) | x Zs. Zs = {zs. length zs = length tys \<and> sat \<sigma> (zs @ v) i \<phi> \<and> Formula.eval_trm (zs @ v) f = x} \<and> Zs \<noteq> {}}
+    in (M = {} \<longrightarrow> fv \<phi> \<subseteq> {0..<length tys}) \<and> v ! y = eval_agg_op \<omega> M)"
 | "sat \<sigma> v i (Formula.Prev I \<phi>) = (case i of 0 \<Rightarrow> False | Suc j \<Rightarrow> mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> v j \<phi>)"
 | "sat \<sigma> v i (Formula.Next I \<phi>) = (mem I ((\<tau> \<sigma> (Suc i) - \<tau> \<sigma> i)) \<and> sat \<sigma> v (Suc i) \<phi>)"
 | "sat \<sigma> v i (Formula.Since \<phi> I \<psi>) = (\<exists>j\<le>i. mem I (\<tau> \<sigma> i - \<tau> \<sigma> j) \<and> sat \<sigma> v j \<psi> \<and> (\<forall>k \<in> {j <.. i}. sat \<sigma> v k \<phi>))"
@@ -242,14 +264,17 @@ lemmas sat_unconvert' = sat_unconvert[where A="{}" and X="preds \<phi>" and \<ph
 
 subsection \<open>Collected correctness results\<close>
 
-definition pprogress :: "Formula.formula \<Rightarrow> Sat.prefix \<Rightarrow> nat" where
+definition pprogress :: "'t Formula.formula \<Rightarrow> Sat.prefix \<Rightarrow> nat" where
   "pprogress \<phi> \<pi> = (THE n. \<forall>\<sigma>. prefix_of \<pi> \<sigma> \<longrightarrow> progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>) = n)"
 
 lemma pprogress_eq: "prefix_of \<pi> \<sigma> \<Longrightarrow> pprogress \<phi> \<pi> = progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>)"
   unfolding pprogress_def plen_punconvert[where A="preds \<phi>", symmetric]
   using progress_prefix_conv prefix_of_unconvert by blast
 
-sublocale future_bounded_mfodl \<subseteq> Sat: timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>"
+lemma wty_trace_restrict: "(\<And>i. f (\<Gamma> \<sigma> i) \<subseteq> (\<Gamma> \<sigma> i)) \<Longrightarrow> wty_trace SIG \<sigma> \<Longrightarrow> wty_trace SIG (map_\<Gamma> f \<sigma>)"
+  unfolding wty_envs_def by force
+
+sublocale future_bounded_mfodl \<subseteq> Sat: timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" "{\<sigma>. unconvert (preds \<phi>) \<sigma> \<in> traces}"
   "\<lambda>\<sigma> v i. sat \<sigma> v i \<phi>" "pprogress \<phi>"
 proof (unfold_locales, goal_cases)
   case (1 x)
@@ -259,7 +284,7 @@ next
   then show ?case
     unfolding sat_unconvert' by (auto intro!: sat_fv_cong)
 next
-  case (3 \<pi> \<pi>')
+  case (3 \<pi>' \<pi>)
   moreover obtain \<sigma> where "prefix_of \<pi>' \<sigma>"
     using ex_prefix_of ..
   moreover have "prefix_of \<pi> \<sigma>"
@@ -274,7 +299,7 @@ next
     by (simp add: pprogress_eq[of _ \<sigma>])
   then show ?case by force
 next
-  case (5 \<pi> \<sigma> \<sigma>' i v)
+  case (5 \<sigma> \<pi> \<sigma>' i v)
   then have "i < progress (unconvert (preds \<phi>) \<sigma>) Map.empty \<phi> (plen \<pi>)"
     by (simp add: pprogress_eq)
   with 5 show ?case
@@ -282,12 +307,12 @@ next
     by (intro sat_prefix_conv) (auto elim!: prefix_of_unconvert)
 next
   case (6 \<pi> \<pi>')
-  then have "plen \<pi> = plen \<pi>'"
+  from 6(3) have "plen \<pi> = plen \<pi>'"
     by transfer (simp add: list_eq_iff_nth_eq)
   moreover obtain \<sigma> \<sigma>' where "prefix_of \<pi> \<sigma>" "prefix_of \<pi>' \<sigma>'"
     using ex_prefix_of by blast+
   moreover have "\<forall>i < plen \<pi>. \<tau> \<sigma> i = \<tau> \<sigma>' i"
-    using 6 calculation
+    using 6(3) calculation
     by transfer (simp add: list_eq_iff_nth_eq)
   ultimately show ?case
     by (simp add: pprogress_eq Monitor.progress_time_conv[where j="plen (punconvert (preds \<phi>) _)", simplified])
@@ -299,11 +324,53 @@ begin
 lemma pprogress_punconvert: "Sat.pprogress \<phi> \<pi> = Monitor.pprogress \<phi> (punconvert (preds \<phi>) \<pi>)"
   by (metis Monitor.pprogress_eq Sat.pprogress_eq ex_prefix_of plen_punconvert prefix_of_unconvert)
 
+lemma unconvert_in_traces: "(\<And>i pn. pn \<in> A \<Longrightarrow> \<forall>v \<in> \<Gamma> \<sigma> i pn. length v = snd pn \<longrightarrow> wty_event SIG (fst pn) v) \<Longrightarrow> unconvert A \<sigma> \<in> traces"
+  unfolding convert_def unconvert_def traces_def wty_envs_def by auto
+
 lemma M_alt: "Sat.M \<pi> = M (punconvert (preds \<phi>) \<pi>)"
   unfolding Sat.M_def M_def
   unfolding pprogress_punconvert sat_unconvert'
   apply (auto simp: prefix_of_unconvert)
-  using ex_prefix_of prefix_of_unconvert progress_sat_cong apply blast
+  apply (use ex_prefix_of'[of \<pi>] in \<open>rule exE\<close>)
+  subgoal for i v \<sigma> \<tau>
+    apply (subgoal_tac "\<forall>i. i < plen \<pi> \<longrightarrow> \<Gamma> (unconvert (preds \<phi>) \<tau>) i = \<Gamma> \<sigma> i")
+     prefer 2
+    apply (erule thin_rl)
+    apply (erule thin_rl)
+    apply (erule thin_rl)
+     apply (erule thin_rl)
+     apply (drule conjunct1)
+     apply (unfold unconvert_def punconvert_def) []
+     apply transfer
+    apply (auto simp: list_eq_iff_nth_eq split: prod.splits) []
+  apply (drule spec)
+  apply (drule mp)
+  apply (rule unconvert_in_traces)
+  prefer 2
+   apply (drule mp)
+    apply (erule conjunct1)
+   apply (erule progress_sat_cong[THEN iffD1, rotated -1])
+         apply (auto simp: prefix_of_unconvert traces_def wty_envs_def)
+    subgoal for k p n
+      apply (cases "k < plen \<pi>")
+       apply (auto simp: not_less)
+      apply (auto simp: unconvert_def)
+      done
+    subgoal for k p n
+      apply (cases "k < plen \<pi>")
+       apply (auto simp: not_less)
+      apply (auto simp: unconvert_def)
+      apply (drule spec, drule mp, assumption)
+      apply (drule spec)
+      apply (drule bspec)
+       apply (erule set_mp[OF equalityD1])
+      apply (rule UN_I)
+        apply assumption
+       apply (unfold prod.case)
+       apply (rule imageI)
+      apply auto
+      done
+    done
   done
 
 lemma Mt_alt: "Sat.Mt \<pi> = Mt (punconvert (preds \<phi>) \<pi>)"
@@ -320,7 +387,7 @@ lemma punconvert_psnoc[simp]: "punconvert A (psnoc \<pi> tdb) = psnoc (punconver
   unfolding punconvert_def
   by transfer (auto simp: last_map split: list.splits prod.splits)
 
-definition monitor_invar where "monitor_invar \<equiv> \<lambda>\<phi> \<pi> R (st, P). wf_mstate \<phi> (punconvert P \<pi>) R st \<and> P = preds \<phi>"
+definition monitor_invar where "monitor_invar \<equiv> \<lambda>S E \<phi> \<pi> R (st, P). wf_mstate S E \<phi> (punconvert P \<pi>) R st \<and> P = preds \<phi>"
 definition monitor_init where "monitor_init \<equiv> \<lambda>\<phi>. (minit_safe \<phi>, preds \<phi>)"
 definition monitor_step where "monitor_step \<equiv> \<lambda>db t (st, P). apsnd (\<lambda>st. (st, P)) (mstep (apfst mk_db (to_db P db, t)) st)"
 
@@ -332,33 +399,34 @@ lemmas monitor_specification =
   Sat.complete_monitor
 
 theorem invar_minit_safe:
-  "mmonitorable \<phi> \<Longrightarrow> monitor_invar \<phi> pnil R (monitor_init \<phi>)"
+  "S, E \<turnstile> \<phi> \<Longrightarrow> mmonitorable \<phi> \<Longrightarrow> monitor_invar S E \<phi> pnil R (monitor_init \<phi>)"
   by (auto elim: wf_mstate_minit_safe simp: monitor_invar_def monitor_init_def)
 
 theorem invar_mstep:
-  assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t"
-  shows "monitor_invar \<phi> (psnoc \<pi> (db, t)) R (snd (monitor_step db t st))"
-  using assms wf_mstate_mstep[of \<phi> "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
+  assumes "monitor_invar S E \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "wty_db S (fst (to_db (snd st) db, t))"
+  shows "monitor_invar S E \<phi> (psnoc \<pi> (db, t)) R (snd (monitor_step db t st))"
+  using assms wf_mstate_mstep[of S E \<phi> "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
   by (auto simp: monitor_invar_def monitor_step_def)
 
 theorem mstep_mverdicts:
-  assumes "monitor_invar \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "mem_restr R v"
+  assumes "monitor_invar SIG ENV \<phi> \<pi> R st" "last_ts \<pi> \<le> t" "wty_db SIG (fst (to_db (snd st) db, t))" "mem_restr R v"
   shows "((i, t, v) \<in> flatten_verdicts (fst (monitor_step db t st))) =
          ((i, t, v) \<in> Sat.Mt (psnoc \<pi> (db, t)) - Sat.Mt \<pi>)"
   using assms mstep_mverdicts[of "punconvert (snd st) \<pi>" R "fst st" "(to_db (snd st) db, t)"]
-  by (auto simp: Mt_alt monitor_invar_def monitor_step_def)
+  by (auto simp: Mt_alt monitor_invar_def monitor_step_def wf_mstate_def)
 
 end
 
 context maux begin
 
-definition wf_envs where "wf_envs \<sigma> j \<delta> P P' db =
+definition wf_envs where "wf_envs S \<sigma> j \<delta> P P' db =
   (Mapping.keys db \<supseteq> dom P \<union> (\<Union>k \<in> {j ..< j + \<delta>}. {(p, n). \<exists>x. x \<in> \<Gamma> \<sigma> k (p, n) \<and> n = length x}) \<and>
    rel_mapping (\<le>) P P' \<and>
    pred_mapping (\<lambda>i. i \<le> j) P \<and>
    pred_mapping (\<lambda>i. i \<le> j + \<delta>) P' \<and>
    (\<forall>pn \<in> Mapping.keys db. the (Mapping.lookup db pn) = map (\<lambda>k. map Some ` {ts. ts \<in> \<Gamma> \<sigma> k pn \<and> length ts = snd pn})
-     (if pn \<in> dom P then [the (P pn)..<the (P' pn)] else [j ..< j + \<delta>])))"
+     (if pn \<in> dom P then [the (P pn)..<the (P' pn)] else [j ..< j + \<delta>])) \<and>
+   wty_envs S (unconvert UNIV \<sigma>) (unconvertV (dom P) \<sigma>))"
 
 definition invar_mformula where
   "invar_mformula \<sigma> j P n R \<phi> \<phi>' =
@@ -375,7 +443,7 @@ lemma in_\<Gamma>_unconvert[simp]:
   by (auto simp: unconvert_def)
 
 lemma meval:
-  assumes "invar_mformula \<sigma> j P n R \<phi> \<phi>'" "wf_envs \<sigma> j \<delta> P P' db"
+  assumes "invar_mformula \<sigma> j P n R \<phi> \<phi>'" "wf_envs S \<sigma> j \<delta> P P' db" "S, E \<turnstile> \<phi>'"
   shows "case meval (j + \<delta>) n (map (\<tau> \<sigma>) [j ..< j + \<delta>]) db \<phi> of (xs, \<phi>\<^sub>n) \<Rightarrow> invar_mformula \<sigma> (j + \<delta>) P' n R \<phi>\<^sub>n \<phi>' \<and>
     list_all2 (\<lambda>i. qtable n (Formula.fv \<phi>') (mem_restr R) (\<lambda>v. Sat.sat \<sigma> (map the v) i \<phi>'))
     [progress \<sigma> P \<phi>' j..<progress \<sigma> P' \<phi>' (j + \<delta>)] xs"
@@ -385,7 +453,7 @@ proof -
   from assms(1) have "wf_mformula (unconvert UNIV \<sigma>) j P (unconvertV (dom P) \<sigma>) n R \<phi> \<phi>'"
     unfolding invar_mformula_def by simp
   moreover
-  from assms(2) have "Monitor.wf_envs (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
+  from assms(2) have "Monitor.wf_envs S (unconvert UNIV \<sigma>) j \<delta> P P' (unconvertV (dom P) \<sigma>) db"
     unfolding wf_envs_def Monitor.wf_envs_def
     apply clarsimp
     apply safe
@@ -399,6 +467,7 @@ proof -
         elim!: list.rel_flip[THEN iffD1, OF list.rel_mono_strong])
     done
   ultimately show ?thesis
+    using assms(3)
     unfolding invar_mformula_def *
       sat_unconvert[where A = "dom P" and X = UNIV, simplified]
     by (subst (1 2) progress_unconvert[symmetric, where A = UNIV])
@@ -406,7 +475,7 @@ proof -
 qed
 
 corollary meval_Map_empty:
-  assumes "invar_mformula \<sigma> j Map.empty n R \<phi> \<phi>'"
+  assumes "invar_mformula \<sigma> j Map.empty n R \<phi> \<phi>'" "wty_trace S (unconvert UNIV \<sigma>)" "S, E \<turnstile> \<phi>'"
     "Mapping.keys db \<supseteq> (\<Union>k \<in> {j ..< j + \<delta>}. {(p, n). \<exists>x. x \<in> \<Gamma> \<sigma> k (p, n) \<and> n = length x})"
     "\<forall>pn \<in> Mapping.keys db. the (Mapping.lookup db pn)
       = map (\<lambda>k. map Some ` {ts. ts \<in> \<Gamma> \<sigma> k pn \<and> length ts = snd pn}) [j ..< j + \<delta>]"
@@ -494,7 +563,7 @@ next
         intro!: wf_mformula.intros elim!: list.rel_mono_strong dest!: arg_cong[where f=\<tau>])
 next
   case (Since P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I R' buf aux)
-  then have mr: "mem_restr (lift_envs' (agg_b args) R') = mem_restr R" by auto
+  then have mr: "mem_restr (lift_envs' (length (agg_tys args)) R') = mem_restr R" by auto
   obtain buf\<phi> buf\<psi> ts skew where "buf = (buf\<phi>, buf\<psi>, ts, skew)"
     by (cases buf)
   moreover have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
@@ -509,7 +578,7 @@ next
     apply (smt (z3)) by blast
 next
   case (Until P V n R \<phi> \<phi>' \<psi> \<psi>' args \<phi>'' I R' buf nts t aux)
-  then have mr: "mem_restr (lift_envs' (agg_b args) R') = mem_restr R" by auto
+  then have mr: "mem_restr (lift_envs' (length (agg_tys args)) R') = mem_restr R" by auto
   have "Formula.sat \<sigma> V v i \<phi>' = Formula.sat \<sigma>' V' v i \<phi>'"
     "Formula.sat \<sigma> V v i \<psi>' = Formula.sat \<sigma>' V' v i \<psi>'" for v i
     by (simp_all add: fun_eq_iff Until.prems sat_convert_cong[of \<sigma> _ \<sigma>'] convert_fun_upd del: fun_upd_apply)
@@ -561,12 +630,14 @@ lemma invar_mformula_Let:
   "invar_mformula \<sigma> j P m UNIV \<phi> \<phi>' \<Longrightarrow>
    invar_mformula (\<sigma>((p, m) \<Rrightarrow> \<lambda>j. {w. Sat.sat \<sigma> w j \<phi>' \<and> length w = m})) j (P((p, m) \<mapsto> Monitor.progress \<sigma> P \<phi>' j)) n
    R \<psi> \<psi>' \<Longrightarrow> {0..<m} \<subseteq> fv \<phi>' \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+   safe_formula \<phi>' \<Longrightarrow> safe_formula \<psi>' \<Longrightarrow>
    invar_mformula \<sigma> j P n R (MLet p m \<phi> \<psi>) (formula.Let p \<phi>' \<psi>')"
   unfolding invar_mformula_def
   apply (rule wf_mformula.Let; assumption?)
   apply (simp add: progress_unconvert)
   apply (erule wf_mformula_convert_cong_aux)
-  by (simp add: convert_unconvert_shadow flip: sat_unconvert)
+  apply (simp add: convert_unconvert_shadow flip: sat_unconvert)
+  done
 
 lemma invar_mformula_LetPast:
   "invar_mformula (\<sigma>((p, m) \<Rrightarrow> letpast_sat (\<lambda>R j. {w. Sat.sat (\<sigma>((p, m) \<Rrightarrow> R)) w j \<phi>' \<and> length w = m}))) j
@@ -580,6 +651,7 @@ lemma invar_mformula_LetPast:
           letpast_sat (\<lambda>R j. {w. Sat.sat (\<sigma>((p, m) \<Rrightarrow> R)) w j \<phi>' \<and> length w = m}) i) Z) \<Longrightarrow>
    safe_letpast (p, m) \<phi>' \<le> PastRec \<Longrightarrow>
    {0..<m} \<subseteq> Formula.fv \<phi>' \<Longrightarrow> m = Formula.nfv \<phi>' \<Longrightarrow>
+   safe_formula \<phi>' \<Longrightarrow> safe_formula \<psi>' \<Longrightarrow>
    invar_mformula \<sigma> j P n R (MLetPast p m \<phi> \<psi> i buf) (formula.LetPast p \<phi>' \<psi>')"
   unfolding invar_mformula_def
   apply (rule wf_mformula.LetPast; assumption?)
@@ -598,7 +670,8 @@ lemma invar_mformula_LetPast:
   apply (intro qtable_cong_strong refl)
   apply (simp add: letpast_sat_alt sat_unconvert_shadow del: fun_upd_apply)
   apply (subst sat_unconvert[symmetric], blast)
-  by (simp add: wf_tuple_def)
+  apply (simp add: wf_tuple_def)
+  done
 
 end
 
