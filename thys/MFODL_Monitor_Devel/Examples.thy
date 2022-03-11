@@ -13,10 +13,12 @@ abbreviation "p \<equiv> STR ''p''"
 abbreviation "A \<equiv> STR ''A''"
 abbreviation "B \<equiv> STR ''B''"
 
-definition "\<phi>\<^sub>e\<^sub>x = Formula.Let p (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0]))
+definition \<phi>\<^sub>e\<^sub>x :: "ty Formula.formula" where
+  "\<phi>\<^sub>e\<^sub>x = Formula.Let p (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0]))
   (Formula.Pred p [Formula.Var 0])"
 
-definition "\<phi>\<^sub>e\<^sub>x\<^sub>2 = Formula.Let p (Formula.And (Eventually (interval 0 10) (Formula.Pred B [Formula.Var 0])) (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0])))
+definition \<phi>\<^sub>e\<^sub>x\<^sub>2 :: "ty Formula.formula" where
+  "\<phi>\<^sub>e\<^sub>x\<^sub>2 = Formula.Let p (Formula.And (Eventually (interval 0 10) (Formula.Pred B [Formula.Var 0])) (Eventually (interval 0 10) (Formula.Pred A [Formula.Var 0])))
   (Formula.Pred p [Formula.Var 0])"
 
 lemma "mmonitorable \<phi>\<^sub>e\<^sub>x" by eval
