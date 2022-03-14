@@ -34,3 +34,4 @@ Temporal Logic (MFOTL) with aggregations.")
   (depends
     (libmonpoly (= version))
     (qcheck (>= 0.18))))
+(using menhir 2.1)
