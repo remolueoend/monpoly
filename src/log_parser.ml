@@ -154,7 +154,14 @@ let parse_signature_file fname =
   let ic = open_in fname in
   let lexbuf = Lexing.from_channel ic in
   Lexing.set_filename lexbuf fname;
-  parse_signature_pb (init_parsebuf lexbuf)
+  try
+    (* let sigs = Signature_parser.signatures Signature_lexer.token lexbuf in
+    let _ = Printf.printf "signatures:\n%s\n" (List.map Signature_ast.string_of_signature sigs |> String.concat "\n") in *)
+    parse_signature_pb (init_parsebuf lexbuf)
+  with
+  | Signature_parser.Error -> failwith @@ Printf.sprintf "Parse error at: %s"
+      (Range.string_of_range (Range.lex_range lexbuf))
+  (* parse_signature_pb (init_parsebuf lexbuf) *)
 
 (* Slicing specification *)
 
