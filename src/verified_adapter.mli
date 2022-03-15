@@ -4,7 +4,7 @@ open Relation
 open Helper
 
 val is_monitorable: Db.schema -> formula -> bool * (formula * string) option
-val convert_formula: Db.schema -> int -> formula -> Verified.Monitor.tysym Verified.Monitor.formula
+val convert_formula: Db.schema -> formula -> Verified.Monitor.tysym Verified.Monitor.formula
 
 type db
 val empty_db: db

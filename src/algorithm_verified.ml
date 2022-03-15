@@ -60,7 +60,7 @@ let monitor dbschema logfile fv f =
   let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
   assert (List.length fv_pos = List.length fv);
 
-  let cf = Verified_adapter.convert_formula dbschema (List.length fv) f in
+  let cf = Verified_adapter.convert_formula dbschema f in
   let tf = Verified_adapter.type_check_formula dbschema cf in
   match tf with
     Verified.Monitor.Inr cf ->
