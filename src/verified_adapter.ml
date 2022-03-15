@@ -144,11 +144,11 @@ and convert_re_vars fvl bvl lets = function
 let convert_tuple (pname, tl) sl =
   let pos = ref 0 in
   let type_error tname =
-    let msg = Printf.sprintf ("[convert_tuple] Expected type %s for \
+    let msg = Printf.sprintf ("[convert_tuple] Expected type %s for\
       \ predicate %s, field number %d") tname pname !pos in
     failwith msg
   in
-  List.map2
+  try List.map2
     (fun (_, t) s ->
       incr pos;
       Some (match t with
@@ -163,6 +163,11 @@ let convert_tuple (pname, tl) sl =
       )
     )
     tl sl
+  with Invalid_argument _ ->
+    let msg = Printf.sprintf "[convert_tuple] Wrong tuple length for\
+      \ predicate %s (expected: %d, actual: %d)"
+      pname (List.length tl) (List.length sl) in
+    failwith msg
 
 type db = ((string * nat), (((event_data option) list) set list)) mapping
 type tyssig = string * nat -> (tysym list) option
