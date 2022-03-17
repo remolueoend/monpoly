@@ -7,7 +7,7 @@ homepage: "https://infsec.ethz.ch/research/software/monpoly.html"
 bug-reports: "https://bitbucket.org/jshs/monpoly/issues"
 depends: [
   "ocaml" {>= "4.13"}
-  "dune" {>= "2.8" & >= "2.8"}
+  "dune" {>= "3.0" & >= "2.8"}
   "zarith" {>= "1.11"}
   "odoc" {with-doc}
 ]

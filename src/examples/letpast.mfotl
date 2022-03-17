@@ -1,0 +1,5 @@
+LETPAST tainted(r,h) =
+  (PREVIOUS tainted(r,h)) OR
+    (in(r,h) OR EXISTS h2. (PREVIOUS tainted(r,h2)) AND comm(h2,h))
+    AND EVENTUALLY[0,1] ids(h)
+IN tainted(r,h) AND out(h,r)

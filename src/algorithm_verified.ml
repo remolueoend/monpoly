@@ -55,7 +55,7 @@ end
 
 module P = Log_parser.Make (Monitor)
 
-let monitor dbschema logfile fv f =
+let monitor_gen parse dbschema logfile fv f =
   (* compute permutation for output tuples *)
   let fv_pos = List.map snd (Table.get_matches (MFOTL.free_vars f) fv) in
   assert (List.length fv_pos = List.length fv);
@@ -72,5 +72,8 @@ let monitor dbschema logfile fv f =
         cur_db = Verified_adapter.empty_db;
         cur_state = Verified_adapter.init cf;
       } in
-      ignore (P.parse_file dbschema logfile ctxt)
+      ignore (parse dbschema logfile ctxt)
   | Verified.Monitor.Inl e -> failwith ("Error during verified type checking: " ^ e)
+
+let monitor_string = monitor_gen (fun dbschema log -> P.parse dbschema (Lexing.from_string log))
+let monitor = monitor_gen P.parse_file

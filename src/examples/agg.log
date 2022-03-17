@@ -1,0 +1,5 @@
+@70  E(30,"gps") E(25,"wifi")
+@100 E(20,"gps")
+@170 E(20,"wifi") E(20,"bluetooth")
+@230 E(30,"wifi")
+@300 E(10,"wifi")
