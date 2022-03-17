@@ -36,7 +36,7 @@ let onload _ =
   let body = Js.Opt.get (d##(getElementById (Js.string "verimon_demo"))) (fun () -> assert false) in
 
   let title = Html.createH1 d in
-  
+
   let set_title () = if !verified then
     title##.innerHTML := Js.string "VeriMon <font size=3>Monitoring Metric First-Order Temporal Properties</font>"
   else
@@ -284,7 +284,6 @@ let onload _ =
       check_sig();
       Js._true);
 
-  
   negatebox##.onclick :=
     Dom_html.handler (fun _ ->
       negate := (Js.to_bool negatebox##.checked);

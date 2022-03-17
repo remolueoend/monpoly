@@ -1,3 +1,6 @@
+(ocamllex formula_lexer log_lexer)
+(ocamlyacc formula_parser)
+
 (library
   (name libmonpoly)
   (public_name libmonpoly)
@@ -11,9 +14,6 @@
   (libraries libmonpoly dune-build-info)
   (modules Main))
 
-(ocamllex formula_lexer log_lexer)
-(ocamlyacc formula_parser)
-  
 (executable
   (name main_js)
   (libraries libmonpoly lwt js_of_ocaml js_of_ocaml-lwt zarith_stubs_js)

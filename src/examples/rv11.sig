@@ -1,2 +1,2 @@
-publish(x:int)  
+publish(x:int)
 approve(x:int)
