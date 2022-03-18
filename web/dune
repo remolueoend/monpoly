@@ -1,0 +1,14 @@
+(executable
+  (name main_js)
+  (libraries libmonpoly lwt js_of_ocaml js_of_ocaml-lwt zarith_stubs_js)
+  (modes js)
+  (preprocess (pps js_of_ocaml-ppx))
+  (modules Main_js)
+  (link_deps (glob_files examples/*))
+  (js_of_ocaml (flags :standard -I . --file examples)))
+
+(rule (copy main_js.bc.js verimon.js))
+(rule
+  (target verimon_js.zip)
+  (deps index.html verimon.js verimon.css check.png tel.png)
+  (action (run zip %{target} %{deps})))

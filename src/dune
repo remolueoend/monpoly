@@ -5,7 +5,7 @@
   (name libmonpoly)
   (public_name libmonpoly)
   (libraries str unix zarith)
-  (modules (:standard \ Main Main_js)))
+  (modules (:standard \ Main)))
 
 (executable
   (name main)
@@ -13,12 +13,3 @@
   (package monpoly)
   (libraries libmonpoly dune-build-info)
   (modules Main))
-
-(executable
-  (name main_js)
-  (libraries libmonpoly lwt js_of_ocaml js_of_ocaml-lwt zarith_stubs_js)
-  (modes js)
-  (preprocess (pps js_of_ocaml-ppx))
-  (modules Main_js)
-  (link_deps (glob_files examples/*))
-  (js_of_ocaml (flags :standard -I . --file examples)))
