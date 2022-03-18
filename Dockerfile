@@ -1,4 +1,4 @@
-FROM ocaml/opam:alpine-3.14-ocaml-4.13-flambda AS build
+FROM ocaml/opam:alpine-3.15-ocaml-4.13-flambda AS build
 
 RUN sudo apk add --no-cache \
     gmp-dev \
@@ -13,7 +13,7 @@ RUN opam install -y --deps-only --ignore-constraints-on=libmonpoly . \
     && dune build --profile=release @install @runtest \
     && dune install --prefix=/home/opam/dist --relocatable monpoly monpoly-tools
 
-FROM alpine:3.14
+FROM alpine:3.15
 
 RUN apk add --no-cache gmp
 
