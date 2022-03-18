@@ -13,7 +13,7 @@ The standard dependencies of MonPoly (see the main README) are needed as well.
 ## Build instructions
 
 Run `dune build --profile=release` from this directory, or add the argument
-`web` if your current directoy is the project root.
+`web` if your current directory is the project root.
 
 This builds a ZIP archive `../_build/default/web/verimon_js.zip` which contains
 all files needed to run the web version. The archive's contents can be deployed
