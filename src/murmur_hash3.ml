@@ -44,14 +44,11 @@ let rotate_left i distance =
 (*
   OCAML Implementation of MurmurHash3 parts relevant for Hypercube slicing
 *)
-let multiply_hex v hex =
-  Int32.mul v (Int32.of_int hex)
-
 let mix_last hash k =
   (*Printf.printf "Mix last inputs: %d %d \n" (Int32.to_int hash) (Int32.to_int k);*)
-  let k = multiply_hex k 0xcc9e2d51 in
+  let k = Int32.mul k 0xcc9e2d51l in
   let k = rotate_left k 15 in
-  let k = multiply_hex k 0x1b873593 in
+  let k = Int32.mul k 0x1b873593l in
   let res = Int32.logxor hash k in
   (*Printf.printf "Mix last res: %d \n" (Int32.to_int res);*)
   res
@@ -60,7 +57,7 @@ let mix32 hash data =
   (*Printf.printf "Mix inputs: %d %d \n" (Int32.to_int hash) (Int32.to_int data);*)
   let h = mix_last hash data in
   let h = rotate_left h 13 in
-  let res = (Int32.add (Int32.mul h 5l) (Int32.of_int 0xe6546b64)) in
+  let res = (Int32.add (Int32.mul h 5l) 0xe6546b64l) in
   (*Printf.printf "Mix res: %d \n" (Int32.to_int res);*)
   res
 
@@ -69,9 +66,9 @@ let mix h d = mix32 (Int32.of_int h) (Int32.of_int d)
 let avalanche hash =
   (*Printf.printf "Avalanche input: %d \n" (Int32.to_int hash);*)
   let h = Int32.logxor hash (Int32.shift_right_logical hash 16) in
-  let h = multiply_hex h 0x85ebca6b in
+  let h = Int32.mul h 0x85ebca6bl in
   let h = Int32.logxor h (Int32.shift_right_logical h 13) in
-  let h = multiply_hex h 0xc2b2ae35 in
+  let h = Int32.mul h 0xc2b2ae35l in
   let h = Int32.logxor h (Int32.shift_right_logical h 16) in
   (*Printf.printf "Avalanche ouput: %d \n" (Int32.to_int h);*)
   h
