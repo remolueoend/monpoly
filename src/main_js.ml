@@ -208,10 +208,8 @@ let onload _ =
                 ()));
         Js._true) in
 
-  let reset_errs () =
-    sigframe##.title := Js.string "";
-    formulaframe##.title := Js.string "";
-    logframe##.title := Js.string "" in
+  let reset_errs frames =
+    List.iter (fun frame -> frame##.title := Js.string "") frames; in
 
   let check_log () =
     logframe##.style##.border := Js.string "2px green solid";
@@ -220,7 +218,7 @@ let onload _ =
     | Some (f, vs) ->
       try
         resframe##.value := Js.string "";
-        reset_errs ();
+        reset_errs [logframe];
         Sys_js.set_channel_flusher stderr (append_err logframe);
         logframe##.style##.backgroundImage := Js.string "none";
         let monitor = if !verified then Algorithm_verified.monitor_string else Algorithm.monitor_string in
@@ -232,46 +230,51 @@ let onload _ =
         else
           (warn logframe; show_res ())
       with e ->
-        error logframe; hide_res ()
+        (error logframe;
+        hide_res ())
   in
 
   let check_formula () =
-    (try
-       reset_errs ();
-       Sys_js.set_channel_flusher stderr (append_err formulaframe);
-       let maybe_neg f = if !negate then MFOTL.Neg f else f in
-       let f = maybe_neg (Formula_parser.formula Formula_lexer.token
-                      (Lexing.from_string (Js.to_string (formulaframe##.value)))) in
-       let is_mon, pf, vartypes = Rewriting.check_formula !sign f in
-       if is_mon then
-         (formula := Some (pf, List.map fst vartypes);
-          check_log ();
-          ok formulaframe)
-       else
-         (formula := None;
-          warn formulaframe;
-          deactivate logframe;
-          hide_res ();
-          formulaframe##.style##.backgroundImage := Js.string "url(\"tel.png\")")
-     with e ->
-       (formula := None;
-        error formulaframe;
+    try
+      reset_errs [formulaframe; logframe];
+      Sys_js.set_channel_flusher stderr (append_err formulaframe);
+      let maybe_neg f = if !negate then MFOTL.Neg f else f in
+      let f = maybe_neg (Formula_parser.formula Formula_lexer.token
+        (Lexing.from_string (Js.to_string (formulaframe##.value)))) in
+      Misc.checkf := true;
+      let is_mon, pf, vartypes = Rewriting.check_formula !sign f in
+      Misc.checkf := false;
+      if is_mon then
+        (formula := Some (pf, List.map fst vartypes);
+        check_log ();
+        ok formulaframe)
+      else
+        (formula := None;
+        warn formulaframe;
         deactivate logframe;
-        hide_res ())) in
+        hide_res ();
+        formulaframe##.style##.backgroundImage := Js.string "url(\"tel.png\")")
+    with e ->
+      (prerr_endline (Printexc.to_string e);
+      formula := None;
+      error formulaframe;
+      deactivate logframe;
+      hide_res ()) in
 
   let check_sig () =
-    (try
-       reset_errs ();
-       Sys_js.set_channel_flusher stderr (append_err sigframe);
-       sign := Log_parser.parse_signature (Js.to_string (sigframe##.value));
-       ok sigframe;
-       check_formula ()
-     with e ->
-       sign := [];
-       error sigframe;
-       deactivate formulaframe;
-       deactivate logframe;
-       hide_res ()) in
+    try
+      reset_errs [sigframe; formulaframe; logframe];
+      Sys_js.set_channel_flusher stderr (append_err sigframe);
+      sign := Log_parser.parse_signature (Js.to_string (sigframe##.value));
+      ok sigframe;
+      check_formula ()
+    with e ->
+      (prerr_endline (Printexc.to_string e);
+      sign := [];
+      error sigframe;
+      deactivate formulaframe;
+      deactivate logframe;
+      hide_res ()) in
 
   register sigin sigframe check_sig;
   register formulain formulaframe check_formula;
