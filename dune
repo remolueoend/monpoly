@@ -1,6 +1,12 @@
+(alias
+  (name default)
+  (deps (package monpoly) (package monpoly-tools)))
+
 (env
   (dev
-    (flags :standard -warn-error -A -w -27-32..39))
+    (flags :standard -warn-error -A -w -27-32..39)
+    (js_of_ocaml (flags --pretty --no-inline --debug-info --source-map)))
   (release
     (flags :standard -warn-error -A -w -27-32..39)
-    (ocamlopt_flags (:standard -O3))))
+    (ocamlopt_flags (:standard -O3))
+    (js_of_ocaml (flags --opt 3))))

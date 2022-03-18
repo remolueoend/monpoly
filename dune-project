@@ -15,7 +15,6 @@
   (synopsis "Library for the MonPoly and VeriMon monitoring tools")
   (depends
     (ocaml (>= 4.13))
-    (dune (>= 2.8))
     (zarith (>= 1.11))))
 
 (package

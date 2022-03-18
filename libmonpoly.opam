@@ -6,8 +6,8 @@ license: "LGPL-2.1-only WITH OCaml-LGPL-linking-exception"
 homepage: "https://infsec.ethz.ch/research/software/monpoly.html"
 bug-reports: "https://bitbucket.org/jshs/monpoly/issues"
 depends: [
+  "dune" {>= "3.0"}
   "ocaml" {>= "4.13"}
-  "dune" {>= "3.0" & >= "2.8"}
   "zarith" {>= "1.11"}
   "odoc" {with-doc}
 ]

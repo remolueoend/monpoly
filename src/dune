@@ -17,8 +17,8 @@
 (executable
   (name main_js)
   (libraries libmonpoly lwt js_of_ocaml js_of_ocaml-lwt zarith_stubs_js)
-  (link_deps (glob_files examples/*))
   (modes js)
   (preprocess (pps js_of_ocaml-ppx))
   (modules Main_js)
-  (js_of_ocaml (flags :standard -I ./ --file examples)))
+  (link_deps (glob_files examples/*))
+  (js_of_ocaml (flags :standard -I . --file examples)))
