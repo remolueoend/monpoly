@@ -9,7 +9,7 @@ exception UnknownType of string
 (** represents a token with a location (for better error reporting) *)
 type 'a node = {elt: 'a; loc: Range.t}
 
-let dum_node (elt : 'a) : 'a node = {elt; loc= ("", (0, 0), (0, 0))}
+let no_node (elt : 'a) : 'a node = {elt; loc= ("", (0, 0), (0, 0))}
 
 type native_ty = TBool | TFloat | TInt | TString
 
@@ -70,8 +70,7 @@ module SignTable = struct
                  | `Float _, Native TFloat -> true
                  | `String _, Native TString -> true
                  | `Assoc fs, Complex ctor ->
-                     match_json (`Assoc fs) signs
-                       (find_record_decl signs ctor)
+                     match_json (`Assoc fs) signs (find_record_decl signs ctor)
                  | _ -> false )
     | _ -> false
 
@@ -121,21 +120,24 @@ let typecheck (signatures : signatures) : unit =
     | Predicate {elt= name, _; loc} -> reg name loc
     | Record {elt= name, _; loc} -> reg name loc in
   let type_set = List.fold_left reg_type TypeSet.empty signatures in
+  (* make sure all complex type references are valid *)
+  let typecheck_ty (loc : Range.t) = function
+    | Native _ -> ()
+    | Complex ctor ->
+        if TypeSet.mem ctor type_set = false then
+          raise
+            (UnknownType
+               (Printf.sprintf "Unknown type %s at %s" ctor
+                  (string_of_range loc) ) ) in
   (* iterate over all fields of record types and lookup their complex types:  *)
-  signatures
-  |> List.iter (function
-       | Predicate _ -> ()
-       | Record {elt= name, fields; _} ->
-           fields
-           |> List.iter (fun {elt= {fname; ftyp}; loc} ->
-                  match ftyp with
-                  | Native _ -> ()
-                  | Complex ctor ->
-                      if TypeSet.mem ctor type_set = false then
-                        raise
-                          (UnknownType
-                             (Printf.sprintf "Unknown type %s at %s" ctor
-                                (string_of_range loc) ) ) ) )
+  let typecheck_record_decl ((_, fields) : record_decl) : unit =
+    List.iter (fun {elt= {ftyp; _}; loc} -> typecheck_ty loc ftyp) fields in
+  (* iterate over all signature declarations and check them separately *)
+  List.iter
+    (function
+      | Predicate _ -> ()
+      | Record {elt= name, fields; _} -> typecheck_record_decl (name, fields) )
+    signatures
 
 (* **** STRING_OF FUNCTIONS FOR AST OBJECTS **** *)
 let rec string_of_ty ty =
@@ -181,7 +183,7 @@ let%test_module "typecheck tests" =
 
     let%test_unit "typecheck throws on duplicated types" =
       let decls =
-        [ Record (dum_node ("SomeType", []))
+        [ Record (no_node ("SomeType", []))
         ; Record
             { elt= ("SomeType", [])
             ; loc= mk_range "f.sig" (mk_pos 1 1) (mk_pos 1 10) } ] in
@@ -194,20 +196,20 @@ let%test_module "typecheck tests" =
     let%test_unit "typecheck can resolve type references" =
       let decls =
         [ Record
-            (dum_node
+            (no_node
                ( "SomeType"
-               , [dum_node {fname= "f1"; ftyp= Complex "AnotherType"}] ) )
-        ; Record (dum_node ("AnotherType", [])) ] in
+               , [no_node {fname= "f1"; ftyp= Complex "AnotherType"}] ) )
+        ; Record (no_node ("AnotherType", [])) ] in
       typecheck decls
 
     let%test_unit "throws if unknown type reference is detected" =
       let decls =
         [ Record
-            (dum_node
+            (no_node
                ( "SomeType"
                , [ { elt= {fname= "f1"; ftyp= Complex "TypeA"}
                    ; loc= ("f.sig", mk_pos 2 42, mk_pos 2 45) } ] ) )
-        ; Record (dum_node ("AnotherType", [])) ] in
+        ; Record (no_node ("AnotherType", [])) ] in
       try
         typecheck decls ;
         raise (AssertException "Test did not throw")
