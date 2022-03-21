@@ -9,7 +9,7 @@
  * newline          = '\n' | '\r' | '\r\n'
  * whitespace       = ' ' | '\t'
  * char             = { letter | digit }
- * ident            = letter , { char }
+ * ident            = letter , { char | '_' }
  *
  * native_ty        = 'int' | 'float' | 'string' | 'bool'
  * ty               = native_ty | ident
