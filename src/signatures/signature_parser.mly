@@ -57,11 +57,11 @@ decl:
 
 (* declaration of single record field: field1: type *)
 rec_field:
-  | id=IDENT COL t=ty { { fname=id; ftyp=t } }
+  | id=IDENT COL t=ty { (loc $startpos $endpos { fname=id; ftyp=t }) }
   
 pred_arg:
-  | id=IDENT COL t=native_ty { { aname=id; atyp=t } }
-  | t=native_ty { { aname=""; atyp=t } }
+  | id=IDENT COL t=native_ty { (loc $startpos $endpos { aname=id; atyp=t }) }
+  | t=native_ty { (loc $startpos $endpos { aname=""; atyp=t }) }
 
 ty:
   | t=native_ty { Native t }
