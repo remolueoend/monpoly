@@ -28,7 +28,12 @@
 %{
 open Signature_ast
 
+(** returns a fresh record type declaration with its fields sorted alphanumerically. *)
+let sort_rec_decl ((name, fields) : record_decl) : record_decl =
+  (name, List.sort (fun a b -> compare a.elt.fname b.elt.fname) fields)
+  
 %}
+
 
 %token EOF
 %token <string> IDENT
@@ -53,7 +58,7 @@ decl:
     { Predicate (loc $startpos $endpos (name, args)) }
   (* declaration of a record type: TypeName { field1: type1, field2: type2, ..., fieldN: typeN } *)
   | name=IDENT LCB fs=separated_list(COM, rec_field) RCB
-    { Record (loc $startpos $endpos (name, fs) ) }
+    { Record (loc $startpos $endpos (sort_rec_decl (name, fs)) ) }
 
 (* declaration of single record field: field1: type *)
 rec_field:
