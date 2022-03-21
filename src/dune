@@ -7,6 +7,8 @@
   (name libmonpoly)
   (public_name libmonpoly)
   (libraries str unix zarith)
+  (inline_tests)
+  (preprocess (pps ppx_inline_test))
   (modules (:standard \ Main)))
 
 (executable
