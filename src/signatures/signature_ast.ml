@@ -2,9 +2,8 @@ open Range
 
 (** is raised if the same type is declared multiple times. Contains the name of the type. *)
 exception DuplicateType of string
-(** Gets raised if a reference to an unknown type was found.
-    Contains the location (Ctor and field name) of the reference and the name of the unknown type. *)
-exception UnknownType of string * string * string
+(** Gets raised if a reference to an unknown type was found. *)
+exception UnknownType of string
 
 (** represents a token with a location (for better error reporting) *)
 type 'a node = { elt : 'a; loc : Range.t }
@@ -22,9 +21,9 @@ type ty =
 | Complex of string
 
 type record_field = { fname : string; ftyp : ty }
-type record_decl = string * record_field list
+type record_decl = string * record_field node list
 type pred_arg = {aname: string; atyp: native_ty}
-type pred_decl = string * pred_arg list
+type pred_decl = string * pred_arg node list
 
 (** represents a top level declaration in a signature.
     Either a predicate (e.g. q(int, string)) or a complex type. *)
@@ -41,25 +40,28 @@ let loc (startpos:Lexing.position) (endpos:Lexing.position) (elt:'a) : 'a node =
 
 
 module TypeSet = Set.Make(String)
+
 (** Typechecks a list of signature declarations. It makes sure that:
     1. No type is declared twice 
     2. All references to complex types are valid *)
 let typecheck (signatures: signatures) : unit =
   (* collect the constructor names of all declared complex types: *)
-  let reg_type decl set =
-    let reg name = if TypeSet.mem name set then raise (DuplicateType name) else TypeSet.add name set in
+  let reg_type set decl =
+    let reg name loc = if TypeSet.mem name set
+      then raise (DuplicateType (Printf.sprintf "Duplicated type %s at %s" name (string_of_range loc)))
+      else TypeSet.add name set in
     match decl with
-    | Predicate {elt=(name, _); _} -> reg name
-    | Record {elt=(name, _); _} -> reg name
+    | Predicate {elt=(name, _); loc} -> reg name loc
+    | Record {elt=(name, _); loc} -> reg name loc
   in
-  let type_set = List.fold_right reg_type signatures TypeSet.empty in
+  let type_set = List.fold_left reg_type TypeSet.empty signatures in
   (* iterate over all fields of record types and lookup their complex types:  *)
   signatures |> List.iter (function 
   | Predicate _ -> ()
-  | Record {elt=(name, fields); _} -> fields |> List.iter (fun {fname; ftyp} ->
+  | Record {elt=(name, fields); _} -> fields |> List.iter (fun {elt={fname; ftyp}; loc} ->
     match ftyp with
     | Native _ -> ()
-    | Complex ctor -> if TypeSet.mem ctor type_set = false then raise (UnknownType (name, fname, ctor))
+    | Complex ctor -> if TypeSet.mem ctor type_set = false then raise (UnknownType (Printf.sprintf "Unknown type %s at %s" ctor (string_of_range loc)))
     )
   )
 
@@ -76,12 +78,12 @@ let rec string_of_ty ty =
     | TString -> "TString"
   
 let string_of_record ((id, fields): record_decl) =
-  let field_to_str ({fname; ftyp}) = Printf.sprintf "%s: %s" fname (string_of_ty ftyp) in
+  let field_to_str {elt={fname; ftyp};_} = Printf.sprintf "%s: %s" fname (string_of_ty ftyp) in
   let fields_to_str = List.map field_to_str fields |> String.concat ", " in
   Printf.sprintf "%s = {%s}" id fields_to_str
   
 let string_of_predicate ((id, args): pred_decl) =
-  let arg_to_str ({aname; atyp}) =
+  let arg_to_str {elt={aname; atyp}; _} =
     let ty_str = string_of_ty (Native atyp) in
     if String.length aname = 0 then Printf.sprintf "%s" ty_str else Printf.sprintf "%s: %s" aname ty_str
   in
@@ -95,27 +97,35 @@ let string_of_signature signature =
   
   
 (* **** INLINE TESTS **** *)
-let%test "typecheck throws on duplicated types" =
-  let decls = [
-    Record ( dum_node ("DuplicatedType", []));
-    Record ( dum_node ("DuplicatedType", []))
-  ] in
-  try typecheck decls; false
-  with DuplicateType ctor -> String.compare ctor "DuplicatedType" = 0
+let%test_module "typecheck tests" = (module struct
 
-let%test_unit "typecheck can resolve type references" =
-  let decls = [
-    Record ( dum_node ("SomeType", [{fname="f1"; ftyp=Complex "AnotherType"}]));
-    Record ( dum_node ("AnotherType", []))
-  ] in
-  typecheck decls
+  exception AssertException of string
 
-let%test "throws if unknown type reference is detected" =
-  let decls = [
-    Record ( dum_node ("SomeType", [{fname="f1"; ftyp=Complex "UnknownType"}]));
-    Record ( dum_node ("AnotherType", []))
-  ] in
-  try typecheck decls; false
-  with UnknownType (p, f, ctor) -> compare p "SomeType" = 0 && 
-                                   compare f "f1" = 0 &&
-                                   compare ctor "UnknownType" = 0
+  let assert_str (actual: string) (expected : string) : unit =
+    if compare actual expected = 0
+      then ()
+      else raise (AssertException (Printf.sprintf "Expected: %s\nActual: %s" expected actual))
+
+  let%test_unit "typecheck throws on duplicated types" =
+    let decls = [
+      Record ( dum_node ("SomeType", []));
+      Record ( {elt=("SomeType", []); loc=mk_range "f.sig" (mk_pos 1 1) (mk_pos 1 10) });
+    ] in
+    try typecheck decls; raise (AssertException "Test did not throw")
+    with DuplicateType msg -> assert_str msg "Duplicated type SomeType at f.sig:[1.1-1.10]"
+
+  let%test_unit "typecheck can resolve type references" =
+    let decls = [
+      Record ( dum_node ("SomeType", [dum_node {fname="f1"; ftyp=Complex "AnotherType"}]));
+      Record ( dum_node ("AnotherType", []))
+    ] in
+    typecheck decls
+
+  let%test_unit "throws if unknown type reference is detected" =
+    let decls = [
+      Record ( dum_node ("SomeType", [{elt={fname="f1"; ftyp=Complex "TypeA"}; loc=("f.sig", mk_pos 2 42, mk_pos 2 45)}]));
+      Record ( dum_node ("AnotherType", []))
+    ] in
+    try typecheck decls; raise (AssertException "Test did not throw")
+    with UnknownType msg -> assert_str msg "Unknown type TypeA at f.sig:[2.42-2.45]"
+end)
