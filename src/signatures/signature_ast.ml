@@ -1,5 +1,11 @@
 open Range
 
+(** is raised if the same type is declared multiple times. Contains the name of the type. *)
+exception DuplicateType of string
+(** Gets raised if a reference to an unknown type was found.
+    Contains the location (Ctor and field name) of the reference and the name of the unknown type. *)
+exception UnknownType of string * string * string
+
 (** represents a token with a location (for better error reporting) *)
 type 'a node = { elt : 'a; loc : Range.t }
 
@@ -31,6 +37,31 @@ type signatures = decl list
 (** returns a new node for the givne start- & end position, wrapping the given element. *)
 let loc (startpos:Lexing.position) (endpos:Lexing.position) (elt:'a) : 'a node =
   { elt ; loc=Range.mk_lex_range startpos endpos }
+
+
+module TypeSet = Set.Make(String)
+(** Typechecks a list of signature declarations. It makes sure that:
+    1. No type is declared twice 
+    2. All references to complex types are valid *)
+let typecheck (signatures: signatures) : unit =
+  (* collect the constructor names of all declared complex types: *)
+  let reg_type decl set =
+    let reg name = if TypeSet.mem name set then raise (DuplicateType name) else TypeSet.add name set in
+    match decl with
+    | Predicate {elt=(name, _); _} -> reg name
+    | Record {elt=(name, _); _} -> reg name
+  in
+  let type_set = List.fold_right reg_type signatures TypeSet.empty in
+  (* iterate over all fields of record types and lookup their complex types:  *)
+  signatures |> List.iter (function 
+  | Predicate _ -> ()
+  | Record {elt=(name, fields); _} -> fields |> List.iter (fun {fname; ftyp} ->
+    match ftyp with
+    | Native _ -> ()
+    | Complex ctor -> if TypeSet.mem ctor type_set = false then raise (UnknownType (name, fname, ctor))
+    )
+  )
+
   
 (** functions for stringifying AST types *)
 let rec string_of_ty ty =

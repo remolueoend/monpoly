@@ -56,9 +56,9 @@ let whitespace = ['\t' ' ']
 rule
   token = parse
   | eof { EOF }
-  | letter (digit | letter | '_')* { create_token lexbuf }
   | whitespace+                    { token lexbuf }
   | newline                        { newline lexbuf; token lexbuf }
   | "(" | ")" | "{" | "}"
   | "," | ";" | ":"                { create_token lexbuf }
+  | letter (digit | letter | '_')* { create_token lexbuf }
   | _ as c                         { unexpected_char lexbuf c }
