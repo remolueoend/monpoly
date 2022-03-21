@@ -6,7 +6,7 @@
 (library
   (name libmonpoly)
   (public_name libmonpoly)
-  (libraries str unix zarith)
+  (libraries str unix zarith yojson)
   (inline_tests)
   (preprocess (pps ppx_inline_test))
   (modules (:standard \ Main)))
