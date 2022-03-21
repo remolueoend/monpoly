@@ -8,6 +8,7 @@ exception UnknownType of string * string * string
 
 (** represents a token with a location (for better error reporting) *)
 type 'a node = { elt : 'a; loc : Range.t }
+let dum_node (elt : 'a) : 'a node = {elt=elt; loc=("", (0, 0), (0, 0))}
 
 type native_ty =
 | TBool
@@ -63,7 +64,7 @@ let typecheck (signatures: signatures) : unit =
   )
 
   
-(** functions for stringifying AST types *)
+(* **** STRING_OF FUNCTIONS FOR AST OBJECTS **** *)
 let rec string_of_ty ty =
   match ty with
   | Complex cty -> cty
@@ -91,3 +92,30 @@ let string_of_signature signature =
   match signature with
   | Predicate n -> string_of_predicate n.elt
   | Record n -> string_of_record n.elt
+  
+  
+(* **** INLINE TESTS **** *)
+let%test "typecheck throws on duplicated types" =
+  let decls = [
+    Record ( dum_node ("DuplicatedType", []));
+    Record ( dum_node ("DuplicatedType", []))
+  ] in
+  try typecheck decls; false
+  with DuplicateType ctor -> String.compare ctor "DuplicatedType" = 0
+
+let%test_unit "typecheck can resolve type references" =
+  let decls = [
+    Record ( dum_node ("SomeType", [{fname="f1"; ftyp=Complex "AnotherType"}]));
+    Record ( dum_node ("AnotherType", []))
+  ] in
+  typecheck decls
+
+let%test "throws if unknown type reference is detected" =
+  let decls = [
+    Record ( dum_node ("SomeType", [{fname="f1"; ftyp=Complex "UnknownType"}]));
+    Record ( dum_node ("AnotherType", []))
+  ] in
+  try typecheck decls; false
+  with UnknownType (p, f, ctor) -> compare p "SomeType" = 0 && 
+                                   compare f "f1" = 0 &&
+                                   compare ctor "UnknownType" = 0
