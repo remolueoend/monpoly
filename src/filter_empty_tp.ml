@@ -257,7 +257,23 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
   in
   (lf, l)
 
+(* The labeling rules do not support LET. Hence we unfold every LET before
+   computing the labels, which is sound because unfolding preserves the
+   semantics. However, a problem can arise if a defined predicate is not used.
+   Then, unfolding removes the defining formula completely, even if it contains
+   operators that are incompatible with filtering empty tps (Prev/Next).
+   Therefore, we perform an additional check, without unfolding, to detect such
+   operators. *)
 let go_down f = go_down (Rewriting.expand_let Rewriting.ExpandAll f)
+
+let is_prev_or_next = function
+  | Prev _ -> true
+  | Next _ -> true
+  | _ -> false
+
+let has_prev_or_next f =
+  let tsf = MFOTL.temporal_subformulas f in
+  List.exists is_prev_or_next tsf
 
 let is_filterable_empty_tp f =
   let (lf, l) = go_down f in
@@ -268,12 +284,9 @@ let is_filterable_empty_tp f =
     Printf.eprintf "\n%!"
   end;
   (* --- end of debugging code ---*)
-  if (has_label LFalse l) && (has_label LEvRel l) then
-    (* LFalse - formula is false on empty tp *)
-    (* LEvRel - formula is not affected by addition/removal of empty tp *)
-    true
-  else
-    false
+  (* LFalse - formula is false on empty tp *)
+  (* LEvRel - formula is not affected by addition/removal of empty tp *)
+  (has_label LFalse l) && (has_label LEvRel l) && not (has_prev_or_next f)
 
 let enable f =
   enabled := is_filterable_empty_tp f;
@@ -289,7 +302,9 @@ let fc_check_filterable_empty_tp f =
   print_labels l;
   Printf.printf "\n";
   Printf.printf "Properties: ";
-  if (has_label LFalse l) && (has_label LEvRel l) then
+  let filterable = (has_label LFalse l) && (has_label LEvRel l) &&
+    not (has_prev_or_next f) in
+  if filterable then
     (* LFalse - formula is false on empty tp *)
     (* LEvRel - formula is not affected by addition/removal of empty tp *)
     Printf.printf "(filterable_empty_tp)";

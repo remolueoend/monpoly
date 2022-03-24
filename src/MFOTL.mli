@@ -137,6 +137,10 @@ val direct_subformulas: formula -> formula list
   (** [direct_subformulas f] returns the list of all direct subformulas of [f]; hence not 
        all subformulas of [f], and not including [f]. Regexes are ignored *)
 
+val temporal_subformulas: formula -> formula list
+  (** [temporal_subformulas f] returns the list of all temporal subformulas of
+      [f], ignoring regexes *)
+
 val is_temporal: formula -> bool
   (** [is_temporal f] returns [true] if the main connective of [f] is
       temporal. *)
