@@ -214,8 +214,8 @@ let rec direct_subformulas = function
   | Matches (t1,t2) -> []
   | Substring (t1, t2) -> []
   | Pred p -> []
-  | Let (p,f1,f2) -> direct_subformulas f2
-  | LetPast (p,f1,f2) -> direct_subformulas f2
+  | Let (p,f1,f2) -> [f1;f2]
+  | LetPast (p,f1,f2) -> [f1;f2]
   | Neg f -> [f]
   | And (f1,f2) -> [f1;f2]
   | Or (f1,f2) -> [f1;f2]
