@@ -1867,7 +1867,29 @@ module Monitor = struct
 
 end
 
-module Parser = Log_parser.Make (Monitor)
+(** forwards all calls to the correct parser module,
+    based on `Misc.log_format` *)
+module ParserAdapter (C: Log_parser.Consumer) = struct
+  
+  let parse (dbschema : Db.schema) (lexbuf : Lexing.lexbuf) (ctxt : C.t)
+  (signatures : Signature_ast.signatures) : bool
+      =
+  let module ClassicParser = Log_parser.Make(C) in
+  let module JSONParser = Json_log_parser.Make(C) in
+    match !Misc.log_format with
+    | Classic -> ClassicParser.parse dbschema lexbuf ctxt
+    | JSON -> JSONParser.parse dbschema lexbuf ctxt signatures
+
+  let parse_file (dbschema : Db.schema) (fname : string) (ctxt : C.t)
+  (signatures : Signature_ast.signatures) : bool =
+    let ic = if fname = "" then stdin else open_in fname in
+    let lexbuf = Lexing.from_channel ic in
+    Lexing.set_filename lexbuf fname ;
+    parse dbschema lexbuf ctxt signatures
+end
+
+
+module Parser = ParserAdapter (Monitor)
 
 let init_monitor_state dbschema fv f =
   (* compute permutation for output tuples *)
@@ -1886,28 +1908,28 @@ let init_monitor_state dbschema fv f =
     s_in_tp = -1;
     s_last = last; }
 
-let monitor_string dbschema log fv f =
+let monitor_string dbschema log fv f (signatures : Signature_ast.signatures) =
   let lexbuf = Lexing.from_string log in
   let ctxt = init_monitor_state dbschema fv f in
-  ignore (Parser.parse dbschema lexbuf ctxt)
+  ignore (Parser.parse dbschema lexbuf ctxt signatures)
 
-let monitor dbschema logfile fv f =
+let monitor dbschema logfile fv f (signatures : Signature_ast.signatures) =
   let ctxt = init_monitor_state dbschema fv f in
   Perf.profile_enter ~tp:(-1) ~loc:Perf.loc_main_loop;
-  ignore (Parser.parse_file dbschema logfile ctxt);
+  ignore (Parser.parse_file dbschema logfile ctxt signatures);
   Perf.profile_exit ~tp:(-1) ~loc:Perf.loc_main_loop
 
 (* Unmarshals formula & state from resume file and then starts processing
    logfile. *)
-let resume dbschema logfile =
+let resume dbschema logfile (signatures : Signature_ast.signatures) =
   let ctxt = unmarshal !resumefile in
   Printf.printf "%s\n%!" restored_state_msg;
-  ignore (Parser.parse_file dbschema logfile ctxt)
+  ignore (Parser.parse_file dbschema logfile ctxt signatures)
 
 (* Combines states from files which are marshalled from an identical extformula. Same as resume
    the log file then processed from the beginning *)
-let combine dbschema logfile =
+let combine dbschema logfile (signatures : Signature_ast.signatures) =
   let files = files_to_list !combine_files in
   let ctxt = merge_states files in
   Printf.printf "%s\n%!" combined_state_msg;
-  ignore (Parser.parse_file dbschema logfile ctxt)
+  ignore (Parser.parse_file dbschema logfile ctxt signatures)

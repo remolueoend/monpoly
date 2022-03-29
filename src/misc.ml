@@ -90,6 +90,11 @@ let stop_at_first_viol = ref false
 
 let str_cache = ref false
 
+type log_format =
+  | Classic
+  | JSON
+let log_format = ref Classic
+
 
 type dbg =
   | Dbg_all (* this is enabled when at least one of the below is enabled *)

@@ -56,6 +56,12 @@ type dbg =
   | Dbg_filter
   | Dbg_parsing
   | Dbg_typing
+  
+(** Available log file formats.
+    Either classic parsable by `Log_parser` or JSON parsable by `Json_log_parser`*)
+type log_format =
+  | Classic
+  | JSON
 
 val usr2: bool ref
 val alrm: bool ref
@@ -82,6 +88,9 @@ val split_debug: string -> unit
 val debugging: dbg -> bool
 (** [debugging d] returns [true] if debugging is activated for
     the debuggin unit [d]. *)
+
+val log_format: log_format ref
+  (** format of the log input *)
 
 
 

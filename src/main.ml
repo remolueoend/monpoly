@@ -138,10 +138,11 @@ let main () =
     else
       begin
         (* read signature file *)
-        let sign = Signatures.parse_signature_file !sigfile in
+        let signatures = Signatures.parse_signature_file !sigfile in
+        let dbschema = Signatures.to_db_schema signatures in
         let _ = if is_mfodl f then Misc.verified := true else () in
 
-        let is_mon, pf, vartypes = check_formula sign f in
+        let is_mon, pf, vartypes = check_formula dbschema f in
         let fv = List.map fst vartypes in
         if !sigout then
           Predicate.print_vartypes_list vartypes
@@ -158,13 +159,13 @@ let main () =
             if not !nofilteremptytpopt && not !Misc.verified then
               Filter_empty_tp.enable pf;
             if !Algorithm.resumefile <> "" then
-              Algorithm.resume sign !logfile
+              Algorithm.resume dbschema !logfile signatures
             else if !Algorithm.combine_files <> "" then
-              Algorithm.combine sign !logfile
+              Algorithm.combine dbschema !logfile signatures
             else if !Misc.verified then
-              Algorithm_verified.monitor sign !logfile fv pf
+              Algorithm_verified.monitor dbschema !logfile fv pf
             else
-              Algorithm.monitor sign !logfile fv pf
+              Algorithm.monitor dbschema !logfile fv pf signatures
           end
       end
 
@@ -202,6 +203,8 @@ let _ =
     "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
       "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
     "-strcache", Arg.Set Misc.str_cache, "\tUse string cache to reduce memory usage";
+    "-json_log", Arg.Unit (fun () -> Misc.log_format := JSON),
+      "\tParse log file as lines of JSON strings";
     "-profile", Arg.String Perf.enable_profile, "\tWrite profile events to the given file";
   ]
     (fun _ -> print_usage_and_exit ())
