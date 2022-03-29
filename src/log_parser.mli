@@ -32,9 +32,6 @@
  * covered by the GNU Lesser General Public License.
  *)
 
-val parse_signature: string -> Db.schema
-val parse_signature_file: string -> Db.schema
-
 exception Stop_parser
 
 module type Consumer = sig

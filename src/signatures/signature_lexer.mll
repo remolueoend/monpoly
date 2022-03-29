@@ -20,7 +20,7 @@
     ("int", TINT);
     ("string", TSTRING);
     ("float", TFLOAT);
-    ("bool", TBOOL);
+    ("regexp", TREGEXP);
     
     (* symbol *)
     ("(", LPA);

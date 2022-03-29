@@ -138,7 +138,7 @@ let main () =
     else
       begin
         (* read signature file *)
-        let sign = Log_parser.parse_signature_file !sigfile in
+        let sign = Signatures.parse_signature_file !sigfile in
         let _ = if is_mfodl f then Misc.verified := true else () in
 
         let is_mon, pf, vartypes = check_formula sign f in
