@@ -43,6 +43,14 @@
     let str = lexeme lexbuf in
     try (Hashtbl.find symbol_table str)
     with _ -> IDENT str
+    
+  let start_lex = ref (Range.start_of_range Range.norange)
+  let start_pos_of_lexbuf lexbuf : pos =
+    (Range.pos_of_lexpos (lexeme_start_p lexbuf))
+    
+  let lex_long_range lexbuf : Range.t =
+    let end_p = lexeme_end_p lexbuf in
+    mk_range end_p.pos_fname (!start_lex) (pos_of_lexpos end_p)  
 
 }
 
@@ -56,9 +64,23 @@ let whitespace = ['\t' ' ']
 rule
   token = parse
   | eof { EOF }
+  | "#"                            { line_comment lexbuf}
+  | "/*"                           { start_lex := start_pos_of_lexbuf lexbuf; comments 0 lexbuf }
   | whitespace+                    { token lexbuf }
   | newline                        { newline lexbuf; token lexbuf }
   | "(" | ")" | "{" | "}"
   | "," | ";" | ":"                { create_token lexbuf }
   | letter (digit | letter | '_')* { create_token lexbuf }
   | _ as c                         { unexpected_char lexbuf c }
+and comments level = parse
+  | "*/" { if level = 0 then token lexbuf
+	   else comments (level-1) lexbuf }
+  | "/*" { comments (level+1) lexbuf}
+  | [^ '\n'] { comments level lexbuf }
+  | "\n" { newline lexbuf; comments level lexbuf }
+  | eof	 { raise (Lexer_error (lex_long_range lexbuf,
+             Printf.sprintf "unclosed comment")) }
+and line_comment = parse
+  | ['\n' '\r']                 { token lexbuf }
+  | _                           { line_comment lexbuf }
+  | eof                         { EOF }
