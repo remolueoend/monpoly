@@ -37,7 +37,7 @@ let sort_rec_decl ((name, fields) : record_decl) : record_decl =
 
 %token EOF
 %token <string> IDENT
-%token TINT TSTRING TFLOAT TBOOL
+%token TINT TSTRING TFLOAT TREGEXP
 %token LPA RPA LCB RCB COM SEP COL
 
 %start signatures
@@ -75,5 +75,5 @@ ty:
 native_ty:
   | TINT   { TInt }
   | TFLOAT   { TFloat }
-  | TBOOL  { TBool } 
-  | TSTRING { TString }
+  | TSTRING { TStr }
+  | TREGEXP { TRegexp }

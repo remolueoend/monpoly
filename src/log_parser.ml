@@ -114,55 +114,6 @@ let parse_tuple pb =
       ^ string_of_token t))
 
 
-(* Signature *)
-
-let get_type = function
-  | "int" -> Predicate.TInt
-  | "string" -> Predicate.TStr
-  | "float" -> Predicate.TFloat
-  | "regexp" -> Predicate.TRegexp
-  | t -> raise (Local_error ("Unknown type " ^ t))
-
-let convert_types l = List.map
-  (fun str ->
-    match Misc.nsplit str ":" with
-    | [] -> failwith "[Log_parser.convert_types] internal error"
-    | [type_str] -> "", get_type type_str
-    | var_name :: type_str :: _ -> var_name, get_type type_str
-  ) l
-
-let rec parse_predicates pb dbschema =
-  match pb.pb_token with
-  | EOF -> dbschema
-  | STR s ->
-      next pb;
-      let l = parse_tuple pb in
-      let l = convert_types l in
-      parse_predicates pb (Db.add_predicate s l dbschema)
-  | t -> raise (Local_error ("Expected a string but saw " ^ string_of_token t))
-
-let parse_signature_pb pb =
-  try parse_predicates pb Db.base_schema
-  with Local_error msg -> failwith ("Error while parsing signature: " ^ msg)
-
-let parse_signature s =
-  let lexbuf = Lexing.from_string s in
-  parse_signature_pb (init_parsebuf lexbuf)
-
-(*TODO(JS): Should close ic after parsing.*)
-let parse_signature_file fname =
-  let ic = open_in fname in
-  let lexbuf = Lexing.from_channel ic in
-  Lexing.set_filename lexbuf fname;
-  try
-    (* let sigs = Signature_parser.signatures Signature_lexer.token lexbuf in
-    let _ = Printf.printf "signatures:\n%s\n" (List.map Signature_ast.string_of_signature sigs |> String.concat "\n") in *)
-    parse_signature_pb (init_parsebuf lexbuf)
-  with
-  | Signature_parser.Error -> failwith @@ Printf.sprintf "Parse error at: %s"
-      (Range.string_of_range (Range.lex_range lexbuf))
-  (* parse_signature_pb (init_parsebuf lexbuf) *)
-
 (* Slicing specification *)
 
 let parse_int_tuple pb =
