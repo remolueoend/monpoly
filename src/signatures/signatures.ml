@@ -65,20 +65,21 @@ module SignTable = struct
     Raises an error if either the given JSON object is not a record
     or no matching type declaration could be found.
     This function requires the signature declarations passed as table AND list *)
-  let get_record_decl_from_json (json : Yojson.Basic.t) (list : signatures)
-      (table : t) : record_decl =
+  let get_record_decl_from_json (json : Yojson.Basic.t) (signatures : signatures)
+      (table : t) : record_decl option =
     let open Yojson.Basic in
     match json with
     | `Assoc _ -> (
         let first =
-          List.find
+          List.find_opt
             (fun d ->
               match d with
               | Record {elt; _} -> match_json json table elt
               | _ -> false )
-            list in
+            signatures in
         match first with
-        | Record {elt; _} -> elt
+        | Some Record {elt; _} -> Some elt
+        | None -> None
         | _ -> failwith "invalid match case" )
     | _ -> raise @@ UnknownType "Not a JSON record"
 end
@@ -136,7 +137,7 @@ let to_db_schema (signatures : signatures) : Db.schema =
 
 (** accepts the path to a signature file and returns a new DB schema for the specificed
     signature declarations in the given file. *)
-let parse_signature_file (fname : string) : Db.schema =
+let parse_signature_file (fname : string) : signatures =
   let ic = open_in fname in
   let lexbuf = Lexing.from_channel ic in
   let schema =
@@ -145,7 +146,7 @@ let parse_signature_file (fname : string) : Db.schema =
       let signatures =
         Signature_parser.signatures Signature_lexer.token lexbuf in
       let _ = typecheck signatures in
-      to_db_schema signatures
+      signatures
     with Signature_parser.Error ->
       failwith
       @@ Printf.sprintf "Parse error at: %s"

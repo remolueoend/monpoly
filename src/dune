@@ -1,6 +1,6 @@
 (include_subdirs unqualified)
 
-(ocamllex formula_lexer log_lexer)
+(ocamllex formula_lexer log_lexer json_log_lexer)
 (ocamlyacc formula_parser)
 
 (library

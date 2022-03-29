@@ -43,21 +43,22 @@
 
 open Predicate
 open MFOTL
+open Signature_ast
 
 val combine_files: string ref
 val resumefile: string ref
 (** The names of the files used for state saving and state loading. *)
 
-val resume: Db.schema -> string -> unit
-val combine: Db.schema -> string -> unit
+val resume: Db.schema -> string -> signatures -> unit
+val combine: Db.schema -> string -> signatures -> unit
 
-val monitor_string: Db.schema -> string -> var list -> formula -> unit
+val monitor_string: Db.schema -> string -> var list -> formula -> signatures -> unit
 (** [monitor log fv f] monitors the log string [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
     the tuples satisfying formula [f]. The tuples are sorted according to
     the variable list [fv]. *)
 
-val monitor: Db.schema -> string -> var list -> formula -> unit
+val monitor: Db.schema -> string -> var list -> formula -> signatures -> unit
 (** [monitor log f] monitors the log [log] with regard to the
     formula [f]. For each time point, it outputs, as soon as possible,
     the tuples satisfying formula [f]. The tuples are sorted according to
