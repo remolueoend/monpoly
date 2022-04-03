@@ -5567,14 +5567,15 @@ let rec sup_rec_safety x0 uu = match x0, uu with AnyRec, uu -> AnyRec
                          | Unused, Unused -> Unused;;
 
 let rec safe_letpast
-  p x1 = match p, x1 with
-    p, MatchF (i, r) ->
-      times_rec_safety AnyRec
-        (fold sup_rec_safety
-          (csorted_list_of_set (ceq_rec_safety, ccompare_rec_safety)
-            (atms (ceq_rec_safety, ccompare_rec_safety, set_impl_rec_safety)
-              (map_regex (safe_letpast p) r)))
-          Unused)
+  p x1 = match p, x1 with p, TS t -> Unused
+    | p, TP t -> Unused
+    | p, MatchF (i, r) ->
+        times_rec_safety AnyRec
+          (fold sup_rec_safety
+            (csorted_list_of_set (ceq_rec_safety, ccompare_rec_safety)
+              (atms (ceq_rec_safety, ccompare_rec_safety, set_impl_rec_safety)
+                (map_regex (safe_letpast p) r)))
+            Unused)
     | p, MatchP (i, r) ->
         fold sup_rec_safety
           (csorted_list_of_set (ceq_rec_safety, ccompare_rec_safety)
@@ -5591,7 +5592,7 @@ let rec safe_letpast
     | p, Next (i, phi) -> times_rec_safety AnyRec (safe_letpast p phi)
     | p, Prev (i, phi) -> times_rec_safety PastRec (safe_letpast p phi)
     | p, Agg (y, omega, b, f, phi) -> safe_letpast p phi
-    | p, Exists (t, phi) -> safe_letpast p phi
+    | p, Exists (ty, phi) -> safe_letpast p phi
     | p, Ands l -> fold (comp sup_rec_safety (safe_letpast p)) l Unused
     | p, And (phi, psi) ->
         sup_rec_safety (safe_letpast p phi) (safe_letpast p psi)

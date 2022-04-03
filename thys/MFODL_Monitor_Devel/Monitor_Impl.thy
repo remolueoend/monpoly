@@ -1156,7 +1156,7 @@ lemma safe_letpast_code[code]:
   "safe_letpast p (Formula.Or \<phi> \<psi>) = (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
   "safe_letpast p (Formula.And \<phi> \<psi>) = (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
   "safe_letpast p (Formula.Ands l) = \<Squnion> set (map (safe_letpast p) l)"
-  "safe_letpast p (Formula.Exists t \<phi>) = safe_letpast p \<phi>"
+  "safe_letpast p (Formula.Exists ty \<phi>) = safe_letpast p \<phi>"
   "safe_letpast p (Formula.Agg y \<omega> b' f \<phi>) = safe_letpast p \<phi>"
   "safe_letpast p (Formula.Prev I \<phi>) = PastRec * safe_letpast p \<phi>"
   "safe_letpast p (Formula.Next I \<phi>) = AnyRec * safe_letpast p \<phi>"
@@ -1165,6 +1165,8 @@ lemma safe_letpast_code[code]:
   "safe_letpast p (Formula.Until \<phi> I \<psi>) = AnyRec * (safe_letpast p \<phi> \<squnion> safe_letpast p \<psi>)"
   "safe_letpast p (Formula.MatchP I r) = \<Squnion> Regex.atms (Regex.map_regex (safe_letpast p) r)"
   "safe_letpast p (Formula.MatchF I r) =  AnyRec * \<Squnion> Regex.atms (Regex.map_regex (safe_letpast p) r)"
+  "safe_letpast p (Formula.TP t) = Unused"
+  "safe_letpast p (Formula.TS t) = Unused"
   by (auto simp add: regex.set_map)
 
 lemma Sup_rec_safety_set[code_unfold]:
