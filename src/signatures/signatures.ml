@@ -41,8 +41,8 @@ module SignTable = struct
   (** returns whether or not the given json object matches the given record type declaration. 
     Assumes that the fields of the json object are sorted alphanumerically.
     TODO: return an actual tuple containing the matching values as an option *)
-  let rec match_json (json : Yojson.Basic.t) (signs : t)
-      ((record_name, record_fields) : record_decl) : bool =
+  let rec match_json (signs : t) ((record_name, record_fields) : record_decl)
+      (json : Yojson.Basic.t) : bool =
     let open Yojson.Basic in
     match json with
     | `Assoc json_fields ->
@@ -57,16 +57,16 @@ module SignTable = struct
                  | `Float _, Native TFloat -> true
                  | `String _, Native TStr -> true
                  | `Assoc fs, Complex ctor ->
-                     match_json (`Assoc fs) signs (find_record_decl signs ctor)
+                     match_json signs (find_record_decl signs ctor) (`Assoc fs)
                  | _ -> false )
     | _ -> false
 
-  (** Returns a record type declaration for the given JSON object.
+  (** Returns a signature declaration for the given JSON object.
     Raises an error if either the given JSON object is not a record
     or no matching type declaration could be found.
     This function requires the signature declarations passed as table AND list *)
-  let get_record_decl_from_json (json : Yojson.Basic.t) (signatures : signatures)
-      (table : t) : record_decl option =
+  let get_signature_from_json (signatures : signatures) (table : t)
+      (json : Yojson.Basic.t) : record_decl option =
     let open Yojson.Basic in
     match json with
     | `Assoc _ -> (
@@ -74,14 +74,14 @@ module SignTable = struct
           List.find_opt
             (fun d ->
               match d with
-              | Record {elt; _} -> match_json json table elt
+              | Record {elt; _} -> match_json table elt json
               | _ -> false )
             signatures in
         match first with
-        | Some Record {elt; _} -> Some elt
+        | Some (Record {elt; _}) -> Some elt
         | None -> None
         | _ -> failwith "invalid match case" )
-    | _ -> raise @@ UnknownType "Not a JSON record"
+    | t -> raise @@ UnknownType (Printf.sprintf "Unsupported JSON root type: %s" (to_string t))
 end
 
 module TypeSet = Set.Make (String)
@@ -131,8 +131,15 @@ let to_db_schema (signatures : signatures) : Db.schema =
           Db.add_predicate name
             (extr_nodes args |> List.map (fun {aname; atyp} -> (aname, atyp)))
             schema
-      | Record {elt= name, _; _} -> Db.add_predicate name [("ref", TInt)] schema
-      )
+      | Record {elt= name, fields; _} ->
+          let cols =
+            List.map
+              (fun {elt= {fname; ftyp}; _} ->
+                match ftyp with
+                | Native t -> (fname, t)
+                | Complex _ -> (fname, TInt) )
+              fields in
+          Db.add_predicate name (("id", TInt) :: cols) schema )
     Db.base_schema signatures
 
 (** accepts the path to a signature file and returns a new DB schema for the specificed
@@ -184,48 +191,48 @@ let string_of_signature signature =
   | Record n -> string_of_record n.elt
 
 (* **** INLINE TESTS **** *)
-let%test_module "typecheck tests" =
-  ( module struct
-    exception AssertException of string
+(* let%test_module "typecheck tests" =
+   ( module struct
+     exception AssertException of string
 
-    let assert_str (actual : string) (expected : string) : unit =
-      if compare actual expected = 0 then ()
-      else
-        raise
-          (AssertException
-             (Printf.sprintf "Expected: %s\nActual: %s" expected actual) )
+     let assert_str (actual : string) (expected : string) : unit =
+       if compare actual expected = 0 then ()
+       else
+         raise
+           (AssertException
+              (Printf.sprintf "Expected: %s\nActual: %s" expected actual) )
 
-    let%test_unit "typecheck throws on duplicated types" =
-      let decls =
-        [ Record (no_node ("SomeType", []))
-        ; Record
-            { elt= ("SomeType", [])
-            ; loc= mk_range "f.sig" (mk_pos 1 1) (mk_pos 1 10) } ] in
-      try
-        typecheck decls ;
-        raise (AssertException "Test did not throw")
-      with DuplicateType msg ->
-        assert_str msg "Duplicated type SomeType at f.sig:[1.1-1.10]"
+     let%test_unit "typecheck throws on duplicated types" =
+       let decls =
+         [ Record (no_node ("SomeType", []))
+         ; Record
+             { elt= ("SomeType", [])
+             ; loc= mk_range "f.sig" (mk_pos 1 1) (mk_pos 1 10) } ] in
+       try
+         typecheck decls ;
+         raise (AssertException "Test did not throw")
+       with DuplicateType msg ->
+         assert_str msg "Duplicated type SomeType at f.sig:[1.1-1.10]"
 
-    let%test_unit "typecheck can resolve type references" =
-      let decls =
-        [ Record
-            (no_node
-               ("SomeType", [no_node {fname= "f1"; ftyp= Complex "AnotherType"}]) )
-        ; Record (no_node ("AnotherType", [])) ] in
-      typecheck decls
+     let%test_unit "typecheck can resolve type references" =
+       let decls =
+         [ Record
+             (no_node
+                ("SomeType", [no_node {fname= "f1"; ftyp= Complex "AnotherType"}]) )
+         ; Record (no_node ("AnotherType", [])) ] in
+       typecheck decls
 
-    let%test_unit "throws if unknown type reference is detected" =
-      let decls =
-        [ Record
-            (no_node
-               ( "SomeType"
-               , [ { elt= {fname= "f1"; ftyp= Complex "TypeA"}
-                   ; loc= ("f.sig", mk_pos 2 42, mk_pos 2 45) } ] ) )
-        ; Record (no_node ("AnotherType", [])) ] in
-      try
-        typecheck decls ;
-        raise (AssertException "Test did not throw")
-      with UnknownType msg ->
-        assert_str msg "Unknown type TypeA at f.sig:[2.42-2.45]"
-  end )
+     let%test_unit "throws if unknown type reference is detected" =
+       let decls =
+         [ Record
+             (no_node
+                ( "SomeType"
+                , [ { elt= {fname= "f1"; ftyp= Complex "TypeA"}
+                    ; loc= ("f.sig", mk_pos 2 42, mk_pos 2 45) } ] ) )
+         ; Record (no_node ("AnotherType", [])) ] in
+       try
+         typecheck decls ;
+         raise (AssertException "Test did not throw")
+       with UnknownType msg ->
+         assert_str msg "Unknown type TypeA at f.sig:[2.42-2.45]"
+   end ) *)

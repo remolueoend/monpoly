@@ -6,13 +6,15 @@ type parsebuf =
   { pb_lexbuf: Lexing.lexbuf
   ; signature_table: SignTable.t
   ; mutable pb_token: Json_log_lexer.token
-  ; mutable pb_schema: Table.schema }
+  ; mutable pb_schema: Table.schema
+  ; mutable id_index: int }
 
 let init_parsebuf lexbuf signatures =
   { pb_lexbuf= lexbuf
   ; signature_table= SignTable.of_signatures signatures
   ; pb_token= Json_log_lexer.token lexbuf
-  ; pb_schema= ("", []) }
+  ; pb_schema= ("", [])
+  ; id_index= 0 }
 
 let string_of_token (t : Json_log_lexer.token) =
   match t with
@@ -21,13 +23,34 @@ let string_of_token (t : Json_log_lexer.token) =
   | JSON json -> "\"" ^ String.escaped json ^ "\""
   | EOF -> "<EOF>"
 
-let json_ast_from_token (json_str : string) : Yojson.Basic.t =
-  let parsed : Yojson.Basic.t = Yojson.Basic.from_string json_str in
-  if Misc.debugging Misc.Dbg_log then
-    Printf.eprintf "[Json_log_parser]: parsed JSON: %s\n"
-    @@ Yojson.Basic.to_string parsed
-  else () ;
-  parsed
+(** Parses the given json record by registering each found DB tuple recursively
+    using the provided `reg_tuple` function. The returned integer is equal to the unique instance ID
+    assigned to the top-level record instance.
+    `reg_tuple` is called with the name of the signature declaration and the list of values.
+
+    This function mutates `pb.id_index`. *)
+let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
+    ((ctor, rec_fields) : Signature_ast.record_decl) (json : Yojson.Basic.t) :
+    string =
+  let open Signature_ast in
+  let open Yojson.Basic in
+  let json_fields =
+    match json with
+    | `Assoc value -> value
+    | _ -> failwith "Invalid json value type" in
+  let get_field_value ({fname; ftyp} : record_field) : string =
+    let json_value = List.assoc fname json_fields in
+    match ftyp with
+    | Native _ -> json_value |> Yojson.Basic.to_string
+    | Complex ctor ->
+        parse_record pb reg_tuple
+          (SignTable.find_record_decl pb.signature_table ctor)
+          json_value in
+  let tuple_values = List.map get_field_value (extr_nodes rec_fields) in
+  let inst_id = Int.to_string pb.id_index in
+  pb.id_index <- pb.id_index + 1 ;
+  reg_tuple ctor (inst_id :: tuple_values) ;
+  inst_id
 
 let next pb = pb.pb_token <- Json_log_lexer.token pb.pb_lexbuf
 
@@ -64,20 +87,24 @@ module Make (C : Log_parser.Consumer) = struct
     and parse_json () =
       let open Yojson.Basic in
       debug "json" ;
-      let _ =
-        match pb.pb_token with
-        | JSON str -> (
-            let json = json_ast_from_token str in
-            let rec_decl =
-              SignTable.get_record_decl_from_json (sort json) signatures
-                pb.signature_table in
-            match rec_decl with
-            | None -> Printf.eprintf "[Json_log_parser] No matching type found"
+      pb.id_index <- 0 ;
+      match pb.pb_token with
+      | JSON str ->
+          let json = sort (Yojson.Basic.from_string str) in
+          let signature_decl =
+            SignTable.get_signature_from_json signatures pb.signature_table json
+          in
+          let _ =
+            match signature_decl with
+            | None -> ()
             | Some decl ->
-                Printf.eprintf "[Json_log_parser] Found matching type: %s"
-                  (Signatures.string_of_record decl) )
-        | t -> fail ("Expected JSON but saw " ^ string_of_token t) in
-      C.end_tp ctxt ; next pb ; parse_init ()
+                ignore
+                @@ parse_record pb
+                     (fun ctor values ->
+                       C.tuple ctxt (ctor, List.assoc ctor dbschema) values )
+                     decl json in
+          C.end_tp ctxt ; next pb ; parse_init ()
+      | t -> fail ("Expected JSON but saw " ^ string_of_token t)
     and parse_eof () = debug "EOF" ; () in
     parse_init () ; true
 end
