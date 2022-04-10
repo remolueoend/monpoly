@@ -197,7 +197,7 @@ let _ =
       "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
     "-strcache", Arg.Set Misc.str_cache, "\tUse string cache to reduce memory usage";
   ]
-    (fun _ -> ())
+    (fun _ -> print_usage_and_exit ())
     usage_string;
   if Misc.debugging Dbg_perf then
     ignore(Unix.alarm 600);
