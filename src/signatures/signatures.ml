@@ -5,6 +5,7 @@ from signature files.
 
 open Range
 open Signature_ast
+open CMFOTL
 
 (* is raised if the same type is declared multiple times. Contains the name of the type. *)
 exception DuplicateType of string
@@ -53,10 +54,10 @@ module SignTable = struct
                  compare jf_name fname = 0
                  &&
                  match (jf_val, ftyp) with
-                 | `Int _, Native TInt -> true
-                 | `Float _, Native TFloat -> true
-                 | `String _, Native TStr -> true
-                 | `Assoc fs, Complex ctor ->
+                 | `Int _, TInt -> true
+                 | `Float _, TFloat -> true
+                 | `String _, TStr -> true
+                 | `Assoc fs, TRef ctor ->
                      match_json signs (find_record_decl signs ctor) (`Assoc fs)
                  | _ -> false )
     | _ -> false
@@ -65,7 +66,7 @@ module SignTable = struct
     Raises an error if either the given JSON object is not a record
     or no matching type declaration could be found.
     This function requires the signature declarations passed as table AND list *)
-  let get_signature_from_json (signatures : signatures) (table : t)
+  let signature_from_json (signatures : signatures) (table : t)
       (json : Yojson.Basic.t) : record_decl option =
     let open Yojson.Basic in
     match json with
@@ -81,7 +82,10 @@ module SignTable = struct
         | Some (Record {elt; _}) -> Some elt
         | None -> None
         | _ -> failwith "invalid match case" )
-    | t -> raise @@ UnknownType (Printf.sprintf "Unsupported JSON root type: %s" (to_string t))
+    | t ->
+        raise
+        @@ UnknownType
+             (Printf.sprintf "Unsupported JSON root type: %s" (to_string t))
 end
 
 module TypeSet = Set.Make (String)
@@ -105,13 +109,13 @@ let typecheck (signatures : signatures) : unit =
   let type_set = List.fold_left reg_type TypeSet.empty signatures in
   (* make sure all complex type references are valid *)
   let typecheck_ty (loc : Range.t) = function
-    | Native _ -> ()
-    | Complex ctor ->
+    | TRef ctor ->
         if TypeSet.mem ctor type_set = false then
           raise
             (UnknownType
                (Printf.sprintf "Unknown type %s at %s" ctor
-                  (string_of_range loc) ) ) in
+                  (string_of_range loc) ) )
+    | _ -> () in
   (* iterate over all fields of record types and lookup their complex types:  *)
   let typecheck_record_decl ((_, fields) : record_decl) : unit =
     List.iter (fun {elt= {ftyp; _}; loc} -> typecheck_ty loc ftyp) fields in
@@ -122,22 +126,36 @@ let typecheck (signatures : signatures) : unit =
       | Record {elt= name, fields; _} -> typecheck_record_decl (name, fields) )
     signatures
 
+(** Returns a new complex DB schema for a given list of signature declarations
+    A complex DB schema is similar to a db_schema, but allows complex types for columns. *)
+let to_cplx_dbschema (signatures : signatures) : CMFOTL.db_schema = []
+(* List.fold_left
+   (fun schema signature ->
+     match signature with
+     | Predicate {elt= name, args; _} ->
+         Db.add_predicate name
+           (extr_nodes args |> List.map (fun {aname; atyp} -> (aname, atyp)))
+           schema
+     | Record {elt= name, fields; _} ->
+         let cols =
+           List.map (fun {elt= {fname; ftyp}; _} -> (fname, ftyp)) fields in
+         Db.add_predicate name (("id", TInt) :: cols) schema )
+   Db.base_schema signatures *)
+
 (** Returns a new DB schema for a given list of signature declarations *)
-let to_db_schema (signatures : signatures) : Db.schema =
+let to_dbschema (signatures : signatures) : Db.schema =
   List.fold_left
     (fun schema signature ->
       match signature with
       | Predicate {elt= name, args; _} ->
           Db.add_predicate name
-            (extr_nodes args |> List.map (fun {aname; atyp} -> (aname, atyp)))
+            ( extr_nodes args
+            |> List.map (fun {aname; atyp} -> (aname, compile_tcst atyp)) )
             schema
       | Record {elt= name, fields; _} ->
           let cols =
             List.map
-              (fun {elt= {fname; ftyp}; _} ->
-                match ftyp with
-                | Native t -> (fname, t)
-                | Complex _ -> (fname, TInt) )
+              (fun {elt= {fname; ftyp}; _} -> (fname, compile_tcst ftyp))
               fields in
           Db.add_predicate name (("id", TInt) :: cols) schema )
     Db.base_schema signatures
@@ -161,25 +179,15 @@ let parse_signature_file (fname : string) : signatures =
   close_in ic ; schema
 
 (* **** STRING_OF FUNCTIONS FOR AST OBJECTS **** *)
-let rec string_of_ty ty =
-  match ty with
-  | Complex cty -> cty
-  | Native nty -> (
-    match nty with
-    | TFloat -> "TFloat"
-    | TInt -> "TInt"
-    | TStr -> "TStr"
-    | TRegexp -> "TRegexp" )
-
 let string_of_record ((id, fields) : record_decl) =
   let field_to_str {elt= {fname; ftyp}; _} =
-    Printf.sprintf "%s: %s" fname (string_of_ty ftyp) in
+    Printf.sprintf "%s: %s" fname (string_of_tcst ftyp) in
   let fields_to_str = List.map field_to_str fields |> String.concat ", " in
   Printf.sprintf "%s = {%s}" id fields_to_str
 
 let string_of_predicate ((id, args) : pred_decl) =
   let arg_to_str {elt= {aname; atyp}; _} =
-    let ty_str = string_of_ty (Native atyp) in
+    let ty_str = string_of_tcst atyp in
     if String.length aname = 0 then Printf.sprintf "%s" ty_str
     else Printf.sprintf "%s: %s" aname ty_str in
   let args_to_str = List.map arg_to_str args |> String.concat ", " in

@@ -27,6 +27,7 @@
 
 %{
 open Signature_ast
+open CMFOTL
 
 (** returns a fresh record type declaration with its fields sorted alphanumerically. *)
 let sort_rec_decl ((name, fields) : record_decl) : record_decl =
@@ -69,8 +70,8 @@ pred_arg:
   | t=native_ty { (loc $startpos $endpos { aname=""; atyp=t }) }
 
 ty:
-  | t=native_ty { Native t }
-  | id=IDENT { Complex id }
+  | t=native_ty { t }
+  | id=IDENT { TRef id }
 
 native_ty:
   | TINT   { TInt }
