@@ -139,11 +139,12 @@ let main () =
       begin
         (* read signature file *)
         let signatures = Signatures.parse_signature_file !sigfile in
-        let cmplx_dbschema = Signatures.to_cplx_dbschema signatures in
         let dbschema = Signatures.to_dbschema signatures in
         let _ = if is_mfodl f then Misc.verified := true else () in
 
-        let is_mon, pf, vartypes = CMFOTL.typecheck_formula dbschema f in
+        let (f, fvtypes) = CMFOTL.typecheck_formula signatures f in
+        let f = CMFOTL.compile_formula f in
+        let is_mon, pf, vartypes = check_formula dbschema f in
         let fv = List.map fst vartypes in
         if !sigout then
           Predicate.print_vartypes_list vartypes

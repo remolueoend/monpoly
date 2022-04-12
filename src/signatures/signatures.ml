@@ -13,10 +13,6 @@ exception DuplicateType of string
 (* Gets raised if a reference to an unknown type was found. *)
 exception UnknownType of string
 
-let extr_node ({elt; _} : 'a node) : 'a = elt
-let extr_nodes (nodes : 'a node list) : 'a list = List.map extr_node nodes
-let no_node (elt : 'a) : 'a node = {elt; loc= ("", (0, 0), (0, 0))}
-
 (** Returns the constructor/predicate name of the given declaration *)
 let decl_name = function
   | Predicate {elt= name, _; _} -> name
@@ -125,22 +121,6 @@ let typecheck (signatures : signatures) : unit =
       | Predicate _ -> ()
       | Record {elt= name, fields; _} -> typecheck_record_decl (name, fields) )
     signatures
-
-(** Returns a new complex DB schema for a given list of signature declarations
-    A complex DB schema is similar to a db_schema, but allows complex types for columns. *)
-let to_cplx_dbschema (signatures : signatures) : CMFOTL.db_schema = []
-(* List.fold_left
-   (fun schema signature ->
-     match signature with
-     | Predicate {elt= name, args; _} ->
-         Db.add_predicate name
-           (extr_nodes args |> List.map (fun {aname; atyp} -> (aname, atyp)))
-           schema
-     | Record {elt= name, fields; _} ->
-         let cols =
-           List.map (fun {elt= {fname; ftyp}; _} -> (fname, ftyp)) fields in
-         Db.add_predicate name (("id", TInt) :: cols) schema )
-   Db.base_schema signatures *)
 
 (** Returns a new DB schema for a given list of signature declarations *)
 let to_dbschema (signatures : signatures) : Db.schema =

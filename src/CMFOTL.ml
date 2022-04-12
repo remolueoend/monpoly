@@ -39,6 +39,7 @@
 
 open Unix
 open Predicate
+open Signature_ast
 
 type cst =
   | Int of Z.t
@@ -49,13 +50,24 @@ type cst =
   (* reference to another instance encoded as an integer *)
   | Ref of int
 
-type tcst = TInt | TStr | TFloat | TRegexp | TRef of string
+type tcst = Signature_ast.ty
 
 type tcl = TNum | TAny | TRecord of (var * tsymb) list
 and tsymb = TSymb of (tcl * int) | TCst of tcst | TBot
 
 type table_schema = var * (string * tcst) list
 type db_schema = table_schema list
+
+(** Γ *)
+type symbol_table = (var * tsymb) list
+
+(** Δ *)
+type predicate_schema = ((var * int) * tsymb list) list
+
+(** G *)
+type type_context = (var * (var * tcst) list) list
+
+type context = predicate_schema * type_context * symbol_table
 
 let type_of_cst = function
   | Int _ -> TInt
@@ -768,10 +780,11 @@ let check_wff (f : cplx_formula) =
 
 let ( << ) f g x = f (g x)
 
-let merge_types sch vars =
+let merge_types (sch : predicate_schema) (vars : symbol_table) =
   List.append (List.map snd vars) (List.flatten (List.map snd sch))
 
-let new_type_symbol cls sch vs =
+let new_type_symbol (cls : tcl) (sch : predicate_schema) (vs : symbol_table) :
+    tsymb =
   let all = merge_types sch vs in
   let maxtype =
     ( List.fold_left (fun a e -> max a e) 0
@@ -784,7 +797,8 @@ exception IncompatibleTypes of tsymb * tsymb
 
 (** Returns the meet of the two given types.
     Raises an IncompatibleTypes exception whenever the meet of the two types is the bottom type. *)
-let rec type_meet sch vs (t1 : tsymb) (t2 : tsymb) : tsymb =
+let rec type_meet ((sch, tctxt, vs) : context) (t1 : tsymb) (t2 : tsymb) : tsymb
+    =
   match (t1, t2) with
   | (TCst (TRef a) as t1), TCst (TRef b) -> if compare a b = 0 then t1 else TBot
   | (TCst a as t1), TCst b -> if a = b then t1 else TBot
@@ -794,34 +808,58 @@ let rec type_meet sch vs (t1 : tsymb) (t2 : tsymb) : tsymb =
   | TSymb (TAny, _), t2 -> t2
   | t1, TSymb (TAny, _) -> t1
   | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) ->
-      merge_records sch vs fs1 fs2
-  | TCst (TRef ctor), TSymb (TRecord fs, _) -> cast_record sch vs ctor fs
-  | TSymb (TRecord fs, _), TCst (TRef ctor) -> cast_record sch vs ctor fs
+      merge_records (sch, tctxt, vs) fs1 fs2
+  | TCst (TRef ctor), TSymb (TRecord fs, _) ->
+      cast_record (sch, tctxt, vs) ctor fs
+  | TSymb (TRecord fs, _), TCst (TRef ctor) ->
+      cast_record (sch, tctxt, vs) ctor fs
   | _ -> TBot
+
 (** Accepts the fields of two symbolic record types and returns their meet.
     Raises an IncompatibleTypes exception whenever the meet of the types of a common field
     are incompatible, i.e. equal to bottom type. *)
-and merge_records sch vs (t1_fields : (var * tsymb) list)
+and merge_records ((sch, tctxt, vs) : context) (t1_fields : (var * tsymb) list)
     (t2_fields : (var * tsymb) list) : tsymb =
   match (t1_fields, t2_fields) with
   | [], t2_fields -> new_type_symbol (TRecord t2_fields) sch vs
   | (f1_name, f1_ty) :: t1_fields, t2_fields -> (
     match List.assoc_opt f1_name t2_fields with
     | Some f2_ty ->
-        let meet = type_meet sch vs f1_ty f2_ty in
+        let meet = type_meet (sch, tctxt, vs) f1_ty f2_ty in
         let new_ty =
           if meet <> TBot then meet else raise (IncompatibleTypes (f1_ty, f2_ty))
         in
-        merge_records sch vs t1_fields ((f1_name, new_ty) :: t2_fields)
-    | None -> merge_records sch vs t1_fields ((f1_name, f1_ty) :: t2_fields) )
+        merge_records (sch, tctxt, vs) t1_fields ((f1_name, new_ty) :: t2_fields)
+    | None ->
+        merge_records (sch, tctxt, vs) t1_fields ((f1_name, f1_ty) :: t2_fields)
+    )
 
 (** Casts (the fields of) a symbolic record type to a constant reference type
     of the given constructor.
     Raises an InvalidTypes exception whenever the reference type is not more specific
     than the symbolic type described by the given fields. *)
-and cast_record sch vs (ctor : var) (fs : (var * tsymb) list) : tsymb = ()
+and cast_record ((sch, tctxt, vs) : context) (ctor : var)
+    (fs : (var * tsymb) list) : tsymb =
+  match List.assoc_opt ctor tctxt with
+  | None -> failwith ("Unknown record type: " ^ ctor)
+  | Some fields ->
+      let cty = TCst (TRef ctor) in
+      let sym_ty = TSymb (TRecord fs, 0) in
+      (* raise if reference type is missing a field: *)
+      if List.exists (fun (name, _) -> List.assoc_opt name fields = None) fs
+      then raise (IncompatibleTypes (cty, sym_ty)) ;
+      (* raise, if for any common field, the meet type is TBot: *)
+      if
+        List.exists
+          (fun (name, ty) ->
+            match List.assoc_opt name fs with
+            | None -> false
+            | Some sty -> type_meet (sch, tctxt, vs) (TCst ty) sty = TBot )
+          fields
+      then raise (IncompatibleTypes (cty, sym_ty))
+      else cty
 
-let more_spec_type sch vs t1 t2 = type_meet sch vs t1 t2
+let more_spec_type ctx t1 t2 = type_meet ctx t1 t2
 
 let rec string_of_type = function
   | TCst TInt -> "Int"
@@ -840,14 +878,15 @@ let rec string_of_type = function
 
 (** Given that v:t1 and v:t2 for some v,
    check which type is more specific and update Γ accordingly *)
-let propagate_constraints t1 t2 t sch vars =
+let propagate_constraints t1 t2 t ((sch, tctxt, vars) : context) :
+    predicate_schema * symbol_table =
   let update_schs oldt1 oldt2 meet =
     List.map (fun t -> if t = oldt1 || t = oldt2 then meet else t) in
   let update_vars oldt1 oldt2 meet =
     List.map (fun (v, t) ->
         if t = oldt1 || t = oldt2 then (v, meet) else (v, t) ) in
   try
-    let meet = type_meet sch vars t1 t2 in
+    let meet = type_meet (sch, tctxt, vars) t1 t2 in
     ( List.map (fun (n, vs) -> (n, update_schs t1 t2 meet vs)) sch
     , update_vars t1 t2 meet vars )
   with IncompatibleTypes (t1, t2) ->
@@ -857,7 +896,7 @@ let propagate_constraints t1 t2 t sch vars =
         (string_of_type t2) (string_of_term t) (string_of_type t1) in
     failwith err_str
 
-let string_of_delta sch =
+let string_of_delta (sch : predicate_schema) : string =
   if List.length sch > 0 then
     let string_of_types ts =
       if List.length ts > 0 then
@@ -898,8 +937,9 @@ Returns a triple (Δ',Γ', typ') where Δ' and Γ' are the new Δ and Γ
 and typ' is the inferred type of t.
 Fails of expected (typ) and inferred (typ') types do not match.
 *)
-let type_check_term_debug d (sch, vars) typ term =
-  let rec type_check_term (sch, vars) typ (term : cplx_term) =
+let type_check_term_debug d (sch, tctxt, vars) typ term =
+  let rec type_check_term ((sch, tctxt, vars) : context) (typ : tsymb)
+      (term : cplx_term) : predicate_schema * symbol_table * tsymb =
     let _ =
       if d then (
         Printf.eprintf "[Rewriting.type_check_term] (%s; %s) ⊢ "
@@ -912,90 +952,105 @@ let type_check_term_debug d (sch, vars) typ term =
     | Var v as tt ->
         if List.mem_assoc v vars then
           let vtyp = List.assoc v vars in
-          let sch, newvars = propagate_constraints typ vtyp tt sch vars in
+          let sch, newvars =
+            propagate_constraints typ vtyp tt (sch, tctxt, vars) in
           (sch, newvars, List.assoc v vars)
         else (sch, (v, typ) :: vars, typ)
     | Cst c as tt ->
         let ctyp = TCst (type_of_cst c) in
-        let sch, newvars = propagate_constraints typ ctyp tt sch vars in
+        let sch, newvars =
+          propagate_constraints typ ctyp tt (sch, tctxt, vars) in
         (sch, newvars, ctyp)
     | F2i t as tt ->
-        let sch, vars = propagate_constraints (TCst TInt) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TFloat) t in
-        let s, v = propagate_constraints (TCst TFloat) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TInt) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TFloat) t in
+        let s, v = propagate_constraints (TCst TFloat) t_typ t (s, tctxt, v) in
         (s, v, TCst TInt)
     | I2f t as tt ->
-        let sch, vars = propagate_constraints (TCst TFloat) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TInt) t in
-        let s, v = propagate_constraints (TCst TInt) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TFloat) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TInt) t in
+        let s, v = propagate_constraints (TCst TInt) t_typ t (s, tctxt, v) in
         (s, v, TCst TFloat)
     | FormatDate t as tt ->
-        let sch, vars = propagate_constraints (TCst TStr) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TFloat) t in
-        let s, v = propagate_constraints (TCst TFloat) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TStr) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TFloat) t in
+        let s, v = propagate_constraints (TCst TFloat) t_typ t (s, tctxt, v) in
         (s, v, TCst TStr)
     | Year t as tt ->
-        let sch, vars = propagate_constraints (TCst TInt) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TFloat) t in
-        let s, v = propagate_constraints (TCst TFloat) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TInt) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TFloat) t in
+        let s, v = propagate_constraints (TCst TFloat) t_typ t (s, tctxt, v) in
         (s, v, TCst TInt)
     | Month t as tt ->
-        let sch, vars = propagate_constraints (TCst TInt) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TFloat) t in
-        let s, v = propagate_constraints (TCst TFloat) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TInt) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TFloat) t in
+        let s, v = propagate_constraints (TCst TFloat) t_typ t (s, tctxt, v) in
         (s, v, TCst TInt)
     | DayOfMonth t as tt ->
-        let sch, vars = propagate_constraints (TCst TInt) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TFloat) t in
-        let s, v = propagate_constraints (TCst TFloat) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TInt) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TFloat) t in
+        let s, v = propagate_constraints (TCst TFloat) t_typ t (s, tctxt, v) in
         (s, v, TCst TInt)
     | R2s t as tt ->
-        let sch, vars = propagate_constraints (TCst TStr) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TRegexp) t in
-        let s, v = propagate_constraints (TCst TRegexp) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TStr) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TRegexp) t in
+        let s, v = propagate_constraints (TCst TRegexp) t_typ t (s, tctxt, v) in
         (s, v, TCst TStr)
     | S2r t as tt ->
-        let sch, vars = propagate_constraints (TCst TRegexp) typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) (TCst TStr) t in
-        let s, v = propagate_constraints (TCst TStr) t_typ t s v in
+        let sch, vars =
+          propagate_constraints (TCst TRegexp) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TStr) t in
+        let s, v = propagate_constraints (TCst TStr) t_typ t (s, tctxt, v) in
         (s, v, TCst TRegexp)
     | UMinus t as tt ->
         let exp_typ = new_type_symbol TNum sch vars in
-        let sch, vars = propagate_constraints exp_typ typ tt sch vars in
-        let s, v, t_typ = type_check_term (sch, vars) exp_typ t in
-        let s, v = propagate_constraints exp_typ t_typ t s v in
-        let exp_typ = more_spec_type sch vars t_typ exp_typ in
+        let sch, vars =
+          propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) exp_typ t in
+        let s, v = propagate_constraints exp_typ t_typ t (s, tctxt, v) in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t_typ exp_typ in
         (s, v, exp_typ)
     | (Plus (t1, t2) | Minus (t1, t2) | Mult (t1, t2) | Div (t1, t2)) as tt ->
         let exp_typ = new_type_symbol TNum sch vars in
-        let sch, vars = propagate_constraints exp_typ typ tt sch vars in
-        let s1, v1, t1_typ = type_check_term (sch, vars) exp_typ t1 in
-        let s1, v1 = propagate_constraints exp_typ t1_typ t1 s1 v1 in
-        let exp_typ = more_spec_type sch vars t1_typ exp_typ in
-        let s2, v2, t2_typ = type_check_term (s1, v1) exp_typ t2 in
-        let s2, v2 = propagate_constraints exp_typ t2_typ t2 s2 v2 in
-        let exp_typ = more_spec_type sch vars t2_typ exp_typ in
+        let sch, vars =
+          propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
+        let s1, v1, t1_typ = type_check_term (sch, tctxt, vars) exp_typ t1 in
+        let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t1_typ exp_typ in
+        let s2, v2, t2_typ = type_check_term (s1, tctxt, v1) exp_typ t2 in
+        let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t2_typ exp_typ in
         (s2, v2, exp_typ)
     | Mod (t1, t2) as tt ->
         let exp_typ = TCst TInt in
-        let sch, vars = propagate_constraints exp_typ typ tt sch vars in
-        let s1, v1, t1_typ = type_check_term (sch, vars) exp_typ t1 in
-        let s1, v1 = propagate_constraints exp_typ t1_typ t1 s1 v1 in
-        let s2, v2, t2_typ = type_check_term (s1, v1) exp_typ t2 in
-        let s2, v2 = propagate_constraints exp_typ t2_typ t2 s2 v2 in
+        let sch, vars =
+          propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
+        let s1, v1, t1_typ = type_check_term (sch, tctxt, vars) exp_typ t1 in
+        let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
+        let s2, v2, t2_typ = type_check_term (s1, tctxt, v1) exp_typ t2 in
+        let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
         (s2, v2, exp_typ)
     | Proj (t1, f) as tt -> (
         let exp_tt_typ = new_type_symbol TAny sch vars in
-        let sch', vars' = propagate_constraints exp_tt_typ typ tt sch vars in
+        let sch', vars' =
+          propagate_constraints exp_tt_typ typ tt (sch, tctxt, vars) in
         let exp_t1_typ =
           new_type_symbol (TRecord [(f, exp_tt_typ)]) sch' vars' in
-        let sch', vars', t1_ty = type_check_term (sch, vars) exp_t1_typ t1 in
+        let sch', vars', t1_ty =
+          type_check_term (sch, tctxt, vars) exp_t1_typ t1 in
         match t1_ty with
-        | TCst (TRef ctor) -> ()
+        | TCst (TRef ctor) -> failwith "not implemented"
         | _ ->
             let err = Printf.sprintf in
             (sch', vars', exp_tt_typ) ) in
-  type_check_term (sch, vars) typ term
+  type_check_term (sch, tctxt, vars) typ term
 
 (*
 Type judgement is of the form (Δ;Γ) ⊢ ϕ wff  
@@ -1010,8 +1065,8 @@ Parameters:
 Returns a pair (Δ',Γ') where Δ' and Γ' are the new Δ and Γ
 Fails if ϕ is not a well formed formula
 *)
-let type_check_formula_debug d (sch, vars) =
-  let rec type_check_formula (sch, vars) (f : cplx_formula) =
+let type_check_formula_debug d (sch, tctxt, vars) =
+  let rec type_check_formula ((sch, tctxt, vars) : context) (f : cplx_formula) =
     let _ =
       if d then (
         Printf.eprintf "[Rewriting.type_check_formula] (%s; %s) ⊢ "
@@ -1022,37 +1077,43 @@ let type_check_formula_debug d (sch, vars) =
     match f with
     | (Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2)) as f ->
         let exp_typ = new_type_symbol TAny sch vars in
-        let s1, v1, t1_typ = type_check_term_debug d (sch, vars) exp_typ t1 in
-        let s1, v1 = propagate_constraints exp_typ t1_typ t1 s1 v1 in
-        let exp_typ = more_spec_type sch vars t1_typ exp_typ in
-        let s2, v2, t2_typ = type_check_term_debug d (s1, v1) exp_typ t2 in
-        let s2, v2 = propagate_constraints exp_typ t2_typ t2 s2 v2 in
-        let s2, v2 = propagate_constraints t1_typ t2_typ t2 s2 v2 in
+        let s1, v1, t1_typ =
+          type_check_term_debug d (sch, tctxt, vars) exp_typ t1 in
+        let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t1_typ exp_typ in
+        let s2, v2, t2_typ =
+          type_check_term_debug d (s1, tctxt, v1) exp_typ t2 in
+        let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
+        let s2, v2 = propagate_constraints t1_typ t2_typ t2 (s2, tctxt, v2) in
         (s2, v2, f)
     | Substring (t1, t2) as f ->
         let exp_typ = TCst TStr in
         (* Define constant *)
-        let s1, v1, t1_typ = type_check_term_debug d (sch, vars) exp_typ t1 in
+        let s1, v1, t1_typ =
+          type_check_term_debug d (sch, tctxt, vars) exp_typ t1 in
         (* Type check t1 *)
-        let s1, v1 = propagate_constraints exp_typ t1_typ t1 s1 v1 in
+        let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
         (* Propagate constraints t1, exp *)
-        let s2, v2, t2_typ = type_check_term_debug d (s1, v1) exp_typ t2 in
+        let s2, v2, t2_typ =
+          type_check_term_debug d (s1, tctxt, v1) exp_typ t2 in
         (* Type check t2 *)
-        let s2, v2 = propagate_constraints exp_typ t2_typ t2 s2 v2 in
+        let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
         (* Propagate constraints t2, exp *)
         (s2, v2, f)
     | Matches (t1, t2) as f ->
         let exp_typ_1 = TCst TStr in
         (* Define constant *)
-        let s1, v1, t1_typ = type_check_term_debug d (sch, vars) exp_typ_1 t1 in
+        let s1, v1, t1_typ =
+          type_check_term_debug d (sch, tctxt, vars) exp_typ_1 t1 in
         (* Type check t1 *)
-        let s1, v1 = propagate_constraints exp_typ_1 t1_typ t1 s1 v1 in
+        let s1, v1 = propagate_constraints exp_typ_1 t1_typ t1 (s1, tctxt, v1) in
         (* Propagate constraints t1, exp *)
         let exp_typ_2 = TCst TRegexp in
         (* Define constant *)
-        let s2, v2, t2_typ = type_check_term_debug d (s1, v1) exp_typ_2 t2 in
+        let s2, v2, t2_typ =
+          type_check_term_debug d (s1, tctxt, v1) exp_typ_2 t2 in
         (* Type check t2 *)
-        let s2, v2 = propagate_constraints exp_typ_2 t2_typ t2 s2 v2 in
+        let s2, v2 = propagate_constraints exp_typ_2 t2_typ t2 (s2, tctxt, v2) in
         (* Propagate constraints t2, exp *)
         (s2, v2, f)
     | Pred p as f ->
@@ -1074,8 +1135,8 @@ let type_check_formula_debug d (sch, vars) =
               (fun (s, v) i ->
                 let exp_t = List.nth (List.assoc (name, arity) s) i in
                 let t = List.nth t_list i in
-                let s1, v1, t1 = type_check_term_debug d (s, v) exp_t t in
-                propagate_constraints exp_t t1 t s1 v1 )
+                let s1, v1, t1 = type_check_term_debug d (s, tctxt, v) exp_t t in
+                propagate_constraints exp_t t1 t (s1, tctxt, v1) )
               (sch, vars) indices in
           (* let ts = zip exp_typ_list t_list in
              let (s,v,_) =
@@ -1102,13 +1163,13 @@ let type_check_formula_debug d (sch, vars) =
             (fun vrs vr ->
               (vr, new_type_symbol TAny sch (List.append vars vrs)) :: vrs )
             [] new_vars in
-        let s1, v1, f1 = type_check_formula (sch, new_typed_vars) f1 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, new_typed_vars) f1 in
         assert (List.length v1 = List.length new_typed_vars) ;
         let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
         let new_sig = List.map (fun (_, t) -> t) new_sig in
         let shadowed_pred, rest = List.partition (fun (p, _) -> (n, a) = p) s1 in
         let delta = ((n, a), new_sig) :: rest in
-        let s2, v2, f2 = type_check_formula (delta, vars) f2 in
+        let s2, v2, f2 = type_check_formula (delta, tctxt, vars) f2 in
         let new_delta = List.filter (fun (p, _) -> not ((n, a) = p)) s2 in
         (shadowed_pred @ new_delta, v2, Let (p, f1, f2))
     | LetPast (p, f1, f2) ->
@@ -1125,59 +1186,61 @@ let type_check_formula_debug d (sch, vars) =
             [] new_vars in
         let new_sig = List.rev_map (fun (_, t) -> t) new_typed_vars in
         let s1, v1, f1 =
-          type_check_formula (((n, a), new_sig) :: sch, new_typed_vars) f1 in
+          type_check_formula
+            (((n, a), new_sig) :: sch, tctxt, new_typed_vars)
+            f1 in
         assert (List.length v1 = List.length new_typed_vars) ;
         let new_sig = List.map (fun v -> (v, List.assoc v v1)) new_vars in
         let new_sig = List.map (fun (_, t) -> t) new_sig in
         let shadowed_pred, rest = List.partition (fun (p, _) -> (n, a) = p) s1 in
         let delta = ((n, a), new_sig) :: rest in
-        let s2, v2, f2 = type_check_formula (delta, vars) f2 in
+        let s2, v2, f2 = type_check_formula (delta, tctxt, vars) f2 in
         let new_delta = List.filter (fun (p, _) -> not ((n, a) = p)) s2 in
         (shadowed_pred @ new_delta, v2, LetPast (p, f1, f2))
     | Neg f ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Neg f)
     | Prev (intv, f) ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Prev (intv, f))
     | Next (intv, f) ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Next (intv, f))
     | Eventually (intv, f) ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Eventually (intv, f))
     | Once (intv, f) ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Once (intv, f))
     | Always (intv, f) ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Always (intv, f))
     | PastAlways (intv, f) ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, PastAlways (intv, f))
     | And (f1, f2) ->
-        let s1, v1, f1 = type_check_formula (sch, vars) f1 in
-        let s2, v2, f2 = type_check_formula (s1, v1) f2 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, vars) f1 in
+        let s2, v2, f2 = type_check_formula (s1, tctxt, v1) f2 in
         (s2, v2, And (f1, f2))
     | Or (f1, f2) ->
-        let s1, v1, f1 = type_check_formula (sch, vars) f1 in
-        let s2, v2, f2 = type_check_formula (s1, v1) f2 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, vars) f1 in
+        let s2, v2, f2 = type_check_formula (s1, tctxt, v1) f2 in
         (s2, v2, Or (f1, f2))
     | Implies (f1, f2) ->
-        let s1, v1, f1 = type_check_formula (sch, vars) f1 in
-        let s2, v2, f2 = type_check_formula (s1, v1) f2 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, vars) f1 in
+        let s2, v2, f2 = type_check_formula (s1, tctxt, v1) f2 in
         (s2, v2, Implies (f1, f2))
     | Equiv (f1, f2) ->
-        let s1, v1, f1 = type_check_formula (sch, vars) f1 in
-        let s2, v2, f2 = type_check_formula (s1, v1) f2 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, vars) f1 in
+        let s2, v2, f2 = type_check_formula (s1, tctxt, v1) f2 in
         (s2, v2, Equiv (f1, f2))
     | Since (intv, f1, f2) ->
-        let s1, v1, f1 = type_check_formula (sch, vars) f1 in
-        let s2, v2, f2 = type_check_formula (s1, v1) f2 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, vars) f1 in
+        let s2, v2, f2 = type_check_formula (s1, tctxt, v1) f2 in
         (s2, v2, Since (intv, f1, f2))
     | Until (intv, f1, f2) ->
-        let s1, v1, f1 = type_check_formula (sch, vars) f1 in
-        let s2, v2, f2 = type_check_formula (s1, v1) f2 in
+        let s1, v1, f1 = type_check_formula (sch, tctxt, vars) f1 in
+        let s2, v2, f2 = type_check_formula (s1, tctxt, v1) f2 in
         (s2, v2, Until (intv, f1, f2))
     | Exists (v, f) ->
         let shadowed_vars, reduced_vars =
@@ -1188,7 +1251,7 @@ let type_check_formula_debug d (sch, vars) =
               (vr, new_type_symbol TAny sch (List.append shadowed_vars vrs))
               :: vrs )
             reduced_vars v in
-        let s1, v1, f = type_check_formula (sch, new_vars) f in
+        let s1, v1, f = type_check_formula (sch, tctxt, new_vars) f in
         let unshadowed_vars =
           List.filter (fun (vr, _) -> not (List.mem vr v)) v1 in
         (s1, unshadowed_vars @ shadowed_vars, Exists (v, f))
@@ -1201,7 +1264,7 @@ let type_check_formula_debug d (sch, vars) =
               (vr, new_type_symbol TAny sch (List.append shadowed_vars vrs))
               :: vrs )
             reduced_vars v in
-        let s1, v1, f = type_check_formula (sch, new_vars) f in
+        let s1, v1, f = type_check_formula (sch, tctxt, new_vars) f in
         let unshadowed_vars =
           List.filter (fun (vr, _) -> not (List.mem vr v)) v1 in
         (s1, unshadowed_vars @ shadowed_vars, ForAll (v, f))
@@ -1217,16 +1280,17 @@ let type_check_formula_debug d (sch, vars) =
             reduced_vars zs in
         let type_check_aggregation exp_typ1 exp_typ2 =
           let s1, v1, _ =
-            type_check_term_debug d (sch, vars') exp_typ2 (Var x) in
+            type_check_term_debug d (sch, tctxt, vars') exp_typ2 (Var x) in
           (* Type check variable x *)
-          let s2, v2, f = type_check_formula (s1, v1) f in
+          let s2, v2, f = type_check_formula (s1, tctxt, v1) f in
           (* Type check formula f *)
           let reduced_vars =
             List.filter (fun (v, _) -> List.mem_assoc v reduced_vars) v2 in
           (* Get the updated types for gs vars *)
           let vars = shadowed_vars @ reduced_vars in
           (* Restore the top-level vars with updated vars *)
-          let s3, v3, _ = type_check_term_debug d (sch, vars) exp_typ1 (Var r) in
+          let s3, v3, _ =
+            type_check_term_debug d (sch, tctxt, vars) exp_typ1 (Var r) in
           (* Type check variable r *)
           let s3, v3 =
             if
@@ -1234,7 +1298,7 @@ let type_check_formula_debug d (sch, vars) =
               (* If the expected types of r and x are the same *)
             then
               propagate_constraints (List.assoc x v2) (List.assoc r v3) (Var r)
-                s3 v3
+                (s3, tctxt, v3)
               (* and have compatible types, propagate the more specific type *)
             else (s3, v3) in
           (s3, v3, Aggreg (List.assoc r v3, r, op, x, gs, f)) in
@@ -1254,7 +1318,7 @@ let type_check_formula_debug d (sch, vars) =
   and type_check_re_formula (sch, vars) = function
     | Wild -> (sch, vars, Wild)
     | Test f ->
-        let s, v, f = type_check_formula (sch, vars) f in
+        let s, v, f = type_check_formula (sch, tctxt, vars) f in
         (s, v, Test f)
     | Concat (r1, r2) ->
         let s1, v1, r1 = type_check_re_formula (sch, vars) r1 in
@@ -1267,26 +1331,40 @@ let type_check_formula_debug d (sch, vars) =
     | Star r ->
         let s, v, r = type_check_re_formula (sch, vars) r in
         (s, v, Star r) in
-  type_check_formula (sch, vars)
+  type_check_formula (sch, tctxt, vars)
 
 let first_debug = ref true
 
-let rec check_syntax (db_schema : db_schema) (f : cplx_formula) =
-  let lift_type t = TCst t in
-  let sch =
-    List.map
-      (fun (t, l) ->
-        ((t, List.length l), List.map (fun (_, t) -> lift_type t) l) )
-      db_schema in
+let rec check_syntax (signatures : signatures) (f : cplx_formula) =
   let debug = !first_debug && Misc.debugging Dbg_typing in
+  let lift_type t = TCst t in
+  let sch : predicate_schema =
+    List.map
+      (fun decl ->
+        match decl with
+        | Predicate {elt= name, args; _} ->
+            ( (name, List.length args)
+            , extr_nodes args |> List.map (fun {atyp; _} -> lift_type atyp) )
+        | Record {elt= name, fields; _} -> ((name, 1), [TCst (TRef name)]) )
+      signatures in
+  let tctxt : type_context =
+    List.fold_left
+      (fun acc decl ->
+        match decl with
+        | Predicate _ -> acc
+        | Record {elt= name, fields; _} ->
+            ( name
+            , extr_nodes fields |> List.map (fun {fname; ftyp} -> (fname, ftyp))
+            )
+            :: acc )
+      [] signatures in
   let fvs =
     List.fold_left
       (fun vrs vr -> (vr, new_type_symbol TAny sch vrs) :: vrs)
       [] (free_vars f) in
-  let s, v, f = type_check_formula_debug debug (sch, fvs) f in
+  let s, v, f = type_check_formula_debug debug (sch, tctxt, fvs) f in
   if debug then (
-    Printf.eprintf
-      "[Rewriting.type_check] The final type judgement is (%s; %s) ⊢ "
+    Printf.eprintf "[check_syntax] The final type judgement is (%s; %s) ⊢ "
       (string_of_delta s) (string_of_gamma v) ;
     Printf.eprintf "%s" (string_of_formula "" f) ;
     Printf.eprintf "\n%!" )
@@ -1294,16 +1372,17 @@ let rec check_syntax (db_schema : db_schema) (f : cplx_formula) =
   first_debug := false ;
   (List.map (fun (v, t) -> (v, match t with TCst a -> a | _ -> TFloat)) v, f)
 
-let typecheck_formula (s : db_schema) (f : cplx_formula) =
+let typecheck_formula (signatures : signatures) (f : cplx_formula) :
+    cplx_formula * (var * tcst) list =
   (* Remember the order of variables in the input formula. This order is used
      for output, regardless of any transformations that follow. *)
   let orig_fv = free_vars f in
   (* Check well-formedness of the formula *)
   ignore (check_wff f) ;
   (* We first infer and check types *)
-  let fvtypes, f = check_syntax s f in
+  let fvtypes, f = check_syntax signatures f in
   let fvtypes = List.map (fun v -> (v, List.assoc v fvtypes)) orig_fv in
-  ()
+  (f, fvtypes)
 
 (* COMPILE FUNCTIONS *)
 let compile_cst (cst : cst) : Predicate.cst =
@@ -1321,3 +1400,6 @@ let compile_tcst (tcst : tcst) : Predicate.tcst =
   | TStr -> TStr
   | TRegexp -> TRegexp
   | TRef _ -> TInt
+
+let compile_formula (input : cplx_formula) : MFOTL.formula =
+  Equal (Predicate.Var "a", Predicate.Var "b")
