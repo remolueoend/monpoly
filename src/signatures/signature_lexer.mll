@@ -65,7 +65,7 @@ rule
   token = parse
   | eof { EOF }
   | "#"                            { line_comment lexbuf}
-  | "/*"                           { start_lex := start_pos_of_lexbuf lexbuf; comments 0 lexbuf }
+  | "(*"                           { start_lex := start_pos_of_lexbuf lexbuf; comments 0 lexbuf }
   | whitespace+                    { token lexbuf }
   | newline                        { newline lexbuf; token lexbuf }
   | "(" | ")" | "{" | "}"
@@ -73,9 +73,9 @@ rule
   | letter (digit | letter | '_')* { create_token lexbuf }
   | _ as c                         { unexpected_char lexbuf c }
 and comments level = parse
-  | "*/" { if level = 0 then token lexbuf
+  | "*)" { if level = 0 then token lexbuf
 	   else comments (level-1) lexbuf }
-  | "/*" { comments (level+1) lexbuf}
+  | "(*" { comments (level+1) lexbuf}
   | [^ '\n'] { comments level lexbuf }
   | "\n" { newline lexbuf; comments level lexbuf }
   | eof	 { raise (Lexer_error (lex_long_range lexbuf,
