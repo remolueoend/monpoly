@@ -273,7 +273,7 @@ let rec string_of_term term =
       | Mult (t1, t2) -> (false, t2s' t1 ^ " * " ^ t2s' t2)
       | Div (t1, t2) -> (false, t2s' t1 ^ " / " ^ t2s' t2)
       | Mod (t1, t2) -> (false, t2s' t1 ^ " mod " ^ t2s' t2)
-      | Proj (t1, f) -> (false, Printf.sprintf "%s[%s]" (string_of_term t1) f)
+      | Proj (t1, f) -> (false, Printf.sprintf "%s.%s" (string_of_term t1) f)
     in
     (* we don't add parentheses for the top-most operator, nor around
        constants and variables *)
@@ -1037,19 +1037,25 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
         let s2, v2, t2_typ = type_check_term (s1, tctxt, v1) exp_typ t2 in
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
         (s2, v2, exp_typ)
-    | Proj (t1, f) as tt -> (
+    | Proj (t1, f) as tt ->
         let exp_tt_typ = new_type_symbol TAny sch vars in
-        let sch', vars' =
-          propagate_constraints exp_tt_typ typ tt (sch, tctxt, vars) in
-        let exp_t1_typ =
-          new_type_symbol (TRecord [(f, exp_tt_typ)]) sch' vars' in
+        let exp_t1_typ = new_type_symbol (TRecord [(f, typ)]) sch vars in
         let sch', vars', t1_ty =
           type_check_term (sch, tctxt, vars) exp_t1_typ t1 in
-        match t1_ty with
-        | TCst (TRef ctor) -> failwith "not implemented"
-        | _ ->
-            let err = Printf.sprintf in
-            (sch', vars', exp_tt_typ) ) in
+        let sch', vars' =
+          propagate_constraints t1_ty exp_t1_typ t1 (sch, tctxt, vars) in
+        let t1_ty = more_spec_type (sch', tctxt, vars') t1_ty exp_t1_typ in
+        let f_ty =
+          match t1_ty with
+          | TSymb (TRecord fields, _) -> List.assoc f fields
+          | TCst (TRef ctor) ->
+              let ty = List.assoc ctor tctxt in
+              TCst (List.assoc f ty)
+          | _ -> failwith "typecheck_term: invalid state" in
+        let sch', vars' =
+          propagate_constraints exp_tt_typ f_ty tt (sch', tctxt, vars') in
+        let f_ty = more_spec_type (sch', tctxt, vars') f_ty exp_tt_typ in
+        (sch', vars', f_ty) in
   type_check_term (sch, tctxt, vars) typ term
 
 (*
