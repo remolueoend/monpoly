@@ -41,11 +41,11 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
   let get_field_value ({fname; ftyp} : record_field) : string =
     let json_value = List.assoc fname json_fields in
     match ftyp with
-    | Native _ -> json_value |> Yojson.Basic.to_string
-    | Complex ctor ->
+    | TRef ctor ->
         parse_record pb reg_tuple
           (SignTable.find_record_decl pb.signature_table ctor)
-          json_value in
+          json_value
+    | _ -> json_value |> Yojson.Basic.to_string in
   let tuple_values = List.map get_field_value (extr_nodes rec_fields) in
   let inst_id = Int.to_string pb.id_index in
   pb.id_index <- pb.id_index + 1 ;
@@ -92,7 +92,7 @@ module Make (C : Log_parser.Consumer) = struct
       | JSON str ->
           let json = sort (Yojson.Basic.from_string str) in
           let signature_decl =
-            SignTable.get_signature_from_json signatures pb.signature_table json
+            SignTable.signature_from_json signatures pb.signature_table json
           in
           let _ =
             match signature_decl with

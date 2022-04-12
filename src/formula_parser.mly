@@ -40,8 +40,8 @@
 
 
 %{
-  open Predicate
   open MFOTL
+  open CMFOTL
   open Misc
 
   let f str =
@@ -75,7 +75,7 @@
     | vl -> ForAll (vl, f)
 
 
-  let dfintv = (MFOTL.CBnd Z.zero, MFOTL.Inf)
+  let dfintv = (CBnd Z.zero, Inf)
 
   let strip str =
     let len = String.length str in
@@ -87,9 +87,8 @@
 
 
   let check f = f
-
   let add_ex p =
-    let args = Predicate.get_args p in
+    let args = CMFOTL.get_predicate_args p in
     let rec proc = function
       | [] -> []
       | (Var v) :: rest when v.[0] = '_' -> v :: (proc rest)
@@ -117,7 +116,7 @@
 
   (* The rule is: var LARROW aggreg var SC varlist formula  *)
   let aggreg res_var op agg_var groupby_vars f =
-    let free_vars = MFOTL.free_vars f in
+    let free_vars = CMFOTL.free_vars f in
     let msg b x =
       let kind = if b then "Aggregation" else "Group-by" in
       Printf.sprintf "[Formula_parser.aggreg] %s variable %s is not a free variable in the aggregated formula" kind x
@@ -170,7 +169,7 @@
 %nonassoc UMINUS F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE /* highest precedence */
 
 %start formula
-%type <MFOTL.formula> formula
+%type <CMFOTL.cplx_formula> formula
 
 %%
 
@@ -275,7 +274,7 @@ units:
 
 predicate:
   | pred LPA termlist RPA   { f "p()";
-                              let p = Predicate.make_predicate ($1,$3) in
+                              let p = ($1, List.length $3, $3) in
                               add_ex p
                             }
 
@@ -303,6 +302,7 @@ term:
   | S2I LPA term RPA          { f "term(s2i)"; S2i $3 }
   | F2S LPA term RPA          { f "term(f2s)"; F2s $3 }
   | S2F LPA term RPA          { f "term(s2f)"; S2f $3 }
+  | term DOT var              { f "term(proj)"; Proj ($1, $3) }
   | cst                       { f "term(cst)"; Cst $1 }
   | var                       { f "term(var)"; Var $1 }
 

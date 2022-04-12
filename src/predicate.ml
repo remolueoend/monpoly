@@ -91,7 +91,7 @@ type predicate = var * int * term list
 
 (* restriction hints
    we assume that rigid predicates are binary
-   hence a restiction hint is a pair of positions
+   hence a restriction hint is a pair of positions
 *)
 type rhint = int * int
 
