@@ -1,0 +1,1 @@
+Request(r) AND r.url = "http://bad.url" IMPLIES EVENTUALLY[0,10] Report(p) AND p.user.name = r.user.name AND p.reason = "bad request"
