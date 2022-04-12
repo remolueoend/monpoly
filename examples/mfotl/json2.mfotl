@@ -1,0 +1,1 @@
+Log(l) IMPLIES (NOT l.event.log_entry.level = "CRITICAL" AND l.event.log_entry.level = "ERROR")
