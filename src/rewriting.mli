@@ -61,7 +61,7 @@ val normalize: formula -> formula
       sugar, pushing down negations, and eliminating double
       negation. *)
 
-val is_special_case: (var list) -> (var list) -> formula -> bool
+val is_special_case: (var list) -> formula -> bool
 (** Returns [true] if the formula does not need to be evaluated
     independently. *)
 

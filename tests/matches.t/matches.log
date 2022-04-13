@@ -1,0 +1,5 @@
+@0 P("ab")
+@1 P("aabc")
+@2 P("xyz")
+@3 P("zab") Q("zzz")
+@4 P("zzzab") Q("zzz")

@@ -124,7 +124,7 @@ val satisfiesp: term list -> tuple -> bool * tuple
 
 
 val get_filter: (var list) -> formula -> tuple -> bool
-val get_tf: (var list) -> formula -> tuple -> tuple
+val get_tf: (var list) -> formula -> tuple -> tuple option
 
 
 exception Not_joinable

@@ -204,7 +204,7 @@ formula:
   | var LARROW aggreg var SC varlist formula
                                     { f "f(agg2)"; aggreg $1 $3 $4 $6 $7 }
   | term SUBSTRING term             { f "f(substring)"; check (Substring ($1, $3)) }
-  | term MATCHES term               { f "f(matches)"; check (Matches ($1, $3)) }
+  | term MATCHES term xopttermlist  { f "f(matches)"; check (Matches ($1, $3, $4)) }
   | PREV interval formula           { f "f(prev)"; Prev ($2,$3) }
   | PREV formula                    { f "f(prevdf)"; Prev (dfintv,$2) }
   | NEXT interval formula           { f "f(next)"; Next ($2,$3) }
@@ -319,6 +319,19 @@ varlist:
   | varlist COM var         { f "varlist(list)"; $1 @ [$3] }
   | var                     { f "varlist(end)"; [$1] }
   |                         { f "varlist()"; [] }
+
+xopttermlist:
+  | LPA opttermlist RPA     { f "xopttermlist(list)"; $2 }
+  |                         { f "xopttermlist()"; [] }
+
+opttermlist:
+  | opttermlist COM optterm { f "opttermlist(list)"; $1 @ [$3] }
+  | optterm                 { f "opttermlist(end)"; [$1] }
+  |                         { f "opttermlist()"; [] }
+
+optterm:
+  | LD                      { f "optterm(None)"; None }
+  | term                    { f "optterm(Some)"; Some $1 }
 
 var:
   | LD                      { f "unnamed var"; incr var_cnt; "_" ^ (string_of_int !var_cnt) }

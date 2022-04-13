@@ -75,7 +75,7 @@ type formula =
   | Less of (term * term)
   | LessEq of (term * term)
   | Substring of (term * term)
-  | Matches of (term * term)
+  | Matches of (term * term * term option list)
   | Pred of predicate
   | Let of (predicate * formula * formula)
   | LetPast of (predicate * formula * formula)

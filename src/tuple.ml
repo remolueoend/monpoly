@@ -249,46 +249,90 @@ let substring cs1 cs2 =
   in
   l1 <= l2 && aux (l2 - l1)
 
-let matches cs cr =
-  let s, p, r = match cs, cr with
-    | Str s, Regexp (p, r) -> s, p, r
-    | _ -> failwith "[Tuple.matches] internal error, expected string as lhs and regexp as rhs"
-  in try
-    let _ = Str.search_forward (Str.regexp p) s 0 in
-    true
-  with Not_found -> false
-  
+type 'a group_op = SkipGroup | GetGroup | EqGroupInt of int | EqGroupExt of 'a
 
-let get_filter attr formula =
-  let pos_t1, pos_t2 =
-    match formula with
-    | Equal (t1, t2)
-    | Less (t1, t2)
-    | LessEq (t1, t2)
-    | Substring (t1, t2)
-    | Matches (t1, t2)
-    | Neg (Equal (t1, t2))
-    | Neg (Less (t1, t2))
-    | Neg (LessEq (t1, t2))
-    | Neg (Substring (t1, t2))
-    | Neg (Matches (t1, t2))
-      ->
-      get_pos_term attr t1, get_pos_term attr t2
-    | _ -> failwith "[Tuple.get_filter, pos] internal error"
+let map_group_op f = function
+  | SkipGroup -> SkipGroup
+  | GetGroup -> GetGroup
+  | EqGroupInt i -> EqGroupInt i
+  | EqGroupExt x -> EqGroupExt (f x)
+
+let compile_group_ops attr vl =
+  let rec go extr out = function
+    | [] -> List.rev out
+    | None::vl -> go extr (SkipGroup::out) vl
+    | (Some (Var v))::vl when List.mem v extr ->
+      let j = Misc.get_pos v extr in
+      go extr ((EqGroupInt j)::out) vl
+    | (Some (Var v))::vl when not (List.mem v attr) ->
+      go (v::extr) (GetGroup::out) vl
+    | (Some t)::vl ->
+      let t' = get_pos_term attr t in
+      go extr ((EqGroupExt t')::out) vl
   in
-  let cond =
-    match formula with
-    | Equal (t1, t2) -> (=)
-    | Less (t1, t2) -> (<)
-    | LessEq (t1, t2) -> (<=)
-    | Substring (t1, t2) -> substring
-    | Matches (t1, t2) -> matches
-    | Neg (Equal (t1, t2)) -> (<>)
-    | Neg (Less (t1, t2)) -> (>=)
-    | Neg (LessEq (t1, t2)) -> (>)
-    | _ -> failwith "[Tuple.get_filter, cond] internal error"
-  in
-  satisfiesf2 cond pos_t1 pos_t2
+  go [] [] vl
+
+let matches cs cr gl =
+  let s, r = match cs, cr with
+    | Str s, Regexp (_, r) -> s, r
+    | _ -> failwith "[Tuple.matches] internal error"
+  in try
+    let _ = Str.search_forward r s 0 in
+    let rec go i out = function
+      | [] -> Some (List.rev_map (fun x -> Str x) out)
+      | SkipGroup :: l -> go (i+1) out l
+      | GetGroup :: l ->
+        let g = Str.matched_group i s in
+        go (i+1) (g::out) l
+      | EqGroupInt j :: l ->
+        let g = Str.matched_group i s in
+        if g = List.nth out j then go (i+1) out l else None
+      | EqGroupExt (Str g') :: l ->
+        let g = Str.matched_group i s in
+        if g = g' then go (i+1) out l else None
+      | _ -> failwith "[Tuple.matches] internal error"
+    in
+    go 1 [] gl (* first group has index 1 *)
+  (* Note: matched_group may raise Not_found too, namely if the match does not
+     involve the group expression at all. For now, the semantics is as follows:
+     wildcards (_ in formula syntax, SkipGroup here) always match, even if the
+     corresponding group does not exist, whereas variables require that the
+     group exist for the formula to be satisfied. *)
+  with Not_found -> None
+
+let rec get_filter attr formula =
+  match formula with
+  | Neg f ->
+    let filter = get_filter attr f in
+    (fun t -> not (filter t))
+  | Matches (t1, t2, tl) ->
+    let pos_t1 = get_pos_term attr t1 in
+    let pos_t2 = get_pos_term attr t2 in
+    let ops = compile_group_ops attr tl in
+    (fun tuple ->
+      let cs = eval_term_on_tuple tuple pos_t1 in
+      let cr = eval_term_on_tuple tuple pos_t2 in
+      let gl = List.map (map_group_op (eval_term_on_tuple tuple)) ops in
+      Option.is_some (matches cs cr gl))
+  | _ ->
+    let pos_t1, pos_t2 =
+      match formula with
+      | Equal (t1, t2)
+      | Less (t1, t2)
+      | LessEq (t1, t2)
+      | Substring (t1, t2)
+        -> get_pos_term attr t1, get_pos_term attr t2
+      | _ -> failwith "[Tuple.get_filter, pos] internal error"
+    in
+    let cond =
+      match formula with
+      | Equal (t1, t2) -> (=)
+      | Less (t1, t2) -> (<)
+      | LessEq (t1, t2) -> (<=)
+      | Substring (t1, t2) -> substring
+      | _ -> failwith "[Tuple.get_filter, cond] internal error"
+    in
+    satisfiesf2 cond pos_t1 pos_t2
 
 (* return a transformation function on tuples *)
 let get_tf attr = function
@@ -297,13 +341,22 @@ let get_tf attr = function
       let pos_term = get_pos_term attr t in
       (fun tuple ->
          let c = eval_term_on_tuple tuple pos_term in
-         add_last tuple c)
+         Some (add_last tuple c))
     in
     (match t1, t2 with
      | Var x, t when not (List.mem x attr) -> f t
      | t, Var x when not (List.mem x attr) -> f t
      | _ -> failwith "[Tuple.get_processing_func, equal] internal error"
     )
+  | Matches (t1, t2, tl) ->
+    let pos_t1 = get_pos_term attr t1 in
+    let pos_t2 = get_pos_term attr t2 in
+    let ops = compile_group_ops attr tl in
+    (fun tuple ->
+      let cs = eval_term_on_tuple tuple pos_t1 in
+      let cr = eval_term_on_tuple tuple pos_t2 in
+      let gl = List.map (map_group_op (eval_term_on_tuple tuple)) ops in
+      Option.map (fun l -> tuple @ l) (matches cs cr gl))
   | _ -> failwith "[Tuple.get_processing_func, formula] internal error"
 
 

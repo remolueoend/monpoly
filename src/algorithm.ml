@@ -1303,7 +1303,7 @@ let add_ext neval f =
     let attr1 = MFOTL.free_vars f1 in
     let attr2 = MFOTL.free_vars f2 in
     let ff1 = add_ext f1 in
-    let f2_is_special = Rewriting.is_special_case attr1 attr2 f2 in
+    let f2_is_special = Rewriting.is_special_case attr1 f2 in
     let ff2 =
       if f2_is_special then ERel Relation.empty
       else match f2 with
@@ -1319,7 +1319,10 @@ let add_ext neval f =
           let process_tuple = Tuple.get_tf attr1 f2 in
           fun rel1 _ ->
             Relation.fold
-              (fun t res -> Relation.add (process_tuple t) res)
+              (fun t res ->
+                match process_tuple t with
+                | None -> res
+                | Some t' -> Relation.add t' res)
               rel1 Relation.empty
       else
         match f2 with

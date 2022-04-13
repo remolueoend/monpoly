@@ -54,7 +54,7 @@ let elim_double_negation f =
     | Less (t1, t2) -> Less (t1, t2)
     | LessEq (t1, t2) -> LessEq (t1, t2)
     | Substring (t1, t2) -> Substring (t1, t2)
-    | Matches (t1, t2) -> Matches (t1, t2)
+    | Matches (t1, t2, tl) -> Matches (t1, t2, tl)
     | Pred p -> Pred p
     | Let (p,f1,f2) -> Let (p,elim f1, elim f2)
     | LetPast (p,f1,f2) -> LetPast (p,elim f1, elim f2)
@@ -102,8 +102,8 @@ let simplify_terms f =
     | Less (t1, t2) -> Less (st t1, st t2)
     | LessEq (t1, t2) -> LessEq (st t1, st t2)
     | Substring (t1, t2) -> Substring (st t1, st t2)
-    | Matches (t1, t2) -> Matches (st t1, st t2)
-
+    | Matches (t1, t2, tl) -> Matches (st t1, st t2,
+        List.map (Option.map st) tl)
     | Pred p ->
       let name, _, tlist = Predicate.get_info p in
       let new_tlist = List.map st tlist in
@@ -279,48 +279,44 @@ let msg_OR = "In subformulas of the form phi OR psi, phi and psi should have the
 
 
 (* In these special cases, no evaluation is needed for the formula [f2]. *)
-let is_special_case fv1 fv2 f2 =
-  if Misc.subset fv2 fv1 then
-    match f2 with
-    | Equal (_, _)
-    | Less (_, _)
-    | LessEq (_, _)
-    | Substring (_, _)
-    | Matches (_, _)
-    | Neg (Equal (_, _))
-    | Neg (Less (_, _))
-    | Neg (LessEq (_, _))
-    | Neg (Substring (_, _))
-    | Neg (Matches (_, _))
-      -> true
-    | _ -> false
-  else
-    match f2 with
-    | Equal (t1, t2) ->
-      (match t1, t2 with
-       | Var x, t when
-           (not (List.mem x fv1))
-           && (Misc.subset (Predicate.tvars t) fv1) -> true
-       | t, Var x when
-           (not (List.mem x fv1))
-           && (Misc.subset (Predicate.tvars t) fv1) -> true
-       | _ -> false
-      )
-    | _ -> false
-
+let is_special_case fv1 f =
+  match f with
+  | Equal (t1, t2) ->
+    (match t1, t2 with
+     | Var x, t when Misc.subset (Predicate.tvars t) fv1 -> true
+     | t, Var x when Misc.subset (Predicate.tvars t) fv1 -> true
+     | _ -> Misc.subset (MFOTL.free_vars f) fv1
+    )
+  | Matches (t1, t2, tl) ->
+    Misc.subset (Predicate.tvars t1) fv1
+    && Misc.subset (Predicate.tvars t2) fv1
+    && List.for_all (function
+      | None -> true
+      | Some (Var _) -> true
+      | Some t -> Misc.subset (Predicate.tvars t) fv1) tl
+  | Less (_, _)
+  | LessEq (_, _)
+  | Substring (_, _)
+  | Neg (Equal (_, _))
+  | Neg (Less (_, _))
+  | Neg (LessEq (_, _))
+  | Neg (Substring (_, _))
+  | Neg (Matches (_, _, _)) ->
+    Misc.subset (MFOTL.free_vars f) fv1
+  | _ -> false
 
 let is_and_relop = function
-  | And (_, f) -> (match f with
-    | Equal (_, _)
-    | Less (_, _)
-    | LessEq (_, _)
-    | Substring (_, _)
-    | Matches (_, _)
-    | Neg (Equal (_, _))
-    | Neg (Less (_, _))
-    | Neg (LessEq (_, _)) -> true
-    | _ -> false)
-  | _ -> failwith "[Rewriting.is_and_relop] internal error"
+  | Equal (_, _)
+  | Less (_, _)
+  | LessEq (_, _)
+  | Substring (_, _)
+  | Matches (_, _, _)
+  | Neg (Equal (_, _))
+  | Neg (Less (_, _))
+  | Neg (LessEq (_, _))
+  | Neg (Substring (_, _))
+  | Neg (Matches (_, _, _)) -> true
+  | _ -> false
 
 
 (* This function tells us beforehand whether a formula is monitorable
@@ -384,14 +380,14 @@ let rec is_monitorable f =
     then (is_mon1, r1)
     else
       let fv1 = MFOTL.free_vars f1 in
-      let fv2 = MFOTL.free_vars f2 in
-      if is_and_relop f then
-        if is_special_case fv1 fv2 f2
+      if is_and_relop f2 then
+        if is_special_case fv1 f2
         then (true, None)
         else (false, Some (f, msg_ANDRELOP))
       else
         (match f2 with
          | Neg f2' ->
+           let fv2 = MFOTL.free_vars f2 in
            if not (Misc.subset fv2 fv1)
            then (false, Some (f, msg_SUBSET))
            else is_monitorable f2'
@@ -479,8 +475,11 @@ let rec rr = function
     (match t1, t2 with
      | Var x, Cst c -> ([x], true)
      | _ -> ([], true))
-  | Substring (t1, t2) 
-  | Matches (t1, t2) -> ([], true)
+  | Substring (t1, t2) -> ([], true)
+  | Matches (t1, t2, tl) ->
+    let vll = List.map (function Some (Var x) -> [x] | _ -> []) tl in
+    let vl = List.fold_left Misc.union [] vll in
+    (vl, true)
 
   | Neg (Equal (t1, t2)) ->
     (match t1, t2 with
@@ -694,7 +693,7 @@ let rec rewrite f =
       And (f', Exists (v, f1))
 
   | And (f', Neg (f1)) ->
-    if propagate_cond f' f1 && not (is_and_relop f) then
+    if propagate_cond f' f1 && not (is_and_relop (Neg (f1))) then
       And (f', Neg (rewrite (And (f', f1))))
     else
       let f' = rewrite f' in
@@ -1408,14 +1407,24 @@ let rec type_check_formula (sch, vars) f =
     let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ t2 in       (* Type check t2 *)
     let (s2,v2) = check_and_propagate exp_typ t2_typ t2 s2 v2 in              (* Propagate constraints t2, exp *)                     
     (s2,v2,f)
-  | Matches (t1,t2) as f ->  
+  | Matches (t1,t2,tl) as f ->
     let exp_typ_1 = TCst TStr in                                              (* Define constant *)
     let (s1,v1,t1_typ) = type_check_term_debug d (sch, vars) exp_typ_1 t1 in  (* Type check t1 *)
     let (s1,v1) = check_and_propagate exp_typ_1 t1_typ t1 s1 v1 in            (* Propagate constraints t1, exp *)  
     let exp_typ_2 = TCst TRegexp in                                           (* Define constant *)
     let (s2,v2,t2_typ) = type_check_term_debug d (s1, v1) exp_typ_2 t2 in     (* Type check t2 *)
-    let (s2,v2) = check_and_propagate exp_typ_2 t2_typ t2 s2 v2 in                     (* Propagate constraints t2, exp *)                     
-    (s2,v2,f)
+    let (s2,v2) = check_and_propagate exp_typ_2 t2_typ t2 s2 v2 in            (* Propagate constraints t2, exp *)
+    let exp_typ_group = TCst TStr in
+    let (s,v) = List.fold_left
+      (fun st t ->
+        match t with
+        | None -> st
+        | Some t ->
+          let (s,v,t_typ) = type_check_term_debug d st exp_typ_group t in
+          check_and_propagate exp_typ_group t_typ t s v
+      ) (s2,v2) tl
+    in
+    (s,v,f)
   | Pred p as f ->
     let (name, arity, _) = Predicate.get_info p in
     let exp_typ_list =

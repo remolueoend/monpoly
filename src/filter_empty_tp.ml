@@ -228,7 +228,7 @@ let rec go_down (f : MFOTL.formula) : lformula labeled =
     | Less (t1,t2) -> LLess (t1,t2)
     | LessEq (t1,t2) -> LLessEq (t1,t2)
     | Substring (t1,t2) -> LSubstring(t1, t2)
-    | Matches (t1,t2) -> LMatches(t1, t2)
+    | Matches (t1,t2,_) -> LMatches(t1, t2)
     | Pred p -> LPred p
     | Neg f -> LNeg (go_down f)
     | And (f1,f2) -> LAnd ((go_down f1), (go_down f2))
