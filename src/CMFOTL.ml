@@ -820,29 +820,31 @@ exception IncompatibleTypes of tsymb * tsymb
 
 (** Returns the meet of the two given types.
     Raises an IncompatibleTypes exception whenever the meet of the two types is the bottom type. *)
-let rec type_meet ((sch, tctxt, vs) : context) (t1 : tsymb) (t2 : tsymb) : tsymb
-    =
+let rec type_meet ((sch, tctxt, vs) : context) (t : cplx_term) (t1 : tsymb)
+    (t2 : tsymb) : tsymb =
   match (t1, t2) with
-  | (TCst (TRef a) as t1), TCst (TRef b) -> if compare a b = 0 then t1 else TBot
-  | (TCst a as t1), TCst b -> if a = b then t1 else TBot
+  | (TCst (TRef a) as t1), TCst (TRef b) ->
+      if compare a b = 0 then t1 else raise (IncompatibleTypes (t1, t2))
+  | (TCst a as t1), TCst b ->
+      if a = b then t1 else raise (IncompatibleTypes (t1, t2))
   | (TCst a as t1), TSymb (TAny, _) -> t1
   | (TSymb (TAny, n1) as t1), (TSymb (TAny, n2) as t2) ->
       if n1 <= n2 then t1 else t2
   | TSymb (TAny, _), t2 -> t2
   | t1, TSymb (TAny, _) -> t1
   | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) ->
-      merge_records (sch, tctxt, vs) fs1 fs2
+      merge_records (sch, tctxt, vs) t fs1 fs2
   | TCst (TRef ctor), TSymb (TRecord fs, _) ->
-      cast_record (sch, tctxt, vs) ctor fs
+      cast_record (sch, tctxt, vs) t ctor fs
   | TSymb (TRecord fs, _), TCst (TRef ctor) ->
-      cast_record (sch, tctxt, vs) ctor fs
-  | _ -> TBot
+      cast_record (sch, tctxt, vs) t ctor fs
+  | _ -> raise (IncompatibleTypes (t1, t2))
 
 (** Accepts the fields of two symbolic record types and returns their meet.
     Raises an IncompatibleTypes exception whenever the meet of the types of a common field
     are incompatible, i.e. equal to bottom type. *)
-and merge_records (ctx : context) (t1_fields : (var * tsymb) list)
-    (t2_fields : (var * tsymb) list) : tsymb =
+and merge_records (ctx : context) (t : cplx_term)
+    (t1_fields : (var * tsymb) list) (t2_fields : (var * tsymb) list) : tsymb =
   let sch, _, vars = ctx in
   (* works similar to the merge function of a merge-sort. Assumes fields to be sorted by name. *)
   let rec merge = function
@@ -854,8 +856,7 @@ and merge_records (ctx : context) (t1_fields : (var * tsymb) list)
       | -1 -> (n1, t1) :: merge (f1s, t2_fields)
       | 1 -> (n2, t2) :: merge (t1_fields, f2s)
       | 0 ->
-          let meet = type_meet ctx t1 t2 in
-          if meet = TBot then raise (IncompatibleTypes (t1, t2)) ;
+          let meet = type_meet ctx t t1 t2 in
           (n1, meet) :: merge (f1s, f2s)
       | _ -> failwith "[CMFOTL:merge_records]: invalid state" ) in
   let sort_fields (n1, _) (n2, _) = compare n1 n2 in
@@ -867,7 +868,7 @@ and merge_records (ctx : context) (t1_fields : (var * tsymb) list)
     of the given constructor.
     Raises an InvalidTypes exception whenever the reference type is not more specific
     than the symbolic type described by the given fields. *)
-and cast_record ((sch, tctxt, vs) : context) (ctor : var)
+and cast_record ((sch, tctxt, vs) : context) (t : cplx_term) (ctor : var)
     (fs : (var * tsymb) list) : tsymb =
   match List.assoc_opt ctor tctxt with
   | None -> failwith ("Unknown record type: " ^ ctor)
@@ -877,18 +878,18 @@ and cast_record ((sch, tctxt, vs) : context) (ctor : var)
       (* raise if reference type is missing a field: *)
       if List.exists (fun (name, _) -> List.assoc_opt name fields = None) fs
       then raise (IncompatibleTypes (cty, sym_ty)) ;
-      (* raise, if for any common field, the meet type is TBot: *)
-      if
-        List.exists
-          (fun (name, ty) ->
-            match List.assoc_opt name fs with
-            | None -> false
-            | Some sty -> type_meet (sch, tctxt, vs) (TCst ty) sty = TBot )
-          fields
-      then raise (IncompatibleTypes (cty, sym_ty))
-      else cty
+      (* try to find the meet of each field.
+         Because all (recursive) fields of a TRef type are constant types,
+         the field type of the TRef type is always the meet of both of them. *)
+      List.iter
+        (fun (name, ty) ->
+          match List.assoc_opt name fs with
+          | None -> ()
+          | Some sty -> ignore (type_meet (sch, tctxt, vs) t (TCst ty) sty) )
+        fields ;
+      cty
 
-let more_spec_type ctx t1 t2 = type_meet ctx t1 t2
+let more_spec_type ctx t t1 t2 = type_meet ctx t t1 t2
 
 let propagate_to_predicate_schema (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
     (sch : predicate_schema) : predicate_schema =
@@ -917,12 +918,10 @@ let propagate_to_symbol_table (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
 let propagate_constraints t1 t2 (t : cplx_term) ((sch, tctxt, vars) : context) :
     predicate_schema * symbol_table =
   try
-    let meet = type_meet (sch, tctxt, vars) t1 t2 in
-    if meet = TBot then raise (IncompatibleTypes (t1, t2))
-    else
-      let vars = if List.mem_assoc t vars then vars else (t, meet) :: vars in
-      ( propagate_to_predicate_schema t1 t2 meet sch
-      , propagate_to_symbol_table t1 t2 meet vars )
+    let meet = type_meet (sch, tctxt, vars) t t1 t2 in
+    let vars = if List.mem_assoc t vars then vars else (t, meet) :: vars in
+    ( propagate_to_predicate_schema t1 t2 meet sch
+    , propagate_to_symbol_table t1 t2 meet vars )
   with IncompatibleTypes (t1, t2) ->
     let err_str =
       Printf.sprintf
@@ -1051,7 +1050,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
         let s, v, t_typ = type_check_term (sch, tctxt, vars) exp_typ t in
         let s, v = propagate_constraints exp_typ t_typ t (s, tctxt, v) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) t_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) tt t_typ exp_typ in
         (s, v, exp_typ)
     | (Plus (t1, t2) | Minus (t1, t2) | Mult (t1, t2) | Div (t1, t2)) as tt ->
         let exp_typ = new_type_symbol TNum sch vars in
@@ -1059,10 +1058,10 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
         let s1, v1, t1_typ = type_check_term (sch, tctxt, vars) exp_typ t1 in
         let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) t1_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) tt t1_typ exp_typ in
         let s2, v2, t2_typ = type_check_term (s1, tctxt, v1) exp_typ t2 in
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) t2_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) tt t2_typ exp_typ in
         (s2, v2, exp_typ)
     | Mod (t1, t2) as tt ->
         let exp_typ = TCst TInt in
@@ -1082,7 +1081,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           type_check_term (sch', tctxt, vars') exp_t1_typ t1 in
         let sch', vars' =
           propagate_constraints t1_ty exp_t1_typ t1 (sch', tctxt, vars') in
-        let t1_ty = more_spec_type (sch', tctxt, vars') t1_ty exp_t1_typ in
+        let t1_ty = more_spec_type (sch', tctxt, vars') tt t1_ty exp_t1_typ in
         let f_ty =
           match t1_ty with
           | TSymb (TRecord fields, _) -> List.assoc f fields
@@ -1092,7 +1091,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           | _ -> failwith "typecheck_term: invalid state" in
         let sch', vars' =
           propagate_constraints exp_tt_typ f_ty tt (sch', tctxt, vars') in
-        let f_ty = more_spec_type (sch', tctxt, vars') f_ty exp_tt_typ in
+        let f_ty = more_spec_type (sch', tctxt, vars') tt f_ty exp_tt_typ in
         (sch', vars', f_ty) in
   type_check_term (sch, tctxt, vars) typ term
 
@@ -1125,7 +1124,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
         let s1, v1, t1_typ =
           type_check_term_debug d (sch, tctxt, vars) exp_typ t1 in
         let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) t1_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t1 t1_typ exp_typ in
         let s2, v2, t2_typ =
           type_check_term_debug d (s1, tctxt, v1) exp_typ t2 in
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
