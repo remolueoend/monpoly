@@ -58,8 +58,12 @@ decl:
   | name=IDENT LPA args=separated_list(COM, pred_arg) RPA
     { Predicate (loc $startpos $endpos (name, args)) }
   (* declaration of a record type: TypeName { field1: type1, field2: type2, ..., fieldN: typeN } *)
-  | name=IDENT LCB fs=separated_list(COM, rec_field) RCB
-    { Record (loc $startpos $endpos (sort_rec_decl (name, fs)) ) }
+  | name=IDENT body=record_body
+    { Record (loc $startpos $endpos (sort_rec_decl (name, body)) ) }
+    
+(* declaration of a record body: { field1: type1, field2: type2, ..., fieldN: typeN } *)
+record_body:
+  | LCB fields=separated_list(COM, rec_field) RCB { fields }
 
 (* declaration of single record field: field1: type *)
 rec_field:
@@ -71,6 +75,7 @@ pred_arg:
 
 ty:
   | t=native_ty { t }
+  | fields=record_body { TInline (extr_nodes fields) }
   | id=IDENT { TRef id }
 
 native_ty:
