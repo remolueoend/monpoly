@@ -247,7 +247,7 @@ let rec string_of_cst c =
     else "\"" ^ s ^ "\"" in
   match c with
   | Int i -> Z.to_string i
-  | Float f -> Printf.sprintf "%g" f
+  | Float f -> Printf.sprintf "%f" f
   | Str s -> format_string s
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
   | Ref ref -> Printf.sprintf "ref<%i>" ref
@@ -1073,9 +1073,10 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
         (s2, v2, exp_typ)
     | Proj (t1, f) as tt ->
-        let exp_tt_typ = new_type_symbol TAny sch vars in
+        let sch', vars' = (sch, vars) in
+        let exp_tt_typ = new_type_symbol TAny sch' vars' in
         let sch', vars' =
-          propagate_constraints exp_tt_typ typ tt (sch, tctxt, vars) in
+          propagate_constraints exp_tt_typ typ tt (sch', tctxt, vars') in
         let exp_t1_typ = new_type_symbol (TRecord [(f, typ)]) sch' vars' in
         let sch', vars', t1_ty =
           type_check_term (sch', tctxt, vars') exp_t1_typ t1 in
