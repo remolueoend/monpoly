@@ -7,14 +7,16 @@ type parsebuf =
   ; signature_table: SignTable.t
   ; mutable pb_token: Json_log_lexer.token
   ; mutable pb_schema: Table.schema
-  ; mutable id_index: int }
+  ; mutable id_index: int
+  ; mutable input_line: int }
 
 let init_parsebuf lexbuf signatures =
   { pb_lexbuf= lexbuf
   ; signature_table= SignTable.of_signatures signatures
   ; pb_token= Json_log_lexer.token lexbuf
   ; pb_schema= ("", [])
-  ; id_index= 0 }
+  ; id_index= 0
+  ; input_line= 0 }
 
 let string_of_token (t : Json_log_lexer.token) =
   match t with
@@ -74,37 +76,44 @@ module Make (C : Log_parser.Consumer) = struct
       failwith "parser failed" in
     let rec parse_init () =
       debug "init" ;
+      pb.input_line <- pb.input_line + 1 ;
       match pb.pb_token with
       | EOF -> parse_eof ()
       | AT -> next pb ; parse_ts ()
-      (* TODO: allow JSON without @timestamp: | JSON _ -> parse_json () *)
+      | JSON _ -> parse_json ()
       | t -> fail ("Expected '@' or JSON but saw " ^ string_of_token t)
     and parse_ts () =
       debug "ts" ;
       match pb.pb_token with
-      | TS ts -> C.begin_tp ctxt ts ; next pb ; parse_json ()
+      | TS ts ->
+          C.begin_tp ctxt ts ;
+          pb.id_index <- 0 ;
+          next pb ;
+          parse_json ()
       | t -> fail ("Expected timestamp but saw " ^ string_of_token t)
     and parse_json () =
       let open Yojson.Basic in
       debug "json" ;
-      pb.id_index <- 0 ;
       match pb.pb_token with
-      | JSON str ->
-          let json = sort (Yojson.Basic.from_string str) in
+      | JSON str -> (
+        try
+          let json = sort (Yojson.Basic.from_string ~lnum:pb.input_line str) in
           let signature_decl =
             SignTable.signature_from_json signatures pb.signature_table json
           in
-          let _ =
-            match signature_decl with
-            | None -> ()
-            | Some decl ->
-                ignore
-                @@ parse_record pb
-                     (fun ctor values ->
-                       C.tuple ctxt (ctor, List.assoc ctor dbschema) values )
-                     decl json in
-          C.end_tp ctxt ; next pb ; parse_init ()
+          ( match signature_decl with
+          | None -> ()
+          | Some decl ->
+              ignore
+              @@ parse_record pb
+                   (fun ctor values ->
+                     C.tuple ctxt (ctor, List.assoc ctor dbschema) values )
+                   decl json ) ;
+          next pb ;
+          (match pb.pb_token with AT -> C.end_log ctxt | _ -> ()) ;
+          parse_init ()
+        with Yojson.Json_error msg -> fail msg )
       | t -> fail ("Expected JSON but saw " ^ string_of_token t)
-    and parse_eof () = debug "EOF" ; () in
-    parse_init () ; true
+    and parse_eof () = debug "EOF" in
+    parse_init () ; C.end_log ctxt ; true
 end
