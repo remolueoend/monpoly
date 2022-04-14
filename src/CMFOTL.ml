@@ -52,7 +52,7 @@ type cst =
 
 type tcst = Signature_ast.ty
 
-type tcl = TNum | TAny | TRecord of (var * tsymb) list
+type tcl = TNum | TAny | TPartial of (var * tsymb) list
 and tsymb = TSymb of (tcl * int) | TCst of tcst | TBot
 
 type table_schema = var * (string * tcst) list
@@ -239,6 +239,10 @@ let rec string_of_tcst = function
   | TStr -> "TStr"
   | TRegexp -> "TRegexp"
   | TRef ctor -> Printf.sprintf "<%s>" ctor
+  | TInline fields ->
+      let string_of_field {fname; ftyp} = fname ^ ": " ^ string_of_tcst ftyp in
+      Printf.sprintf "{%s}"
+        (List.map string_of_field fields |> String.concat ", ")
 
 let rec string_of_cst c =
   let format_string s =
@@ -253,13 +257,9 @@ let rec string_of_cst c =
   | Ref ref -> Printf.sprintf "ref<%i>" ref
 
 let rec string_of_type = function
-  | TCst TInt -> "Int"
-  | TCst TFloat -> "Float"
-  | TCst TStr -> "String"
-  | TCst TRegexp -> "Regexp"
-  | TCst (TRef ref) -> Printf.sprintf "<%s>" ref
+  | TCst t -> string_of_tcst t
   | TSymb (TNum, a) -> "(Num t" ^ string_of_int a ^ ") =>  t" ^ string_of_int a
-  | TSymb (TRecord fs, a) ->
+  | TSymb (TPartial fs, a) ->
       Printf.sprintf "t%i{%s}" a
         ( List.map (fun (n, t) -> n ^ ":" ^ string_of_type t) fs
         |> String.concat ", " )
@@ -797,7 +797,7 @@ let ( << ) f g x = f (g x)
 let merge_types (sch : predicate_schema) (vars : symbol_table) =
   let rec merge_tsymb (tsymb : tsymb) : tsymb list =
     match tsymb with
-    | TSymb (TRecord fields, _) ->
+    | TSymb (TPartial fields, _) ->
         (* TODO: is this recursion really necessary? *)
         (* tsymb :: List.map snd fields |> List.map merge_tsymb |> List.flatten *)
         [tsymb]
@@ -818,26 +818,63 @@ let new_type_symbol (cls : tcl) (sch : predicate_schema) (vs : symbol_table) :
 
 exception IncompatibleTypes of tsymb * tsymb
 
+(* compares two types for structural equality.
+   Returns either true of false (no order). *)
+let rec compare_tcst t1 t2 =
+  match (t1, t2) with
+  | TInline fs1, TInline fs2 ->
+      (* compare fields recursively. They are allowed to be in different order. *)
+      if List.length fs1 <> List.length fs2 then false
+      else
+        List.for_all
+          (fun {fname= f1; ftyp= t1} ->
+            match List.find_opt (fun {fname= f2; _} -> f1 = f2) fs2 with
+            | None -> false
+            | Some {ftyp= t2; _} -> compare_tcst t1 t2 )
+          fs1
+  | t1, t2 -> compare t1 t2 = 0
+
 (** Returns the meet of the two given types.
     Raises an IncompatibleTypes exception whenever the meet of the two types is the bottom type. *)
-let rec type_meet ((sch, tctxt, vs) : context) (t : cplx_term) (t1 : tsymb)
-    (t2 : tsymb) : tsymb =
+let rec type_meet (ctx : context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb) :
+    tsymb =
+  let _, tctxt, _ = ctx in
   match (t1, t2) with
-  | (TCst (TRef a) as t1), TCst (TRef b) ->
-      if compare a b = 0 then t1 else raise (IncompatibleTypes (t1, t2))
+  (* the meet of two constant types -> they need to be equal *)
   | (TCst a as t1), TCst b ->
-      if a = b then t1 else raise (IncompatibleTypes (t1, t2))
-  | (TCst a as t1), TSymb (TAny, _) -> t1
+      if compare_tcst a b then t1 else raise (IncompatibleTypes (t1, t2))
+  (* the meet of two TAny instances is the one with the lower index *)
   | (TSymb (TAny, n1) as t1), (TSymb (TAny, n2) as t2) ->
       if n1 <= n2 then t1 else t2
-  | TSymb (TAny, _), t2 -> t2
-  | t1, TSymb (TAny, _) -> t1
-  | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) ->
-      merge_records (sch, tctxt, vs) t fs1 fs2
-  | TCst (TRef ctor), TSymb (TRecord fs, _) ->
-      cast_record (sch, tctxt, vs) t ctor fs
-  | TSymb (TRecord fs, _), TCst (TRef ctor) ->
-      cast_record (sch, tctxt, vs) t ctor fs
+  (* the meet of TAny with any type t is always type t *)
+  | TSymb (TAny, _), t | t, TSymb (TAny, _) -> t
+  (* the meet of two partial types is their merged partial type *)
+  | TSymb (TPartial fs1, _), TSymb (TPartial fs2, _) ->
+      merge_records ctx t fs1 fs2
+  (* the meet between a ref type and a partial type is the ref type,
+     as long as the partial type can be casted. *)
+  | TCst (TRef ctor), TSymb (TPartial partial_fields, _)
+   |TSymb (TPartial partial_fields, _), TCst (TRef ctor) -> (
+    match List.assoc_opt ctor tctxt with
+    | None -> failwith ("Unknown record type: " ^ ctor)
+    | Some ref_fields ->
+        let success = cast_to_record ctx t ref_fields partial_fields in
+        if success then TCst (TRef ctor) else raise (IncompatibleTypes (t1, t2))
+    )
+  (* the meet of an inline type and a partial type is the inline type,
+     as long as the partial type can be casted. *)
+  | TCst (TInline inline_fields), TSymb (TPartial partial_fields, _)
+   |TSymb (TPartial partial_fields, _), TCst (TInline inline_fields) ->
+      let fields = List.map (fun {fname; ftyp} -> (fname, ftyp)) inline_fields in
+      let success = cast_to_record ctx t fields partial_fields in
+      if success then TCst (TInline inline_fields)
+      else raise (IncompatibleTypes (t1, t2))
+  (* by definition, the meet of a ref type and an inline type is the ref type,
+     as long as they are structurally equal. *)
+  (* | TCst (TInline inline_fields), TCst (TRef ctor)
+   |TCst (TRef ctor), TCst (TInline inline_fields) ->
+      () *)
+  (* for any other case, we assume the meet is the bottom type *)
   | _ -> raise (IncompatibleTypes (t1, t2))
 
 (** Accepts the fields of two symbolic record types and returns their meet.
@@ -862,32 +899,28 @@ and merge_records (ctx : context) (t : cplx_term)
   let sort_fields (n1, _) (n2, _) = compare n1 n2 in
   let t1_fields = List.sort sort_fields t1_fields in
   let t2_fields = List.sort sort_fields t2_fields in
-  new_type_symbol (TRecord (merge (t1_fields, t2_fields))) sch vars
+  new_type_symbol (TPartial (merge (t1_fields, t2_fields))) sch vars
 
 (** Casts (the fields of) a symbolic record type to a constant reference type
     of the given constructor.
     Raises an InvalidTypes exception whenever the reference type is not more specific
     than the symbolic type described by the given fields. *)
-and cast_record ((sch, tctxt, vs) : context) (t : cplx_term) (ctor : var)
-    (fs : (var * tsymb) list) : tsymb =
-  match List.assoc_opt ctor tctxt with
-  | None -> failwith ("Unknown record type: " ^ ctor)
-  | Some fields ->
-      let cty = TCst (TRef ctor) in
-      let sym_ty = TSymb (TRecord fs, 0) in
-      (* raise if reference type is missing a field: *)
-      if List.exists (fun (name, _) -> List.assoc_opt name fields = None) fs
-      then raise (IncompatibleTypes (cty, sym_ty)) ;
-      (* try to find the meet of each field.
-         Because all (recursive) fields of a TRef type are constant types,
-         the field type of the TRef type is always the meet of both of them. *)
-      List.iter
-        (fun (name, ty) ->
-          match List.assoc_opt name fs with
-          | None -> ()
-          | Some sty -> ignore (type_meet (sch, tctxt, vs) t (TCst ty) sty) )
-        fields ;
-      cty
+and cast_to_record ((sch, tctxt, vs) : context) (t : cplx_term)
+    (fields : (var * tcst) list) (fs : (var * tsymb) list) : bool =
+  (* raise if reference type is missing a field: *)
+  if List.exists (fun (name, _) -> List.assoc_opt name fields = None) fs then
+    false
+  else (
+    (* try to find the meet of each field.
+       Because all (recursive) fields of a TRef type are constant types,
+       the field type of the TRef type is always the meet of both of them. *)
+    List.iter
+      (fun (name, ty) ->
+        match List.assoc_opt name fs with
+        | None -> ()
+        | Some sty -> ignore (type_meet (sch, tctxt, vs) t (TCst ty) sty) )
+      fields ;
+    true )
 
 let more_spec_type ctx t t1 t2 = type_meet ctx t t1 t2
 
@@ -905,11 +938,11 @@ let propagate_to_symbol_table (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
     if tsymb = t1 || tsymb = t2 then meet
     else
       match tsymb with
-      | TSymb (TRecord fields, i) ->
+      | TSymb (TPartial fields, i) ->
           let new_fields =
             List.map (fun (name, typ) -> (name, propagate_to_tsymb typ)) fields
           in
-          TSymb (TRecord new_fields, i)
+          TSymb (TPartial new_fields, i)
       | _ -> tsymb in
   List.map (fun (name, typ) -> (name, propagate_to_tsymb typ)) vars
 
@@ -1077,7 +1110,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
         let exp_tt_typ = new_type_symbol TAny sch' vars' in
         let sch', vars' =
           propagate_constraints exp_tt_typ typ tt (sch', tctxt, vars') in
-        let exp_t1_typ = new_type_symbol (TRecord [(f, typ)]) sch' vars' in
+        let exp_t1_typ = new_type_symbol (TPartial [(f, typ)]) sch' vars' in
         let sch', vars', t1_ty =
           type_check_term (sch', tctxt, vars') exp_t1_typ t1 in
         let sch', vars' =
@@ -1085,10 +1118,13 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
         let t1_ty = more_spec_type (sch', tctxt, vars') tt t1_ty exp_t1_typ in
         let f_ty =
           match t1_ty with
-          | TSymb (TRecord fields, _) -> List.assoc f fields
+          | TSymb (TPartial fields, _) -> List.assoc f fields
           | TCst (TRef ctor) ->
-              let ty = List.assoc ctor tctxt in
-              TCst (List.assoc f ty)
+              let fields = List.assoc ctor tctxt in
+              TCst (List.assoc f fields)
+          | TCst (TInline fields) ->
+              let {ftyp; _} = List.find (fun {fname; _} -> fname = f) fields in
+              TCst ftyp
           | _ -> failwith "typecheck_term: invalid state" in
         let sch', vars' =
           propagate_constraints exp_tt_typ f_ty tt (sch', tctxt, vars') in
@@ -1429,12 +1465,13 @@ let compile_tcst (tcst : tcst) : Predicate.tcst =
   | TStr -> TStr
   | TRegexp -> TRegexp
   | TRef _ -> TInt
+  | TInline _ -> TInt
 
 let compile_tcl (tcl : tcl) : Predicate.tcl =
   match tcl with
   | TNum -> TNum
   | TAny -> TAny
-  | TRecord _ -> failwith "compile_tcl: case TRecord not implemented"
+  | TPartial _ -> failwith "compile_tcl: case TPartial not implemented"
 
 let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
   match tsymb with
