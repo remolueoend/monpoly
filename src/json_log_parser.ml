@@ -23,7 +23,119 @@ let string_of_token (t : Json_log_lexer.token) =
   | AT -> "'@'"
   | TS ts -> Z.to_string ts
   | JSON json -> "\"" ^ String.escaped json ^ "\""
+  | LPA -> "'('"
+  | RPA -> "')'"
+  | LCB -> "'{'"
+  | RCB -> "'}'"
+  | COM -> "','"
+  | STR s -> "\"" ^ String.escaped s ^ "\""
+  | CMD -> "'>'"
+  | EOC -> "'<'"
   | EOF -> "<EOF>"
+
+exception Local_error of string
+
+let next pb = pb.pb_token <- Json_log_lexer.token pb.pb_lexbuf
+
+let expect pb t =
+  if pb.pb_token = t then next pb
+  else
+    raise
+      (Local_error
+         ( "Expected " ^ string_of_token t ^ " but saw "
+         ^ string_of_token pb.pb_token ) )
+
+let parse_string pb =
+  match pb.pb_token with
+  | STR s -> next pb ; s
+  | t -> raise (Local_error ("Expected a string but saw " ^ string_of_token t))
+
+let parse_int pb =
+  let s = parse_string pb in
+  try int_of_string s
+  with Failure _ ->
+    raise
+      (Local_error ("Expected an integer but saw \"" ^ String.escaped s ^ "\""))
+
+let parse_tuple pb =
+  let rec more l =
+    match pb.pb_token with
+    | COM ->
+        next pb ;
+        let s = parse_string pb in
+        more (s :: l)
+    | RPA -> next pb ; List.rev l
+    | t ->
+        raise (Local_error ("Expected ',' or ')' but saw " ^ string_of_token t))
+  in
+  expect pb LPA ;
+  match pb.pb_token with
+  | RPA -> next pb ; []
+  | STR s ->
+      next pb ;
+      more [s]
+  | t ->
+      raise
+        (Local_error ("Expected a string or ')' but saw " ^ string_of_token t))
+
+let parse_int_tuple pb =
+  let t = parse_tuple pb in
+  try List.map int_of_string t
+  with Failure _ -> raise (Local_error "Expected a tuple of integers")
+
+let parse_heavy pb =
+  expect pb LPA ;
+  let i = parse_int pb in
+  expect pb COM ;
+  let t = parse_tuple pb in
+  expect pb RPA ; (i, t)
+
+let parse_heavies pb =
+  let rec more l =
+    match pb.pb_token with
+    | COM ->
+        next pb ;
+        let h = parse_heavy pb in
+        more (h :: l)
+    | _ -> List.rev l in
+  expect pb LCB ;
+  let h0 = parse_heavy pb in
+  let hl = more [h0] in
+  expect pb RCB ; Array.of_list hl
+
+let parse_slices pb =
+  let rec more l =
+    match pb.pb_token with
+    | COM ->
+        next pb ;
+        let t = Array.of_list (parse_int_tuple pb) in
+        more (t :: l)
+    | _ -> List.rev l in
+  expect pb LCB ;
+  let t0 = Array.of_list (parse_int_tuple pb) in
+  let tl = more [t0] in
+  expect pb RCB ; Array.of_list tl
+
+let parse_slicing_params pb =
+  expect pb LCB ;
+  let heavies = parse_heavies pb in
+  expect pb COM ;
+  let shares = parse_slices pb in
+  expect pb COM ;
+  let seeds = parse_slices pb in
+  expect pb RCB ; (heavies, shares, seeds)
+
+let parse_command_params pb =
+  match pb.pb_token with
+  | LCB ->
+      let p = parse_slicing_params pb in
+      expect pb EOC ; Some (Helper.SplitSave p)
+  | STR s -> next pb ; expect pb EOC ; Some (Helper.Argument s)
+  | EOC -> next pb ; None
+  | t ->
+      raise
+        (Local_error
+           ("Expected a string, '{' or '<' but saw " ^ string_of_token t) )
 
 (** Parses the given json record by registering each found DB tuple recursively
     using the provided `reg_tuple` function. The returned integer is equal to the unique instance ID
@@ -54,8 +166,6 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
   reg_tuple ctor (inst_id :: tuple_values) ;
   inst_id
 
-let next pb = pb.pb_token <- Json_log_lexer.token pb.pb_lexbuf
-
 (** Creates a parser which is capable of parsing log files consisting of
     lines of JSON strings. *)
 module Make (C : Log_parser.Consumer) = struct
@@ -79,6 +189,7 @@ module Make (C : Log_parser.Consumer) = struct
       pb.input_line <- pb.input_line + 1 ;
       match pb.pb_token with
       | EOF -> parse_eof ()
+      | CMD -> next pb ; parse_command ()
       | AT -> next pb ; parse_ts ()
       | JSON _ -> parse_json ()
       | t -> fail ("Expected '@' or JSON but saw " ^ string_of_token t)
@@ -114,6 +225,18 @@ module Make (C : Log_parser.Consumer) = struct
           parse_init ()
         with Yojson.Json_error msg -> fail msg )
       | t -> fail ("Expected JSON but saw " ^ string_of_token t)
+    and parse_command () =
+      debug "command" ;
+      match pb.pb_token with
+      | STR name -> (
+          next pb ;
+          let err, params =
+            try (None, parse_command_params pb)
+            with Local_error msg -> (Some msg, None) in
+          match err with
+          | None -> C.command ctxt name params ; parse_init ()
+          | Some msg -> fail msg )
+      | t -> fail ("Expected a command name but saw " ^ string_of_token t)
     and parse_eof () = debug "EOF" in
     parse_init () ; C.end_log ctxt ; true
 end
