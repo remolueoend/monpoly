@@ -1,1 +1,2 @@
-Request(r) AND r.url = "http://bad.url" IMPLIES EVENTUALLY[0,10] Report(p) AND p.user = r.user AND p.reason = "bad request"
+r.url = "http://bad.url" AND
+Request(r) IMPLIES EVENTUALLY[0,10] p.user = r.user AND p.reason = "bad request" AND Report(p)

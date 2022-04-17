@@ -27,6 +27,7 @@
 
 %{
 open Signature_ast
+open Signature_ast.ParseTree
 open CMFOTL
 
 (** returns a fresh record type declaration with its fields sorted alphanumerically. *)
@@ -43,7 +44,7 @@ let sort_rec_decl ((name, fields) : record_decl) : record_decl =
 
 %start signatures
 
-%type <signatures> signatures
+%type <ParseTree.signatures> signatures
 
 %%
 

@@ -16,7 +16,7 @@ exception UnknownType of string
 (** Returns the constructor/predicate name of the given declaration *)
 let decl_name = function
   | Predicate {elt= name, _; _} -> name
-  | Record {elt= name, _; _} -> name
+  | Record (_, {elt= name, _; _}) -> name
 
 (** Stores a map from declaration name to type declaration *)
 module SignTable = struct
@@ -33,11 +33,10 @@ module SignTable = struct
     | Predicate _ ->
         failwith
         @@ Printf.sprintf "[find_record_decl]: %s is not a record type" ctor
-    | Record {elt; _} -> elt
+    | Record (_, {elt; _}) -> elt
 
   (** returns whether or not the given json object matches the given record type declaration. 
-    Assumes that the fields of the json object are sorted alphanumerically.
-    TODO: return an actual tuple containing the matching values as an option *)
+    Assumes that the fields of the json object are sorted alphanumerically. *)
   let rec match_json (signs : t) ((record_name, record_fields) : record_decl)
       (json : Yojson.Basic.t) : bool =
     let open Yojson.Basic in
@@ -71,11 +70,11 @@ module SignTable = struct
           List.find_opt
             (fun d ->
               match d with
-              | Record {elt; _} -> match_json table elt json
+              | Record (_, {elt; _}) -> match_json table elt json
               | _ -> false )
             signatures in
         match first with
-        | Some (Record {elt; _}) -> Some elt
+        | Some (Record (_, {elt; _})) -> Some elt
         | None -> None
         | _ -> failwith "invalid match case" )
     | t ->
@@ -101,7 +100,7 @@ let typecheck (signatures : signatures) : unit =
       else TypeSet.add name set in
     match decl with
     | Predicate {elt= name, _; loc} -> reg name loc
-    | Record {elt= name, _; loc} -> reg name loc in
+    | Record (_, {elt= name, _; loc}) -> reg name loc in
   let type_set = List.fold_left reg_type TypeSet.empty signatures in
   (* make sure all complex type references are valid *)
   let typecheck_ty (loc : Range.t) = function
@@ -119,7 +118,8 @@ let typecheck (signatures : signatures) : unit =
   List.iter
     (function
       | Predicate _ -> ()
-      | Record {elt= name, fields; _} -> typecheck_record_decl (name, fields) )
+      | Record (_, {elt= name, fields; _}) ->
+          typecheck_record_decl (name, fields) )
     signatures
 
 (** Returns a new DB schema for a given list of signature declarations *)
@@ -132,7 +132,7 @@ let to_dbschema (signatures : signatures) : Db.schema =
             ( extr_nodes args
             |> List.map (fun {aname; atyp} -> (aname, compile_tcst atyp)) )
             schema
-      | Record {elt= name, fields; _} ->
+      | Record (_, {elt= name, fields; _}) ->
           let cols =
             List.map
               (fun {elt= {fname; ftyp}; _} -> (fname, compile_tcst ftyp))
@@ -140,43 +140,28 @@ let to_dbschema (signatures : signatures) : Db.schema =
           Db.add_predicate name (("id", TInt) :: cols) schema )
     Db.base_schema signatures
 
-(** accepts the path to a signature file and returns a new DB schema for the specificed
-    signature declarations in the given file. *)
+(** parses the signature file at the given path. *)
 let parse_signature_file (fname : string) : signatures =
   let ic = open_in fname in
   let lexbuf = Lexing.from_channel ic in
   let schema =
     try
       Lexing.set_filename lexbuf fname ;
-      let signatures =
+      let parsed_signatures =
         Signature_parser.signatures Signature_lexer.token lexbuf in
-      let _ = typecheck signatures in
+      let signatures = Signature_ast.transpile_signatures parsed_signatures in
+      (let _ = typecheck signatures in
+       if Misc.debugging Dbg_signatures then
+         Printf.eprintf "[Signatures]: Parsed signatures after transpiling:\n%!" ;
+       List.iter
+         (fun s -> Printf.eprintf "%s\n%!" (string_of_signature s))
+         signatures ) ;
       signatures
     with Signature_parser.Error ->
       failwith
       @@ Printf.sprintf "Parse error at: %s"
            (Range.string_of_range (Range.lex_range lexbuf)) in
   close_in ic ; schema
-
-(* **** STRING_OF FUNCTIONS FOR AST OBJECTS **** *)
-let string_of_record ((id, fields) : record_decl) =
-  let field_to_str {elt= {fname; ftyp}; _} =
-    Printf.sprintf "%s: %s" fname (string_of_tcst ftyp) in
-  let fields_to_str = List.map field_to_str fields |> String.concat ", " in
-  Printf.sprintf "%s = {%s}" id fields_to_str
-
-let string_of_predicate ((id, args) : pred_decl) =
-  let arg_to_str {elt= {aname; atyp}; _} =
-    let ty_str = string_of_tcst atyp in
-    if String.length aname = 0 then Printf.sprintf "%s" ty_str
-    else Printf.sprintf "%s: %s" aname ty_str in
-  let args_to_str = List.map arg_to_str args |> String.concat ", " in
-  Printf.sprintf "%s(%s)" id args_to_str
-
-let string_of_signature signature =
-  match signature with
-  | Predicate n -> string_of_predicate n.elt
-  | Record n -> string_of_record n.elt
 
 (* **** INLINE TESTS **** *)
 (* let%test_module "typecheck tests" =

@@ -47,8 +47,6 @@ type cst =
   | Float of float
   (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
   | Regexp of (string * Str.regexp)
-  (* reference to another instance encoded as an integer *)
-  | Ref of int
 
 type tcst = Signature_ast.ty
 
@@ -63,8 +61,6 @@ let type_of_cst = function
   | Str _ -> TStr
   | Float _ -> TFloat
   | Regexp _ -> TRegexp
-  (* TODO: what should be the ctor name? *)
-  | Ref _ -> TRef "void"
 
 (** Γ *)
 type symbol_table = (cplx_term * tsymb) list
@@ -72,8 +68,8 @@ type symbol_table = (cplx_term * tsymb) list
 (** Δ *)
 and predicate_schema = ((var * int) * tsymb list) list
 
-(** G *)
-and type_context = (var * (var * tcst) list) list
+(** T *)
+and type_context = (var * (bool * (var * tcst) list)) list
 
 and context = predicate_schema * type_context * symbol_table
 
@@ -233,16 +229,23 @@ let rec is_mfodl = function
   | Frex (intv, r) | Prex (intv, r) -> true
 
 (* STRING FUNCTIONS *)
-let rec string_of_tcst = function
+
+let rec string_of_tcst (tctxt : type_context) = function
   | TFloat -> "TFloat"
   | TInt -> "TInt"
   | TStr -> "TStr"
   | TRegexp -> "TRegexp"
-  | TRef ctor -> Printf.sprintf "<%s>" ctor
-  | TInline fields ->
-      let string_of_field {fname; ftyp} = fname ^ ": " ^ string_of_tcst ftyp in
-      Printf.sprintf "{%s}"
-        (List.map string_of_field fields |> String.concat ", ")
+  | TRef ctor -> (
+    (* print their structure instead of teir ctor name for inline type *)
+    match List.assoc ctor tctxt with
+    | false, _ -> Printf.sprintf "%s" ctor
+    | true, fields ->
+        "{"
+        ^ ( List.map
+              (fun (name, typ) -> name ^ ": " ^ string_of_tcst tctxt typ)
+              fields
+          |> String.concat ", " )
+        ^ "}" )
 
 let rec string_of_cst c =
   let format_string s =
@@ -254,14 +257,13 @@ let rec string_of_cst c =
   | Float f -> Printf.sprintf "%f" f
   | Str s -> format_string s
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
-  | Ref ref -> Printf.sprintf "ref<%i>" ref
 
-let rec string_of_type = function
-  | TCst t -> string_of_tcst t
+let rec string_of_type (tctxt : type_context) = function
+  | TCst t -> string_of_tcst tctxt t
   | TSymb (TNum, a) -> "(Num t" ^ string_of_int a ^ ") =>  t" ^ string_of_int a
   | TSymb (TPartial fs, a) ->
       Printf.sprintf "t%i{%s}" a
-        ( List.map (fun (n, t) -> n ^ ":" ^ string_of_type t) fs
+        ( List.map (fun (n, t) -> n ^ ":" ^ string_of_type tctxt t) fs
         |> String.concat ", " )
   | TSymb (TAny, a) -> "t" ^ string_of_int a
   | TBot -> "Never"
@@ -820,17 +822,19 @@ exception IncompatibleTypes of tsymb * tsymb
 
 (* compares two types for structural equality.
    Returns either true of false (no order). *)
-let rec compare_tcst t1 t2 =
+let rec compare_tcst (tctxt : type_context) t1 t2 =
   match (t1, t2) with
-  | TInline fs1, TInline fs2 ->
+  | TRef ctor1, TRef ctor2 ->
+      let (_, fs1), (_, fs2) =
+        (List.assoc ctor1 tctxt, List.assoc ctor2 tctxt) in
       (* compare fields recursively. They are allowed to be in different order. *)
       if List.length fs1 <> List.length fs2 then false
       else
         List.for_all
-          (fun {fname= f1; ftyp= t1} ->
-            match List.find_opt (fun {fname= f2; _} -> f1 = f2) fs2 with
+          (fun (f1, t1) ->
+            match List.assoc_opt f1 fs2 with
             | None -> false
-            | Some {ftyp= t2; _} -> compare_tcst t1 t2 )
+            | Some t2 -> compare_tcst tctxt t1 t2 )
           fs1
   | t1, t2 -> compare t1 t2 = 0
 
@@ -840,9 +844,17 @@ let rec type_meet (ctx : context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb) :
     tsymb =
   let _, tctxt, _ = ctx in
   match (t1, t2) with
-  (* the meet of two constant types -> they need to be equal *)
+  (* the meet of two constant types can only exist if they are structurally equal.
+     if both are TRef types, we retuned the named typed in favor of any inline type: *)
+  | (TCst (TRef c1 as ref1) as t1), (TCst (TRef c2 as ref2) as t2) ->
+      let c1_inline, _ = List.assoc c1 tctxt in
+      let ttt =
+        if compare_tcst tctxt ref1 ref2 then if c1_inline then t2 else t1
+        else raise (IncompatibleTypes (t1, t2)) in
+      Printf.eprintf "XXXXXXX %s <> %s: %s\n%!" c1 c2 (string_of_type tctxt ttt) ;
+      ttt
   | (TCst a as t1), TCst b ->
-      if compare_tcst a b then t1 else raise (IncompatibleTypes (t1, t2))
+      if compare_tcst tctxt a b then t1 else raise (IncompatibleTypes (t1, t2))
   (* the meet of two TAny instances is the one with the lower index *)
   | (TSymb (TAny, n1) as t1), (TSymb (TAny, n2) as t2) ->
       if n1 <= n2 then t1 else t2
@@ -857,23 +869,10 @@ let rec type_meet (ctx : context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb) :
    |TSymb (TPartial partial_fields, _), TCst (TRef ctor) -> (
     match List.assoc_opt ctor tctxt with
     | None -> failwith ("Unknown record type: " ^ ctor)
-    | Some ref_fields ->
+    | Some (_, ref_fields) ->
         let success = cast_to_record ctx t ref_fields partial_fields in
         if success then TCst (TRef ctor) else raise (IncompatibleTypes (t1, t2))
     )
-  (* the meet of an inline type and a partial type is the inline type,
-     as long as the partial type can be casted. *)
-  | TCst (TInline inline_fields), TSymb (TPartial partial_fields, _)
-   |TSymb (TPartial partial_fields, _), TCst (TInline inline_fields) ->
-      let fields = List.map (fun {fname; ftyp} -> (fname, ftyp)) inline_fields in
-      let success = cast_to_record ctx t fields partial_fields in
-      if success then TCst (TInline inline_fields)
-      else raise (IncompatibleTypes (t1, t2))
-  (* by definition, the meet of a ref type and an inline type is the ref type,
-     as long as they are structurally equal. *)
-  (* | TCst (TInline inline_fields), TCst (TRef ctor)
-   |TCst (TRef ctor), TCst (TInline inline_fields) ->
-      () *)
   (* for any other case, we assume the meet is the bottom type *)
   | _ -> raise (IncompatibleTypes (t1, t2))
 
@@ -901,10 +900,9 @@ and merge_records (ctx : context) (t : cplx_term)
   let t2_fields = List.sort sort_fields t2_fields in
   new_type_symbol (TPartial (merge (t1_fields, t2_fields))) sch vars
 
-(** Casts (the fields of) a symbolic record type to a constant reference type
-    of the given constructor.
-    Raises an InvalidTypes exception whenever the reference type is not more specific
-    than the symbolic type described by the given fields. *)
+(** Tries to cast a partial record type to a given list of fields.
+    Raises an error if the record fields do not describe a subtype of the partial type
+    described by its fields. *)
 and cast_to_record ((sch, tctxt, vs) : context) (t : cplx_term)
     (fields : (var * tcst) list) (fs : (var * tsymb) list) : bool =
   (* raise if reference type is missing a field: *)
@@ -960,31 +958,33 @@ let propagate_constraints t1 t2 (t : cplx_term) ((sch, tctxt, vars) : context) :
       Printf.sprintf
         "Type error while evaluating term '%s': Actual type %s is not \
          compatible with expected type %s"
-        (string_of_term t) (string_of_type t2) (string_of_type t1) in
+        (string_of_term t) (string_of_type tctxt t2) (string_of_type tctxt t1)
+    in
     failwith err_str
 
-let string_of_delta (sch : predicate_schema) : string =
+let string_of_delta (tctxt : type_context) (sch : predicate_schema) : string =
   if List.length sch > 0 then
     let string_of_types ts =
       if List.length ts > 0 then
         let ft = List.hd ts in
         List.fold_left
-          (fun a e -> a ^ ", " ^ string_of_type e)
-          (string_of_type ft) (List.tl ts)
+          (fun a e -> a ^ ", " ^ string_of_type tctxt e)
+          (string_of_type tctxt ft) (List.tl ts)
       else "()" in
     let fp, fs = List.hd sch in
     List.fold_left
-      (fun a (p, ts) -> a ^ ", " ^ fst p ^ ":(" ^ string_of_types ts ^ ")")
-      (fst fp ^ ":(" ^ string_of_types fs ^ ")")
+      (fun a (p, ts) -> a ^ ", " ^ fst p ^ "(" ^ string_of_types ts ^ ")")
+      (fst fp ^ "(" ^ string_of_types fs ^ ")")
       (List.tl sch)
   else "_"
 
-let string_of_gamma (vars : symbol_table) =
+let string_of_gamma (tctxt : type_context) (vars : symbol_table) =
   if List.length vars > 0 then
     let fv, ft = List.hd vars in
     List.fold_left
-      (fun a (v, t) -> a ^ ", " ^ string_of_term v ^ ":" ^ string_of_type t)
-      (string_of_term fv ^ ":" ^ string_of_type ft)
+      (fun a (v, t) ->
+        a ^ ", " ^ string_of_term v ^ ":" ^ string_of_type tctxt t )
+      (string_of_term fv ^ ":" ^ string_of_type tctxt ft)
       (List.tl vars)
   else "_"
 
@@ -1011,9 +1011,10 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
     let _ =
       if d then (
         Printf.eprintf "[Typecheck.type_check_term] \n%!Δ: %s\n%!Γ: %s\n%!⊢ "
-          (string_of_delta sch) (string_of_gamma vars) ;
+          (string_of_delta tctxt sch)
+          (string_of_gamma tctxt vars) ;
         Printf.eprintf "%s" (string_of_term term) ;
-        Printf.eprintf ": %s" (string_of_type typ) ;
+        Printf.eprintf ": %s" (string_of_type tctxt typ) ;
         Printf.eprintf "\n%!\n%!" )
       else () in
     match term with
@@ -1120,15 +1121,12 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           match t1_ty with
           | TSymb (TPartial fields, _) -> List.assoc f fields
           | TCst (TRef ctor) ->
-              let fields = List.assoc ctor tctxt in
+              let _, fields = List.assoc ctor tctxt in
               TCst (List.assoc f fields)
-          | TCst (TInline fields) ->
-              let {ftyp; _} = List.find (fun {fname; _} -> fname = f) fields in
-              TCst ftyp
           | _ -> failwith "typecheck_term: invalid state" in
         let sch', vars' =
-          propagate_constraints exp_tt_typ f_ty tt (sch', tctxt, vars') in
-        let f_ty = more_spec_type (sch', tctxt, vars') tt f_ty exp_tt_typ in
+          propagate_constraints typ f_ty tt (sch', tctxt, vars') in
+        let f_ty = more_spec_type (sch', tctxt, vars') tt typ f_ty in
         (sch', vars', f_ty) in
   type_check_term (sch, tctxt, vars) typ term
 
@@ -1151,7 +1149,8 @@ let type_check_formula_debug d (sch, tctxt, vars) =
     let _ =
       if d then (
         Printf.eprintf "[Typecheck.typecheck_formula] \n%!Δ: %s\n%!Γ: %s\n%!⊢ "
-          (string_of_delta sch) (string_of_gamma vars) ;
+          (string_of_delta tctxt sch)
+          (string_of_gamma tctxt vars) ;
         Printf.eprintf "%s" (string_of_formula "" f) ;
         Printf.eprintf "\n%!\n%!" )
       else () in
@@ -1416,23 +1415,30 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
   let debug = !first_debug && Misc.debugging Dbg_typing in
   let lift_type t = TCst t in
   let sch : predicate_schema =
-    List.map
-      (fun decl ->
+    List.fold_left
+      (fun acc decl ->
         match decl with
         | Predicate {elt= name, args; _} ->
-            ( (name, List.length args)
-            , extr_nodes args |> List.map (fun {atyp; _} -> lift_type atyp) )
-        | Record {elt= name, fields; _} -> ((name, 1), [TCst (TRef name)]) )
-      signatures in
+            let lifted_args =
+              extr_nodes args |> List.map (fun {atyp; _} -> lift_type atyp)
+            in
+            ((name, List.length args), lifted_args) :: acc
+        | Record (false, {elt= name, fields; _}) ->
+            let rec_pred = ((name, 1), [TCst (TRef name)]) in
+            rec_pred :: acc
+        (* do not add inline records to predicate schema: *)
+        | Record (true, _) -> acc )
+      [] signatures in
   let tctxt : type_context =
     List.fold_left
       (fun acc decl ->
         match decl with
         | Predicate _ -> acc
-        | Record {elt= name, fields; _} ->
+        | Record (inline, {elt= name, fields; _}) ->
             ( name
-            , extr_nodes fields |> List.map (fun {fname; ftyp} -> (fname, ftyp))
-            )
+            , ( inline
+              , extr_nodes fields
+                |> List.map (fun {fname; ftyp} -> (fname, ftyp)) ) )
             :: acc )
       [] signatures in
   let fvs =
@@ -1442,7 +1448,7 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
   let s, v, f = type_check_formula_debug debug (sch, tctxt, fvs) f in
   if debug then (
     Printf.eprintf "[check_syntax] The final type judgement is (%s; %s) ⊢ "
-      (string_of_delta s) (string_of_gamma v) ;
+      (string_of_delta tctxt s) (string_of_gamma tctxt v) ;
     Printf.eprintf "%s" (string_of_formula "" f) ;
     Printf.eprintf "\n%!" )
   else () ;
@@ -1450,13 +1456,8 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
   ((s, tctxt, v), f)
 
 (* COMPILE FUNCTIONS *)
-let compile_cst (cst : cst) : Predicate.cst =
-  match cst with
-  | Int v -> Int v
-  | Float v -> Float v
-  | Str v -> Str v
-  | Regexp v -> Regexp v
-  | Ref r -> Int (Z.of_int r)
+
+type compile_ctx = {mutable inst_index: int}
 
 let compile_tcst (tcst : tcst) : Predicate.tcst =
   match tcst with
@@ -1465,85 +1466,94 @@ let compile_tcst (tcst : tcst) : Predicate.tcst =
   | TStr -> TStr
   | TRegexp -> TRegexp
   | TRef _ -> TInt
-  | TInline _ -> TInt
-
-let compile_tcl (tcl : tcl) : Predicate.tcl =
-  match tcl with
-  | TNum -> TNum
-  | TAny -> TAny
-  | TPartial _ -> failwith "compile_tcl: case TPartial not implemented"
-
-let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
-  match tsymb with
-  | TSymb (tcl, l) -> TSymb (compile_tcl tcl, l)
-  | TCst t -> TCst (compile_tcst t)
-  | TBot -> failwith "compile_tsymb: invalid type TBot"
-
-let rec compile_term (ctx : context) (input : 'a cplx_eterm) :
-    'a Predicate.eterm =
-  match input with
-  | Var v -> Var v
-  | Cst c -> Cst (compile_cst c)
-  | F2i t -> F2i (compile_term ctx t)
-  | I2f t -> I2f (compile_term ctx t)
-  | DayOfMonth t -> DayOfMonth (compile_term ctx t)
-  | Month t -> Month (compile_term ctx t)
-  | Year t -> Year (compile_term ctx t)
-  | FormatDate t -> FormatDate (compile_term ctx t)
-  | R2s t -> R2s (compile_term ctx t)
-  | S2r t -> S2r (compile_term ctx t)
-  | Plus (t1, t2) -> Plus (compile_term ctx t1, compile_term ctx t2)
-  | Minus (t1, t2) -> Minus (compile_term ctx t1, compile_term ctx t2)
-  | UMinus t -> UMinus (compile_term ctx t)
-  | Mult (t1, t2) -> Mult (compile_term ctx t1, compile_term ctx t2)
-  | Div (t1, t2) -> Div (compile_term ctx t1, compile_term ctx t2)
-  | Mod (t1, t2) -> Mod (compile_term ctx t1, compile_term ctx t2)
-  | Proj (t, f) -> failwith "not implemented"
-
-let compile_predicate (ctx : context) ((name, arity, args) : cplx_predicate) :
-    predicate =
-  (name, arity, List.map (compile_term ctx) args)
 
 let rec compile_formula (ctx : context) (input : cplx_formula) : MFOTL.formula =
-  match input with
-  | Equal (t1, t2) -> Equal (compile_term ctx t1, compile_term ctx t2)
-  | Less (t1, t2) -> Less (compile_term ctx t1, compile_term ctx t2)
-  | LessEq (t1, t2) -> LessEq (compile_term ctx t1, compile_term ctx t2)
-  | Substring (t1, t2) -> Substring (compile_term ctx t1, compile_term ctx t2)
-  | Matches (t1, t2) -> Matches (compile_term ctx t1, compile_term ctx t2)
-  | Pred p -> Pred (compile_predicate ctx p)
-  | Let (p, f1, f2) ->
-      Let
-        (compile_predicate ctx p, compile_formula ctx f1, compile_formula ctx f2)
-  | LetPast (p, f1, f2) ->
-      Let
-        (compile_predicate ctx p, compile_formula ctx f1, compile_formula ctx f2)
-  | Neg f -> compile_formula ctx f
-  | And (f1, f2) -> And (compile_formula ctx f1, compile_formula ctx f2)
-  | Or (f1, f2) -> Or (compile_formula ctx f1, compile_formula ctx f2)
-  | Implies (f1, f2) -> Implies (compile_formula ctx f1, compile_formula ctx f2)
-  | Equiv (f1, f2) -> Equiv (compile_formula ctx f1, compile_formula ctx f2)
-  | Exists (l, f) -> Exists (l, compile_formula ctx f)
-  | ForAll (l, f) -> ForAll (l, compile_formula ctx f)
-  | Aggreg (tsymb, a, op, b, l, f) ->
-      Aggreg (compile_tsymb tsymb, a, op, b, l, compile_formula ctx f)
-  | Prev (i, f) -> Prev (i, compile_formula ctx f)
-  | Next (i, f) -> Next (i, compile_formula ctx f)
-  | Eventually (i, f) -> Eventually (i, compile_formula ctx f)
-  | Once (i, f) -> Once (i, compile_formula ctx f)
-  | Always (i, f) -> Always (i, compile_formula ctx f)
-  | PastAlways (i, f) -> PastAlways (i, compile_formula ctx f)
-  | Since (i, f1, f2) ->
-      Since (i, compile_formula ctx f1, compile_formula ctx f2)
-  | Until (i, f1, f2) ->
-      Since (i, compile_formula ctx f1, compile_formula ctx f2)
-  | Frex (i, r) -> Frex (i, compile_regex ctx r)
-  | Prex (i, r) -> Prex (i, compile_regex ctx r)
-
-and compile_regex (ctx : context) (input : regex) : MFOTL.regex =
-  match input with
-  | Wild -> Wild
-  | Test f -> Test (compile_formula ctx f)
-  | Concat (r1, r2) -> Concat (compile_regex ctx r1, compile_regex ctx r2)
-  | Plus (r1, r2) -> Plus (compile_regex ctx r1, compile_regex ctx r2)
-  | Star r -> Star (compile_regex ctx r)
+  let compile_ctx = {inst_index= 0} in
+  let compile_cst (cst : cst) : Predicate.cst =
+    match cst with
+    | Int v -> Int v
+    | Float v -> Float v
+    | Str v -> Str v
+    | Regexp v -> Regexp v in
+  let compile_tcl (tcl : tcl) : Predicate.tcl =
+    match tcl with
+    | TNum -> TNum
+    | TAny -> TAny
+    | TPartial _ -> failwith "compile_tcl: case TPartial not implemented" in
+  let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
+    match tsymb with
+    | TSymb (tcl, l) -> TSymb (compile_tcl tcl, l)
+    | TCst t -> TCst (compile_tcst t)
+    | TBot -> failwith "compile_tsymb: invalid type TBot" in
+  let rec compile_term (ctx : context) (input : 'a cplx_eterm) :
+      'a Predicate.eterm =
+    match input with
+    | Var v -> Var v
+    | Cst c -> Cst (compile_cst c)
+    | F2i t -> F2i (compile_term ctx t)
+    | I2f t -> I2f (compile_term ctx t)
+    | DayOfMonth t -> DayOfMonth (compile_term ctx t)
+    | Month t -> Month (compile_term ctx t)
+    | Year t -> Year (compile_term ctx t)
+    | FormatDate t -> FormatDate (compile_term ctx t)
+    | R2s t -> R2s (compile_term ctx t)
+    | S2r t -> S2r (compile_term ctx t)
+    | Plus (t1, t2) -> Plus (compile_term ctx t1, compile_term ctx t2)
+    | Minus (t1, t2) -> Minus (compile_term ctx t1, compile_term ctx t2)
+    | UMinus t -> UMinus (compile_term ctx t)
+    | Mult (t1, t2) -> Mult (compile_term ctx t1, compile_term ctx t2)
+    | Div (t1, t2) -> Div (compile_term ctx t1, compile_term ctx t2)
+    | Mod (t1, t2) -> Mod (compile_term ctx t1, compile_term ctx t2)
+    | Proj (t, f) -> failwith "not implemented" in
+  let compile_predicate (ctx : context) ((name, arity, args) : cplx_predicate) :
+      predicate =
+    (name, arity, List.map (compile_term ctx) args) in
+  let rec compile_formula (ctx : context) (input : cplx_formula) : MFOTL.formula
+      =
+    match input with
+    | Equal (t1, t2) -> Equal (compile_term ctx t1, compile_term ctx t2)
+    | Less (t1, t2) -> Less (compile_term ctx t1, compile_term ctx t2)
+    | LessEq (t1, t2) -> LessEq (compile_term ctx t1, compile_term ctx t2)
+    | Substring (t1, t2) -> Substring (compile_term ctx t1, compile_term ctx t2)
+    | Matches (t1, t2) -> Matches (compile_term ctx t1, compile_term ctx t2)
+    | Pred p -> Pred (compile_predicate ctx p)
+    | Let (p, f1, f2) ->
+        Let
+          ( compile_predicate ctx p
+          , compile_formula ctx f1
+          , compile_formula ctx f2 )
+    | LetPast (p, f1, f2) ->
+        Let
+          ( compile_predicate ctx p
+          , compile_formula ctx f1
+          , compile_formula ctx f2 )
+    | Neg f -> compile_formula ctx f
+    | And (f1, f2) -> And (compile_formula ctx f1, compile_formula ctx f2)
+    | Or (f1, f2) -> Or (compile_formula ctx f1, compile_formula ctx f2)
+    | Implies (f1, f2) ->
+        Implies (compile_formula ctx f1, compile_formula ctx f2)
+    | Equiv (f1, f2) -> Equiv (compile_formula ctx f1, compile_formula ctx f2)
+    | Exists (l, f) -> Exists (l, compile_formula ctx f)
+    | ForAll (l, f) -> ForAll (l, compile_formula ctx f)
+    | Aggreg (tsymb, a, op, b, l, f) ->
+        Aggreg (compile_tsymb tsymb, a, op, b, l, compile_formula ctx f)
+    | Prev (i, f) -> Prev (i, compile_formula ctx f)
+    | Next (i, f) -> Next (i, compile_formula ctx f)
+    | Eventually (i, f) -> Eventually (i, compile_formula ctx f)
+    | Once (i, f) -> Once (i, compile_formula ctx f)
+    | Always (i, f) -> Always (i, compile_formula ctx f)
+    | PastAlways (i, f) -> PastAlways (i, compile_formula ctx f)
+    | Since (i, f1, f2) ->
+        Since (i, compile_formula ctx f1, compile_formula ctx f2)
+    | Until (i, f1, f2) ->
+        Since (i, compile_formula ctx f1, compile_formula ctx f2)
+    | Frex (i, r) -> Frex (i, compile_regex ctx r)
+    | Prex (i, r) -> Prex (i, compile_regex ctx r)
+  and compile_regex (ctx : context) (input : regex) : MFOTL.regex =
+    match input with
+    | Wild -> Wild
+    | Test f -> Test (compile_formula ctx f)
+    | Concat (r1, r2) -> Concat (compile_regex ctx r1, compile_regex ctx r2)
+    | Plus (r1, r2) -> Plus (compile_regex ctx r1, compile_regex ctx r2)
+    | Star r -> Star (compile_regex ctx r) in
+  compile_formula ctx input

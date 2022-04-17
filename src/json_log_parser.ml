@@ -163,6 +163,9 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
   let tuple_values = List.map get_field_value (extr_nodes rec_fields) in
   let inst_id = Int.to_string pb.id_index in
   pb.id_index <- pb.id_index + 1 ;
+  if Misc.debugging Dbg_parsing then
+    Printf.eprintf "[Json_log_parser]: registering tuple: %s(%s)\n%!" ctor
+      (String.concat "," (inst_id :: tuple_values)) ;
   reg_tuple ctor (inst_id :: tuple_values) ;
   inst_id
 
@@ -191,6 +194,14 @@ module Make (C : Log_parser.Consumer) = struct
       | EOF -> parse_eof ()
       | CMD -> next pb ; parse_command ()
       | AT -> next pb ; parse_ts ()
+      | t -> fail ("Expected '@' but saw " ^ string_of_token t)
+    and parse_line () =
+      debug "line" ;
+      pb.input_line <- pb.input_line + 1 ;
+      match pb.pb_token with
+      | EOF -> parse_eof ()
+      | CMD -> next pb ; parse_command ()
+      | AT -> next pb ; parse_ts ()
       | JSON _ -> parse_json ()
       | t -> fail ("Expected '@' or JSON but saw " ^ string_of_token t)
     and parse_ts () =
@@ -213,7 +224,11 @@ module Make (C : Log_parser.Consumer) = struct
             SignTable.signature_from_json signatures pb.signature_table json
           in
           ( match signature_decl with
-          | None -> ()
+          | None ->
+              Printf.eprintf
+                "[JSON_log_parser|WARN]: Line %i did not match any signature.\n\
+                 %!"
+                pb.input_line
           | Some decl ->
               ignore
               @@ parse_record pb
@@ -222,7 +237,7 @@ module Make (C : Log_parser.Consumer) = struct
                    decl json ) ;
           next pb ;
           (match pb.pb_token with AT -> C.end_log ctxt | _ -> ()) ;
-          parse_init ()
+          parse_line ()
         with Yojson.Json_error msg -> fail msg )
       | t -> fail ("Expected JSON but saw " ^ string_of_token t)
     and parse_command () =
@@ -234,7 +249,7 @@ module Make (C : Log_parser.Consumer) = struct
             try (None, parse_command_params pb)
             with Local_error msg -> (Some msg, None) in
           match err with
-          | None -> C.command ctxt name params ; parse_init ()
+          | None -> C.command ctxt name params ; parse_line ()
           | Some msg -> fail msg )
       | t -> fail ("Expected a command name but saw " ^ string_of_token t)
     and parse_eof () = debug "EOF" in
