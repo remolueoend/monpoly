@@ -1,4 +1,4 @@
-{"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"INFO","time":"2022-03-23T17:35:53+01:00","message":"Hello world!","module":"hello","line":10,"host":"127.0.0.1"}}}
+@10 {"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"INFO","time":"2022-03-23T17:35:53+01:00","message":"Hello world!","module":"hello","line":10,"host":"127.0.0.1"}}}
 {"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"INFO","time":"2022-03-23T17:35:54+01:00","message":"Launch successful","module":"hello","line":17,"host":"127.0.0.1"}}}
-{"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"DEBUG","time":"2022-03-23T17:35:58+01:00","message":"Configuration updated","module":"auth","line":234,"host":"127.0.0.1"}}}
-{"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"ERROR","time":"2022-03-23T17:36:20+01:00","message":"Power loss","module":"power","line":567,"host":"127.0.0.1"}}}
+@15 {"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"DEBUG","time":"2022-03-23T17:35:58+01:00","message":"Configuration updated","module":"auth","line":234,"host":"127.0.0.1"}}}
+@20 {"type":"Log","event":{"src":{"a":0},"log_entry":{"level":"ERROR","time":"2022-03-23T17:36:20+01:00","message":"Power loss","module":"power","line":567,"host":"127.0.0.1"}}}
