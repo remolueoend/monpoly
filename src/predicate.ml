@@ -66,6 +66,10 @@ type 'a eterm =
   | Cst of cst
   | F2i of 'a eterm
   | I2f of 'a eterm
+  | I2s of 'a eterm
+  | S2i of 'a eterm
+  | F2s of 'a eterm
+  | S2f of 'a eterm
   | DayOfMonth of 'a eterm
   | Month of 'a eterm
   | Year of 'a eterm
@@ -125,7 +129,19 @@ let cst_of_str_basic v =
 let rec tvars = function
   | Var v -> [v]
   | Cst c -> []
-  | F2i t | I2f t | DayOfMonth t | Month t | Year t | FormatDate t | UMinus t | R2s t | S2r t -> tvars t
+  | F2i t
+  | I2f t
+  | I2s t
+  | S2i t
+  | F2s t
+  | S2f t
+  | DayOfMonth t
+  | Month t
+  | Year t
+  | FormatDate t
+  | UMinus t
+  | R2s t
+  | S2r t -> tvars t
   | Plus (t1, t2)
   | Minus (t1, t2)
   | Mult (t1, t2)
@@ -140,6 +156,10 @@ let substitute_vars m =
   | Cst c as t -> t
   | F2i t -> F2i (substitute_vars_rec t)
   | I2f t -> I2f (substitute_vars_rec t)
+  | I2s t -> I2s (substitute_vars_rec t)
+  | S2i t -> S2i (substitute_vars_rec t)
+  | F2s t -> F2s (substitute_vars_rec t)
+  | S2f t -> S2f (substitute_vars_rec t)
   | Month t -> Month (substitute_vars_rec t)
   | DayOfMonth t -> DayOfMonth (substitute_vars_rec t)
   | Year t -> Year (substitute_vars_rec t)
@@ -175,6 +195,24 @@ let eval_eterm f t =
             try Int (Z.of_float c)
             with Z.Overflow -> Int Z.zero
         | _ -> failwith "[Predicate.eval_eterm, f2i] wrong types")
+    | I2s t -> (match eval t with
+        | Int c -> Str (Z.to_string c)
+        | _ -> failwith "[Predicate.eval_eterm, i2s] wrong types")
+    | S2i t -> (match eval t with
+        | Str c ->
+            (* TODO(JS): Should be a partial function; see also F2i above. *)
+            try Int (Z.of_string c)
+            with Invalid_argument _ -> Int Z.zero
+        | _ -> failwith "[Predicate.eval_eterm, s2i] wrong types")
+    | F2s t -> (match eval t with
+        | Float c -> Str (Float.to_string c)
+        | _ -> failwith "[Predicate.eval_eterm, i2s] wrong types")
+    | S2f t -> (match eval t with
+        | Str c ->
+            (* TODO(JS): Should be a partial function; see also F2i above. *)
+            try Float (Float.of_string c)
+            with Failure _ -> Float 0.
+        | _ -> failwith "[Predicate.eval_eterm, s2f] wrong types")
     | DayOfMonth t -> (match eval t with
         | Float t -> Int (Z.of_int (safe_gmtime t).tm_mday)
         | _ -> failwith "[Predicate.eval_eterm, DayOfMonth] wrong types")
@@ -345,6 +383,10 @@ let rec string_of_term term =
       | Cst c -> true, string_of_cst c
       | F2i t ->  false, "f2i(" ^ (t2s true t) ^ ")"
       | I2f t ->  false, "i2f(" ^ (t2s true t) ^ ")"
+      | I2s t ->  false, "i2s(" ^ (t2s true t) ^ ")"
+      | S2i t ->  false, "s2i(" ^ (t2s true t) ^ ")"
+      | F2s t ->  false, "f2s(" ^ (t2s true t) ^ ")"
+      | S2f t ->  false, "s2f(" ^ (t2s true t) ^ ")"
       | R2s t ->  false, "r2s(" ^ (t2s true t) ^ ")"
       | S2r t ->  false, "s2r(" ^ (t2s true t) ^ ")"
       | Year t ->  false, "YEAR(" ^ (t2s true t) ^ ")"

@@ -1304,6 +1304,26 @@ let  type_check_term_debug d (sch, vars) typ term =
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TInt) t in
         let (s,v) = check_and_propagate (TCst TInt) t_typ t s v in
         (s,v,(TCst TFloat))            
+      | I2s t as tt ->
+        let (sch,vars) = check_and_propagate (TCst TStr) typ tt sch vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TInt) t in
+        let (s,v) = check_and_propagate (TCst TInt) t_typ t s v in
+        (s,v,(TCst TStr))
+      | S2i t as tt ->
+        let (sch,vars) = check_and_propagate (TCst TInt) typ tt sch vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TStr) t in
+        let (s,v) = check_and_propagate (TCst TStr) t_typ t s v in
+        (s,v,(TCst TInt))
+      | F2s t as tt ->
+        let (sch,vars) = check_and_propagate (TCst TStr) typ tt sch vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
+        let (s,v) = check_and_propagate (TCst TFloat) t_typ t s v in
+        (s,v,(TCst TStr))
+      | S2f t as tt ->
+        let (sch,vars) = check_and_propagate (TCst TFloat) typ tt sch vars in
+        let (s,v,t_typ) = type_check_term (sch, vars) (TCst TStr) t in
+        let (s,v) = check_and_propagate (TCst TStr) t_typ t s v in
+        (s,v,(TCst TFloat))
       | FormatDate t as tt ->
         let (sch, vars) = check_and_propagate (TCst TStr) typ tt sch vars in
         let (s,v,t_typ) = type_check_term (sch, vars) (TCst TFloat) t in
