@@ -159,7 +159,7 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
         parse_record pb reg_tuple
           (SignTable.find_record_decl pb.signature_table ctor)
           json_value
-    | _ -> json_value |> Yojson.Basic.to_string in
+    | _ -> ( match json_value with `String s -> s | v -> to_string v ) in
   let tuple_values = List.map get_field_value (extr_nodes rec_fields) in
   let inst_id = Int.to_string pb.id_index in
   pb.id_index <- pb.id_index + 1 ;
@@ -217,6 +217,7 @@ module Make (C : Log_parser.Consumer) = struct
       let open Yojson.Basic in
       debug "json" ;
       match pb.pb_token with
+      | EOF -> parse_eof ()
       | JSON str -> (
         try
           let json = sort (Yojson.Basic.from_string ~lnum:pb.input_line str) in
@@ -236,7 +237,7 @@ module Make (C : Log_parser.Consumer) = struct
                      C.tuple ctxt (ctor, List.assoc ctor dbschema) values )
                    decl json ) ;
           next pb ;
-          (match pb.pb_token with AT -> C.end_log ctxt | _ -> ()) ;
+          (match pb.pb_token with AT -> C.end_tp ctxt | _ -> ()) ;
           parse_line ()
         with Yojson.Json_error msg -> fail msg )
       | t -> fail ("Expected JSON but saw " ^ string_of_token t)

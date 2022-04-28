@@ -57,6 +57,7 @@ type dbg =
   | Dbg_parsing
   | Dbg_typing
   | Dbg_signatures
+  | Dbg_rewriting
   
 (** Available log file formats.
     Either classic parsable by `Log_parser` or JSON parsable by `Json_log_parser`*)
