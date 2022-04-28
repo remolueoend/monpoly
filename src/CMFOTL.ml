@@ -78,6 +78,10 @@ and 'a cplx_eterm =
   | Cst of cst
   | F2i of 'a cplx_eterm
   | I2f of 'a cplx_eterm
+  | I2s of 'a cplx_eterm
+  | S2i of 'a cplx_eterm
+  | F2s of 'a cplx_eterm
+  | S2f of 'a cplx_eterm
   | DayOfMonth of 'a cplx_eterm
   | Month of 'a cplx_eterm
   | Year of 'a cplx_eterm
@@ -118,6 +122,10 @@ let rec tvars = function
   | Cst c -> []
   | F2i t
    |I2f t
+   |I2s t
+   |S2i t
+   |F2s t
+   |S2f t
    |DayOfMonth t
    |Month t
    |Year t
@@ -136,7 +144,7 @@ type cplx_formula =
   | Less of (cplx_term * cplx_term)
   | LessEq of (cplx_term * cplx_term)
   | Substring of (cplx_term * cplx_term)
-  | Matches of (cplx_term * cplx_term)
+  | Matches of (cplx_term * cplx_term * cplx_term option list)
   | Pred of cplx_predicate
   | Let of (cplx_predicate * cplx_formula * cplx_formula)
   | LetPast of (cplx_predicate * cplx_formula * cplx_formula)
@@ -169,12 +177,13 @@ and regex =
 let unixts = ref false
 
 let rec free_vars = function
-  | Equal (t1, t2)
-   |Less (t1, t2)
-   |LessEq (t1, t2)
-   |Matches (t1, t2)
-   |Substring (t1, t2) ->
+  | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
       Misc.union (tvars t1) (tvars t2)
+  | Matches (t1, t2, tl) ->
+      let fv = Misc.union (tvars t1) (tvars t2) in
+      List.fold_left
+        (fun s t -> match t with None -> s | Some t -> Misc.union s (tvars t))
+        fv tl
   | Pred p -> pvars p
   | Let (_, _, f) -> free_vars f
   | LetPast (_, _, f) -> free_vars f
@@ -207,7 +216,7 @@ let rec is_mfodl = function
    |Less (t1, t2)
    |LessEq (t1, t2)
    |Substring (t1, t2)
-   |Matches (t1, t2) ->
+   |Matches (t1, t2, _) ->
       false
   | Pred p -> false
   | Let (_, f1, f2) -> is_mfodl f1 || is_mfodl f2
@@ -277,6 +286,10 @@ let rec string_of_term term =
       | Cst c -> (true, string_of_cst c)
       | F2i t -> (false, "f2i(" ^ t2s true t ^ ")")
       | I2f t -> (false, "i2f(" ^ t2s true t ^ ")")
+      | I2s t -> (false, "i2s(" ^ t2s true t ^ ")")
+      | S2i t -> (false, "s2i(" ^ t2s true t ^ ")")
+      | F2s t -> (false, "f2s(" ^ t2s true t ^ ")")
+      | S2f t -> (false, "s2f(" ^ t2s true t ^ ")")
       | R2s t -> (false, "r2s(" ^ t2s true t ^ ")")
       | S2r t -> (false, "s2r(" ^ t2s true t ^ ")")
       | Year t -> (false, "YEAR(" ^ t2s true t ^ ")")
@@ -300,6 +313,8 @@ let rec string_of_term term =
 let string_of_predicate (p, ar, args) =
   string_of_var p ^ Misc.string_of_list string_of_term args
 
+let string_of_opt_term = function None -> "_" | Some t -> string_of_term t
+
 (* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
    ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
 let string_of_formula str g =
@@ -314,7 +329,11 @@ let string_of_formula str g =
     | LessEq (t1, t2) -> string_of_term t1 ^ " <= " ^ string_of_term t2
     | Substring (t1, t2) ->
         string_of_term t1 ^ " SUBSTRING " ^ string_of_term t2
-    | Matches (t1, t2) -> string_of_term t1 ^ " MATCHES " ^ string_of_term t2
+    | Matches (t1, t2, tl) ->
+        string_of_term t1 ^ " MATCHES " ^ string_of_term t2
+        ^
+        if tl = [] then ""
+        else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl
     | Pred p -> string_of_predicate p
     | _ ->
         (if par && not top then "(" else "")
@@ -445,8 +464,11 @@ let string_of_parenthesized_formula str g =
         "(" ^ string_of_term t1 ^ " <= " ^ string_of_term t2 ^ ")"
     | Substring (t1, t2) ->
         "(" ^ string_of_term t1 ^ " SUBSTRING " ^ string_of_term t2 ^ ")"
-    | Matches (t1, t2) ->
-        "(" ^ string_of_term t1 ^ " MATCHES " ^ string_of_term t2 ^ ")"
+    | Matches (t1, t2, tl) ->
+        "(" ^ string_of_term t1 ^ " MATCHES " ^ string_of_term t2
+        ^ ( if tl = [] then ""
+          else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl )
+        ^ ")"
     | Pred p -> string_of_predicate p
     | _ -> (
       match h with
@@ -1039,6 +1061,30 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
         let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TInt) t in
         let s, v = propagate_constraints (TCst TInt) t_typ t (s, tctxt, v) in
         (s, v, TCst TFloat)
+    | I2s t as tt ->
+        let sch, vars =
+          propagate_constraints (TCst TStr) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TInt) t in
+        let s, v = propagate_constraints (TCst TInt) t_typ t (s, tctxt, v) in
+        (s, v, TCst TStr)
+    | S2i t as tt ->
+        let sch, vars =
+          propagate_constraints (TCst TInt) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TStr) t in
+        let s, v = propagate_constraints (TCst TStr) t_typ t (s, tctxt, v) in
+        (s, v, TCst TInt)
+    | F2s t as tt ->
+        let sch, vars =
+          propagate_constraints (TCst TStr) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TFloat) t in
+        let s, v = propagate_constraints (TCst TFloat) t_typ t (s, tctxt, v) in
+        (s, v, TCst TStr)
+    | S2f t as tt ->
+        let sch, vars =
+          propagate_constraints (TCst TFloat) typ tt (sch, tctxt, vars) in
+        let s, v, t_typ = type_check_term (sch, tctxt, vars) (TCst TStr) t in
+        let s, v = propagate_constraints (TCst TStr) t_typ t (s, tctxt, v) in
+        (s, v, TCst TFloat)
     | FormatDate t as tt ->
         let sch, vars =
           propagate_constraints (TCst TStr) typ tt (sch, tctxt, vars) in
@@ -1175,7 +1221,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
         (* Propagate constraints t2, exp *)
         (s2, v2, f)
-    | Matches (t1, t2) as f ->
+    | Matches (t1, t2, tl) as f ->
         let exp_typ_1 = TCst TStr in
         (* Define constant *)
         let s1, v1, t1_typ =
@@ -1190,7 +1236,18 @@ let type_check_formula_debug d (sch, tctxt, vars) =
         (* Type check t2 *)
         let s2, v2 = propagate_constraints exp_typ_2 t2_typ t2 (s2, tctxt, v2) in
         (* Propagate constraints t2, exp *)
-        (s2, v2, f)
+        let exp_typ_group = TCst TStr in
+        let s, v =
+          List.fold_left
+            (fun (s, v) t ->
+              match t with
+              | None -> (s, v)
+              | Some t ->
+                  let s, v, t_typ =
+                    type_check_term_debug d (s, tctxt, v) exp_typ_group t in
+                  propagate_constraints exp_typ_group t_typ t (s, tctxt, v) )
+            (s2, v2) tl in
+        (s, v, f)
     | Pred p as f ->
         let name, arity, _ = p in
         let exp_typ_list =
@@ -1522,6 +1579,18 @@ let compile_formula (ctx : context) (input : cplx_formula) : MFOTL.formula =
     | I2f t ->
         let c, v, f = compile_term t in
         (I2f c, v, f)
+    | I2s t ->
+        let c, v, f = compile_term t in
+        (I2f c, v, f)
+    | S2i t ->
+        let c, v, f = compile_term t in
+        (I2f c, v, f)
+    | F2s t ->
+        let c, v, f = compile_term t in
+        (I2f c, v, f)
+    | S2f t ->
+        let c, v, f = compile_term t in
+        (I2f c, v, f)
     | DayOfMonth t ->
         let c, v, f = compile_term t in
         (DayOfMonth c, v, f)
@@ -1590,7 +1659,9 @@ let compile_formula (ctx : context) (input : cplx_formula) : MFOTL.formula =
     | Less (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.Less (c1, c2)) t1 t2
     | LessEq (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.LessEq (c1, c2)) t1 t2
     | Substring (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.Substring (c1, c2)) t1 t2
-    | Matches (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.Matches (c1, c2)) t1 t2
+    (* TODO: correctly compile termlist tl *)
+    | Matches (t1, t2, tl) ->
+        lift2 (fun c1 c2 -> MFOTL.Matches (c1, c2, [])) t1 t2
     | Pred (name, arity, args) -> (
         let compile_simple_arg = function
           | Var v -> Predicate.Var v
