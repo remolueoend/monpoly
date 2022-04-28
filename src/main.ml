@@ -139,12 +139,13 @@ let main () =
       begin
         (* read signature file *)
         let signatures = Signatures.parse_signature_file !sigfile in
-        let dbschema = Signatures.to_dbschema signatures in
-        let _ = if is_mfodl f then Misc.verified := true else () in
-
-        let (ctx, f) = CMFOTL.typecheck_formula signatures f in
+        let (ctx, f, is_cplx_mon) = CMFOTL.typecheck_formula signatures f in
         let f = CMFOTL.compile_formula ctx f in
+        if MFOTL.is_mfodl f then Misc.verified := true;
+        let dbschema = Signatures.to_dbschema signatures in
         let is_mon, pf, vartypes = check_formula dbschema f in
+        if is_mon <> is_cplx_mon then
+          failwith "Invalid safety properties after compilation";
         let fv = List.map fst vartypes in
         if !sigout then
           Predicate.print_vartypes_list vartypes
@@ -184,7 +185,7 @@ let _ =
     "-negate", Arg.Set negate, "\tAnalyze the negation of the input formula";
     "-log", Arg.Set_string logfile, "\t\tChoose the log file";
     "-version", Arg.Set displayver, "\tDisplay the version (and exit)";
-    "-debug", Arg.Set_string debug, "\tChoose aspect to debug, among 'eval', 'perf', 'log', 'parsing', 'typing' 'monitorable', 'filter' (select multple using commas)";
+    "-debug", Arg.Set_string debug, "\tChoose aspect to debug, among 'eval', 'perf', 'log', 'parsing', 'typing' 'signature' 'rewriting' 'monitorable', 'filter' (select multple using commas)";
     "-verbose", Arg.Set Misc.verbose, "\tTurn on verbose mode";
     "-check", Arg.Set Misc.checkf, "\tCheck if formula is monitorable (and exit)";
     "-no_rw", Arg.Set Rewriting.no_rw, "\tNo formula rewrite";

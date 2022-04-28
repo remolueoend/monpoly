@@ -106,6 +106,7 @@ type dbg =
   | Dbg_parsing
   | Dbg_typing
   | Dbg_signatures
+  | Dbg_rewriting
 
 
 let debugl = ref []
@@ -120,6 +121,7 @@ let split_debug debugstr =
         | "parsing" -> Dbg_parsing
         | "typing" -> Dbg_typing
         | "signatures" -> Dbg_signatures
+        | "rewriting" -> Dbg_rewriting
         | "monitorable" -> Dbg_monitorable
         | "filter" -> Dbg_filter
         | _ -> failwith "[Misc.split_debug] unrecognized debug option"
