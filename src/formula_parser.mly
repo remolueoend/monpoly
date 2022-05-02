@@ -116,21 +116,7 @@
 
   (* The rule is: var LARROW aggreg var SC varlist formula  *)
   let aggreg res_var op agg_var groupby_vars f =
-    let free_vars = CMFOTL.free_vars f in
-    let msg b x =
-      let kind = if b then "Aggregation" else "Group-by" in
-      Printf.sprintf "[Formula_parser.aggreg] %s variable %s is not a free variable in the aggregated formula" kind x
-    in
-    if not (List.mem agg_var free_vars) then
-      failwith (msg true agg_var)
-    else
-      begin
-        List.iter (fun gby_var ->
-          if not (List.mem gby_var free_vars) then
-            failwith (msg false gby_var)
-        ) groupby_vars;
-        Aggreg ((TSymb (TAny, 0)),res_var, op, agg_var, groupby_vars, f)
-      end
+    Aggreg ((TSymb (TAny, 0)),res_var, op, agg_var, groupby_vars, f)
 
 %}
 
@@ -199,8 +185,8 @@ formula:
   | NOT formula                     { f "f(not)"; Neg ($2) }
   | EX varlist DOT formula %prec EX { f "f(ex)"; exists $2 $4 }
   | FA varlist DOT formula %prec FA { f "f(fa)"; forall $2 $4 }
-  | var LARROW aggreg var formula   { f "f(agg1)"; aggreg $1 $3 $4 [] $5 }
-  | var LARROW aggreg var SC varlist formula
+  | var LARROW aggreg term formula   { f "f(agg1)"; aggreg $1 $3 $4 [] $5 }
+  | var LARROW aggreg term SC termlist formula
                                     { f "f(agg2)"; aggreg $1 $3 $4 $6 $7 }
   | term SUBSTRING term             { f "f(substring)"; check (Substring ($1, $3)) }
   | term MATCHES term xopttermlist  { f "f(matches)"; check (Matches ($1, $3, $4)) }
