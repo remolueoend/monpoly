@@ -1,12 +1,2 @@
-1 = 2
-
-(*
-LET is_error(entry) = entry.level = "CRITICAL" OR entry.level = "ERROR" IN
-Log(l) IMPLIES NOT is_error(l.event.log_entry)
-*)
-
-(*
-LET is_error(entry1_id) = LogEntry(entry1_id, entry1_level) AND entry1_level = "CRITICAL" AND entry1_level = "ERROR" IN
-Log(log1_id, log1_type, log1_event) AND
-Log_event(log1_event, log_event2_src, log_event2_log_entry) AND IMPLIES NOT is_error(log_event2_log_entry)
-*)
+LET is_error(entry) = LogEntry(entry) AND entry.level = "ERROR" IN
+Log(l) AND is_error(l.event.log_entry)

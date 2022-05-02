@@ -187,6 +187,14 @@ module Make (C : Log_parser.Consumer) = struct
         Printf.eprintf "[Json_log_parser] failed with message %s" msg
       else () ;
       failwith "parser failed" in
+    let begin_tp ts =
+      if Misc.debugging Misc.Dbg_log then
+        Printf.eprintf "[Json_log_parser] Begin TP %s\n%!" (Z.to_string ts) ;
+      C.begin_tp ctxt ts in
+    let end_tp () =
+      if Misc.debugging Misc.Dbg_log then
+        Printf.eprintf "[Json_log_parser] End TP\n%!" ;
+      C.end_tp ctxt in
     let rec parse_init () =
       debug "init" ;
       pb.input_line <- pb.input_line + 1 ;
@@ -208,7 +216,7 @@ module Make (C : Log_parser.Consumer) = struct
       debug "ts" ;
       match pb.pb_token with
       | TS ts ->
-          C.begin_tp ctxt ts ;
+          begin_tp ts ;
           pb.id_index <- 0 ;
           next pb ;
           parse_json ()
@@ -217,7 +225,7 @@ module Make (C : Log_parser.Consumer) = struct
       let open Yojson.Basic in
       debug "json" ;
       match pb.pb_token with
-      | EOF -> parse_eof ()
+      | EOF -> end_tp () ; parse_eof ()
       | JSON str -> (
         try
           let json = sort (Yojson.Basic.from_string ~lnum:pb.input_line str) in
@@ -237,7 +245,7 @@ module Make (C : Log_parser.Consumer) = struct
                      C.tuple ctxt (ctor, List.assoc ctor dbschema) values )
                    decl json ) ;
           next pb ;
-          (match pb.pb_token with AT -> C.end_tp ctxt | _ -> ()) ;
+          (match pb.pb_token with AT -> end_tp () | _ -> ()) ;
           parse_line ()
         with Yojson.Json_error msg -> fail msg )
       | t -> fail ("Expected JSON but saw " ^ string_of_token t)

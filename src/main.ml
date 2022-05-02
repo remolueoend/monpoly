@@ -140,7 +140,7 @@ let main () =
         (* read signature file *)
         let signatures = Signatures.parse_signature_file !sigfile in
         let (ctx, f, is_cplx_mon) = CMFOTL.typecheck_formula signatures f in
-        let f = CMFOTL.compile_formula ctx f in
+        let f = CMFOTL.compile_formula signatures f in
         if MFOTL.is_mfodl f then Misc.verified := true;
         let dbschema = Signatures.to_dbschema signatures in
         let is_mon, pf, vartypes = check_formula dbschema f in
