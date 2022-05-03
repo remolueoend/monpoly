@@ -21,6 +21,7 @@
     ("string", TSTRING);
     ("float", TFLOAT);
     ("regexp", TREGEXP);
+    ("event", EVENT);
     
     (* symbol *)
     ("(", LPA);

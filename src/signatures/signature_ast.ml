@@ -21,12 +21,52 @@ and pred_arg = {aname: string; atyp: ty}
 and pred_decl = string * pred_arg node list
 and ty = TInt | TStr | TFloat | TRegexp | TRef of string
 
+(** Describes several attributes of a record declared in a signature:
+    1. inline: tags records which have been declared as inline types in the signature file
+       and have been extracted.
+    2. event: tags  predicates which are considered when matching against top-level JSON log entries. *)
+type record_attrs = {inline: bool; event: bool}
+
 (** represents a top level declaration in a signature.
-    Either a predicate (e.g. q(int, string)) or a record type (named or inlined) *)
-type decl = Predicate of pred_decl node | Record of bool * record_decl node
+    Either a predicate (e.g. q(int, string)) or a record type *)
+type decl =
+  | Predicate of pred_decl node
+  | Record of record_attrs * record_decl node
 
 (** top level type of a signature file: Represents a flat list of declarations. *)
 type signatures = decl list
+
+(* **** STRING_OF FUNCTIONS FOR AST OBJECTS **** *)
+let string_of_ty = function
+  | TInt -> "TInt"
+  | TStr -> "TStr"
+  | TFloat -> "TFloat"
+  | TRegexp -> "TRegexp"
+  | TRef ctor -> ctor
+
+let string_of_record (attrs : record_attrs) ((id, fields) : record_decl) =
+  let field_to_str {elt= {fname; ftyp}; _} =
+    Printf.sprintf "%s: %s" fname (string_of_ty ftyp) in
+  let fields_to_str = List.map field_to_str fields |> String.concat ", " in
+  let prefix =
+    match attrs with
+    | {event= true; _} -> "event "
+    | {inline= true; _} -> "[inline] "
+    | _ -> "" in
+  Printf.sprintf "%s%s = {%s}" prefix id fields_to_str
+
+let string_of_predicate ((id, args) : pred_decl) =
+  let arg_to_str {elt= {aname; atyp}; _} =
+    let ty_str = string_of_ty atyp in
+    if String.length aname = 0 then Printf.sprintf "%s" ty_str
+    else Printf.sprintf "%s: %s" aname ty_str in
+  let args_to_str = List.map arg_to_str args |> String.concat ", " in
+  Printf.sprintf "%s(%s)" id args_to_str
+
+let string_of_decl decl =
+  match decl with
+  | Predicate n -> string_of_predicate n.elt
+  | Record (attrs, {elt; _}) -> string_of_record attrs elt
 
 (** The types of this module are the results of parsing the signature file.
     The signatures used throughout the application need to be transpiled fist:
@@ -47,7 +87,11 @@ module ParseTree = struct
     | TRef of string
     | TInline of record_field list
 
-  type decl = Predicate of pred_decl node | Record of record_decl node
+  type decl =
+    | Predicate of pred_decl node
+    (* the first element is true whenever the record is an event predicate. *)
+    | Record of (bool * record_decl node)
+
   type signatures = decl list
 end
 
@@ -83,51 +127,31 @@ let transpile_signatures (s : ParseTree.signatures) : signatures =
               (extr_type_name, extr_type_fields) in
             let new_field = no_node {fname; ftyp= TRef extr_type_name} in
             ( new_field :: fs
-            , s @ (Record (true, no_node extracted_decl) :: new_sigs) )
+            , s
+              @ Record ({inline= true; event= false}, no_node extracted_decl)
+                :: new_sigs )
         | _ -> ({elt= {fname; ftyp= transpile_ty ftyp}; loc} :: fs, s) )
       fields ([], []) in
-  List.fold_left
-    (fun acc (s : ParseTree.decl) ->
-      match s with
-      | Predicate {elt= name, args; loc} ->
-          Predicate
-            { elt=
-                ( name
-                , List.map
-                    (fun ({elt= {aname; atyp}; loc} : ParseTree.pred_arg node) ->
-                      {elt= {aname; atyp= transpile_ty atyp}; loc} )
-                    args )
-            ; loc }
-          :: acc
-      | Record {elt= name, fields; loc} ->
-          let new_fields, sigs = extract_inline_types name fields in
-          sigs @ (Record (false, {elt= (name, new_fields); loc}) :: acc) )
-    [] s
-
-(* **** STRING_OF FUNCTIONS FOR AST OBJECTS **** *)
-let string_of_ty = function
-  | TInt -> "TInt"
-  | TStr -> "TStr"
-  | TFloat -> "TFloat"
-  | TRegexp -> "TRegexp"
-  | TRef ctor -> ctor
-
-let string_of_record (inline : bool) ((id, fields) : record_decl) =
-  let field_to_str {elt= {fname; ftyp}; _} =
-    Printf.sprintf "%s: %s" fname (string_of_ty ftyp) in
-  let fields_to_str = List.map field_to_str fields |> String.concat ", " in
-  let prefix = if inline then "[inline] " else "" in
-  Printf.sprintf "%s%s = {%s}" prefix id fields_to_str
-
-let string_of_predicate ((id, args) : pred_decl) =
-  let arg_to_str {elt= {aname; atyp}; _} =
-    let ty_str = string_of_ty atyp in
-    if String.length aname = 0 then Printf.sprintf "%s" ty_str
-    else Printf.sprintf "%s: %s" aname ty_str in
-  let args_to_str = List.map arg_to_str args |> String.concat ", " in
-  Printf.sprintf "%s(%s)" id args_to_str
-
-let string_of_signature signature =
-  match signature with
-  | Predicate n -> string_of_predicate n.elt
-  | Record (inline, {elt; _}) -> string_of_record inline elt
+  let transpiled =
+    List.fold_left
+      (fun acc (s : ParseTree.decl) ->
+        match s with
+        | Predicate {elt= name, args; loc} ->
+            Predicate
+              { elt=
+                  ( name
+                  , List.map
+                      (fun ({elt= {aname; atyp}; loc} : ParseTree.pred_arg node) ->
+                        {elt= {aname; atyp= transpile_ty atyp}; loc} )
+                      args )
+              ; loc }
+            :: acc
+        | Record (is_event, {elt= name, fields; loc}) ->
+            let new_fields, sigs = extract_inline_types name fields in
+            sigs
+            @ Record
+                ( {inline= false; event= is_event}
+                , {elt= (name, new_fields); loc} )
+              :: acc )
+      [] s in
+  transpiled

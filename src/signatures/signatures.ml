@@ -60,6 +60,7 @@ module SignTable = struct
   (** Returns a signature declaration for the given JSON object.
     Raises an error if either the given JSON object is not a record
     or no matching type declaration could be found.
+    Only signatures declared as events are considered.
     This function requires the signature declarations passed as table AND list *)
   let signature_from_json (signatures : signatures) (table : t)
       (json : Yojson.Basic.t) : record_decl option =
@@ -70,7 +71,7 @@ module SignTable = struct
           List.find_opt
             (fun d ->
               match d with
-              | Record (_, {elt; _}) -> match_json table elt json
+              | Record ({event= true; _}, {elt; _}) -> match_json table elt json
               | _ -> false )
             signatures in
         match first with
@@ -154,7 +155,7 @@ let parse_signature_file (fname : string) : signatures =
        if Misc.debugging Dbg_signatures then
          Printf.eprintf "[Signatures]: Parsed signatures after transpiling:\n%!" ;
        List.iter
-         (fun s -> Printf.eprintf "%s\n%!" (string_of_signature s))
+         (fun d -> Printf.eprintf "%s\n%!" (string_of_decl d))
          signatures ) ;
       signatures
     with Signature_parser.Error ->
