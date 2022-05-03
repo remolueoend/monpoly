@@ -40,6 +40,7 @@ let sort_rec_decl ((name, fields) : record_decl) : record_decl =
 %token EOF
 %token <string> IDENT
 %token TINT TSTRING TFLOAT TREGEXP
+%token EVENT
 %token LPA RPA LCB RCB COM SEP COL
 
 %start signatures
@@ -56,11 +57,14 @@ decl:
    * 1. predicate_name(type1, type2, ..., typeN)
    * 2. predicate_name(arg1: type1, arg2: type2, ..., argN: typeN)
   *)
-  | name=IDENT LPA args=separated_list(COM, pred_arg) RPA
+  | name=ident LPA args=separated_list(COM, pred_arg) RPA
     { Predicate (loc $startpos $endpos (name, args)) }
   (* declaration of a record type: TypeName { field1: type1, field2: type2, ..., fieldN: typeN } *)
-  | name=IDENT body=record_body
-    { Record (loc $startpos $endpos (sort_rec_decl (name, body)) ) }
+  | name=ident body=record_body
+    { Record (false, loc $startpos $endpos (sort_rec_decl (name, body)) ) }
+  (* declaration of a top level predicate type: event TypeName { field1: type1, field2: type2, ..., fieldN: typeN } *)
+  | EVENT name=ident body=record_body
+    { Record (true, loc $startpos $endpos (sort_rec_decl (name, body)) ) }
     
 (* declaration of a record body: { field1: type1, field2: type2, ..., fieldN: typeN } *)
 record_body:
@@ -68,16 +72,20 @@ record_body:
 
 (* declaration of single record field: field1: type *)
 rec_field:
-  | id=IDENT COL t=ty { (loc $startpos $endpos { fname=id; ftyp=t }) }
+  | id=ident COL t=ty { (loc $startpos $endpos { fname=id; ftyp=t }) }
   
 pred_arg:
-  | id=IDENT COL t=native_ty { (loc $startpos $endpos { aname=id; atyp=t }) }
+  | id=ident COL t=native_ty { (loc $startpos $endpos { aname=id; atyp=t }) }
   | t=native_ty { (loc $startpos $endpos { aname=""; atyp=t }) }
 
 ty:
   | t=native_ty { t }
   | fields=record_body { TInline (extr_nodes fields) }
   | id=IDENT { TRef id }
+
+ident:
+  | IDENT { $1 }
+  | EVENT { "event" } (* accept keyword event as identifer *)
 
 native_ty:
   | TINT   { TInt }

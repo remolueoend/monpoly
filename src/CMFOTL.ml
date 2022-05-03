@@ -1555,11 +1555,12 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
               extr_nodes args |> List.map (fun {atyp; _} -> lift_type atyp)
             in
             ((name, List.length args), lifted_args) :: acc
-        | Record (false, {elt= name, fields; _}) ->
-            let rec_pred = ((name, 1), [TCst (TRef name)]) in
-            rec_pred :: acc
-        (* do not add inline records to predicate schema: *)
-        | Record (true, _) -> acc )
+        | Record (attrs, {elt= name, fields; _}) ->
+            (* do not add inline records to predicate schema: *)
+            if not attrs.inline then
+              let rec_pred = ((name, 1), [TCst (TRef name)]) in
+              rec_pred :: acc
+            else acc )
       [] signatures in
   (* create T *)
   let tctxt : type_context =
@@ -1567,9 +1568,9 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
       (fun acc decl ->
         match decl with
         | Predicate _ -> acc
-        | Record (inline, {elt= name, fields; _}) ->
+        | Record (attrs, {elt= name, fields; _}) ->
             ( name
-            , ( inline
+            , ( attrs.inline
               , extr_nodes fields
                 |> List.map (fun {fname; ftyp} -> (fname, ftyp)) ) )
             :: acc )

@@ -1,5 +1,6 @@
 LogEntry {level: string, time: string, message: string, module: string, line: int, host: string}
-Log {
+
+event Log {
 	type: string,
 	event: {
 		src: {a: int},
