@@ -916,7 +916,7 @@ let rec type_meet (ctx : context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb) :
   let _, tctxt, _ = ctx in
   match (t1, t2) with
   (* the meet of two constant types can only exist if they are structurally equal.
-     if both are TRef types, we retuned the named typed in favor of any inline type: *)
+     if both are TRef types, we return the named typed in favor of any inline type: *)
   | (TCst (TRef c1 as ref1) as t1), (TCst (TRef c2 as ref2) as t2) ->
       let c1_inline, _ = List.assoc c1 tctxt in
       let ttt =
@@ -1039,7 +1039,7 @@ let rec check_unresolved_terms (pred : string option) (vars : symbol_table) :
     unit =
   let unresolved_vars =
     List.filter
-      (fun (v, t) -> match t with TSymb st -> true | _ -> false)
+      (fun (v, t) -> match (v, t) with (Var _, TSymb st) -> true | _ -> false)
       vars
     |> List.map fst in
   if List.length unresolved_vars > 0 then
@@ -1449,6 +1449,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
               :: vrs )
             reduced_vars v_terms in
         let s1, v1, f = type_check_formula (sch, tctxt, new_vars) f in
+        check_unresolved_terms None v1 ;
         let unshadowed_vars =
           List.filter (fun (vr, _) -> not (List.mem vr v_terms)) v1 in
         (s1, unshadowed_vars @ shadowed_vars, Exists (v, f))
@@ -1463,6 +1464,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
               :: vrs )
             reduced_vars v_terms in
         let s1, v1, f = type_check_formula (sch, tctxt, new_vars) f in
+        check_unresolved_terms None v1 ;
         let unshadowed_vars =
           List.filter (fun (vr, _) -> not (List.mem vr v_terms)) v1 in
         (s1, unshadowed_vars @ shadowed_vars, ForAll (v, f))
@@ -1634,16 +1636,6 @@ let compile_formula (signatures : signatures) (input : cplx_formula) :
     | Float v -> Float v
     | Str v -> Str v
     | Regexp v -> Regexp v in
-  let compile_tcl (tcl : tcl) : Predicate.tcl =
-    match tcl with
-    | TNum -> TNum
-    | TAny -> TAny
-    | TPartial _ -> failwith "compile_tcl: case TPartial not implemented" in
-  let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
-    match tsymb with
-    | TSymb (tcl, l) -> TSymb (compile_tcl tcl, l)
-    | TCst t -> TCst (compile_tcst t)
-    | TBot -> failwith "compile_tsymb: invalid type TBot" in
   let rec compile_term (ctx : context) (input : 'a cplx_eterm) :
       Predicate.term * var list * MFOTL.formula list =
     let lift2 fac t1 t2 =
