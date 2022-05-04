@@ -1,3 +1,4 @@
-User { sessionId: string, name: string }
-Request { method: string, url: string, user: {sessionId: string, name: string} }
-Report { user: User, reason: string }
+User { sessionId: string, name: string, address: {city: string} }
+
+event Request { method: string, url: string, user: User }
+event Report { user: User, reason: string }

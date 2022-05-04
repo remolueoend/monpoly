@@ -41,6 +41,22 @@ open Unix
 open Predicate
 open Signature_ast
 
+(* COMMON HELPERS (may be moved to other module?) *)
+
+(** Same as :: operator, but does not add duplicates to the list. *)
+let ( ^:: ) v l = if List.mem v l then l else v :: l
+
+(** Returns the first entry of a given triple. *)
+let t_fst (a, _, _) = a
+
+(** Returns the second entry of a given triple. *)
+let t_snd (_, b, _) = b
+
+(** Returns the third entry of a given triple. *)
+let t_thd (_, _, c) = c
+
+(* DATA STRUCTURES *)
+
 type cst =
   | Int of Z.t
   | Str of string
@@ -98,19 +114,16 @@ and 'a cplx_eterm =
 
 and cplx_term = var cplx_eterm
 
+module TermSet = Set.Make (struct
+  type t = cplx_term
+
+  let compare = compare
+end)
+
 (* predicate = name, arity, and list of arguments *)
 type cplx_predicate = var * int * cplx_term list
 
 let get_predicate_args ((name, ar, args) : cplx_predicate) = args
-
-(** Returns the first entry of a given triple. *)
-let t_fst (a, _, _) = a
-
-(** Returns the second entry of a given triple. *)
-let t_snd (_, b, _) = b
-
-(** Returns the third entry of a given triple. *)
-let t_thd (_, _, c) = c
 
 let pvars (p : cplx_predicate) =
   let rec get_vars assign res args =
@@ -184,14 +197,15 @@ and regex =
   | Plus of (regex * regex)
   | Star of regex
 
-(** Accepts a variable 'var' and returns a list of terms depending on 'var'.
+(** Accepts a variable 'var' and returns a set of terms depending on 'var'.
     The returned terms are either of type Var or Proj.
     Example: get_var_usage r (Request(r) AND r.user.name = "" AND EXISTS r . Report(r) AND r.reason = "")
     -> [r, r.user.name]. *)
-let rec get_var_usage (var : var) (f : cplx_formula) : cplx_term list =
+let rec get_var_usage (f : cplx_formula) (var : var) : TermSet.t =
   let rec f_term = function
-    | Cst _ -> []
-    | Var v -> if compare v var = 0 then [Var v] else []
+    | Cst _ -> TermSet.empty
+    | Var v ->
+        if compare v var = 0 then TermSet.singleton (Var v) else TermSet.empty
     | F2i t1
      |I2f t1
      |I2s t1
@@ -211,42 +225,49 @@ let rec get_var_usage (var : var) (f : cplx_formula) : cplx_term list =
      |Mult (t1, t2)
      |Div (t1, t2)
      |Mod (t1, t2) ->
-        f_term t1 @ f_term t2
-    | Proj (base, _) as p -> if List.length (f_term base) > 0 then [p] else []
-  in
+        TermSet.union (f_term t1) (f_term t2)
+    | Proj (base, _) as p ->
+        if f_term base = TermSet.empty then TermSet.empty
+        else TermSet.singleton p in
   match f with
   | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
-      f_term t1 @ f_term t2
+      TermSet.union (f_term t1) (f_term t2)
   | Matches (t1, t2, tl) ->
       let terms =
         List.fold_left
           (fun acc o -> match o with Some t -> t :: acc | None -> acc)
           [] tl in
-      f_term t1 @ f_term t2 @ (List.map f_term terms |> List.flatten)
-  | Pred (_, n, args) -> List.map f_term args |> List.flatten
-  | Neg f1 -> get_var_usage var f1
+      List.fold_left
+        (fun acc s -> TermSet.union acc s)
+        TermSet.empty
+        (f_term t1 :: f_term t2 :: List.map f_term terms)
+  | Pred (_, n, args) ->
+      List.fold_left
+        (fun acc a -> TermSet.union acc (f_term a))
+        TermSet.empty args
+  | Neg f1 -> get_var_usage f1 var
   | And (f1, f2) | Or (f1, f2) | Implies (f1, f2) | Equiv (f1, f2) ->
-      get_var_usage var f1 @ get_var_usage var f2
+      TermSet.union (get_var_usage f1 var) (get_var_usage f2 var)
   | Exists (vs, f1) | ForAll (vs, f1) ->
       (* do not visit nested scope if var is shadowed: *)
-      if not (List.mem var vs) then get_var_usage var f1 else []
+      if not (List.mem var vs) then get_var_usage f1 var else TermSet.empty
   | Let (p, f1, f2) | LetPast (p, f1, f2) ->
       (* free variables in f1 (body of LET) have to be arguments to p by definition,
          and therefore always shadow variables from outer scope. *)
-      get_var_usage var f2
+      get_var_usage f2 var
   | Prev (_, f1)
    |Next (_, f1)
    |Eventually (_, f1)
    |Once (_, f1)
    |Always (_, f1)
    |PastAlways (_, f1) ->
-      get_var_usage var f1
+      get_var_usage f1 var
   (* TODO is this really the correct behavior? *)
   | Since (_, f1, f2) | Until (_, f1, f2) ->
-      get_var_usage var f1 @ get_var_usage var f2
-  | Frex _ | Prex _ -> []
+      TermSet.union (get_var_usage f1 var) (get_var_usage f2 var)
+  | Frex _ | Prex _ -> TermSet.empty
   (* TODO handle these cases *)
-  | Aggreg _ -> []
+  | Aggreg _ -> TermSet.empty
 
 let unixts = ref false
 
@@ -1685,144 +1706,135 @@ let rec projection_path = function
       @@ Printf.sprintf "[CMFOTL.projection_path]: Invalid term detected: %s"
            (string_of_term t)
 
+let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
+  List.fold_left (fun acc f -> MFOTL.And (acc, f)) (List.hd fs) (List.tl fs)
+
+(** Accpets a variable name of a free complex variable in the given formula and
+      expands it. It returns a new conjunction and a set of new variables introduced
+      by the expansion. *)
+let expand_cplx_var (f : cplx_formula) (ctx : context) (var : var) :
+    MFOTL.formula * var list =
+  let _, tctxt, _ = ctx in
+  let get_ref_type t =
+    let _, _, ty = type_check_term_debug false ctx (TSymb (TAny, -1)) t in
+    match ty with
+    | TCst (TRef r) -> r
+    | _ ->
+        failwith
+        @@ Printf.sprintf "could not find ref type of %s: is of type %s"
+             (string_of_term t) (string_of_type tctxt ty) in
+  let usages = get_var_usage f var |> TermSet.elements in
+  Printf.eprintf "DEBUG: usages of %s in %s: %s\n" var (string_of_formula "" f)
+    (List.map string_of_term usages |> String.concat ",") ;
+  (* list of triples: (ctor, Record, prefix) *)
+  let required_expansions =
+    List.fold_right
+      (fun u acc ->
+        match u with
+        | (Var _ as b) | Proj (b, _) ->
+            let ctor = get_ref_type b in
+            let record = List.assoc ctor tctxt |> snd in
+            (ctor, record, projection_path b) ^:: acc
+        | _ -> acc )
+      usages [] in
+  let expansions =
+    List.map
+      (fun (ctor, record, prefix) ->
+        let new_vars = List.map (fun (n, _) -> prefix ^ "_" ^ n) record in
+        let new_pred =
+          MFOTL.Pred
+            ( ctor
+            , List.length new_vars + 1
+            , Var prefix :: List.map (fun v -> Predicate.Var v) new_vars ) in
+        (new_pred, new_vars) )
+      required_expansions in
+  let new_preds, new_vars = List.split expansions in
+  (conjunction new_preds, List.flatten new_vars)
+
 let compile_formula (signatures : signatures) (input : cplx_formula) :
     MFOTL.formula =
-  let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
-    List.fold_right (fun f acc -> MFOTL.And (f, acc)) (List.tl fs) (List.hd fs)
-  in
   let compile_cst (cst : cst) : Predicate.cst =
     match cst with
     | Int v -> Int v
     | Float v -> Float v
     | Str v -> Str v
     | Regexp v -> Regexp v in
-  let rec compile_term (ctx : context) (input : 'a cplx_eterm) :
-      Predicate.term * var list * MFOTL.formula list =
-    let lift2 fac t1 t2 =
-      let c1, v1, f1 = compile_term ctx t1 in
-      let c2, v2, f2 = compile_term ctx t2 in
-      (fac c1 c2, v1 @ v2, f1 @ f2) in
+  let rec compile_term (input : cplx_term) : Predicate.term =
     match input with
-    | Var v -> (Var v, [], [])
-    | Cst c -> (Cst (compile_cst c), [], [])
-    | F2i t ->
-        let c, v, f = compile_term ctx t in
-        (F2i c, v, f)
-    | I2f t ->
-        let c, v, f = compile_term ctx t in
-        (I2f c, v, f)
-    | I2s t ->
-        let c, v, f = compile_term ctx t in
-        (I2f c, v, f)
-    | S2i t ->
-        let c, v, f = compile_term ctx t in
-        (I2f c, v, f)
-    | F2s t ->
-        let c, v, f = compile_term ctx t in
-        (I2f c, v, f)
-    | S2f t ->
-        let c, v, f = compile_term ctx t in
-        (I2f c, v, f)
-    | DayOfMonth t ->
-        let c, v, f = compile_term ctx t in
-        (DayOfMonth c, v, f)
-    | Month t ->
-        let c, v, f = compile_term ctx t in
-        (Month c, v, f)
-    | Year t ->
-        let c, v, f = compile_term ctx t in
-        (Year c, v, f)
-    | FormatDate t ->
-        let c, v, f = compile_term ctx t in
-        (FormatDate c, v, f)
-    | R2s t ->
-        let c, v, f = compile_term ctx t in
-        (R2s c, v, f)
-    | S2r t ->
-        let c, v, f = compile_term ctx t in
-        (S2r c, v, f)
-    | Plus (t1, t2) -> lift2 (fun c1 c2 -> Predicate.Plus (c1, c2)) t1 t2
-    | Minus (t1, t2) -> lift2 (fun c1 c2 -> Predicate.Minus (c1, c2)) t1 t2
-    | UMinus t ->
-        let c, v, f = compile_term ctx t in
-        (UMinus c, v, f)
-    | Mult (t1, t2) -> lift2 (fun c1 c2 -> Predicate.Mult (c1, c2)) t1 t2
-    | Div (t1, t2) -> lift2 (fun c1 c2 -> Predicate.Div (c1, c2)) t1 t2
-    | Mod (t1, t2) -> lift2 (fun c1 c2 -> Predicate.Mod (c1, c2)) t1 t2
+    | Var v -> Var v
+    | Cst c -> Cst (compile_cst c)
+    | F2i t -> F2i (compile_term t)
+    | I2f t -> I2f (compile_term t)
+    | I2s t -> I2s (compile_term t)
+    | S2i t -> S2i (compile_term t)
+    | F2s t -> F2s (compile_term t)
+    | S2f t -> S2f (compile_term t)
+    | DayOfMonth t -> DayOfMonth (compile_term t)
+    | Month t -> Month (compile_term t)
+    | Year t -> Year (compile_term t)
+    | FormatDate t -> FormatDate (compile_term t)
+    | R2s t -> R2s (compile_term t)
+    | S2r t -> S2r (compile_term t)
+    | Plus (t1, t2) -> Plus (compile_term t1, compile_term t2)
+    | Minus (t1, t2) -> Minus (compile_term t1, compile_term t2)
+    | UMinus t -> UMinus (compile_term t)
+    | Mult (t1, t2) -> Mult (compile_term t1, compile_term t2)
+    | Div (t1, t2) -> Div (compile_term t1, compile_term t2)
+    | Mod (t1, t2) -> Mod (compile_term t1, compile_term t2)
     (* Example: r.user.name, r of type Request, user typeof User *)
-    | Proj (t, field) ->
-        (* first get the concrete type of 't' (needs to be a TRef type, e.g. TRef<User>): *)
-        let _, tctxt, vars = ctx in
-        let t_ty =
-          match List.assoc_opt t vars with
-          | Some t -> t
-          | None -> failwith ("Could not find " ^ string_of_term t) in
-        let ctor =
-          match t_ty with
-          | TCst (TRef ctor) -> ctor
-          | _ -> failwith "TODO: error handling" in
-        let record = List.assoc ctor tctxt |> snd in
-        (* t = r.user => t_path = r_user *)
-        let t_path = projection_path t in
-        (* Assuming ctor = User => new_vars = [r_user_name, r_user_address, ...] *)
-        let new_vars = List.map (fun (n, _) -> t_path ^ "_" ^ n) record in
-        (* e.g. User(r_user, r_user_name, r_user_address) *)
-        let new_pred =
-          MFOTL.Pred
-            ( ctor
-            , List.length new_vars + 1
-            , Var t_path :: List.map (fun v -> Predicate.Var v) new_vars ) in
-        let _, v, f = compile_term ctx t in
-        (* e.g. r_user_name *)
-        let new_term = Predicate.Var (t_path ^ "_" ^ field) in
-        (new_term, v @ new_vars, f @ [new_pred]) in
+    | Proj (t, field) -> Var (projection_path t ^ "_" ^ field) in
   let compile_predicate (ctx : context) ((name, arity, args) : cplx_predicate) :
       predicate =
-    ( name
-    , arity
-    , List.map (fun t -> compile_term ctx t) args
-      |> List.map (fun (c, _, _) -> c) ) in
-  let rec compile_formula (ctx : context) (input : cplx_formula) : MFOTL.formula
-      =
+    (name, arity, List.map (fun t -> compile_term t) args) in
+  (* compiles the given formula and expands all complex free variables.
+     The given filter is used to only expand a certain set of free variables. If the filter is empty,
+     all free variables in the formula's scope are expanded. *)
+  let rec expand_cplx_formula (ctx : context) (var_filter : var list)
+      (input : cplx_formula) : MFOTL.formula =
     let _, tctxt, _ = ctx in
-    (* TODO: remove this in favor of liftn right below *)
-    let lift2 fac t1 t2 =
-      let c1, v1, f1 = compile_term ctx t1 in
-      let c2, v2, f2 = compile_term ctx t2 in
-      let conj =
-        List.fold_right (fun f acc -> MFOTL.And (f, acc)) (f1 @ f2) (fac c1 c2)
-      in
-      let vars = List.sort_uniq String.compare (v1 @ v2) in
-      if List.length vars > 0 then MFOTL.Exists (vars, conj) else conj in
-    let liftn fac ts =
-      let compiled = List.map (compile_term ctx) ts in
-      let new_f = fac (List.map t_fst compiled) in
-      let conj =
-        new_f :: (List.map t_thd compiled |> List.flatten) |> conjunction in
-      let vars =
-        List.map t_snd compiled |> List.flatten |> List.sort_uniq String.compare
-      in
-      if List.length vars = 0 then conj else MFOTL.Exists (vars, conj) in
+    let sch, vars, f = type_check_formula_debug false ctx input in
+    let filter_var v = List.length var_filter = 0 || List.mem v var_filter in
+    let free_cplx_vars =
+      List.fold_left
+        (fun acc (t, ty) ->
+          match (t, ty) with
+          | Var v, TCst (TRef _) -> if filter_var v then v :: acc else acc
+          | _ -> acc )
+        [] vars in
+    Printf.eprintf "DEBUG: free cplx vars in %s: %s\n" (string_of_formula "" f)
+      (String.concat "," free_cplx_vars) ;
+    let expansions, new_vars_list =
+      List.map (expand_cplx_var f (sch, tctxt, vars)) free_cplx_vars
+      |> List.split in
+    let new_vars = List.flatten new_vars_list in
+    let compiled = compile_formula (sch, tctxt, vars) f in
+    if List.length new_vars = 0 then compiled
+    else MFOTL.Exists (new_vars, conjunction (expansions @ [compiled]))
+  and compile_formula (ctx : context) (input : cplx_formula) : MFOTL.formula =
+    let _, tctxt, vars = ctx in
     match input with
-    | Equal (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.Equal (c1, c2)) t1 t2
-    | Less (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.Less (c1, c2)) t1 t2
-    | LessEq (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.LessEq (c1, c2)) t1 t2
-    | Substring (t1, t2) -> lift2 (fun c1 c2 -> MFOTL.Substring (c1, c2)) t1 t2
-    (* TODO: correctly compile termlist tl *)
+    | Equal (t1, t2) -> MFOTL.Equal (compile_term t1, compile_term t2)
+    | Less (t1, t2) -> Less (compile_term t1, compile_term t2)
+    | LessEq (t1, t2) -> LessEq (compile_term t1, compile_term t2)
+    | Substring (t1, t2) -> Substring (compile_term t1, compile_term t2)
     | Matches (t1, t2, tl) ->
-        lift2 (fun c1 c2 -> MFOTL.Matches (c1, c2, [])) t1 t2
+        Matches
+          ( compile_term t1
+          , compile_term t2
+          , List.map
+              (function Some t -> Some (compile_term t) | None -> None)
+              tl )
     | Pred (name, arity, args) -> (
       match List.assoc_opt name tctxt with
       (* no type predicate -> only compile arguments: *)
-      | None -> liftn (fun ts -> MFOTL.Pred (name, arity, ts)) args
+      | None -> Pred (name, arity, List.map compile_term args)
       (* type predicate: expand complex argument:
          example: Request(r) -> EXISTS r_url, r_user, ... . Request(r, r_url, r_user, ...) *)
       | Some (_, fields) ->
-          (* we expect type predicates to have a single variable argument.
-             If type-checked correctly, the error below should never be raised. *)
           let prefix =
             match args with
             | [Var v] -> v
+            | [(Proj _) as p] -> projection_path p
             | ts ->
                 let msg =
                   Printf.sprintf
@@ -1835,12 +1847,14 @@ let compile_formula (signatures : signatures) (input : cplx_formula) :
           let new_args = List.map prefix_field fields in
           let arg_terms =
             List.map (fun a -> Predicate.Var a) (prefix :: new_args) in
-          let new_pred =
-            MFOTL.Pred (name, List.length new_args + 1, arg_terms) in
-          MFOTL.Exists (new_args, new_pred) )
+          MFOTL.Pred (name, List.length new_args + 1, arg_terms) )
     | Let (p, f1, f2) ->
         let sch, tctxt, vars = ctx in
         let n, a, ts = p in
+        let arg_vars =
+          List.fold_left
+            (fun acc t -> match t with Var v -> v :: acc | _ -> acc)
+            [] ts in
         (* get the type information by compiling the body of the LET statement
            with a new set of free variables. Use the new symbol table to compile the body. *)
         let new_vars =
@@ -1848,15 +1862,17 @@ let compile_formula (signatures : signatures) (input : cplx_formula) :
             (fun vrs vr ->
               (vr, new_type_symbol TAny sch (List.append vars vrs)) :: vrs )
             [] ts in
-        let s, v, f1 =
-          type_check_formula_debug false (sch, tctxt, new_vars) f1 in
         Let
           ( compile_predicate ctx p
-          , compile_formula (s, tctxt, v) f1
+          , expand_cplx_formula (sch, tctxt, new_vars) arg_vars f1
           , compile_formula ctx f2 )
     | LetPast (p, f1, f2) ->
         let sch, tctxt, vars = ctx in
         let n, a, ts = p in
+        let arg_vars =
+          List.fold_left
+            (fun acc t -> match t with Var v -> v :: acc | _ -> acc)
+            [] ts in
         (* get the type information by compiling the body of the LET statement
            with a new set of free variables. Use the new symbol table to compile the body. *)
         let new_vars =
@@ -1864,11 +1880,9 @@ let compile_formula (signatures : signatures) (input : cplx_formula) :
             (fun vrs vr ->
               (vr, new_type_symbol TAny sch (List.append vars vrs)) :: vrs )
             [] ts in
-        let s, v, f1 =
-          type_check_formula_debug false (sch, tctxt, new_vars) f1 in
         Let
           ( compile_predicate ctx p
-          , compile_formula (s, tctxt, v) f1
+          , expand_cplx_formula (sch, tctxt, new_vars) arg_vars f1
           , compile_formula ctx f2 )
     | Neg f -> Neg (compile_formula ctx f)
     | And (f1, f2) -> And (compile_formula ctx f1, compile_formula ctx f2)
@@ -1890,24 +1904,22 @@ let compile_formula (signatures : signatures) (input : cplx_formula) :
               (vr, new_type_symbol TAny sch (List.append shadowed_vars vrs))
               :: vrs )
             reduced_vars v_terms in
-        let s, v, f1 = type_check_formula_debug false (sch, tctxt, new_vars) f in
-        Exists (l, compile_formula (s, tctxt, v) f1)
+        Exists (l, expand_cplx_formula (sch, tctxt, new_vars) l f)
     | ForAll (l, f) ->
         (* create new symbol table scope for inner formula,
            then typecheck it under the new context and use the type information
            for rewriting. *)
         let sch, tctxt, vars = ctx in
-        let l_terms = List.map (fun v -> Var v) l in
+        let v_terms = List.map (fun v -> Var v) l in
         let shadowed_vars, reduced_vars =
-          List.partition (fun (vr, _) -> List.mem vr l_terms) vars in
+          List.partition (fun (vr, _) -> List.mem vr v_terms) vars in
         let new_vars =
           List.fold_left
             (fun vrs vr ->
               (vr, new_type_symbol TAny sch (List.append shadowed_vars vrs))
               :: vrs )
-            reduced_vars l_terms in
-        let s, v, f1 = type_check_formula_debug false (sch, tctxt, new_vars) f in
-        ForAll (l, compile_formula (s, tctxt, v) f1)
+            reduced_vars v_terms in
+        ForAll (l, expand_cplx_formula (sch, tctxt, new_vars) l f)
     | Aggreg (rty, r, op, x, gs, f) ->
         let sch, _, vars = ctx in
         let gs_vars = List.map projection_base gs in
@@ -1945,7 +1957,7 @@ let compile_formula (signatures : signatures) (input : cplx_formula) :
     | Plus (r1, r2) -> Plus (compile_regex ctx r1, compile_regex ctx r2)
     | Star r -> Star (compile_regex ctx r) in
   let ctx, f, _ = typecheck_formula signatures input in
-  let output = compile_formula ctx f in
+  let output = expand_cplx_formula ctx [] f in
   if Misc.debugging Dbg_rewriting then
     Printf.eprintf
       "\n%!\n%![Rewriting.compile_formula] The compilation output is %s\n%!\n%!"
