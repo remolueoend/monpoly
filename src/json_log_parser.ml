@@ -262,5 +262,6 @@ module Make (C : Log_parser.Consumer) = struct
           | Some msg -> fail msg )
       | t -> fail ("Expected a command name but saw " ^ string_of_token t)
     and parse_eof () = debug "EOF" in
-    parse_init () ; C.end_log ctxt ; true
+    try parse_init () ; C.end_log ctxt ; true
+    with Log_parser.Stop_parser -> false
 end
