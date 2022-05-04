@@ -1,4 +1,4 @@
-@10 {"method": "GET", "url": "http://bad.url", "user": { "sessionId": "abc123", "name": "Alice" }}
-@20 {"method": "POST", "url": "http://nzz.ch", "user": { "sessionId": "xyz789", "name": "Bob" }}
-> save_state testfile <
-{"reason": "bad request", "user": {"sessionId": "whatever", "name": "Alice"}}
+@10 {"method": "GET", "url": "http://bad.url", "user": { "sessionId": "abc123", "name": "Alice", "address": {"city": "ZH"} }}
+@20 {"method": "POST", "url": "http://nzz.ch", "user": { "sessionId": "xyz789", "name": "Bob", "address": {"city": "BS"} }}
+{"reason": "bad request", "user": {"sessionId": "abc123", "name": "Alice", "address": {"city": "ZH"}}}
+@30

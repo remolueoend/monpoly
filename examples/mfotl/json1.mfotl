@@ -1,2 +1,3 @@
-r.url = "http://bad.url" AND
-Request(r) IMPLIES EVENTUALLY[0,10] p.user = r.user AND p.reason = "bad request" AND Report(p)
+(Request(r) AND User(r.user) AND r.url = "http://bad.url")
+AND
+(NOT EVENTUALLY[0, 50] EXISTS u . Report(u) AND User(u.user) AND u.reason = "bad request" AND u.user.name = r.user.name)
