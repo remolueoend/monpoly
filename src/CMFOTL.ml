@@ -184,6 +184,70 @@ and regex =
   | Plus of (regex * regex)
   | Star of regex
 
+(** Accepts a variable 'var' and returns a list of terms depending on 'var'.
+    The returned terms are either of type Var or Proj.
+    Example: get_var_usage r (Request(r) AND r.user.name = "" AND EXISTS r . Report(r) AND r.reason = "")
+    -> [r, r.user.name]. *)
+let rec get_var_usage (var : var) (f : cplx_formula) : cplx_term list =
+  let rec f_term = function
+    | Cst _ -> []
+    | Var v -> if compare v var = 0 then [Var v] else []
+    | F2i t1
+     |I2f t1
+     |I2s t1
+     |S2i t1
+     |F2s t1
+     |S2f t1
+     |DayOfMonth t1
+     |Month t1
+     |Year t1
+     |FormatDate t1
+     |R2s t1
+     |S2r t1
+     |UMinus t1 ->
+        f_term t1
+    | Plus (t1, t2)
+     |Minus (t1, t2)
+     |Mult (t1, t2)
+     |Div (t1, t2)
+     |Mod (t1, t2) ->
+        f_term t1 @ f_term t2
+    | Proj (base, _) as p -> if List.length (f_term base) > 0 then [p] else []
+  in
+  match f with
+  | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
+      f_term t1 @ f_term t2
+  | Matches (t1, t2, tl) ->
+      let terms =
+        List.fold_left
+          (fun acc o -> match o with Some t -> t :: acc | None -> acc)
+          [] tl in
+      f_term t1 @ f_term t2 @ (List.map f_term terms |> List.flatten)
+  | Pred (_, n, args) -> List.map f_term args |> List.flatten
+  | Neg f1 -> get_var_usage var f1
+  | And (f1, f2) | Or (f1, f2) | Implies (f1, f2) | Equiv (f1, f2) ->
+      get_var_usage var f1 @ get_var_usage var f2
+  | Exists (vs, f1) | ForAll (vs, f1) ->
+      (* do not visit nested scope if var is shadowed: *)
+      if not (List.mem var vs) then get_var_usage var f1 else []
+  | Let (p, f1, f2) | LetPast (p, f1, f2) ->
+      (* free variables in f1 (body of LET) have to be arguments to p by definition,
+         and therefore always shadow variables from outer scope. *)
+      get_var_usage var f2
+  | Prev (_, f1)
+   |Next (_, f1)
+   |Eventually (_, f1)
+   |Once (_, f1)
+   |Always (_, f1)
+   |PastAlways (_, f1) ->
+      get_var_usage var f1
+  (* TODO is this really the correct behavior? *)
+  | Since (_, f1, f2) | Until (_, f1, f2) ->
+      get_var_usage var f1 @ get_var_usage var f2
+  | Frex _ | Prex _ -> []
+  (* TODO handle these cases *)
+  | Aggreg _ -> []
+
 let unixts = ref false
 
 let rec free_vars = function
@@ -1039,7 +1103,7 @@ let rec check_unresolved_terms (pred : string option) (vars : symbol_table) :
     unit =
   let unresolved_vars =
     List.filter
-      (fun (v, t) -> match (v, t) with (Var _, TSymb st) -> true | _ -> false)
+      (fun (v, t) -> match (v, t) with Var _, TSymb st -> true | _ -> false)
       vars
     |> List.map fst in
   if List.length unresolved_vars > 0 then
@@ -1620,10 +1684,6 @@ let rec projection_path = function
       failwith
       @@ Printf.sprintf "[CMFOTL.projection_path]: Invalid term detected: %s"
            (string_of_term t)
-
-(** Returns the conjuncture of the given formula options *)
-let opt_formula_conj f1 f2 =
-  match (f1, f2) with None, f2 -> f2 | Some f1, f2 -> MFOTL.And (f1, f2)
 
 let compile_formula (signatures : signatures) (input : cplx_formula) :
     MFOTL.formula =
