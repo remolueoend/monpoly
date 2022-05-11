@@ -5,86 +5,9 @@ begin
 (*>*)
 
 
-subsection \<open> Notation \<close>
-
-context
-begin
-
-abbreviation "eval_trm_option v t \<equiv> Formula.eval_trm (map the v) t"
-
-abbreviation "sat_the \<sigma> V v i \<equiv> Formula.sat \<sigma> V (map the v) i"
-
-end
-
-bundle MFODL_no_notation
-begin
-
-no_notation trm.Var ("\<^bold>v")
-     and trm.Const ("\<^bold>c")
-
-no_notation formula.Pred ("_ \<dagger> _" [85, 85] 85)
-     and formula.Eq (infixl "=\<^sub>F" 75)
-     and formula.LessEq ("(_/ \<le>\<^sub>F _)" [76,76] 75)
-     and formula.Less ("(_/ <\<^sub>F _)" [76,76] 75)
-     and formula.Neg ("\<not>\<^sub>F _" [82] 82)
-     and formula.And (infixr "\<and>\<^sub>F" 80)
-     and formula.Or (infixr "\<or>\<^sub>F" 80)
-     and formula.Exists ("\<exists>\<^sub>F:_. _" [70,70] 70)
-     and formula.Ands ("\<And>\<^sub>F _" [70] 70)
-     and formula.Prev ("\<^bold>Y _ _" [55, 65] 65)
-     and formula.Next ("\<^bold>X _ _" [55, 65] 65)
-     and formula.Since ("_ \<^bold>S _ _" [60,55,60] 60)
-     and formula.Until ("_ \<^bold>U _ _" [60,55,60] 60)
-
-no_notation Formula.fv_trm ("FV\<^sub>t")
-     and Formula.fv ("FV")
-     and eval_trm_option ("_\<lbrakk>_\<rbrakk>\<^sub>M" [51,89] 89)
-     and sat_the ("\<langle>_, _, _, _\<rangle> \<Turnstile>\<^sub>M _" [56, 56, 56, 56, 56] 55)
-     and Formula.sat ("\<langle>_, _, _, _\<rangle> \<Turnstile> _" [56, 56, 56, 56, 56] 55)
-     and Interval.interval ("\<^bold>[_,_\<^bold>]")
-
-end
-
-
-bundle MFODL_notation
-begin
-
-notation trm.Var ("\<^bold>v")
-     and trm.Const ("\<^bold>c")
-
-notation formula.Pred ("_ \<dagger> _" [85, 85] 85)
-     and formula.Eq (infixl "=\<^sub>F" 75)
-     and formula.LessEq ("(_/ \<le>\<^sub>F _)" [76,76] 75)
-     and formula.Less ("(_/ <\<^sub>F _)" [76,76] 75)
-     and formula.Neg ("\<not>\<^sub>F _" [82] 82)
-     and formula.And (infixr "\<and>\<^sub>F" 80)
-     and formula.Or (infixr "\<or>\<^sub>F" 80)
-     and formula.Exists ("\<exists>\<^sub>F:_. _" [70,70] 70)
-     and formula.Ands ("\<And>\<^sub>F _" [70] 70)
-     and formula.Prev ("\<^bold>Y _ _" [55, 65] 65)
-     and formula.Next ("\<^bold>X _ _" [55, 65] 65)
-     and formula.Since ("_ \<^bold>S _ _" [60,55,60] 60)
-     and formula.Until ("_ \<^bold>U _ _" [60,55,60] 60)
-
-notation Formula.fv_trm ("FV\<^sub>t")
-     and Formula.fv ("FV")
-     and eval_trm_option ("_\<lbrakk>_\<rbrakk>\<^sub>M" [51,89] 89)
-     and sat_the ("\<langle>_, _, _, _\<rangle> \<Turnstile>\<^sub>M _" [56, 56, 56, 56, 56] 55)
-     and Formula.sat ("\<langle>_, _, _, _\<rangle> \<Turnstile> _" [56, 56, 56, 56, 56] 55)
-     and Interval.interval ("\<^bold>[_,_\<^bold>]")
-
-end
+subsection \<open>Safe Formula.formulas\<close>
 
 unbundle MFODL_notation \<comment> \<open> enable notation \<close>
-
-term "\<^bold>c (EInt 0) =\<^sub>F \<^bold>c (EInt 0)"
-term "v\<lbrakk>\<^bold>c t\<rbrakk>\<^sub>M"
-term "\<And>\<^sub>F [\<exists>\<^sub>F:t. (trm =\<^sub>F \<^bold>v x) \<and>\<^sub>F (a \<le>\<^sub>F \<^bold>c z), \<phi> \<^bold>U I \<psi>]"
-
-term "\<langle>\<sigma>, V, v, i + length v\<rangle> \<Turnstile>\<^sub>M \<^bold>Y I (\<not>\<^sub>F (P \<dagger> [\<^bold>c a, \<^bold>v 0]) 
-  \<and>\<^sub>F (Q \<dagger> [\<^bold>v y])) \<^bold>S (point n) ((\<^bold>X \<^bold>[2,3\<^bold>] (P \<dagger> [\<^bold>c b, \<^bold>v 0])) \<or>\<^sub>F Q \<dagger> [\<^bold>v y])"
-
-subsection \<open>Safe Formula.formulas\<close>
 
 context begin
 
@@ -779,8 +702,8 @@ next
     by (fastforce simp: list.pred_set convert_multiway_remove_neg sat_remove_neg[OF is_Neg_cm])
 qed (auto cong: nat.case_cong)
 
-lemma sat_the_restrict: "fv \<phi> \<subseteq> A \<Longrightarrow> Formula.sat \<sigma> V (map the (restrict A v)) i \<phi> = Formula.sat \<sigma> V (map the v) i \<phi>"
-  by (rule sat_fv_cong) (auto intro!: map_the_restrict)
+(*
+subsection \<open> Finite @{term safe_formula} \<close>
 
 lemma inj_eval: " \<forall>t\<in>set ts. Formula.is_Var t \<or> Formula.is_Const t \<Longrightarrow>
     inj_on (\<lambda>v. map (Formula.eval_trm (map the v)) ts) {v. wf_tuple n (\<Union> (fv_trm ` set ts)) v}"
@@ -826,14 +749,8 @@ fun joinN :: "'a tuple list \<Rightarrow> 'a tuple option" where
 |"joinN (a#b#cs) =  (case (join1 (a, b)) of None \<Rightarrow> None| Some x \<Rightarrow> joinN (x#cs))"
 |"joinN (a#[]) = Some a"
 
-lemma restrict_restrict: "restrict A (restrict B z) = restrict (A\<inter>B) z"
-  by(simp add: restrict_def)
-
 lemma in_listset_conv_list_all2: "xs \<in> listset ys \<longleftrightarrow> list_all2 (\<in>) xs ys"
   by (induct ys arbitrary: xs) (auto simp: set_Cons_def list_all2_Cons2)
-
-lemma nth_restrict': "i<length z \<Longrightarrow> (restrict A z)!i = (if i \<in> A then z!i else None)"
-  by(simp add: restrict_def)
 
 lemma joinN_Some_restrict:
   fixes as :: "'a tuple list"
@@ -950,10 +867,6 @@ lemma safe_regex_Future_finite: "safe_regex Futu Strict r \<Longrightarrow>
     apply (meson match_le order_trans)
     done
   done
-
-lemma wf_tuple_empty_iff: "wf_tuple n {} v \<longleftrightarrow> v = replicate n None"
-  unfolding wf_tuple_def
-  by (auto simp add: list_eq_iff_nth_eq)
 
 lemma Collect_singleton_tuple_eq_image: "i < n \<Longrightarrow> {v. wf_tuple n {i} v \<and> P (map the v ! i)} =
   (\<lambda>x. (replicate n None)[i := Some x]) ` Collect P"
@@ -1462,6 +1375,7 @@ next
     by (auto simp add: wf_tuple_empty_iff Collect_singleton_tuple_eq_image[where P="\<lambda>x. x = _"])
 qed
 
+*)
 
 subsection \<open>Slicing traces\<close>
 
@@ -1740,7 +1654,7 @@ lemma Neg_splits:
    (\<not> ((\<exists>\<psi>. \<phi> = Formula.formula.Neg \<psi> \<and> \<not> P (f \<psi>)) \<or> ((\<not> Formula.is_Neg \<phi>) \<and> \<not> P (g \<phi>))))"
   by (cases \<phi>; auto simp: Formula.is_Neg_def)+
 
-unbundle MFODL_no_notation \<comment> \<open> enable notation \<close>
+unbundle MFODL_no_notation \<comment> \<open> disable notation \<close>
 
 
 (*<*)

@@ -4300,7 +4300,7 @@ lemma wf_tuple_simple_match_gen: "is_simple_pattern ts m \<Longrightarrow> \<for
   (\<forall>y\<in>set ys. y \<noteq> None) \<Longrightarrow> length ys = length ts \<Longrightarrow>
   wf_tuple (n - m) (\<Union>t\<in>set ts. (\<lambda>x. x - m) ` Formula.fv_trm t) (simple_match n m ts ys)"
   apply (induction n m ts ys rule: simple_match.induct)
-                      apply (simp add: wf_tuple_empty)
+                      apply (simp add: wf_tuple_empty_iff)
   subgoal for n m x ts y ys
     supply simple_match.simps[simp del]
     apply (cases "m < x")
@@ -4361,7 +4361,7 @@ lemma simple_match_eval_trm_gen: "\<forall>t\<in>set ts. \<forall>i\<in>Formula.
   wf_tuple (n - m) (\<Union>t\<in>set ts. (\<lambda>x. x - m) ` Formula.fv_trm t) v \<Longrightarrow>
   simple_match n m ts (map (Some \<circ> Formula.eval_trm (map the (replicate m None @ v))) ts) = v"
   apply (induction n m ts "map (Some \<circ> Formula.eval_trm (map the (replicate m None @ v))) ts" arbitrary: v rule: simple_match.induct)
-                      apply (simp add: wf_tuple_empty)
+                      apply (simp add: wf_tuple_empty_iff)
   subgoal for n m x ts y ys v
     supply simple_match.simps[simp del]
     apply (cases "m < x")
@@ -5448,22 +5448,6 @@ qed (auto split: prod.splits if_splits simp: qtable_empty_iff list_all2_conv_all
     in_set_conv_nth restrict_idle sat_the_restrict
     intro: in_qtableI qtableI elim!: qtable_join[where A=A and C=A])
 
-lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
-  by (simp add: qtable_def table_empty)
-
-lemma qtable_empty_unit_table:
-  "qtable n {} R P empty_table \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) (unit_table n)"
-  by (auto intro: qtable_unit_table simp add: qtable_empty_iff)
-
-lemma qtable_unit_empty_table:
-  "qtable n {} R P (unit_table n) \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
-  by (auto intro!: qtable_empty elim: in_qtableE simp add: wf_tuple_empty unit_table_def)
-
-lemma qtable_nonempty_empty_table:
-  "qtable n {} R P X \<Longrightarrow> x \<in> X \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
-  by (frule nullary_qtable_cases) (auto dest: qtable_unit_empty_table)
-
-
 lemma qtable_r\<epsilon>_strict:
   assumes "safe_regex Past Strict (from_mregex mr \<phi>s)" "ok (length \<phi>s) mr" "A = fv_regex (from_mregex mr \<phi>s)"
     and "list_all2 (\<lambda>\<phi> rel. qtable n (Formula.fv \<phi>) (mem_restr R) (\<lambda>v. Formula.sat \<sigma> V (map the v) i \<phi>) rel) \<phi>s rels"
@@ -6117,9 +6101,6 @@ proof -
         intro!: qtable_cong[OF qtable_l\<epsilon>_strict[where \<phi>s=\<phi>s]] intro: qtables exI[of _ j]
         split: option.splits)
 qed
-
-lemma Un_empty_table[simp]: "rel \<union> empty_table = rel" "empty_table \<union> rel = rel"
-  unfolding empty_table_def by auto
 
 lemma wf_matchF_invar_step:
   assumes wf: "wf_matchF_invar \<sigma> V n R I r st (Suc i)"
@@ -6843,76 +6824,11 @@ lemma qtable_bin_join:
   using qtable_join[OF assms] bin_join_table[of n A X B Y b] assms(1,2)
   by (auto simp add: qtable_def)
 
-lemma restrict_update: "y \<notin> A \<Longrightarrow> y < length x \<Longrightarrow> restrict A (x[y:=z]) = restrict A x"
-  unfolding restrict_def by (auto simp add: nth_list_update)
-
-lemma qtable_assign:
-  assumes "qtable n A P Q X"
-    "y < n" "insert y A = A'" "y \<notin> A"
-    "\<And>x'. wf_tuple n A' x' \<Longrightarrow> P x' \<Longrightarrow> P (restrict A x')"
-    "\<And>x. wf_tuple n A x \<Longrightarrow> P x \<Longrightarrow> Q x \<Longrightarrow> Q' (x[y:=Some (f x)])"
-    "\<And>x'. wf_tuple n A' x' \<Longrightarrow> P x' \<Longrightarrow> Q' x' \<Longrightarrow> Q (restrict A x') \<and> x' ! y = Some (f (restrict A x'))"
-  shows "qtable n A' P Q' ((\<lambda>x. x[y:=Some (f x)]) ` X)" (is "qtable _ _ _ _ ?Y")
-proof (rule qtableI)
-  from assms(1) have "table n A X" unfolding qtable_def by simp
-  then show "table n A' ?Y"
-    unfolding table_def wf_tuple_def using assms(2,3)
-    by (auto simp: nth_list_update)
-next
-  fix x'
-  assume "x' \<in> ?Y" "wf_tuple n A' x'" "P x'"
-  then obtain x where "x \<in> X" and x'_eq: "x' = x[y:=Some (f x)]" by blast
-  then have "wf_tuple n A x"
-    using assms(1) unfolding qtable_def table_def by blast
-  then have "y < length x" using assms(2) by (simp add: wf_tuple_def)
-  with \<open>wf_tuple n A x\<close> have "restrict A x' = x"
-    unfolding x'_eq by (simp add: restrict_update[OF assms(4)] restrict_idle)
-  with \<open>wf_tuple n A' x'\<close> \<open>P x'\<close> have "P x"
-    using assms(5) by blast
-  with \<open>wf_tuple n A x\<close> \<open>x \<in> X\<close> have "Q x"
-    using assms(1) by (elim in_qtableE)
-  with \<open>wf_tuple n A x\<close> \<open>P x\<close> show "Q' x'"
-    unfolding x'_eq by (rule assms(6))
-next
-  fix x'
-  assume "wf_tuple n A' x'" "P x'" "Q' x'"
-  then have "wf_tuple n A (restrict A x')"
-    using assms(3) by (auto intro!: wf_tuple_restrict_simple)
-  moreover have "P (restrict A x')"
-    using \<open>wf_tuple n A' x'\<close> \<open>P x'\<close> by (rule assms(5))
-  moreover have "Q (restrict A x')" and y: "x' ! y = Some (f (restrict A x'))"
-    using \<open>wf_tuple n A' x'\<close> \<open>P x'\<close> \<open>Q' x'\<close> by (auto dest!: assms(7))
-  ultimately have "restrict A x' \<in> X" by (intro in_qtableI[OF assms(1)])
-  moreover have "x' = (restrict A x')[y:=Some (f (restrict A x'))]"
-    using y assms(2,3) \<open>wf_tuple n A (restrict A x')\<close> \<open>wf_tuple n A' x'\<close>
-    by (auto simp: list_eq_iff_nth_eq wf_tuple_def nth_list_update nth_restrict)
-  ultimately show "x' \<in> ?Y" by simp
-qed
-
 lemma sat_the_update: "y \<notin> fv \<phi> \<Longrightarrow> Formula.sat \<sigma> V (map the (x[y:=z])) i \<phi> = Formula.sat \<sigma> V (map the x) i \<phi>"
   by (rule sat_fv_cong) (metis map_update nth_list_update_neq)
 
 lemma progress_constraint: "progress \<sigma> P (formula_of_constraint c) j = j"
   by (induction rule: formula_of_constraint.induct) simp_all
-
-lemma qtable_filter:
-  assumes "qtable n A P Q X"
-    "\<And>x. wf_tuple n A x \<Longrightarrow> P x \<Longrightarrow> Q x \<and> R x \<longleftrightarrow> Q' x"
-  shows "qtable n A P Q' (Set.filter R X)" (is "qtable _ _ _ _ ?Y")
-proof (rule qtableI)
-  from assms(1) have "table n A X"
-    unfolding qtable_def by simp
-  then show "table n A ?Y"
-    unfolding table_def wf_tuple_def by simp
-next
-  fix x
-  assume "x \<in> ?Y" "wf_tuple n A x" "P x"
-  with assms show "Q' x" by (auto elim!: in_qtableE)
-next
-  fix x
-  assume "wf_tuple n A x" "P x" "Q' x"
-  with assms show "x \<in> Set.filter R X" by (auto intro!: in_qtableI)
-qed
 
 lemma eval_constraint_sat_eq: "wf_tuple n A x \<Longrightarrow> fv_trm t1 \<subseteq> A \<Longrightarrow> fv_trm t2 \<subseteq> A \<Longrightarrow>
   \<forall>i\<in>A. i < n \<Longrightarrow> eval_constraint (t1, p, c, t2) x =

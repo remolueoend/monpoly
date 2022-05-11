@@ -28,11 +28,6 @@ definition rwf_query :: "nat \<Rightarrow> vertices \<Rightarrow> 'a query \<Rig
   "rwf_query n V Qp Qn \<longleftrightarrow> wf_query n V Qp Qn \<and> covering V Qp \<and> included V Qp \<and> included V Qn
                          \<and> non_empty_query Qp \<and> non_empty_query Qn"
 
-lemma wf_tuple_empty: "wf_tuple n {} v \<longleftrightarrow> v = replicate n None"
-  by (auto intro!: replicate_eqI simp add: wf_tuple_def in_set_conv_nth)
-
-lemma table_empty: "table n {} X \<longleftrightarrow> (X = empty_table \<or> X = unit_table n)"
-  by (auto simp add: wf_tuple_empty unit_table_def table_def)
 
 context getIJ begin
 
@@ -1928,12 +1923,12 @@ proof (cases "(\<exists>(A, X)\<in>Q_pos. Set.is_empty X) \<or> (\<exists>(A, X)
       then have "\<exists>(A, X)\<in>Q_neg. Set.is_empty A \<and> \<not> Set.is_empty X" using True by blast
       then obtain A X where "(A, X) \<in> Q_neg" "Set.is_empty A" "\<not> Set.is_empty X" by auto
       then have "table n A X" using assms(2) by auto
-      then have "X \<subseteq> {?v}" using \<open>Set.is_empty A\<close> table_empty unit_table_def
+      then have "X \<subseteq> {?v}" using \<open>Set.is_empty A\<close> table_empty_vars_iff unit_table_def
         by (metis Set.is_empty_def \<open>\<not> Set.is_empty X\<close> empty_table_def set_eq_subset)
       then show ?thesis using \<open>(A, X) \<in> Q_neg\<close> \<open>Set.is_empty A\<close> \<open>\<not> Set.is_empty X\<close>
           \<open>wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)\<close>
         by (metis (no_types, lifting) Set.is_empty_def \<open>table n A X\<close> case_prod_beta' empty_table_def
-            in_unit_table inf_le1 inf_le2 prod.sel(1) snd_conv subset_empty table_empty wf_tuple_restrict_simple)
+            in_unit_table inf_le1 inf_le2 prod.sel(1) snd_conv subset_empty table_empty_vars_iff wf_tuple_restrict_simple)
     qed
   qed
   then show ?thesis using \<open>?r = {}\<close> by simp
@@ -1959,7 +1954,7 @@ next
         have "(A, X) \<notin> Q" by (simp add: True)
         then show ?thesis by (simp add: Q_def Set.is_empty_def \<open>(A, X) \<in> Q_pos\<close>)
       qed
-      then show "X \<subseteq> {replicate n None}" using \<open>A = {}\<close> \<open>table n A X\<close> table_empty unit_table_def by fastforce
+      then show "X \<subseteq> {replicate n None}" using \<open>A = {}\<close> \<open>table n A X\<close> table_empty_vars_iff unit_table_def by fastforce
     qed
     have "?r \<subseteq> {replicate n None}"
     proof (rule subsetI)
@@ -1990,7 +1985,7 @@ next
       proof (rule notI)
         assume "wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)"
         have "z = ?v"
-          using \<open>wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)\<close> empty_u wf_tuple_empty by auto
+          using \<open>wf_tuple n (\<Union>(A, X)\<in>Q_pos. A) z \<and> (\<forall>(A, X)\<in>Q_pos. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Q_neg. restrict A z \<notin> X)\<close> empty_u wf_tuple_empty_iff by auto
         then have "\<And>A. restrict A z = z"
           by (metis getIJ.restrict_index_out getIJ_axioms length_replicate length_restrict nth_replicate nth_restrict simple_list_index_equality)
         then have "(\<exists>(A, X)\<in>Q_pos. z \<notin> X) \<or> (\<exists>(A, X)\<in>Q_neg. z \<in> X)" using disj using \<open>z = replicate n None\<close> by auto
@@ -2014,10 +2009,10 @@ next
           then have "\<And>A. restrict A z = z"
             by (metis getIJ.restrict_index_out getIJ_axioms length_replicate length_restrict nth_replicate nth_restrict simple_list_index_equality)
           then show "?b" using \<open>\<forall>(A, X)\<in>Q_neg. replicate n None \<notin> X\<close> \<open>\<forall>(A, X)\<in>Q_pos. X = {replicate n None}\<close>
-              \<open>z = replicate n None\<close> empty_u wf_tuple_empty by fastforce
+              \<open>z = replicate n None\<close> empty_u wf_tuple_empty_iff by fastforce
         qed
         moreover have "?b \<Longrightarrow> ?a"
-          using \<open>wrapperGenericJoin Q_pos Q_neg = {replicate n None}\<close> empty_u wf_tuple_empty by auto
+          using \<open>wrapperGenericJoin Q_pos Q_neg = {replicate n None}\<close> empty_u wf_tuple_empty_iff by auto
         ultimately show ?thesis by blast
       qed
     qed
@@ -2119,11 +2114,11 @@ next
         moreover have "Set.is_empty A"
           by (metis (no_types, lifting) DiffD1 DiffD2 Q_def \<open>(A, X) \<in> Q_pos - Q\<close> case_prod_beta' member_filter prod.sel(1))
         moreover have "\<not> Set.is_empty X" using forall using \<open>(A, X) \<in> Q_pos - Q\<close> by blast
-        ultimately have "X = {replicate n None}" by (simp add: Set.is_empty_def empty_table_def table_empty unit_table_def)
+        ultimately have "X = {replicate n None}" by (simp add: Set.is_empty_def empty_table_def table_empty_vars_iff unit_table_def)
         moreover have "wf_tuple n V z"
           using \<open>(z \<in> genericJoin V Q Qn) = (wf_tuple n V z \<and> (\<forall>(A, X)\<in>Q. restrict A z \<in> X) \<and> (\<forall>(A, X)\<in>Qn. restrict A z \<notin> X))\<close> \<open>z \<in> genericJoin V Q Qn\<close> by linarith
         then have "restrict A z = replicate n None"
-          using \<open>Set.is_empty A\<close> wf_tuple_empty wf_tuple_restrict_simple
+          using \<open>Set.is_empty A\<close> wf_tuple_empty_iff wf_tuple_restrict_simple
           by (metis Diff_Int2 Diff_Int_distrib2 Diff_eq_empty_iff Set.is_empty_def inf_le2)
         then show "restrict A z \<in> X" by (simp add: calculation)
       qed
