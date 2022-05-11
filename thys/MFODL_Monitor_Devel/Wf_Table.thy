@@ -1,5 +1,5 @@
 theory Wf_Table
-  imports "Containers.Containers" "HOL-Library.Code_Target_Nat" "MFODL_Monitor_Devel.Optimized_Join" Cluster Mapping_Code
+  imports "Containers.Containers" "HOL-Library.Code_Target_Nat" "Optimized_Join" Cluster Mapping_Code
 begin
 
 lemma table_restrict[simp]: "table n (A \<inter> {..<n}) X \<longleftrightarrow> table n A X"

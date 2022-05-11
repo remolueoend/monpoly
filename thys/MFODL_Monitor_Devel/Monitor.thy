@@ -17,8 +17,8 @@ text \<open>The algorithm defined here abstracts over the implementation of the 
 
 subsection \<open>Monitorable formulas\<close>
 
-definition "mmonitorable \<phi> \<longleftrightarrow> safe_formula \<phi> \<and> Formula.future_bounded \<phi>"
-definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Regex.pred_regex Formula.future_bounded r"
+definition "mmonitorable \<phi> \<longleftrightarrow> safe_formula \<phi> \<and> Safety.future_bounded \<phi>"
+definition "mmonitorable_regex b g r \<longleftrightarrow> safe_regex b g r \<and> Regex.pred_regex Safety.future_bounded r"
 
 definition is_simple_eq :: "Formula.trm \<Rightarrow> Formula.trm \<Rightarrow> bool" where
   "is_simple_eq t1 t2 = (Formula.is_Const t1 \<and> (Formula.is_Const t2 \<or> Formula.is_Var t2) \<or>
@@ -28,7 +28,7 @@ fun mmonitorable_exec :: "'t Formula.formula \<Rightarrow> bool" where
   "mmonitorable_exec (Formula.Eq t1 t2) = is_simple_eq t1 t2"
 | "mmonitorable_exec (Formula.Pred e ts) = list_all (\<lambda>t. Formula.is_Var t \<or> Formula.is_Const t) ts"
 | "mmonitorable_exec (Formula.Let p \<phi> \<psi>) = ({0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
-| "mmonitorable_exec (Formula.LetPast p \<phi> \<psi>) = (Formula.safe_letpast (p, Formula.nfv \<phi>) \<phi> \<le> PastRec \<and>
+| "mmonitorable_exec (Formula.LetPast p \<phi> \<psi>) = (Safety.safe_letpast (p, Formula.nfv \<phi>) \<phi> \<le> PastRec \<and>
     {0..<Formula.nfv \<phi>} \<subseteq> Formula.fv \<phi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
 | "mmonitorable_exec (Formula.Neg \<phi>) = (fv \<phi> = {} \<and> mmonitorable_exec \<phi>)"
 | "mmonitorable_exec (Formula.Or \<phi> \<psi>) = (fv \<phi> = fv \<psi> \<and> mmonitorable_exec \<phi> \<and> mmonitorable_exec \<psi>)"
@@ -57,7 +57,7 @@ lemma cases_Neg_iff:
   "(case \<phi> of formula.Neg \<psi> \<Rightarrow> P \<psi> | _ \<Rightarrow> False) \<longleftrightarrow> (\<exists>\<psi>. \<phi> = formula.Neg \<psi> \<and> P \<psi>)"
   by (cases \<phi>) auto
 
-lemma safe_formula_mmonitorable_exec: "safe_formula \<phi> \<Longrightarrow> Formula.future_bounded \<phi> \<Longrightarrow> mmonitorable_exec \<phi>"
+lemma safe_formula_mmonitorable_exec: "safe_formula \<phi> \<Longrightarrow> Safety.future_bounded \<phi> \<Longrightarrow> mmonitorable_exec \<phi>"
 proof (induct \<phi> rule: safe_formula.induct)
   case (8 \<phi> \<psi>)
   then show ?case
@@ -70,7 +70,7 @@ next
     by (auto simp: cases_Neg_iff)
 next
   case (10 l)
-  from "10.prems"(2) have bounded: "Formula.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
+  from "10.prems"(2) have bounded: "Safety.future_bounded \<phi>" if "\<phi> \<in> set l" for \<phi>
     using that by (auto simp: list.pred_set)
   obtain poss negs where posnegs: "(poss, negs) = partition safe_formula l" by simp
   obtain posm negm where posnegm: "(posm, negm) = partition mmonitorable_exec l" by simp
@@ -139,10 +139,10 @@ next
     by (auto elim!: safe_regex_mono[rotated] simp: cases_Neg_iff regex.pred_set)
 qed (auto simp add: is_simple_eq_def list.pred_set)
 
-lemma safe_assignment_future_bounded: "safe_assignment X \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
+lemma safe_assignment_future_bounded: "safe_assignment X \<phi> \<Longrightarrow> Safety.future_bounded \<phi>"
   unfolding safe_assignment_def by (auto split: formula.splits)
 
-lemma is_constraint_future_bounded: "is_constraint \<phi> \<Longrightarrow> Formula.future_bounded \<phi>"
+lemma is_constraint_future_bounded: "is_constraint \<phi> \<Longrightarrow> Safety.future_bounded \<phi>"
   by (induction rule: is_constraint.induct) simp_all
 
 lemma mmonitorable_exec_mmonitorable: "mmonitorable_exec \<phi> \<Longrightarrow> mmonitorable \<phi>"
@@ -172,25 +172,25 @@ next
   then have "\<Union> (fv ` set negs) \<subseteq> \<Union> (fv ` set poss)"
     using \<open>set posm \<subseteq> set poss\<close> \<open>set negs \<subseteq> set negm\<close> by fastforce
   ultimately have "safe_formula (Formula.Ands l)" using posnegs by simp
-  moreover have "Formula.future_bounded (Formula.Ands l)"
+  moreover have "Safety.future_bounded (Formula.Ands l)"
   proof -
-    have "list_all Formula.future_bounded posm"
+    have "list_all Safety.future_bounded posm"
       using pos_monitorable "8.hyps"(1) posnegm unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
-    moreover have fnegm: "list_all Formula.future_bounded (map remove_neg negm)"
+    moreover have fnegm: "list_all Safety.future_bounded (map remove_neg negm)"
       using neg_monitorable "8.hyps"(2) posnegm "8.prems" unfolding mmonitorable_def
       by (auto elim!: list.pred_mono_strong)
-    then have "list_all Formula.future_bounded negm"
+    then have "list_all Safety.future_bounded negm"
     proof -
-      have "\<And>x. x \<in> set negm \<Longrightarrow> Formula.future_bounded x"
+      have "\<And>x. x \<in> set negm \<Longrightarrow> Safety.future_bounded x"
       proof -
         fix x assume "x \<in> set negm"
-        have "Formula.future_bounded (remove_neg x)" using fnegm \<open>x \<in> set negm\<close> by (simp add: list_all_iff)
-        then show "Formula.future_bounded x" by (cases x) auto
+        have "Safety.future_bounded (remove_neg x)" using fnegm \<open>x \<in> set negm\<close> by (simp add: list_all_iff)
+        then show "Safety.future_bounded x" by (cases x) auto
       qed
       then show ?thesis by (simp add: list_all_iff)
     qed
-    ultimately have "list_all Formula.future_bounded l" using posnegm by (auto simp: list_all_iff)
+    ultimately have "list_all Safety.future_bounded l" using posnegm by (auto simp: list_all_iff)
     then show ?thesis by (auto simp: list_all_iff)
   qed
   ultimately show ?case unfolding mmonitorable_def ..
@@ -2255,7 +2255,7 @@ lemma letpast_progress_ignore_upd: "letpast_progress \<sigma> (P(p := x)) p \<ph
 
 lemma progress_ge_gen:
   fixes \<phi> :: "'t Formula.formula"
-  shows "Formula.future_bounded \<phi> \<Longrightarrow>
+  shows "Safety.future_bounded \<phi> \<Longrightarrow>
    \<exists>P j. dom P = S \<and> range_mapping i j P \<and> i \<le> progress \<sigma> P \<phi> j"
 proof (induction \<phi> arbitrary: i S)
   case (Pred e ts)
@@ -2440,7 +2440,7 @@ next
   next
     case False
     then obtain \<phi> where "\<phi> \<in> set l" by (cases l) auto
-    from Ands.prems have "\<forall>\<phi>\<in>set l. Formula.future_bounded \<phi>"
+    from Ands.prems have "\<forall>\<phi>\<in>set l. Safety.future_bounded \<phi>"
       by (simp add: list.pred_set)
     { fix \<phi>
       assume "\<phi> \<in> set l"
@@ -2612,7 +2612,7 @@ next
     moreover
     note i' ix
     moreover
-    from MatchF.prems have "Regex.pred_regex Formula.future_bounded r"
+    from MatchF.prems have "Regex.pred_regex Safety.future_bounded r"
       by auto
     ultimately show ?thesis using \<tau>_mono[of _ ?j \<sigma>] less_\<tau>D[of \<sigma> i] pick pred_pick False
       by (intro exI[of _ "?j"]  exI[of _ "?P"])
@@ -2632,7 +2632,7 @@ next
     by (intro exI[of _ "\<lambda>e. if e \<in> S then Some i else None"]) (auto split: if_splits simp: pred_mapping_alt)
 qed (auto split: option.splits)
 
-lemma progress_ge: "Formula.future_bounded \<phi> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> Map.empty \<phi> j"
+lemma progress_ge: "Safety.future_bounded \<phi> \<Longrightarrow> \<exists>j. i \<le> progress \<sigma> Map.empty \<phi> j"
   using progress_ge_gen[of \<phi> "{}" i \<sigma>]
   by auto
 
@@ -3062,7 +3062,7 @@ lemma map_\<Gamma>_subset_traces: "\<sigma> \<in> traces \<Longrightarrow> (\<An
 end
 
 locale future_bounded_mfodl = wty_mfodl +
-   assumes future_bounded: "Formula.future_bounded \<phi>"
+   assumes future_bounded: "Safety.future_bounded \<phi>"
 
 sublocale future_bounded_mfodl \<subseteq> sliceable_timed_progress "Formula.nfv \<phi>" "Formula.fv \<phi>" traces "relevant_events \<phi>"
   "\<lambda>\<sigma> v i. Formula.sat \<sigma> Map.empty v i \<phi>" "pprogress \<phi>"

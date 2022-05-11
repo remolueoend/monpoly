@@ -842,6 +842,7 @@ fun wf_formula :: "'t formula \<Rightarrow> bool" where
 | "wf_formula (MatchF I r) = Regex.pred_regex wf_formula r"
 | "wf_formula _ = True"
 
+(*
 subsection \<open>Safe formulas\<close>
 
 fun safe_letpast :: "name \<times> nat \<Rightarrow> 't formula \<Rightarrow> rec_safety" where
@@ -878,12 +879,12 @@ fun remove_neg :: "'t formula \<Rightarrow> 't formula" where
 lemma fvi_remove_neg[simp]: "fvi b (remove_neg \<phi>) = fvi b \<phi>"
   by (cases \<phi>) simp_all
 
+lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
+  by (cases \<phi>) simp_all
+
 lemma partition_cong[fundef_cong]:
   "xs = ys \<Longrightarrow> (\<And>x. x\<in>set xs \<Longrightarrow> f x = g x) \<Longrightarrow> partition f xs = partition g ys"
   by (induction xs arbitrary: ys) auto
-
-lemma size_remove_neg[termination_simp]: "size (remove_neg \<phi>) \<le> size \<phi>"
-  by (cases \<phi>) simp_all
 
 fun is_constraint :: "'t formula \<Rightarrow> bool" where
   "is_constraint (Eq t1 t2) = True"
@@ -2490,6 +2491,10 @@ lemma Neg_splits:
   "P (case \<phi> of formula.Neg \<psi> \<Rightarrow> f \<psi> | _ \<Rightarrow> g \<phi>) =
    (\<not> ((\<exists>\<psi>. \<phi> = formula.Neg \<psi> \<and> \<not> P (f \<psi>)) \<or> ((\<not> Formula.is_Neg \<phi>) \<and> \<not> P (g \<phi>))))"
   by (cases \<phi>; auto simp: Formula.is_Neg_def)+
+
+*)
+
+end 
 
 (*<*)
 end

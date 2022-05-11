@@ -1,6 +1,6 @@
 (*<*)
 theory Typing
-  imports Formula
+  imports Safety
   Error_Monad
 begin
 (*>*)
