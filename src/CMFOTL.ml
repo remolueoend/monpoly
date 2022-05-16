@@ -1706,11 +1706,41 @@ let rec projection_path = function
       @@ Printf.sprintf "[CMFOTL.projection_path]: Invalid term detected: %s"
            (string_of_term t)
 
+(** Returns the type of the given term derived from the provided sybol table.
+    Only implemented for variables and projections. *)
+let rec type_of_term (ctx : context) (t : cplx_term) : tcst =
+  let sch, tctxt, vars = ctx in
+  let concrete_ty = function
+    | TCst t -> t
+    | ty ->
+        failwith
+        @@ Printf.sprintf
+             "type_of_term: Expected %s to be of concrete type, found %s"
+             (string_of_term t) (string_of_type tctxt ty) in
+  match t with
+  | Var v -> List.assoc (Var v) vars |> concrete_ty
+  | Proj (base, field) ->
+      let base_ctor =
+        match type_of_term ctx base with
+        | TRef ctor -> ctor
+        | t ->
+            failwith
+            @@ Printf.sprintf
+                 "type_of_term: exptected base to be TRef, found %s"
+                 (string_of_ty t) in
+      let base_fields = List.assoc base_ctor tctxt |> snd in
+      List.assoc field base_fields
+  | _ -> failwith "not implemented"
+
+let cplx_conjunction (fs : cplx_formula list) : cplx_formula =
+  List.fold_left (fun acc f -> And (acc, f)) (List.hd fs) (List.tl fs)
+
 let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
   List.fold_left (fun acc f -> MFOTL.And (acc, f)) (List.hd fs) (List.tl fs)
 
 (** Accpets a variable name of a free complex variable in the given formula and
-      expands it. It returns a new conjunction and a set of new variables introduced
+      expands it based on its usage in the given formula.
+      It returns a new conjunction and a set of new variables introduced
       by the expansion. *)
 let expand_cplx_var (f : cplx_formula) (ctx : context) (var : var) :
     MFOTL.formula * var list =
@@ -1761,6 +1791,35 @@ let free_ref_vars (vars : symbol_table) (accept_list : var list) =
       | Var v, TCst (TRef _) -> if filter_var v then v :: acc else acc
       | _ -> acc )
     [] vars
+
+(** accepts two sides of an equality and returns a formula comparing both sides
+    recursively/structurally. The returned formual replaces the original equality. *)
+let expand_structural_equality (ctx : context) (left : cplx_term)
+    (right : cplx_term) : cplx_formula =
+  let sch, tctxt, vars = ctx in
+  let rec terms left right =
+    let left_ty, right_ty = (type_of_term ctx left, type_of_term ctx right) in
+    if compare left_ty right_ty <> 0 then
+      failwith
+      @@ Printf.sprintf
+           "expand_structural_equality: type %s of %s is not equal to type %s \
+            of %s"
+           (string_of_term left) (string_of_ty left_ty) (string_of_term right)
+           (string_of_ty right_ty) ;
+    match left_ty with
+    | TRef ctor ->
+        let fields = List.assoc ctor tctxt |> snd in
+        List.map
+          (fun (name, _) -> terms (Proj (left, name)) (Proj (right, name)))
+          fields
+        |> List.flatten
+    | _ -> [Equal (left, right)] in
+  cplx_conjunction (terms left right)
+
+(** pre-processes the given complex formula before the actual compilation step.
+    Should be run *once per scope* before compiling. *)
+let preprocess_formula (ctx : context) (f : cplx_formula) : cplx_formula =
+  match f with Equal (l, r) -> expand_structural_equality ctx l r | _ -> f
 
 let compile_formula (signatures : signatures) (input : cplx_formula) :
     MFOTL.formula =
