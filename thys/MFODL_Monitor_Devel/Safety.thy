@@ -5,9 +5,354 @@ begin
 (*>*)
 
 
-subsection \<open>Safe Formula.formulas\<close>
+section \<open> Safety \<close>
+
+
+subsection \<open> Preliminaries \<close>
+
+\<comment> \<open> Finiteness \<close>
+
+lemma finite_Union_image_Collect: 
+  "finite A \<Longrightarrow> (\<And>X. X \<in> A \<Longrightarrow> finite (f X)) \<Longrightarrow> finite (\<Union>{f X|X. X \<in> A})"
+  by (rule finite_Union, auto)
+
+lemma finite_image_Collect: "finite A \<Longrightarrow> finite {f k |k. k \<in> A}"
+  apply (subst Collect_mem_eq[where A=A, symmetric])
+  by (rule finite_image_set) simp
+
+lemma finite_bounded_\<I>: "bounded I \<Longrightarrow> finite {i |i. memL I i \<and> memR I i}"
+  by (transfer, clarsimp simp: upclosed_def downclosed_def)
+    (metis (lifting) infinite_nat_iff_unbounded_le mem_Collect_eq)
+
+lemma finite_bounded_\<I>2: "bounded I \<Longrightarrow> finite {f i |i. memL I (f i) \<and> memR I (f i)}"
+  apply (transfer, clarsimp simp: upclosed_def downclosed_def)
+  by (smt (verit, best) infinite_nat_iff_unbounded_le mem_Collect_eq)
+
+lemma finite_vimage_set: "finite {x. P x} \<Longrightarrow> inj f \<Longrightarrow> finite {x. P (f x)}"
+  using finite_vimageI
+  unfolding vimage_def by force
+
+thm finite_vimage_set[OF finite_bounded_\<I>, of _ "\<lambda>k. \<tau> \<sigma> k - \<tau> \<sigma> \<iota>", unfolded inj_on_def, simplified]
+
+lemma finite_vimage_\<tau>_nat: "finite {k. \<tau> \<sigma> k - c = n}"
+proof (transfer, clarsimp)
+  fix \<sigma> :: "('a \<times> nat) stream" 
+    and c :: nat 
+    and n :: nat
+  assume h1: "ssorted (smap snd \<sigma>)"
+    and h2: "sincreasing (smap snd \<sigma>)"
+  have "\<exists>k. n < snd (\<sigma> !! k) - c"
+    using h2 sincreasing_grD less_diff_conv 
+    by (metis smap_alt)
+  moreover have "\<forall>i j. i \<le> j \<longrightarrow> snd (\<sigma> !! i) \<le> snd (\<sigma> !! j)"
+    using iffD1[OF ssorted_iff_mono h1] smap_alt by auto
+  ultimately show "finite {k. snd (\<sigma> !! k) - c = n}"
+    unfolding finite_nat_set_iff_bounded_le
+    by (smt (verit, del_insts) add_less_cancel_left diff_le_mono linorder_le_cases 
+        mem_Collect_eq nat_arith.rule0 order_less_le_trans zero_order(3))
+qed
+
+lemma finite_vimage_\<I>_Until:
+  assumes "bounded I"
+  shows "finite {k. mem I (\<tau> \<sigma> k - \<tau> \<sigma> \<iota>)}"
+proof-
+  let ?A = "{{k. \<tau> \<sigma> k - \<tau> \<sigma> \<iota> = n}|n. mem I n}"
+  have "?A = (\<lambda>n. {k. \<tau> \<sigma> k - \<tau> \<sigma> \<iota> = n}) ` {i |i. mem I i}"
+    by auto
+  hence "finite ?A"
+    using finite_bounded_\<I>[OF assms] 
+    by simp
+  moreover have "{k. mem I (\<tau> \<sigma> k - \<tau> \<sigma> \<iota>)} = \<Union>?A"
+    by auto
+  ultimately show ?thesis
+    using finite_Union[of ?A] 
+      finite_vimage_\<tau>_nat[of \<sigma> \<open>\<tau> \<sigma> \<iota>\<close>]
+    by auto
+qed
+
+\<comment> \<open> Pairwise union \<close>
+
+lemma set_eqI2: "(\<And>x. x\<in>A \<Longrightarrow> x\<in>B) \<Longrightarrow> (\<And>x. x\<in>B \<Longrightarrow> x\<in>A) \<Longrightarrow> A = B"
+  by auto
+
+lemma eq_singleton_iff: "A = {a} \<longleftrightarrow> a \<in> A \<and> (\<forall>x. x \<in> A \<longrightarrow> x = a)"
+  by auto
+
+lemma sub_pair_unfold: "A \<subseteq> {{}, X} \<longleftrightarrow> A = {} \<or> A = {{}} \<or> A = {X} \<or> A = {{},X}"
+  by blast
+
+definition pairw_union :: "'a set set \<Rightarrow> 'a set set \<Rightarrow> 'a set set" (infixl "\<uplus>" 70)
+  where "A \<uplus> B = (\<lambda>(X, Y). X \<union> Y) ` (A \<times> B)"
+
+lemma pairw_union_eq:
+  "A \<uplus> B = {a \<union> b|a b. a \<in> A \<and> b \<in> B}"
+  by (auto simp: pairw_union_def)
+
+lemma in_pairw_union_iff: "x \<in> A \<uplus> B \<longleftrightarrow> (\<exists>a b. a \<in> A \<and> b \<in> B \<and> x = a \<union> b)"
+  unfolding pairw_union_eq by blast
+
+lemma union_in_pairw_union: "a \<in> A \<Longrightarrow> b \<in> B \<Longrightarrow> a \<union> b \<in> A \<uplus> B"
+  by (auto simp: pairw_union_eq)
+
+lemma empty_in_pairw_unionI: "{} \<in> A \<Longrightarrow> {} \<in> B \<Longrightarrow> {} \<in> A \<uplus> B"
+  using union_in_pairw_union[where a="{}"] by auto
+
+lemma empty_notin_pairw_unionI:
+  "{} \<in> A \<Longrightarrow> {} \<notin> B \<Longrightarrow> {} \<notin> A \<uplus> B" 
+  "{} \<notin> A \<Longrightarrow> {} \<in> B \<Longrightarrow> {} \<notin> A \<uplus> B"
+  unfolding pairw_union_eq by auto
+
+lemma subset_pairw_unionI:
+  "{} \<in> A \<Longrightarrow> B \<subseteq> A \<uplus> B"
+  "{} \<in> B \<Longrightarrow> A \<subseteq> A \<uplus> B"
+  unfolding pairw_union_eq by auto
+
+lemma pairw_union_empty[simp]:
+  "A \<uplus> {} = {}"
+  "{} \<uplus> B = {}"
+  by (simp_all add: pairw_union_def)
+
+lemma pairw_union_unit[simp]:
+  "A \<uplus> {{}} = A"
+  "{{}} \<uplus> B = B"
+  by (auto simp: pairw_union_def)
+
+lemma pairw_union_UNIV[simp]:
+  "A \<noteq> {} \<Longrightarrow> A \<uplus> {UNIV} = {UNIV}"
+  "B \<noteq> {} \<Longrightarrow> {UNIV} \<uplus> B = {UNIV}"
+  by (auto simp: pairw_union_eq)
+
+lemma pairw_union_commutes: "A \<uplus> B = B \<uplus> A"
+  by (auto simp: pairw_union_def)
+
+lemma pairw_union_assoc: "(A \<uplus> B) \<uplus> C = A \<uplus> (B \<uplus> C)"
+  apply(rule set_eqI2; clarsimp simp: pairw_union_eq)
+  by (rename_tac c a b, rule_tac x=a in exI, rule_tac x="b \<union> c" in exI, blast)
+    (rename_tac a b c, rule_tac x="a \<union> b" in exI, rule_tac x=c in exI, blast)
+
+lemma pairw_union_absorbL_iff: 
+  "A \<uplus> B = A \<longleftrightarrow> (\<forall>x\<in>A.\<exists>a\<in>A.\<exists>b\<in>B. x = a \<union> b) \<and> (\<forall>a\<in>A. \<forall>b\<in>B. a \<union> b \<in> A)"
+  apply (intro iffI set_eqI2)
+  by (auto simp: pairw_union_eq)
+    (smt (verit, best) CollectD pairw_union_eq)+
+
+lemma pairw_union_absorbR_iff:
+  "A \<uplus> B = B \<longleftrightarrow> (\<forall>x\<in>B.\<exists>a\<in>A.\<exists>b\<in>B. x = a \<union> b) \<and> (\<forall>a\<in>A. \<forall>b\<in>B. a \<union> b \<in> B)"
+  by (subst pairw_union_commutes, subst pairw_union_absorbL_iff)
+    (metis (no_types, lifting) sup.commute)
+
+lemma pairw_union_absorbI:
+  "B \<noteq> {} \<Longrightarrow> \<forall>X\<in>A. \<forall>Y\<in>B. Y \<subseteq> X \<Longrightarrow> A \<uplus> B = A"
+  "A \<noteq> {} \<Longrightarrow> \<forall>X\<in>A. \<forall>Y\<in>B. X \<subseteq> Y \<Longrightarrow> A \<uplus> B = B"
+  unfolding pairw_union_absorbL_iff pairw_union_absorbR_iff
+  by (auto simp: sup_absorb1 sup_absorb2)
+
+lemma pairw_union_eq_singletonI:
+  "A \<noteq> {} \<Longrightarrow> \<forall>X\<in>A. X \<subseteq> Y \<Longrightarrow> B = {Y} \<Longrightarrow> A \<uplus> B = {Y}"
+  "B \<noteq> {} \<Longrightarrow> \<forall>X\<in>B. X \<subseteq> Y \<Longrightarrow> A = {Y} \<Longrightarrow> A \<uplus> B = {Y}"
+  by (metis singleton_iff pairw_union_absorbI(2))
+    (metis singleton_iff pairw_union_absorbI(1))
+
+interpretation pairw_semiring1: comm_semiring_1 "(\<uplus>)" "{{}}" "(\<union>)" "{}"
+  by (unfold_locales, rule pairw_union_assoc) (auto simp: pairw_union_eq)
+
+interpretation pairw_no_zero_div: semiring_no_zero_divisors "(\<union>)" "{}" "(\<uplus>)"
+  by unfold_locales (auto simp: pairw_union_eq)
+
+lemma Union_pairw_union_bdd_above: "\<Union> \<A> \<subseteq> C \<Longrightarrow> \<Union> \<B> \<subseteq> C \<Longrightarrow> \<Union> (\<A> \<uplus> \<B>) \<subseteq> C"
+  by (auto simp: pairw_union_eq)
+
+lemma Union_pairw_union_bdd_below: "A \<subseteq> \<Union>\<A> \<Longrightarrow> \<B> \<noteq> {} \<Longrightarrow> A \<subseteq> \<Union> (\<B> \<uplus> \<A>) "
+  by (auto simp: pairw_union_eq)
+
+lemma (in mult_zero) foldl_times_zero [simp]: 
+  "foldl (*) 0 xs = 0"
+  "0 \<in> set xs \<Longrightarrow> foldl (*) x xs = 0"
+  by (induction xs arbitrary: x, auto)
+
+lemma (in mult_zero) foldr_times_zero [simp]: 
+  "foldr (*) xs 0 = 0"
+  "0 \<in> set xs \<Longrightarrow> foldr (*) xs x = 0"
+  by (induction xs arbitrary: x, auto)
+
+lemma (in semiring_no_zero_divisors) non_zero_foldl_times: 
+  "\<forall>y \<in> set xs. f y \<noteq> 0 \<Longrightarrow> x \<noteq> 0 \<Longrightarrow> foldl (*) x (map f xs) \<noteq> 0"
+  by (induct xs arbitrary: x, simp_all)
+
+lemma (in semiring_no_zero_divisors) foldl_times_non_zeroD: 
+  "foldl (*) x (map f xs) \<noteq> 0 \<Longrightarrow> (\<forall>y \<in> set xs. f y \<noteq> 0) \<and> x \<noteq> 0"
+  by (induct xs arbitrary: x, simp)
+    (metis image_eqI list.set_map foldl_times_zero(1,2))
+
+lemma (in semiring_no_zero_divisors) foldl_times_non_zero_eq[simp]: 
+  "foldl (*) x (map f xs) \<noteq> 0 \<longleftrightarrow> (\<forall>y \<in> set xs. f y \<noteq> 0) \<and> x \<noteq> 0"
+  by (rule iffI, rule foldl_times_non_zeroD, assumption)
+    (rule non_zero_foldl_times, auto)
+
+lemma (in monoid_mult) foldr_times_one_all_one[simp]:
+  "\<forall>x\<in>set xs. x = 1 \<Longrightarrow> foldr (*) xs 1 = 1"
+  by (induct xs, simp_all)
+
+lemma (in monoid_mult) foldl_times_one [simp]:
+  "xs \<noteq> [] \<Longrightarrow> foldl (*) 1 (x # xs) = foldl (*) x xs"
+  "\<forall>x\<in>set xs. x = 1 \<Longrightarrow> foldl (*) 1 xs = 1"
+  by (induct xs arbitrary: x, simp_all)
+
+lemma (in monoid_mult) foldl_times_one_expand: 
+  "foldl (*) x xs = x * (foldl (*) 1 xs)"
+  by (induct xs arbitrary: x, simp)
+    (metis foldl_Cons local.mult_1_left mult_assoc)
+
+lemma (in comm_monoid_mult) foldr_times_one [simp]:
+  "xs \<noteq> [] \<Longrightarrow> foldr (*) (x # xs) 1 = foldr (*) xs x"
+  using local.mult.left_commute 
+  by (induct xs arbitrary: x) (simp_all, fastforce)
+
+lemma "(\<lambda>(A, B, C). (A \<union> B) \<union> C) ` (X \<times> Y \<times> Z) = (X \<uplus> Y) \<uplus> Z"
+  by (auto simp: pairw_union_eq)
+
+lemma in_foldl_pairwD:
+  "X \<in> foldl (\<uplus>) A As \<Longrightarrow> (\<forall>Z\<in>set As. Z \<noteq> {})"
+  by (erule contrapos_pp, simp)
+
+lemma pairw_union_eq_one_iff[simp]: 
+  "A \<uplus> B = {{}} \<longleftrightarrow> A = {{}} \<and> B = {{}}"
+proof(rule iffI)
+  assume h1: "A \<uplus> B = {{}}"
+  hence "\<forall>x\<in>A \<uplus> B. x = {}"
+    unfolding pairw_union_eq by auto
+  hence "\<forall>a\<in>A. \<forall>b\<in>B. a \<union> b = {}" 
+    unfolding pairw_union_eq by auto
+  hence "(\<forall>a\<in>A. a = {}) \<and> (\<forall>b\<in>B. b = {})" 
+    using h1 Un_empty by (metis all_not_in_conv insert_not_empty 
+        pairw_no_zero_div.mult_eq_0_iff) 
+  thus "A = {{}} \<and> B = {{}}"
+    by (metis h1 insertI1 is_singletonI' is_singleton_the_elem 
+        pairw_union_empty(1) pairw_union_empty(2))
+next
+  show "A = {{}} \<and> B = {{}} \<Longrightarrow> A \<uplus> B = {{}}"
+    unfolding pairw_union_eq by auto
+qed
+
+lemma foldl_pairw_eq_one_iff[simp]: 
+  "foldl (\<uplus>) x xs = {{}} \<longleftrightarrow> (x={{}} \<and> (\<forall>x\<in>(set xs). x = {{}}))"
+  by (induct xs arbitrary: x, simp_all)
+
+lemma foldl_pairw_one_eq:
+  defines "choice As f \<equiv> (\<forall>n < length As. f n \<in> As ! n)"
+  shows "foldl (\<uplus>) {{}} As = {\<Union> (f ` ({0..<length As}))|f. choice As f}" (is "_ = ?rhs As")
+proof(induct As, simp add: assms)
+  case (Cons A As)
+  have "foldl (\<uplus>) {{}} (A # As) = A \<uplus> ?rhs As"
+    using Cons pairw_semiring1.foldl_times_one_expand
+    by (metis foldl_Cons pairw_union_unit(2))
+  also have "... = ?rhs (A # As)"
+  proof(rule set_eqI2)
+    fix X assume "X \<in> A \<uplus> ?rhs As"
+    then obtain a and f where "a \<in> A" and f_def: "choice As f"
+      and X_def: "X = a \<union> \<Union> (f ` {0..<length As})"
+      by (auto simp: pairw_union_eq)
+    let "?g" = "(override_on f (f \<circ> (\<lambda>x. x - 1)) ({1..<Suc (length As)}))(0:=a)"
+    have "X = \<Union> (?g ` {0..<length (A # As)})"
+      using X_def by auto (metis (no_types, lifting) Ex_less_Suc Int_iff 
+          atLeast0LessThan diff_Suc_Suc diff_zero lessThan_iff less_trans_Suc 
+          mem_Collect_eq zero_less_Suc)
+    moreover have "choice (A # As) ?g"
+      using f_def unfolding assms using \<open>a \<in> A\<close> by auto
+    ultimately show "X \<in> ?rhs (A # As)"
+      by blast
+  next
+    fix X assume "X \<in> ?rhs (A # As)"
+    then obtain g where g_def: "choice (A # As) g" 
+      and X_def: "X = \<Union> (g ` {0..<length (A # As)})" (is "X = ?img g (A#As)")
+      by blast
+    define f where f_def: "f = override_on g (g \<circ> Suc) ({0..< (length As)})"
+    have "\<Union> (g ` {1..<Suc (length As)}) = ?img f As"
+      apply(rule set_eqI2; clarsimp)
+      unfolding f_def by clarsimp (metis atLeastLessThan_iff
+          less_Suc_eq_0_disj not_less, force)
+    moreover have "choice As f"
+      using g_def unfolding f_def assms by auto
+    moreover have "X = g 0 \<union> (?img f As)"
+      unfolding X_def f_def apply (rule set_eqI; clarsimp)
+      using less_Suc_eq_0_disj by force+
+    moreover have "g 0 \<in> A" and "?img f As \<in> {?img f As|f. choice As f}"
+      using X_def g_def unfolding assms apply clarsimp
+      using \<open>choice As f\<close> unfolding assms by auto
+    ultimately show "X \<in> A \<uplus> ?rhs As"
+      unfolding pairw_union_eq by auto
+  qed
+  finally show "foldl (\<uplus>) {{}} (A # As) = ?rhs (A # As)"
+    by simp
+qed
+
+lemma in_foldl_pairw_single_emptyD: "X \<in> foldl (\<uplus>) {{}} As \<Longrightarrow> \<exists>A\<subseteq>\<Union>(set As). X = \<Union>A"
+  unfolding foldl_pairw_one_eq apply (clarsimp simp: subset_eq)
+  by (rule_tac x="f ` {0..<length As}" in exI, rule conjI; clarsimp) auto
+
+lemma imgage_in_foldl_pairw_union: "\<forall>x\<in>set xs. f x \<in> g x \<Longrightarrow> \<Union>(f ` set xs) \<in> (foldl (\<uplus>) {{}} (map g xs))"
+  by (induct xs, simp_all)
+    (subst pairw_semiring1.foldl_times_one_expand, simp add: union_in_pairw_union)
+
+
+subsection \<open> Sets of safe free variables \<close>
 
 unbundle MFODL_notation \<comment> \<open> enable notation \<close>
+
+fun is_constraint :: "'t Formula.formula \<Rightarrow> bool" 
+  where "is_constraint (t1 =\<^sub>F t2) = True"
+  | "is_constraint (t1 <\<^sub>F t2) = True"
+  | "is_constraint (t1 \<le>\<^sub>F t2) = True"
+  | "is_constraint (\<not>\<^sub>F (t1 =\<^sub>F t2)) = True"
+  | "is_constraint (\<not>\<^sub>F (t1 <\<^sub>F t2)) = True"
+  | "is_constraint (\<not>\<^sub>F (t1 \<le>\<^sub>F t2)) = True"
+  | "is_constraint _ = False"
+
+lemma is_constraint_Neg_iff: "is_constraint (\<not>\<^sub>F \<alpha>) \<longleftrightarrow> 
+  (\<exists>t1 t2. \<alpha> = t1 =\<^sub>F t2 \<or> \<alpha> = t1 <\<^sub>F t2 \<or> \<alpha> = t1 \<le>\<^sub>F t2)"
+  by (cases \<alpha>, simp_all)
+
+lemma is_constraint_iff: "is_constraint \<alpha> \<longleftrightarrow> (\<exists>t1 t2. \<alpha> = t1 =\<^sub>F t2 \<or> \<alpha> = t1 <\<^sub>F t2 
+  \<or> \<alpha> = t1 \<le>\<^sub>F t2 \<or> \<alpha> = \<not>\<^sub>F (t1 =\<^sub>F t2) \<or> \<alpha> = \<not>\<^sub>F (t1 <\<^sub>F t2) \<or> \<alpha> = \<not>\<^sub>F (t1 \<le>\<^sub>F t2))"
+  by (cases \<alpha>, simp_all add: is_constraint_Neg_iff)
+
+definition safe_assignment :: "nat set \<Rightarrow> 'a Formula.formula \<Rightarrow> bool" where
+  "safe_assignment X \<alpha> = (case \<alpha> of
+       \<^bold>v x =\<^sub>F \<^bold>v y \<Rightarrow> (x \<notin> X \<longleftrightarrow> y \<in> X)
+     | \<^bold>v x =\<^sub>F t \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
+     | t =\<^sub>F \<^bold>v x \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
+     | _ \<Rightarrow> False)"
+
+lemma safe_assignment_Eq_iff: "safe_assignment X (t1 =\<^sub>F t2) 
+  \<longleftrightarrow> (\<exists>x y. t1 = \<^bold>v x \<and> t2 = \<^bold>v y \<and> (x \<notin> X \<longleftrightarrow> y \<in> X)) 
+    \<or> (\<exists>x. t1 = \<^bold>v x \<and> (x \<notin> X \<and> FV\<^sub>t t2 \<subseteq> X)) 
+    \<or> (\<exists>x. t2 = \<^bold>v x \<and> (x \<notin> X \<and> FV\<^sub>t t1 \<subseteq> X))"
+  by (cases t1; cases t2, auto simp: safe_assignment_def)
+
+lemmas safe_assignment_EqD = iffD1[OF safe_assignment_Eq_iff]
+   and safe_assignment_EqI = iffD2[OF safe_assignment_Eq_iff]
+
+lemma safe_assignment_iff: "safe_assignment X \<beta> 
+  \<longleftrightarrow> (\<exists>x y. \<beta> = (\<^bold>v x =\<^sub>F \<^bold>v y) \<and> (x \<notin> X \<longleftrightarrow> y \<in> X)) 
+    \<or> (\<exists>x t. \<beta> = (\<^bold>v x =\<^sub>F t) \<and> (x \<notin> X \<and> FV\<^sub>t t \<subseteq> X)) 
+    \<or> (\<exists>x t. \<beta> = (t =\<^sub>F \<^bold>v x) \<and> (x \<notin> X \<and> FV\<^sub>t t \<subseteq> X))"
+  by (cases \<beta>; simp add: safe_assignment_Eq_iff) 
+    (simp_all add: safe_assignment_def)
+
+lemma safe_assignment_iff2: 
+  "safe_assignment X \<beta> \<longleftrightarrow> (\<exists>x t. (x \<notin> X \<and> FV\<^sub>t t \<subseteq> X) \<and> (\<beta> = (\<^bold>v x =\<^sub>F t) \<or> \<beta> = (t =\<^sub>F \<^bold>v x)))
+  \<or> (\<exists>x y. (x \<notin> X \<longleftrightarrow> y \<in> X) \<and> \<beta> = (\<^bold>v x =\<^sub>F \<^bold>v y))"
+  unfolding safe_assignment_iff
+  by (intro conjI impI allI iffI; (clarsimp, blast))
+
+lemmas safe_assignmentD = iffD1[OF safe_assignment_iff]
+   and safe_assignmentI = iffD2[OF safe_assignment_iff]
+
+lemma safe_assignment_Neg_iff[simp]: "safe_assignment X (\<not>\<^sub>F \<beta>) \<longleftrightarrow> False"
+  unfolding safe_assignment_iff by auto
+
+
+subsection \<open> Safe formula predicate \<close>
 
 context begin
 
@@ -52,23 +397,6 @@ lemma partition_cong[fundef_cong]:
   "xs = ys \<Longrightarrow> (\<And>x. x\<in>set xs \<Longrightarrow> f x = g x) \<Longrightarrow> partition f xs = partition g ys"
   by (induction xs arbitrary: ys) auto
 
-fun is_constraint :: "'t Formula.formula \<Rightarrow> bool" where
-  "is_constraint (t1 =\<^sub>F t2) = True"
-| "is_constraint (t1 <\<^sub>F t2) = True"
-| "is_constraint (t1 \<le>\<^sub>F t2) = True"
-| "is_constraint (\<not>\<^sub>F (t1 =\<^sub>F t2)) = True"
-| "is_constraint (\<not>\<^sub>F (t1 <\<^sub>F t2)) = True"
-| "is_constraint (\<not>\<^sub>F (t1 \<le>\<^sub>F t2)) = True"
-| "is_constraint _ = False"
-
-term "\<^bold>v x =\<^sub>F \<^bold>v y"
-
-definition safe_assignment :: "nat set \<Rightarrow> 't Formula.formula \<Rightarrow> bool" where
-  "safe_assignment X \<phi> = (case \<phi> of
-       \<^bold>v x =\<^sub>F (\<^bold>v y) \<Rightarrow> (x \<notin> X \<longleftrightarrow> y \<in> X)
-     | \<^bold>v x =\<^sub>F t \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
-     | t =\<^sub>F (\<^bold>v x) \<Rightarrow> (x \<notin> X \<and> fv_trm t \<subseteq> X)
-     | _ \<Rightarrow> False)"
 
 fun safe_formula :: "'t Formula.formula \<Rightarrow> bool" where
   "safe_formula (t1 =\<^sub>F t2) = (Formula.is_Const t1 \<and> (Formula.is_Const t2 \<or> Formula.is_Var t2) \<or> Formula.is_Var t1 \<and> Formula.is_Const t2)"

@@ -100,6 +100,12 @@ lemma restrict_empty_eq: "length v = n \<Longrightarrow> restrict {} v = replica
   by (induct v arbitrary: n)
     (simp_all add: restrict_def map_replicate_trivial)
 
+lemma restrict_restrict: "restrict A (restrict B v) = restrict (A \<inter> B) v"
+  by (simp add: restrict_def)
+
+lemma sub_restrict_restrict: "A \<subseteq> B \<Longrightarrow> restrict A (restrict B v) = restrict A v"
+  by (simp add: restrict_restrict Int_absorb2)
+
 lemma restrict_update: "y \<notin> A \<Longrightarrow> y < length x \<Longrightarrow> restrict A (x[y:=z]) = restrict A x"
   unfolding restrict_def by (auto simp add: nth_list_update)
 
@@ -112,9 +118,6 @@ lemma length_restrict[simp]: "length (restrict A v) = length v"
 lemma map_the_restrict:
   "i \<in> A \<Longrightarrow> map the (restrict A v) ! i = map the v ! i"
   by (induct v arbitrary: A i) (auto simp: nth_Cons' gr0_conv_Suc split: option.splits)
-
-lemma restrict_restrict: "restrict A (restrict B z) = restrict (A\<inter>B) z"
-  by(simp add: restrict_def)
 
 lemma nth_restrict': "i < length z \<Longrightarrow> (restrict A z)!i = (if i \<in> A then z!i else None)"
   by(simp add: restrict_def)
@@ -295,6 +298,175 @@ lemma self_join1: "join1 (xs, ys) \<noteq> Some xs \<Longrightarrow> join1 (zs, 
 lemma join1_commute: "join1 (x, y) = join1 (y, x)"
   by (induct "(x, y)" arbitrary: x y rule: join1.induct) auto
 
+lemma join1_Cons_None [simp]: 
+  "join1 (None # as, b # bs) = map_option ((#) b) (join1 (as, bs))"
+  "join1 (a # as, None # bs) = map_option ((#) a) (join1 (as, bs))"
+  apply (induct "(None # as, b # bs)" rule: join1.induct; clarsimp)
+  by (induct "(a # as, None # bs)" rule: join1.induct; clarsimp)
+
+lemma join1_Cons_SomeD1: 
+  "join1 (a # as, b # bs) = Some (z # zs) \<Longrightarrow> join1 (as, bs) = Some zs"
+  by (induct "(a # as, b # bs)" arbitrary: a b as bs z zs rule: join1.induct)
+    (simp_all split: if_splits)
+
+lemma join1_Cons_SomeD2: 
+  "join1 (a # as, b # bs) = Some (z # zs) \<Longrightarrow> (a = z \<and> b = None) \<or> (a = None \<and> b = z) \<or> (a = b \<and> b = z)"
+  by (induct "(a # as, b # bs)" arbitrary: a b as bs z zs rule: join1.induct)
+    (simp_all split: if_splits)
+
+lemma join1_Cons_Some_exI: "join1 (a # as, bs) = Some zs 
+  \<Longrightarrow> \<exists>b bs' z zs'. bs = b # bs' \<and> zs = z # zs' \<and> join1 (as, bs') = Some zs'"
+proof-
+  assume hyp: "join1 (a # as, bs) = Some zs"
+  then obtain b bs' where bs_eq: "bs = b # bs'"
+    by (metis join1.simps(7) list.exhaust option.discI)
+  moreover obtain z zs' where zs_eq: "zs = z # zs'"
+    using hyp by (metis join1.simps(8) join1_commute 
+        neq_Nil_conv option.distinct(1) self_join1) 
+  ultimately have "join1 (as, bs') = Some (zs')"
+    using join1_Cons_SomeD1 hyp by auto
+  thus ?thesis
+    using bs_eq zs_eq by blast
+qed
+
+
+lemma join1_assoc1: "Some jabc = join1 (a, jbc) \<Longrightarrow> join1 (b, c) = Some jbc 
+  \<Longrightarrow> \<exists>y. join1 (a, b) = Some y"
+proof ((induct "(a,b)" arbitrary: a b c jbc jabc rule: join1.induct), 
+    goal_cases NilNil Nones SNone NSome SSome Nil1 Nil2 Nil3 Nil4)
+  case (Nones as bs c jbc jabc)
+  then show ?case
+    by (metis join1.simps(2) join1_Cons_Some_exI 
+        list.inject option.simps(9))
+next
+  case (SNone a as bs c jbc jabc)
+  then show ?case
+    by (metis (no_types, lifting) join1.simps(3) join1_Cons_Some_exI 
+        list.inject option.simps(9)) 
+next
+  case (NSome as b bs c jbc jabc)
+  then show ?case
+    by (metis (no_types, lifting) join1.simps(4) join1_Cons_Some_exI 
+        list.inject option.simps(9))
+next
+  case (SSome a as b bs c jbc jabc)
+  obtain bc bcs abc abcs c' cs 
+    where jbc_eq: "jbc = bc # bcs" 
+    and jabc_eq: "jabc = abc # abcs"
+    and c_eq: "c = c' # cs"
+    and eq1: "join1 (as, bcs) = Some abcs"
+    and eq2: "join1 (bs, cs) = Some bcs"
+    using join1_Cons_Some_exI[OF SSome(3)] 
+      join1_Cons_Some_exI[OF SSome(2)[symmetric]]
+    by auto
+  note join1_Cons_SomeD2[OF SSome(3)[unfolded c_eq jbc_eq], simplified]
+    join1_Cons_SomeD2[OF SSome(2)[symmetric, unfolded jabc_eq jbc_eq], simplified]
+  hence "a = b"
+    by blast
+  thus ?case 
+    using SSome(1)[OF _ eq1[symmetric] eq2]
+    by auto
+next
+  case (Nil1 a as c jbc jabc)
+  then show ?case
+    using join1_eq_lengths by force
+next
+  case (Nil2 a as c jbc jabc)
+  then show ?case 
+    using join1_eq_lengths by force
+qed (auto dest: join1_Cons_Some_exI)
+
+lemma join1_assoc2: "Some jabc = join1 (a, jbc) \<Longrightarrow> join1 (b, c) = Some jbc 
+  \<Longrightarrow> join1 (a, jbc) = join1 (the (join1 (a, b)), c)"
+proof ((induct "(a,b)" arbitrary: a b c jbc jabc rule: join1.induct), 
+    goal_cases NilNil Nones SNone NSome SSome Nil1 Nil2 Nil3 Nil4)
+  case (NilNil c jbc jabc)
+  then show ?case
+    by clarsimp (metis join1_commute self_join1)
+next
+  case (Nones as bs c jbc jabc)
+  then obtain abc abcs bc bcs c' cs
+    where jbc_eq: "jbc = bc # bcs" 
+    and jabc_eq: "jabc = abc # abcs"
+    and c_eq: "c = c' # cs"
+    and eq1: "join1 (as, bcs) = Some abcs"
+    and eq2: "join1 (bs, cs) = Some bcs"
+    using join1_Cons_Some_exI[OF Nones(3)] 
+      join1_Cons_Some_exI[OF Nones(2)[symmetric]]
+    by auto 
+  hence "c' = bc"
+    using Nones(3) by simp
+  then show ?case
+    using Nones(1)[OF eq1[symmetric] eq2] Nones(2,3)
+    apply (clarsimp simp: c_eq jbc_eq)
+    by (metis (no_types, lifting) eq1 join1_Cons_None(1) join1_assoc1 
+        option.discI option.map_sel)
+next
+  case (SNone a as bs c jbc jabc)
+  then obtain abc abcs bc bcs c' cs
+    where jbc_eq: "jbc = bc # bcs"
+    and jabc_eq: "jabc = abc # abcs"
+    and c_eq: "c = c' # cs"
+    and eq1: "join1 (as, bcs) = Some abcs"
+    and eq2: "join1 (bs, cs) = Some bcs"
+    using join1_Cons_Some_exI[OF SNone(3)] 
+      join1_Cons_Some_exI[OF SNone(2)[symmetric]]
+    by auto 
+  hence "c' = bc" "abc = Some a"
+    using SNone(2,3) 
+    by simp_all (metis join1_Cons_SomeD2 not_None_eq)
+  then show ?case
+    using SNone(1)[OF eq1[symmetric] eq2] SNone(2,3)
+    apply (clarsimp simp: c_eq jbc_eq)
+    by (smt (z3) join1.simps(1,3,5,6) join1_Cons_SomeD2 
+        join1_Cons_Some_exI join1_assoc1 list.inject option.distinct(1)  
+        option.exhaust_sel option.inject option.map_disc_iff)
+next
+  case (NSome as b bs c jbc jabc)
+  then obtain abc abcs bc bcs c' cs
+    where jbc_eq: "jbc = bc # bcs"
+    and jabc_eq: "jabc = abc # abcs"
+    and c_eq: "c = c' # cs"
+    and eq1: "join1 (as, bcs) = Some abcs"
+    and eq2: "join1 (bs, cs) = Some bcs"
+    using join1_Cons_Some_exI[OF NSome(3)] 
+      join1_Cons_Some_exI[OF NSome(2)[symmetric]]
+    by auto 
+  note join1_Cons_SomeD2[OF NSome(3)[unfolded c_eq jbc_eq], simplified]
+    join1_Cons_SomeD2[OF NSome(2)[symmetric, unfolded jabc_eq jbc_eq], simplified]
+  hence "abc = bc" and "bc = Some b" 
+    and "c' = None \<or> c' = Some b"
+    by blast+
+  then show ?case
+    using NSome(1)[OF eq1[symmetric] eq2] NSome(2,3)
+    unfolding c_eq jbc_eq
+    apply (elim disjE; clarsimp simp: c_eq jbc_eq)
+    by (metis (no_types, lifting) eq1 join1_Cons_None(2) join1_assoc1 option.distinct(1) option.map_sel)
+      (metis eq1 join1.simps(5) join1_assoc1 option.map_sel option.simps(3))
+next
+  case (SSome a as b bs c jbc jabc)
+    then obtain abc abcs bc bcs c' cs
+    where jbc_eq: "jbc = bc # bcs"
+    and jabc_eq: "jabc = abc # abcs"
+    and c_eq: "c = c' # cs"
+    and eq1: "join1 (as, bcs) = Some abcs"
+    and eq2: "join1 (bs, cs) = Some bcs"
+    using join1_Cons_Some_exI[OF SSome(3)] 
+      join1_Cons_Some_exI[OF SSome(2)[symmetric]]
+    by auto 
+  note join1_Cons_SomeD2[OF SSome(3)[unfolded c_eq jbc_eq], simplified]
+    join1_Cons_SomeD2[OF SSome(2)[symmetric, unfolded jabc_eq jbc_eq], simplified]
+  hence "a = b" and "abc = bc" 
+    and "bc = Some b" and "c' = None \<or> c' = Some b"
+    by blast+
+  then show ?case
+    using SSome(1)[OF _ eq1[symmetric] eq2] SSome(2,3)
+    unfolding c_eq jbc_eq
+    apply (elim disjE; clarsimp simp: c_eq jbc_eq)
+    by (metis (no_types, lifting) eq1 join1_Cons_None(2) join1_assoc1 option.distinct(1) option.map_sel)
+      (metis eq1 join1.simps(5) join1_assoc1 option.map_sel option.simps(3))
+qed (auto dest: join1_assoc1)
+
 lemma join1_wf_tuple:
   "join1 (v1, v2) = Some v \<Longrightarrow> wf_tuple n A v1 \<Longrightarrow> wf_tuple n B v2 \<Longrightarrow> wf_tuple n (A \<union> B) v"
   by (induct "(v1, v2)" arbitrary: n v v1 v2 A B rule: join1.induct)
@@ -372,25 +544,54 @@ qed
 
 subsubsection \<open> Joining tables \<close>
 
-definition join :: "'a table \<Rightarrow> bool \<Rightarrow> 'a table \<Rightarrow> 'a table" where
-  "join A pos B = (if pos then Option.these (join1 ` (A \<times> B))
+definition join :: "'a table \<Rightarrow> bool \<Rightarrow> 'a table \<Rightarrow> 'a table" 
+  where "join A pos B = (if pos then Option.these (join1 ` (A \<times> B))
     else A - Option.these (join1 ` (A \<times> B)))"
 
-lemma join_True_code[code]: "join A True B = (\<Union>a \<in> A. \<Union>b \<in> B. set_option (join1 (a, b)))"
+abbreviation nat_join :: "'a option list set \<Rightarrow> 'a option list set 
+  \<Rightarrow> 'a option list set" (infixl "\<bowtie>" 70)
+  where "R1 \<bowtie> R2 \<equiv> join R1 True R2"
+
+lemma join_True_code[code]: "A \<bowtie> B = (\<Union>a \<in> A. \<Union>b \<in> B. set_option (join1 (a, b)))"
   unfolding join_def by (force simp: Option.these_def image_iff)
 
-lemma join_False_alt: "join X False Y = X - join X True Y"
+lemma join_False_alt: "join X False Y = X - X \<bowtie> Y"
   unfolding join_def by auto
 
 lemma join_False_code[code]: "join A False B = {a \<in> A. \<forall>b \<in> B. join1 (a, b) \<noteq> Some a}"
   unfolding join_False_alt join_True_code
   by (auto simp: Option.these_def image_iff dest: self_join1)
 
-lemma join_commute: "join R1 True R2 = join R2 True R1"
+lemma join_commute: "R1 \<bowtie> R2 = R2 \<bowtie> R1"
   unfolding join_def 
   using join1_commute
   by (auto simp: image_def Option.these_def)
     fastforce+
+
+lemma join_assoc: "R1 \<bowtie> (R2 \<bowtie> R3) = R1 \<bowtie> R2 \<bowtie> R3"
+  unfolding join_def 
+  apply (clarsimp simp: Option.these_def)
+  apply (intro set_eqI iffI; clarsimp simp: image_iff)
+   apply (rename_tac a jabc b c jbc)
+   apply (rule_tac x="Some jabc" in exI, clarsimp)
+  apply (intro conjI)
+    apply (rule_tac x="join1 (a,b)" in exI; intro conjI; clarsimp?)
+     apply (rule_tac x=a in bexI; clarsimp?)
+      apply (rule_tac x=b in bexI; clarsimp)
+  using join1_assoc1 apply force
+    apply (rule_tac x=c in bexI; clarsimp?)
+  using join1_assoc2 apply force
+   apply metis
+   apply (rename_tac jabc a b c jab)
+   apply (rule_tac x="Some jabc" in exI, clarsimp)
+  apply (intro conjI)
+   apply (rule_tac x=a in bexI; clarsimp?)
+    apply (rule_tac x="join1 (b,c)" in exI; intro conjI; clarsimp?)
+     apply (rule_tac x=b in bexI; clarsimp?)
+     apply (rule_tac x=c in bexI; clarsimp?)
+    apply (metis join1_assoc1 join1_commute)
+  apply (smt (verit, best) join1_assoc2 join1_commute)
+  using join1_assoc1 by force
 
 lemma join_wf_tuple: "x \<in> join X b Y \<Longrightarrow> \<forall>v \<in> X. wf_tuple n A v \<Longrightarrow> \<forall>v \<in> Y. wf_tuple n B v 
   \<Longrightarrow> (\<not> b \<Longrightarrow> B \<subseteq> A) \<Longrightarrow> A \<union> B = C \<Longrightarrow> wf_tuple n C x"
@@ -461,8 +662,8 @@ lemma join_restrict_annotated:
   by (intro set_eqI, subst join_restrict) (auto simp: wf_tuple_restrict_simple simp_implies_def)
 
 lemma join_unit_table:
-  "table n X R \<Longrightarrow> join R True (unit_table n) = R"
-  "table n X R \<Longrightarrow> join (unit_table n) True R  = R"
+  "table n X R \<Longrightarrow> R \<bowtie> unit_table n = R"
+  "table n X R \<Longrightarrow> unit_table n \<bowtie> R = R"
   by (auto simp: join_def image_def unit_table_def table_def 
       wf_tuple_def join1_replicate_None Option.these_def)
 
@@ -475,34 +676,44 @@ lemma join_unitD: "table n X R1 \<Longrightarrow> table n Y R2 \<Longrightarrow>
     (metis (no_types, opaque_lifting) join1_replicate_None join1_replicate_None_iff 
       option.sel table_def wf_tuple_def)
 
-lemma join_empty_table:
-  "join R True empty_table = empty_table"
-  "join empty_table True R = empty_table"
+lemma join_empty [simp]:
+  "R \<bowtie> {} = {}"
+  "{} \<bowtie> R = {}"
   by (auto simp: join_def Option.these_def)
 
+lemma join_empty_table:
+  "R \<bowtie> empty_table = empty_table"
+  "empty_table \<bowtie> R = empty_table"
+  by (auto simp: empty_table_def)
+
 lemma join_sub_tables_eq:
-  "table n X R\<^sub>1 \<Longrightarrow> table n Y R\<^sub>2 \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> join R\<^sub>1 True R\<^sub>2 = {v \<in> R\<^sub>1. (restrict Y v) \<in> R\<^sub>2 }"
+  "table n X R\<^sub>1 \<Longrightarrow> table n Y R\<^sub>2 \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> R\<^sub>1 \<bowtie> R\<^sub>2 = {v \<in> R\<^sub>1. (restrict Y v) \<in> R\<^sub>2 }"
   using join1_Some_sub_tuples1 join1_Some_sub_tuples2
   unfolding table_def join_def 
   by (auto simp: Option.these_def image_iff)
     (smt (z3) Un_absorb2 join1_Some_restrict option.sel restrict_idle)+
 
 lemma join_eq_interI: 
-  "table n X R1 \<Longrightarrow> table n X R2 \<Longrightarrow> join R1 True R2 = R1 \<inter> R2"
+  "table n X R1 \<Longrightarrow> table n X R2 \<Longrightarrow> R1 \<bowtie> R2 = R1 \<inter> R2"
   apply (intro set_eqI iffI; clarsimp simp: join_def image_def Option.these_def table_def)
   using join1_Some_wf_tuple_eqD(2,3) apply blast
   using join1_self by (metis option.sel)
 
 lemma foldr_join_tables_eq_InterI:
-  "\<forall>R\<in>set Rs. table n X R \<Longrightarrow> foldr (\<lambda>r1 r2. join r1 True r2) Rs (unit_table n) = 
+  "\<forall>R\<in>set Rs. table n X R \<Longrightarrow> foldr (\<bowtie>) Rs (unit_table n) = 
   (if Rs = [] then unit_table n else (\<Inter> (set Rs)))"
   apply (induct Rs arbitrary: n X; clarsimp simp: join_unit_table(1))
   using table_InterI[of "set _"] join_eq_interI
   by (metis set_empty2)
 
+lemma join_union_distrib: 
+  "R1 \<bowtie> (R2 \<union> R3) = R1 \<bowtie> R2 \<union> R1 \<bowtie> R3"
+  "(R1 \<union> R2) \<bowtie> R3 = R1 \<bowtie> R3 \<union> R2 \<bowtie> R3"
+  by (auto simp: join_True_code)
+
 lemma join_Un_distrib:
-  "join R True (\<Union>i\<in>\<I>. \<R> i) = (\<Union>i\<in>\<I>. join R True (\<R> i))"
-  "join (\<Union>i\<in>\<I>. \<R> i) True R = (\<Union>i\<in>\<I>. join (\<R> i) True R)"
+  "R \<bowtie> (\<Union>i\<in>\<I>. \<R> i) = (\<Union>i\<in>\<I>. R \<bowtie> (\<R> i))"
+  "(\<Union>i\<in>\<I>. \<R> i) \<bowtie> R = (\<Union>i\<in>\<I>. (\<R> i) \<bowtie> R)"
   unfolding Union_eq 
   by (auto; smt (verit, best) UN_E UN_I join_True_code mem_Collect_eq)+
 
@@ -535,6 +746,227 @@ corollary
   using table_union_must_subset(1,2)[of _ X Y n _] by auto blast
 
 
+subsection \<open> N-ary join \<close>
+
+term sum
+term comm_monoid_set.F
+term Finite_Set.fold
+
+interpretation join_comp_fun: comp_fun_commute_on "UNIV" "(\<bowtie>)"
+  apply standard
+  apply (rule ext; clarsimp)
+  apply (subst join_assoc)
+  apply (subst join_assoc)
+  apply (subst join_commute)
+  by simp
+
+interpretation join_ab_semigroup: ab_semigroup_mult "(\<bowtie>)"
+  by (standard, clarsimp simp: join_assoc, clarsimp simp: join_commute)
+
+interpretation join_monoid: comm_monoid_set "(\<bowtie>)" "unit_table n"
+  apply (standard)
+  oops
+
+lemma join_idemp[simp]: "table n X R \<Longrightarrow> R \<bowtie> R = R"
+  apply (intro set_eqI iffI; clarsimp simp: join_def Option.these_def image_iff table_def)
+  using join1_Some_wf_tuple_eqD(2)
+  by blast (metis join1_self option.sel)
+
+definition nary_join :: "nat \<Rightarrow> 'a option list set set \<Rightarrow> 'a option list set"
+  where eq_fold: "nary_join n \<R> = Finite_Set.fold (\<bowtie>) (unit_table n) \<R>"
+
+lemma infinite_nary_join [simp]: "\<not> finite \<R> \<Longrightarrow> nary_join n \<R> = unit_table n"
+  by (simp add: eq_fold)
+
+lemma nary_join_empty [simp]: "nary_join n {} = unit_table n"
+  by (simp add: eq_fold)
+
+lemma nary_join_insert [simp]: 
+  "finite \<R> \<Longrightarrow> R \<notin> \<R> \<Longrightarrow> nary_join n (insert R \<R>) = R \<bowtie> nary_join n \<R>"
+  "finite \<R> \<Longrightarrow> R \<in> \<R> \<Longrightarrow> nary_join n (insert R \<R>) = nary_join n \<R>"
+  by (simp add: eq_fold)
+    (induct \<R> arbitrary: R rule: infinite_finite_induct, simp_all add: insert_absorb)
+
+lemma nary_join_set: "nary_join n (set (R # Rs)) 
+  = (if R \<in> set Rs then nary_join n (set Rs) else R \<bowtie> nary_join n (set Rs))"
+  by (simp split: if_splits)
+
+lemma nary_join_with_empty: "finite \<R> \<Longrightarrow> {} \<in> \<R> \<Longrightarrow> nary_join n \<R> = {}"
+  by (induct \<R> rule: infinite_finite_induct) auto
+
+lemma join_nary_join_elem: "\<forall>R\<in>\<R>. table n (X R) R \<Longrightarrow> finite \<R> \<Longrightarrow> R \<in> \<R> 
+  \<Longrightarrow> R \<bowtie> nary_join n \<R> = nary_join n \<R>"
+proof (induct \<R> arbitrary: R rule: infinite_finite_induct)
+  case (insert C \<C>)
+  hence "C \<bowtie> (C \<bowtie> nary_join n \<C>) = C \<bowtie> nary_join n \<C>"
+    by (simp add: join_assoc)
+      (subst join_idemp, auto)
+  hence "R = C \<Longrightarrow> ?case"
+    using insert by simp
+  moreover have "R \<in> \<C> \<Longrightarrow> ?case"
+    using insert.hyps insert.prems
+    by (clarsimp, subst join_assoc, subst join_commute)
+      (clarsimp simp: join_assoc[symmetric])
+  ultimately show ?case 
+    using insert.prems by blast
+qed simp_all
+
+lemma nary_join_insert_table: 
+  "\<forall>R\<in>\<R>. \<exists>X. table n X R \<Longrightarrow> finite \<R> \<Longrightarrow> nary_join n (insert R \<R>) = R \<bowtie> nary_join n \<R>"
+  apply (induct \<R> arbitrary: R rule: infinite_finite_induct)
+  by (simp, simp) (metis insert_absorb join_nary_join_elem nary_join_insert(1))
+
+lemma nary_join_remove:
+  assumes "finite \<R>" and "R \<in> \<R>"
+  shows "nary_join n \<R> = R \<bowtie> nary_join n (\<R> - {R})"
+proof -
+  from \<open>R \<in> \<R>\<close> obtain \<R>' where R_eq: "\<R> = insert R \<R>'" and "R \<notin> \<R>'"
+    by (auto dest: mk_disjoint_insert)
+  moreover from \<open>finite \<R>\<close> R_eq have "finite \<R>'" by simp
+  ultimately show ?thesis by simp
+qed
+
+lemma nary_join_insert_remove: 
+  "finite \<R> \<Longrightarrow> nary_join n (insert R \<R>) = R \<bowtie> nary_join n (\<R> - {R})"
+  by (cases "R \<in> \<R>") (simp_all add: nary_join_remove insert_absorb)
+
+lemma nary_join_insert_if: "finite \<R> 
+  \<Longrightarrow> nary_join n (insert R \<R>) = (if R \<in> \<R> then nary_join n \<R> else R \<bowtie> nary_join n \<R>)"
+  by (cases "R \<in> \<R>") (simp_all add: insert_absorb)
+
+lemma nary_join_neutral: "\<forall>R\<in>\<R>. R = unit_table n \<Longrightarrow> nary_join n \<R> = unit_table n"
+  by (induct \<R> rule: infinite_finite_induct) simp_all
+
+lemma table_nary_joinI: "finite \<R> \<Longrightarrow> \<forall>R\<in>\<R>. table n (X R) R 
+  \<Longrightarrow> table n (\<Union>R\<in>\<R>. X R) (nary_join n \<R>)"
+  by (induct \<R> rule: infinite_finite_induct) (simp_all, metis join_table)
+
+lemma nary_join_union_inter:
+  assumes "finite \<C>" and "finite \<D>"
+  shows "nary_join n (\<C> \<union> \<D>) \<bowtie> nary_join n (\<C> \<inter> \<D>) = nary_join n \<C> \<bowtie> nary_join n \<D>"
+  using assms
+proof (induct \<C>)
+  case empty
+  then show ?case 
+    by (simp add: join_commute)
+next
+  case (insert x \<C>)
+  then show ?case
+    by (auto simp: insert_absorb Int_insert_left; 
+        simp add: join_ab_semigroup.mult.left_commute join_ab_semigroup.mult_assoc)
+qed
+
+corollary nary_join_union_inter_neutral:
+  assumes "finite \<C>" and "finite \<D>" 
+    and "\<forall>R\<in>\<C>\<inter>\<D>. R = unit_table n"
+    and "\<forall>R\<in>\<C>\<union>\<D>. table n (X R) R"
+  shows "nary_join n (\<C> \<union> \<D>) = nary_join n \<C> \<bowtie> nary_join n \<D>"
+  using nary_join_union_inter[OF assms(1,2)] 
+    nary_join_neutral[OF assms(3)]
+    table_nary_joinI[OF _ assms(4)]
+  by (metis assms(1,2) finite_Un join_unit_table(1))
+
+corollary nary_join_union_disjoint:
+  assumes "finite \<C>" and "finite \<D>"     
+    and "\<forall>R\<in>\<C>\<union>\<D>. table n (X R) R"
+    and "\<C> \<inter> \<D> = {}"
+  shows "nary_join n (\<C> \<union> \<D>) = nary_join n \<C> \<bowtie> nary_join n \<D>"
+  using assms by (simp add: nary_join_union_inter_neutral)
+
+lemma nary_join_union_diff:
+  assumes "finite \<C>" and "finite \<D>" and "\<forall>R\<in>\<C>\<union>\<D>. table n (X R) R"
+  shows "nary_join n (\<C> \<union> \<D>) = nary_join n (\<C> - \<D>) \<bowtie> nary_join n (\<D> - \<C>) \<bowtie> nary_join n (\<C> \<inter> \<D>)"
+proof -
+  have "\<C> \<union> \<D> = (\<C> - \<D>) \<union> (\<D> - \<C>) \<union> \<C> \<inter> \<D>"
+    by auto
+  with assms show ?thesis
+    apply simp
+    by (subst nary_join_union_disjoint, simp_all; (subst nary_join_union_disjoint)?) auto
+qed
+
+lemma nary_join_subset_diff:
+  assumes "\<D> \<subseteq> \<C>" and "finite \<C>" and "\<forall>R\<in>\<C>. table n (X R) R"
+  shows "nary_join n \<C> = nary_join n (\<C> - \<D>) \<bowtie> nary_join n \<D>"
+proof -
+  from assms have "finite (\<C> - \<D>)" 
+    by auto
+  moreover have "finite \<D>"
+    using assms(1,2) by (rule finite_subset)
+  moreover from assms have "(\<C> - \<D>) \<inter> \<D> = {}"
+    using assms by auto
+  ultimately have "nary_join n (\<C> - \<D> \<union> \<D>) = nary_join n(\<C> - \<D>) \<bowtie> nary_join n \<D>" 
+    using assms
+    by (subst nary_join_union_disjoint) auto
+  moreover from assms have "\<C> \<union> \<D> = \<C>" 
+    by auto
+  ultimately show ?thesis 
+    by simp
+qed
+
+lemma nary_join_inter_diff:
+  assumes "finite \<C>" and "\<forall>R\<in>\<C>. table n (X R) R"
+  shows "nary_join n \<C> = nary_join n (\<C> \<inter> \<D>) \<bowtie> nary_join n (\<C> - \<D>)"
+  using assms
+  by (subst nary_join_subset_diff[where \<D>="\<C> - \<D>" and X=X])
+    (auto simp:  Diff_Diff_Int assms)
+
+lemma nary_join_setdiff_irrelevant:
+  assumes "finite \<C>" and "\<forall>R\<in>\<C>. table n (X R) R"
+  shows "nary_join n (\<C> - {unit_table n}) = nary_join n \<C>"
+  using assms 
+  apply (induct \<C>) 
+  by (simp_all add: insert_Diff_if)
+    (metis boolean_algebra.conj_zero_right empty_table_def finite.emptyI 
+      join_commute nary_join_empty nary_join_union_disjoint union_empty_table_eq(2))
+
+lemma nary_join_not_neutral_contains_not_neutral:
+  assumes "nary_join n \<C> \<noteq> unit_table n"
+  obtains R where "R \<in> \<C>" and "R \<noteq> unit_table n"
+proof -
+  from assms have "\<exists>R\<in>\<C>. R \<noteq> unit_table n"
+  proof (induct \<C> rule: infinite_finite_induct)
+    case infinite
+    then show ?case by simp
+  next
+    case empty
+    then show ?case by simp
+  next
+    case (insert R \<C>)
+    then show ?case by fastforce
+  qed
+  with that show thesis by blast
+qed
+
+lemma UNION_disjoint:
+  assumes "finite I" and "\<forall>i\<in>I. finite (\<C> i)"
+    and "\<forall>i\<in>I. \<forall>j\<in>I. i \<noteq> j \<longrightarrow> \<C> i \<inter> \<C> j = {}"
+    and "\<forall>R\<in>(\<Union>i\<in>I. \<C> i). table n (X R) R"
+  shows "nary_join n (\<Union>(\<C> ` I)) = nary_join n ((\<lambda>x. nary_join n (\<C> x)) ` I)"
+  using assms
+proof (induction rule: finite_induct)
+  case (insert i I)
+  hence "\<forall>j\<in>I. j \<noteq> i"
+    by blast
+  hence obs1: "\<C> i \<inter> \<Union>(\<C> ` I) = {}"
+    using insert.prems by blast
+  have obs2: "finite (\<Union> (\<C> ` I))"
+    using insert by auto
+  have obs3: "\<forall>R\<in>\<C> i \<union> \<Union> (\<C> ` I). table n (X R) R"
+    using insert by auto
+  hence obs4: "\<forall>R\<in>(\<lambda>x. nary_join n (\<C> x)) ` I. \<exists>X. table n X R"
+    apply (clarsimp, rename_tac j)
+    apply (rule_tac x="\<Union>R\<in>(\<C> j). X R" in exI)
+    using insert by (auto intro!: table_nary_joinI)
+  thus ?case
+    apply (simp, subst nary_join_union_disjoint[OF insert(4)[rule_format] obs2 obs3 obs1]; clarsimp)
+    apply(subst nary_join_insert_table)
+    using insert by force+
+qed auto
+
+lemma foldr_join_tables_eq_nary_join[simp]: "\<forall>R\<in>set Rs. \<exists>X. table n X R 
+  \<Longrightarrow> foldr (\<lambda>r1 r2. join r1 True r2) Rs (unit_table n) = (nary_join n (set Rs))"
+  by (induct Rs arbitrary: n) (auto simp: nary_join_insert_table)
+
 subsection \<open> Correctness predicate \<close>
 
 definition qtable :: "nat \<Rightarrow> nat set \<Rightarrow> ('a tuple \<Rightarrow> bool) \<Rightarrow> ('a tuple \<Rightarrow> bool) \<Rightarrow>
@@ -553,6 +985,14 @@ lemma qtable_cong_strong: "A = B \<Longrightarrow> (\<And>v. wf_tuple n A v \<Lo
   \<Longrightarrow> qtable n A P Q = qtable n B P Q'"
   apply (auto simp: qtable_def fun_eq_iff)
   using table_def by blast+
+
+lemma qtable_unique_vars:
+  "R \<noteq> {} \<Longrightarrow> X \<subseteq> {m. m < n} \<Longrightarrow> Y \<subseteq> {m. m < n} \<Longrightarrow> table n X R \<Longrightarrow> table n Y R \<Longrightarrow> X = Y"
+  by (auto simp: table_def wf_tuple_def subset_eq)
+
+lemma qtable_unique_pred:
+  "qtable n X P Q1 R \<Longrightarrow> qtable n X P Q2 R \<Longrightarrow> (\<forall>v. P v \<longrightarrow> wf_tuple n X v \<longrightarrow> Q1 v = Q2 v)"
+  by (auto simp: qtable_iff fun_eq_iff)
 
 abbreviation wf_table where
   "wf_table n A Q X \<equiv> qtable n A (\<lambda>_. True) Q X"
@@ -599,7 +1039,7 @@ lemmas qtable_empty_varsD =
   iffD1[OF qtable_empty_vars_iff, THEN conjunct2, rule_format]
 
 lemma nullary_qtable_cases: "qtable n {} P Q X \<Longrightarrow> (X = empty_table \<or> X = unit_table n)"
-  by (simp add: qtable_empty_vars_iff)
+  by (simp add: qtable_empty_vars_iff) (* replace everywhere with qtable_empty_varsD(1) *)
 
 lemma qtable_empty_unit_table:
   "qtable n {} R P empty_table \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) (unit_table n)"
@@ -611,7 +1051,7 @@ lemma qtable_unit_empty_table:
 
 lemma qtable_nonempty_empty_table:
   "qtable n {} R P X \<Longrightarrow> x \<in> X \<Longrightarrow> qtable n {} R (\<lambda>v. \<not> P v) empty_table"
-  by (frule nullary_qtable_cases) (auto dest: qtable_unit_empty_table)
+  by (frule qtable_empty_varsD(1)) (auto dest: qtable_unit_empty_table)
 
 
 subsubsection \<open> Empty and unit table \<close>
@@ -637,6 +1077,11 @@ lemma qtable_unit_table: "(\<And>x. wf_tuple n {} x \<Longrightarrow> P x \<Long
 
 
 subsubsection \<open> Union \<close>
+
+lemma qtable_union_iff: "qtable n Z P Q1 R1 \<Longrightarrow> qtable n Z P Q2 R2
+  \<Longrightarrow> qtable n Z P Q (R1 \<union> R2)
+  \<longleftrightarrow> (\<forall>v. P v \<longrightarrow> wf_tuple n Z v \<longrightarrow> Q v = (Q1 v \<or> Q2 v))"
+  by (auto simp: qtable_iff)
 
 lemma qtable_union: "qtable n A P Q1 X \<Longrightarrow> qtable n A P Q2 Y \<Longrightarrow>
   (\<And>x. wf_tuple n A x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> Q1 x \<or> Q2 x) \<Longrightarrow> qtable n A P Q (X \<union> Y)"
@@ -751,6 +1196,54 @@ next
   with assms show "x \<in> Set.filter R X" by (auto intro!: in_qtableI)
 qed
 
+lemma qtable_Inter_list:
+  "Rs \<noteq> [] \<Longrightarrow> (\<And>i. i < length Rs \<Longrightarrow> qtable n X P (Qi i) (Rs ! i)) 
+  \<Longrightarrow> (\<And>x. wf_tuple n X x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> (\<forall>i<length Rs. Qi i x)) 
+  \<Longrightarrow> qtable n X P Q (\<Inter> (set Rs))"
+proof (induct Rs arbitrary: n X Q Qi)
+  case (Cons R Rs)
+  hence "Rs = [] \<Longrightarrow> ?case"
+    by clarsimp (metis qtable_cong_strong)
+  moreover have "Rs \<noteq> [] \<Longrightarrow> ?case"
+    apply (simp, rule_tac qtable_inter[OF Cons.prems(2)[of 0, simplified]])
+     apply (rule Cons.hyps[of n X "\<lambda>i. Qi (Suc i)"]; clarsimp?)
+    using Cons.prems(2,3) by (force, auto simp: less_Suc_eq_0_disj)
+  ultimately show ?case
+    by blast
+qed simp
+
+lemma qtable_Inter:
+  assumes "finite I" "I \<noteq> {}" 
+    and "(\<And>i. i \<in> I \<Longrightarrow> qtable n X P (Qi i) (Ri i))"
+    and "(\<And>x. wf_tuple n X x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> (\<forall>i \<in> I. Qi i x))"
+  shows "qtable n X P Q (\<Inter>i \<in> I. Ri i)"
+proof-
+  obtain m::nat and f 
+    where I_eq: "I = f ` {i. i < m}" 
+      and "m > 0"
+    using \<open>finite I\<close> \<open>I \<noteq> {}\<close>
+    by (metis Collect_empty_eq finite_imp_nat_seg_image_inj_on 
+        gr0I image_is_empty less_nat_zero_code)
+  then obtain "Rs" 
+    where Rs_def: "\<And>i. i < length Rs \<Longrightarrow> Rs ! i = Ri (f i)"
+    and len_Rs: "length Rs = m"
+    by (atomize_elim, rule_tac x="map (Ri \<circ> f) [0..<m]" in exI, force)
+  hence to_set: "set Rs = Ri ` I"
+    by (clarsimp simp: I_eq, safe) 
+      (metis image_eqI in_set_conv_nth mem_Collect_eq,
+        metis in_set_conv_nth)
+  hence "Rs \<noteq> []"
+    using I_eq \<open>I \<noteq> {}\<close> by force
+  moreover have "\<And>i. i < length Rs \<Longrightarrow> qtable n X P ((Qi \<circ> f) i) (Rs ! i)"
+    and "\<And>x. wf_tuple n X x \<Longrightarrow> P x \<Longrightarrow> Q x \<longleftrightarrow> (\<forall>i<length Rs. (Qi \<circ> f) i x)"
+    using assms(3,4) Rs_def len_Rs
+    by (simp add: I_eq)+
+  ultimately have "qtable n X P Q (\<Inter> (set Rs))"
+    using qtable_Inter_list[of Rs n X P "Qi \<circ> f"] by force
+  thus "qtable n X P Q (\<Inter>i \<in> I. Ri i)"
+    unfolding to_set .
+qed
+
 
 subsubsection \<open> Projection \<close>
 
@@ -777,6 +1270,17 @@ lemma mem_restr_UNIV [simp]: "mem_restr UNIV x"
 lemma restrict_mem_restr[simp]: "mem_restr A x \<Longrightarrow> mem_restr A (restrict V x)"
   unfolding mem_restr_def restrict_def
   by (auto simp: list_all2_conv_all_nth elim!: bexI[rotated])
+
+lemma mem_restr_join1l: "mem_restr U z \<Longrightarrow> join1 (x, y) = Some z \<Longrightarrow> mem_restr U x"
+  apply (induct "(x, y)" arbitrary: x y z U rule: join1.induct)
+  by (auto simp: list_all2_Cons1 mem_restr_def split: if_splits) blast+
+
+lemma mem_restr_join1r: "mem_restr U z \<Longrightarrow> join1 (x, y) = Some z \<Longrightarrow> mem_restr U y"
+  apply (induct "(x, y)" arbitrary: x y z U rule: join1.induct)
+  by (auto simp: list_all2_Cons1 mem_restr_def split: if_splits) blast+
+
+lemma qtable_mem_restr_UNIV: "qtable n X (mem_restr UNIV) Q R = wf_table n X Q R"
+  unfolding qtable_def by auto
 
 definition lift_envs :: "'a list set \<Rightarrow> 'a list set" where
   "lift_envs R = (\<lambda>(a,b). a # b) ` (UNIV \<times> R)"
@@ -808,6 +1312,156 @@ next
   then show ?case
     by (auto simp: image_iff elim: bexI[rotated])
 qed
+
+
+subsubsection \<open> N-ary join \<close>
+
+lemma qtable_nary_join_list:
+  "(\<And>i. i < length Rs \<Longrightarrow> qtable n (X i) P (Qi i) (Rs ! i)) 
+  \<Longrightarrow> (\<And>i. i < length Rs \<Longrightarrow> X i \<subseteq> {m. m < n})
+  \<Longrightarrow> (\<And>X Y v i. P v \<Longrightarrow> wf_tuple n Y v \<Longrightarrow> X \<subseteq> Y \<Longrightarrow> P (restrict X v))
+  \<Longrightarrow> (\<And>v. P v \<Longrightarrow> wf_tuple n (\<Union>i<length Rs. X i) v 
+    \<Longrightarrow> Q v \<longleftrightarrow> (\<forall>i<length Rs. Qi i (restrict (X i) v))) 
+  \<Longrightarrow> qtable n (\<Union>i<length Rs. X i) P Q (nary_join n (set Rs))"
+proof (induct Rs arbitrary: n X Q Qi)
+  case Nil
+  then show ?case
+    apply (clarsimp simp: qtable_unit_iff)
+    using wf_tuple_empty_iff by blast
+next
+  case (Cons R Rs)
+  let ?U = "\<Union> (X ` {..<Suc (length Rs)})"
+  have "\<Union> (X ` {..<Suc 0}) = X 0"
+    by auto
+  hence "Rs = [] \<Longrightarrow> ?case"
+    using Cons.prems(1,4)
+      join_unit_table(1)[OF qtableD(1)[of n "X 0" P "Qi 0" R]]
+    by clarsimp (smt (verit, best) qtable_cong_strong restrict_idle)
+  moreover have "{} \<in> set (R # Rs) \<Longrightarrow> ?case"
+  proof-
+    assume hyp: "{} \<in> set (R # Rs)"
+    then obtain i 
+      where i_le: "i < length (R # Rs)" 
+        and "(R # Rs) ! i = {}"
+        and "qtable n (X i) P (Qi i) {}"
+      unfolding in_set_conv_nth[of "{}" "R # Rs"]
+      using Cons.prems(1) by force
+    hence "\<forall>v. P v \<longrightarrow> wf_tuple n (X i) v \<longrightarrow> \<not> Qi i v"
+      unfolding qtable_iff by auto
+    moreover have "\<forall>v. P v \<longrightarrow> wf_tuple n ?U v \<longrightarrow> P (restrict (X i) v)"
+      using i_le Cons.prems(3)[of _ ?U "X i"] 
+      by auto
+    moreover have "\<forall>v. P v \<longrightarrow> wf_tuple n ?U v \<longrightarrow> wf_tuple n (X i) (restrict (X i) v)"
+      using i_le wf_tuple_restrict_simple[of n ?U _ "X i"] 
+      by auto
+    moreover have nary_simp: "nary_join n (set (R # Rs)) = {}"
+      using hyp
+      by (subst nary_join_with_empty) 
+        simp_all
+    ultimately show ?thesis
+      apply (clarsimp simp: qtable_iff)
+      apply (erule_tac x="restrict (X i) v" in allE)
+      using Cons.prems(4) i_le by auto
+  qed
+  moreover have "Rs \<noteq> [] \<Longrightarrow> {} \<notin> set (R # Rs) \<Longrightarrow> ?case"
+  proof-
+    assume "Rs \<noteq> []" 
+      and no_empty: "{} \<notin> set (R # Rs)"
+    hence qtableR: "qtable n (X 0) P (Qi 0) R"
+      and qtables: "\<And>i. i < length Rs \<Longrightarrow> qtable n (X (Suc i)) P (Qi (Suc i)) (Rs ! i)" 
+      and wf_vars: "\<And>i. i < length Rs \<Longrightarrow> (X \<circ> Suc) i \<subseteq> {m. m < n}"
+      and empty_case: "\<And>i. i < length Rs \<Longrightarrow> Rs ! i = {} \<Longrightarrow> length Rs \<noteq> 1 
+        \<Longrightarrow> (X \<circ> Suc) i \<in> {(X \<circ> Suc) j |j. j \<noteq> i \<and> j < length Rs}"
+      using Cons.prems(1,2) \<open>Rs \<noteq> []\<close> 
+      by (fastforce, fastforce, fastforce, metis list.set_intros(2) nth_mem)
+    then show ?thesis
+    proof(cases "R \<in> set Rs")
+      case True
+      then obtain i where i_def: "Rs ! i = R" 
+        and i_le: "i < length Rs"
+        by (meson in_set_conv_nth)
+      hence "table n (X 0) R" "table n (X (Suc i)) R"
+        using qtableD(1)[OF qtableR]
+          qtableD(1)[OF Cons.prems(1)[of "Suc i"]]
+        by auto
+      hence eq_vars: "X 0 = X (Suc i)"
+        using no_empty Cons.prems(2)[of 0]
+          Cons.prems(2)[of "Suc i"] \<open>i < length Rs\<close>
+        by (auto simp: table_def wf_tuple_def subset_eq)
+      hence rw_vars: "?U = \<Union> ((X \<circ> Suc) ` {..<length Rs})" (is "_ = ?U'")
+        apply (rule_tac f=\<Union> in arg_cong)
+        using i_le less_Suc_eq_0_disj by auto
+      show ?thesis
+        using True
+        apply simp
+        unfolding rw_vars
+        apply (rule Cons.hyps[of n "X \<circ> Suc" "Qi \<circ> Suc"])
+        using qtables apply force
+        using wf_vars apply force
+        using Cons.prems(3) apply force
+        subgoal for v
+          using Cons.prems(4)[simplified, unfolded rw_vars, of v]
+          apply clarsimp
+          apply (intro conjI impI allI iffI)
+           apply force
+          subgoal for j
+            apply (cases "j=0"; clarsimp)
+             apply (erule_tac x=i in allE)
+            using i_le apply clarsimp
+            using qtable_unique_pred[OF qtables[OF i_le, unfolded i_def] qtableR[unfolded eq_vars]]
+              wf_tuple_restrict_simple[of n ?U' v "X 0", simplified]
+              Cons.prems(3)[of v ?U' "X 0", simplified]
+            apply (metis SUP_upper eq_vars lessThan_iff)
+            using less_Suc_eq_0_disj by auto
+          done
+        done
+    next
+      case False
+      then show ?thesis
+        using \<open>Rs \<noteq> []\<close>
+        apply simp
+        apply (rule qtable_join[OF qtableR, where b=True, simplified])
+           apply (rule Cons.hyps[of n "X \<circ> Suc" "Qi \<circ> Suc"])
+        using qtables apply force
+        using wf_vars apply force
+        using Cons.prems(3) apply force
+        apply force
+           prefer 2 subgoal for v
+          using Cons.prems(3)[of v ?U "\<Union>((X \<circ> Suc) ` {..<length Rs})"]
+            Cons.prems(3)[of v "\<Union> (X ` _)" "X 0"] by force
+         subgoal
+          apply (intro set_eqI iffI; clarsimp)
+          using less_Suc_eq_0_disj by force blast
+        subgoal for v
+          using Cons.prems(4)[of v, simplified] apply clarsimp
+          apply (intro conjI impI allI iffI; clarsimp)
+           apply (subst sub_restrict_restrict)
+          apply force
+           apply force
+          subgoal for j
+            apply (cases "j=length Rs", clarsimp)
+            apply (erule_tac x="j-1" in allE)
+            apply clarsimp
+            apply (subst (asm) sub_restrict_restrict)
+              apply auto[1]
+            apply (metis Suc_pred length_greater_0_conv lessI lessThan_iff)
+            apply (metis length_0_conv lessI lessThan_iff less_Suc_eq_0_disj)
+            apply fastforce
+            apply (erule_tac x="j-1" in allE)
+            apply clarsimp
+            apply (subst (asm) sub_restrict_restrict)
+             apply (clarsimp simp: subset_eq)
+            apply (metis lessThan_iff less_Suc_eq less_imp_diff_less)
+            by (metis Suc_pred gr0I less_SucE less_imp_diff_less)
+          done
+        done
+    qed
+  qed
+  ultimately show ?case
+    by blast
+qed
+
+no_notation nat_join (infixl "\<bowtie>" 70)
 
 (*<*)
 end

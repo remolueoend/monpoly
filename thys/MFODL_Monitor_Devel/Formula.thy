@@ -157,6 +157,19 @@ qualified datatype trm = is_Var: Var nat | is_Const: Const event_data
   | Plus trm trm | Minus trm trm | UMinus trm | Mult trm trm | Div trm trm | Mod trm trm
   | F2i trm | I2f trm
 
+lemma trm_exhaust: "(\<And>x. t = Var x \<Longrightarrow> P (Var x)) 
+  \<Longrightarrow> (\<And>a. t = Const a \<Longrightarrow> P (Const a))
+  \<Longrightarrow> (\<And>t1 t2. t = Plus t1 t2 \<Longrightarrow> P (Plus t1 t2))
+  \<Longrightarrow> (\<And>t1 t2. t = Minus t1 t2 \<Longrightarrow> P (Minus t1 t2))
+  \<Longrightarrow> (\<And>t1. t = UMinus t1 \<Longrightarrow> P (UMinus t1))
+  \<Longrightarrow> (\<And>t1 t2. t = Mult t1 t2 \<Longrightarrow> P (Mult t1 t2))
+  \<Longrightarrow> (\<And>t1 t2. t = Div t1 t2 \<Longrightarrow> P (Div t1 t2))
+  \<Longrightarrow> (\<And>t1 t2. t = Mod t1 t2 \<Longrightarrow> P (Mod t1 t2))
+  \<Longrightarrow> (\<And>t1. t = F2i t1 \<Longrightarrow> P (F2i t1))
+  \<Longrightarrow> (\<And>t1. t = I2f t1 \<Longrightarrow> P (I2f t1))
+  \<Longrightarrow> P t"
+  by (cases t, simp_all)
+
 text \<open> In this implementation of MFODL, to use De Bruijn indices, binding operators increase the
 value of the bounding number @{term b} (that starts at $0$) and this number is subtracted from
 all free variables (type @{typ nat}) greater than @{term b}. For instance, the free variable of
