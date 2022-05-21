@@ -71,9 +71,7 @@ let parse_tuple pb =
   expect pb LPA ;
   match pb.pb_token with
   | RPA -> next pb ; []
-  | STR s ->
-      next pb ;
-      more [s]
+  | STR s -> next pb ; more [s]
   | t ->
       raise
         (Local_error ("Expected a string or ')' but saw " ^ string_of_token t))
@@ -180,13 +178,6 @@ module Make (C : Log_parser.Consumer) = struct
         Printf.eprintf "[Json_log_parser] state %s with token=%s\n" msg
           (string_of_token pb.pb_token)
       else () in
-    let fail msg =
-      debug "fail" ;
-      C.parse_error ctxt pb.pb_lexbuf.Lexing.lex_start_p msg ;
-      if Misc.debugging Misc.Dbg_log then
-        Printf.eprintf "[Json_log_parser] failed with message %s" msg
-      else () ;
-      failwith "parser failed" in
     let begin_tp ts =
       if Misc.debugging Misc.Dbg_log then
         Printf.eprintf "[Json_log_parser] Begin TP %s\n%!" (Z.to_string ts) ;
@@ -261,7 +252,12 @@ module Make (C : Log_parser.Consumer) = struct
           | None -> C.command ctxt name params ; parse_line ()
           | Some msg -> fail msg )
       | t -> fail ("Expected a command name but saw " ^ string_of_token t)
-    and parse_eof () = debug "EOF" in
+    and parse_eof () = debug "EOF"
+    and fail msg =
+      debug "fail" ;
+      C.parse_error ctxt pb.pb_lexbuf.Lexing.lex_start_p msg ;
+      recover ()
+    and recover () = debug "recover" ; next pb ; parse_line () in
     try parse_init () ; C.end_log ctxt ; true
     with Log_parser.Stop_parser -> false
 end
