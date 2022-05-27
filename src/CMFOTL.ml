@@ -1896,6 +1896,36 @@ let rec preprocess_formula (ctx : context) (f : cplx_formula) : cplx_formula =
       Until (intv, preprocess_formula ctx f1, preprocess_formula ctx f2)
   | f -> f
 
+let rec postprocess_formula (f : MFOTL.formula) : MFOTL.formula =
+  match f with
+  | Let (p, f1, f2) -> Let (p, postprocess_formula f1, postprocess_formula f2)
+  | LetPast (p, f1, f2) ->
+      LetPast (p, postprocess_formula f1, postprocess_formula f2)
+  | Neg f -> Neg (postprocess_formula f)
+  | And (f1, And (f2, f3)) ->
+      And
+        ( postprocess_formula( And (postprocess_formula f1, postprocess_formula f2))
+        , postprocess_formula f3 )
+  | And (f1, f2) -> And (postprocess_formula f1, postprocess_formula f2)
+  | Or (f1, f2) -> Or (postprocess_formula f1, postprocess_formula f2)
+  | Implies (f1, f2) -> Implies (postprocess_formula f1, postprocess_formula f2)
+  | Equiv (f1, f2) -> Equiv (postprocess_formula f1, postprocess_formula f2)
+  | Exists (vl, f) -> Exists (vl, postprocess_formula f)
+  | ForAll (vl, f) -> ForAll (vl, postprocess_formula f)
+  | Aggreg (rty, y, op, x, glist, f) ->
+      Aggreg (rty, y, op, x, glist, postprocess_formula f)
+  | Prev (intv, f) -> Prev (intv, postprocess_formula f)
+  | Next (intv, f) -> Next (intv, postprocess_formula f)
+  | Eventually (intv, f) -> Eventually (intv, postprocess_formula f)
+  | Once (intv, f) -> Once (intv, postprocess_formula f)
+  | Always (intv, f) -> Always (intv, postprocess_formula f)
+  | PastAlways (intv, f) -> PastAlways (intv, postprocess_formula f)
+  | Since (intv, f1, f2) ->
+      Since (intv, postprocess_formula f1, postprocess_formula f2)
+  | Until (intv, f1, f2) ->
+      Until (intv, postprocess_formula f1, postprocess_formula f2)
+  | f -> f
+
 let compile_cst (cst : cst) : Predicate.cst =
   match cst with
   | Int v -> Int v
@@ -2075,6 +2105,7 @@ let compile_formula (signatures : signatures) (f : cplx_formula) : MFOTL.formula
   let ctx, f, _ = typecheck_formula signatures f in
   let f = preprocess_formula ctx f in
   let output = compile_formula_scope ctx [] f f in
+  let output = postprocess_formula output in
   if Misc.debugging Dbg_rewriting then
     Printf.eprintf
       "\n%!\n%![Rewriting.compile_formula] The compilation output is %s\n%!\n%!"
