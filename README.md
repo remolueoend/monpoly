@@ -1,6 +1,6 @@
 ⚠️ **This is a fork of the [development repository](https://bitbucket.org/jshs/monpoly).** ⚠️
 
-The purpose of this fork is to investigate and develop support for monitoring complex data types.
+The purpose of this fork is to investigate and develop support for monitoring complex data types as part of my bachelor thesis at the information security group at ETH Zurich.
 
 MonPoly
 =======
