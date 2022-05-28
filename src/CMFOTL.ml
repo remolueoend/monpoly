@@ -1623,9 +1623,227 @@ let type_check_formula_debug d (sch, tctxt, vars) =
 
 let first_debug = ref true
 
-(* TODO: implement proper is_monitorable check for complex formulas *)
-let check_monitorability (f : cplx_formula) : bool = true
+(** internal module for validating the monitorability of an extended formula. *)
+module Monitorability = struct
+  let msg_PRED =
+    "In subformulas p(t1,...,tn) each term ti should be a variable or a \
+     constant."
 
+  let msg_EQUAL =
+    "In input formulas psi of the form t1 = t2 the terms t1 and t2 should be \
+     variables or constants and at least one should be a constant."
+
+  let msg_LESS =
+    "Formulas of the form t1 < t2, t1 <= t2, t1 SUBSTRING t2, and t1 MATCHES \
+     t2 are currently considered not monitorable."
+
+  let msg_NOT_EQUAL =
+    "In subformulas psi of the form NOT (t1 = t2) the terms t1 and t2 should \
+     be either the same variable x or some constants (except when psi is part \
+     of subformulas of the form phi AND NOT psi, or phi AND NOT psi)."
+
+  let msg_NOT =
+    "Subformulas of the form NOT psi should contain no free variables (except \
+     when they are part of subformulas of the form phi AND NOT psi, NOT psi \
+     SINCE_I phi, or NOT psi UNTIL_I phi)."
+
+  let msg_ANDRELOP =
+    "In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with \
+     op among =, <, <=, either the variables of the terms t1 and t2 are among \
+     the free variables of psi or the formula is of the form psi AND x = t or \
+     psi AND x = t, and the variables of the term t are among the free \
+     variables of psi."
+
+  let msg_SUBSET =
+    format_of_string
+      "In subformulas of the form phi AND NOT psi, psi SINCE_I phi, and psi \
+       UNTIL_I phi, the free variables of psi (%s) should be among the free \
+       variables of phi (%s)."
+
+  let msg_OR =
+    "In subformulas of the form phi OR psi, phi and psi should have the same \
+     set of free variables."
+
+  (* In these special cases, no evaluation is needed for the formula [f2]. *)
+  let is_special_case fv1 f =
+    match f with
+    | Equal (t1, t2) -> (
+      match (t1, t2) with
+      | Var x, t when Misc.subset (tvars t) fv1 -> true
+      | t, Var x when Misc.subset (tvars t) fv1 -> true
+      (* TODO: is this valid for projections? *)
+      | Proj (b, _), t when Misc.subset (tvars t) fv1 -> true
+      | t, Proj (b, _) when Misc.subset (tvars t) fv1 -> true
+      | _ -> Misc.subset (free_vars f) fv1 )
+    | Matches (t1, t2, tl) ->
+        Misc.subset (tvars t1) fv1
+        && Misc.subset (tvars t2) fv1
+        && List.for_all
+             (function
+               | None -> true
+               | Some (Var _) -> true
+               | Some t -> Misc.subset (tvars t) fv1 )
+             tl
+    | Less (_, _)
+     |LessEq (_, _)
+     |Substring (_, _)
+     |Neg (Equal (_, _))
+     |Neg (Less (_, _))
+     |Neg (LessEq (_, _))
+     |Neg (Substring (_, _))
+     |Neg (Matches (_, _, _)) ->
+        Misc.subset (free_vars f) fv1
+    | _ -> false
+
+  let is_and_relop = function
+    | Equal (_, _)
+     |Less (_, _)
+     |LessEq (_, _)
+     |Substring (_, _)
+     |Matches (_, _, _)
+     |Neg (Equal (_, _))
+     |Neg (Less (_, _))
+     |Neg (LessEq (_, _))
+     |Neg (Substring (_, _))
+     |Neg (Matches (_, _, _)) ->
+        true
+    | _ -> false
+
+  (** This function tells us beforehand whether a formula is monitorable
+    by MonPoly. It should thus exactly correspond to the
+    implementation of the Algorithm module.
+
+    Remark: There are a few formulae that are not TSF safe-range
+    (according strictly to the given definition), but which are
+    monitorable; and we could accept even a few more: see
+    examples/test4.mfotl. However, there are many formulae which are
+    TSF safe range but not monitorable since our propagation function
+    is still quite limited.
+  *)
+  let rec is_monitorable f =
+    match f with
+    | Equal (t1, t2) -> (
+      match (t1, t2) with
+      | Var _, Cst _ | Cst _, Var _ | Cst _, Cst _ -> (true, None)
+      (* TODO: is this valid for projections? *)
+      | Proj _, Cst _ | Cst _, Proj _ -> (true, None)
+      | _ -> (false, Some (f, msg_EQUAL)) )
+    | Less _ | LessEq _ | Substring _ | Matches _ -> (false, Some (f, msg_LESS))
+    | Neg (Equal (t1, t2)) -> (
+      match (t1, t2) with
+      | Var x, Var y when x = y -> (true, None)
+      (* TODO: is this valid for projections? *)
+      | Proj (xb, xf), Proj (yb, yf) when xb = yb && xf = yf -> (true, None)
+      | Cst _, Cst _ -> (true, None)
+      | _ -> (false, Some (f, msg_NOT_EQUAL)) )
+    | Pred p ->
+        let tlist = get_predicate_args p in
+        if
+          List.for_all
+            (* TODO: is this valid for projections? *)
+              (fun t ->
+              match t with Var _ | Cst _ | Proj _ -> true | _ -> false )
+            tlist
+        then (true, None)
+        else (false, Some (f, msg_PRED))
+    | Let (p, f1, f2) ->
+        let is_mon1, r1 = is_monitorable f1 in
+        if not is_mon1 then (is_mon1, r1) else is_monitorable f2
+    | LetPast (p, f1, f2) ->
+        let is_mon1, r1 = is_monitorable f1 in
+        if not is_mon1 then (is_mon1, r1) else is_monitorable f2
+    | Neg f1 ->
+        if free_vars f1 = [] then is_monitorable f1
+        else (false, Some (f, msg_NOT))
+    | And (f1, f2) -> (
+        let is_mon1, r1 = is_monitorable f1 in
+        if not is_mon1 then (is_mon1, r1)
+        else
+          let fv1 = free_vars f1 in
+          if is_and_relop f2 then
+            if is_special_case fv1 f2 then (true, None)
+            else (false, Some (f, msg_ANDRELOP))
+          else
+            match f2 with
+            | Neg f2' ->
+                let fv2 = free_vars f2 in
+                if not (Misc.subset fv2 fv1) then
+                  ( false
+                  , Some
+                      ( f
+                      , Printf.sprintf msg_SUBSET (String.concat "," fv2)
+                          (String.concat "," fv1) ) )
+                else is_monitorable f2'
+            | _ -> is_monitorable f2 )
+    | Or (f1, f2) ->
+        let fv1 = free_vars f1 in
+        let fv2 = free_vars f2 in
+        if (not (Misc.subset fv1 fv2)) || not (Misc.subset fv2 fv1) then
+          (false, Some (f, msg_OR))
+        else
+          let is_mon1, r1 = is_monitorable f1 in
+          if not is_mon1 then (is_mon1, r1) else is_monitorable f2
+    | Exists (_, f1)
+     |Aggreg (_, _, _, _, _, f1)
+     |Prev (_, f1)
+     |Next (_, f1)
+     |Eventually (_, f1)
+     |Once (_, f1) ->
+        is_monitorable f1
+    | Since (intv, f1, f2) | Until (intv, f1, f2) ->
+        let is_mon2, msg2 = is_monitorable f2 in
+        if not is_mon2 then (is_mon2, msg2)
+        else
+          let fv1 = free_vars f1 in
+          let fv2 = free_vars f2 in
+          if not (Misc.subset fv1 fv2) then
+            ( false
+            , Some
+                ( f
+                , Printf.sprintf msg_SUBSET (String.concat "," fv2)
+                    (String.concat "," fv1) ) )
+          else
+            let f1' = match f1 with Neg f1' -> f1' | _ -> f1 in
+            is_monitorable f1'
+    | Frex (intv, f) ->
+        failwith
+          "[Rewriting.is_monitorable] The future match operator |.|> can be \
+           used only with the -verified flag set"
+    | Prex (intv, f) ->
+        failwith
+          "[Rewriting.is_monitorable] The past match operator <|.| can be used \
+           only with the -verified flag set"
+    (* These operators should have been eliminated *)
+    | Implies _ | Equiv _ | ForAll _ | Always _ | PastAlways _ ->
+        failwith
+          "[Rewriting.is_monitorable] The operators IMPLIES, EQUIV, FORALL, \
+           ALWAYS and PAST_ALWAYS should have been eliminated when the -no_rw \
+           option is not present. If the -no_rw option is present, make sure \
+           to eliminate these operators yourself."
+
+  let print_reason str reason =
+    match reason with
+    | Some (f, msg) ->
+        Printf.eprintf "%s, because of the subformula: %s\n%!%s\n%!" str
+          (string_of_formula "" f) msg
+    | None -> failwith "[Rewriting.print_reason] internal error"
+
+  let print_results is_mon reason =
+    if !Misc.verbose || !Misc.checkf then
+      if is_mon then Printf.eprintf "The extended formula is monitorable.\n%!"
+      else print_reason "The extended formula is NOT monitorable" reason
+    else if not is_mon then
+      Printf.eprintf
+        "The extended formula is NOT monitorable. Use the -check or -verbose \
+         flags.\n\
+         %!"
+end
+
+(** type checks a complex formula given matching signature definitions.
+    Returns a triple consiting of:
+    1) The type checking context consisting of predicate schema, symbol table and type context.
+    2) A possibly updated version of the input formula.
+    3) A boolean flag indicating the monitorability (safety) of the input formula. *)
 let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
     context * cplx_formula * bool =
   let debug = !first_debug && Misc.debugging Dbg_typing in
@@ -1681,7 +1899,9 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
     Printf.eprintf "%s" (string_of_formula "" f) ;
     Printf.eprintf "\n%!" ) ;
   first_debug := false ;
-  let is_mon = check_monitorability f in
+  (* check and print monitorablity results: *)
+  let is_mon, reason = Monitorability.is_monitorable f in
+  if not is_mon then Monitorability.print_results is_mon reason ;
   ((s, tctxt, v), f, is_mon)
 
 (* COMPILE FUNCTIONS *)
@@ -1796,8 +2016,6 @@ let expand_cplx_var (f : cplx_formula) (ctx : context) (var : var) :
         @@ Printf.sprintf "could not find ref type of %s: is of type %s"
              (string_of_term t) (string_of_type tctxt ty) in
   let usages = get_var_usage f var |> TermSet.elements in
-  Printf.eprintf "DEBUG: usages of %s in %s: %s\n" var (string_of_formula "" f)
-    (List.map string_of_term usages |> String.concat ",") ;
   (* list of triples: (ctor, Record, prefix) *)
   let required_expansions =
     List.fold_right
@@ -1904,7 +2122,8 @@ let rec postprocess_formula (f : MFOTL.formula) : MFOTL.formula =
   | Neg f -> Neg (postprocess_formula f)
   | And (f1, And (f2, f3)) ->
       And
-        ( postprocess_formula( And (postprocess_formula f1, postprocess_formula f2))
+        ( postprocess_formula
+            (And (postprocess_formula f1, postprocess_formula f2))
         , postprocess_formula f3 )
   | And (f1, f2) -> And (postprocess_formula f1, postprocess_formula f2)
   | Or (f1, f2) -> Or (postprocess_formula f1, postprocess_formula f2)
@@ -2016,8 +2235,6 @@ and _compile_formula (ctx : context) (f_scope : cplx_formula)
                   name
                   (List.map string_of_term ts |> String.concat ",") in
               failwith msg in
-        Printf.eprintf "Expanding PRED %s for var %s in scope %s" name var_name
-          (string_of_formula "" f_scope) ;
         let expansions, _ =
           List.map (expand_cplx_var f_scope (sch, tctxt, vars)) [var_name]
           |> List.split in
@@ -2100,9 +2317,11 @@ and compile_regex (ctx : context) (scope : cplx_formula) (input : regex) :
       Plus (compile_regex ctx scope r1, compile_regex ctx scope r2)
   | Star r -> Star (compile_regex ctx scope r)
 
-let compile_formula (signatures : signatures) (f : cplx_formula) : MFOTL.formula
-    =
-  let ctx, f, _ = typecheck_formula signatures f in
+(** compiles a MFOTL formula from a complex formula and the parsed signature definitions.
+    Returns the compiled formula and a flag indicating the monitoriability of the formula. *)
+let compile_formula (signatures : signatures) (f : cplx_formula) :
+    MFOTL.formula * bool =
+  let ctx, f, is_mon = typecheck_formula signatures f in
   let f = preprocess_formula ctx f in
   let output = compile_formula_scope ctx [] f f in
   let output = postprocess_formula output in
@@ -2110,4 +2329,4 @@ let compile_formula (signatures : signatures) (f : cplx_formula) : MFOTL.formula
     Printf.eprintf
       "\n%!\n%![Rewriting.compile_formula] The compilation output is %s\n%!\n%!"
       (MFOTL.string_of_formula "" output) ;
-  output
+  (output, is_mon)
