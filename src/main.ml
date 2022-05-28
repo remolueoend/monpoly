@@ -139,17 +139,18 @@ let main () =
       begin
         (* read signature file *)
         let signatures = Signatures.parse_signature_file !sigfile in
-        let (ctx, f, is_cplx_mon) = CMFOTL.typecheck_formula signatures f in
-        let f = CMFOTL.compile_formula signatures f in
+        (* typecheck, compile and check monitorability of extended formula: *)
+        let f, is_cplx_mon = CMFOTL.compile_formula signatures f in
         if MFOTL.is_mfodl f then Misc.verified := true;
+        (*  generate a DB schema from the parsed signatures: *)
         let dbschema = Signatures.to_dbschema signatures in
         let is_mon, pf, vartypes = check_formula dbschema f in
         if is_mon <> is_cplx_mon then
-          failwith "Invalid safety properties after compilation";
+          failwith @@ Printf.sprintf "Invalid safety properties after compilation";
         let fv = List.map fst vartypes in
         if !sigout then
           Predicate.print_vartypes_list vartypes
-        else if is_mon && not !Misc.checkf then
+        else if is_cplx_mon && is_mon && not !Misc.checkf then
           begin
             (* By default, that is without user specification (see option
               -nonewlastts), we add a new maximal timestamp for future formulas;
