@@ -257,12 +257,10 @@ let prerr_extf str ff =
     prerr_spaces d;
     (match f with
       | ERel (_, loc) ->
-        Printf.eprintf "ERel@%d\n" loc;
+        prerr_string "ERel\n";
 
       | EPred (p,_,inf,loc) ->
         Predicate.prerr_predicate p;
-        prerr_string "@";
-        prerr_int loc;
         prerr_string ": inf=";
         prerr_inf inf;
         prerr_string "\n"
@@ -270,16 +268,15 @@ let prerr_extf str ff =
       | _ ->
         (match f with
         | ENeg (f,loc) ->
-          Printf.eprintf "NOT@%d\n" loc;
+          prerr_string "NOT\n";
           prerr_f_rec (d+1) f;
 
         | EExists (_,f,loc) ->
-          Printf.eprintf "EXISTS@%d\n" loc;
+          prerr_string "EXISTS\n";
           prerr_f_rec (d+1) f;
 
         | EPrev (intv,f,pinf,loc) ->
-          prerr_string "PREVIOUS@";
-          prerr_int loc;
+          prerr_string "PREVIOUS";
           MFOTL.prerr_interval intv;
           prerr_string ": plast=";
           prerr_string (Neval.string_of_cell pinf.plast);
@@ -287,8 +284,7 @@ let prerr_extf str ff =
           prerr_f_rec (d+1) f
 
         | ENext (intv,f,ninf,loc) ->
-          prerr_string "NEXT@";
-          prerr_int loc;
+          prerr_string "NEXT";
           MFOTL.prerr_interval intv;
           prerr_string ": init=";
           prerr_bool ninf.init;
@@ -296,8 +292,7 @@ let prerr_extf str ff =
           prerr_f_rec (d+1) f
 
         | EOnceA (intv,f,inf,loc) ->
-          prerr_string "ONCE@";
-          prerr_int loc;
+          prerr_string "ONCE";
           MFOTL.prerr_interval intv;
           Relation.prerr_rel ": rel = " inf.ores;
           prerr_string "; oaauxrels = ";
@@ -306,30 +301,26 @@ let prerr_extf str ff =
           prerr_f_rec (d+1) f
 
         | EOnceZ (intv,f,oinf,loc) ->
-          prerr_string "ONCE@";
-          prerr_int loc;
+          prerr_string "ONCE";
           MFOTL.prerr_interval intv;
           prerr_ozinf ": ozinf=" oinf;
           prerr_f_rec (d+1) f
 
         | EOnce (intv,f,oinf,loc) ->
-          prerr_string "ONCE@";
-          prerr_int loc;
+          prerr_string "ONCE";
           MFOTL.prerr_interval intv;
           prerr_oinf ": oinf = " oinf;
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
         | EEventuallyZ (intv,f,einf,loc) ->
-          prerr_string "EVENTUALLY@";
-          prerr_int loc;
+          prerr_string "EVENTUALLY";
           MFOTL.prerr_interval intv;
           prerr_ezinf ": ezinf=" einf;
           prerr_f_rec (d+1) f
 
         | EEventually (intv,f,einf,loc) ->
-          prerr_string "EVENTUALLY@";
-          prerr_int loc;
+          prerr_string "EVENTUALLY";
           MFOTL.prerr_interval intv;
           prerr_einf ": einf=" einf;
           prerr_string "\n";
@@ -339,8 +330,6 @@ let prerr_extf str ff =
           prerr_string (string_of_agg_op info.op);
           prerr_string "_";
           prerr_string (string_of_cst info.default);
-          prerr_string "@";
-          prerr_int loc;
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
@@ -349,8 +338,6 @@ let prerr_extf str ff =
             prerr_string "ONCE";
             prerr_string "_";
             prerr_string (string_of_cst info.default);
-            prerr_string "@";
-            prerr_int loc;
             prerr_string " ";
             Aggreg.prerr_state aggr;
             prerr_string "\n";
@@ -359,28 +346,26 @@ let prerr_extf str ff =
         | _ ->
           (match f with
             | ELet (p,_,f1,f2,linf,loc) ->
-              Printf.eprintf "LET@%d: " loc;
+              prerr_string "LET: ";
               Predicate.prerr_predicate p;
               prerr_linf " linf=" linf;
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
             | EAnd (_,f1,f2,ainf,loc) ->
-              Printf.eprintf "AND@%d: " loc;
-              prerr_ainf "ainf=" ainf.arel;
+              prerr_ainf "AND: ainf=" ainf.arel;
               prerr_string "\n";
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
             | EOr (_,f1,f2,ainf,loc) ->
-              Printf.eprintf "OR@%d: " loc;
-              prerr_ainf "ainf=" ainf.arel;
+              prerr_ainf "OR: ainf=" ainf.arel;
               prerr_string "\n";
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
             | ESinceA (_,intv,f1,f2,sinf,loc) ->
-              Printf.eprintf "SINCE@%d" loc;
+              prerr_string "SINCE";
               MFOTL.prerr_interval intv;
               prerr_sainf ": sinf = " sinf;
               prerr_string "\n";
@@ -388,7 +373,7 @@ let prerr_extf str ff =
               prerr_f_rec (d+1) f2
 
             | ESince (_,intv,f1,f2,sinf,loc) ->
-              Printf.eprintf "SINCE@%d" loc;
+              prerr_string "SINCE";
               MFOTL.prerr_interval intv;
               prerr_sinf ": sinf=" sinf;
               prerr_string "\n";
@@ -396,14 +381,14 @@ let prerr_extf str ff =
               prerr_f_rec (d+1) f2
 
             | EUntil (_,intv,f1,f2,uinf,loc) ->
-              Printf.eprintf "UNTIL@%d" loc;
+              prerr_string "UNTIL";
               MFOTL.prerr_interval intv;
               prerr_uinf ": uinf=" uinf;
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
             | ENUntil (_,intv,f1,f2,uninf,loc) ->
-              Printf.eprintf "NUNTIL@%d" loc;
+              prerr_string "NUNTIL";
               MFOTL.prerr_interval intv;
               prerr_uninf ": uninf=" uninf;
               prerr_f_rec (d+1) f1;
