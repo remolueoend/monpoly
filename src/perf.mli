@@ -52,3 +52,24 @@ val begin_profile: unit -> unit
 val profile_enter: int -> unit
 val profile_exit: int -> 'a -> 'a
 val end_profile: unit -> unit
+
+val tag_enter_add_index: int
+val tag_exit_add_index: int
+val tag_enter_eval: int
+val tag_exit_eval: int
+val tag_enter_show_results: int
+val tag_exit_show_results: int
+val tag_enter_compute: int
+val tag_exit_compute: int
+val tag_enter_update: int
+val tag_exit_update: int
+val tag_pred_size: int
+val tag_eval_result: int
+val tag_extformula: int
+
+val profile_enabled: bool ref
+val enable_profile: string -> unit
+val finalize_profile: unit -> unit
+val profile_int32: int -> int -> Int32.t -> unit
+val profile_now: int -> int -> unit
+val profile_string: int -> string -> unit

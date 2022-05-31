@@ -196,12 +196,14 @@ let _ =
     "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
       "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
     "-strcache", Arg.Set Misc.str_cache, "\tUse string cache to reduce memory usage";
+    "-profile", Arg.String Perf.enable_profile, "\tWrite profile events to the given file";
   ]
     (fun _ -> print_usage_and_exit ())
     usage_string;
   if Misc.debugging Dbg_perf then
     ignore(Unix.alarm 600);
   main ();
+  Perf.finalize_profile ();
   if !memarg then
     prerr_endline (Misc.mem_max ());
   if !statsarg then
