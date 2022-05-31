@@ -50,26 +50,26 @@ type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
 
 type extformula =
-  | ERel of relation
-  | EPred of predicate * comp_one * info
-  | ELet of predicate * comp_one * extformula * extformula * linfo
-  | ENeg of extformula
-  | EAnd of comp_two * extformula * extformula * ainfo
-  | EOr of comp_two * extformula * extformula * ainfo
-  | EExists of comp_one * extformula
-  | EAggreg of agg_info * Aggreg.aggregator * extformula
-  | EAggOnce of agg_info * Aggreg.once_aggregator * extformula
-  | EPrev of interval * extformula * pinfo
-  | ENext of interval * extformula * ninfo
-  | ESinceA of comp_two * interval * extformula * extformula * sainfo
-  | ESince of comp_two * interval * extformula * extformula * sinfo
-  | EOnceA of interval * extformula * oainfo
-  | EOnceZ of interval * extformula * ozinfo
-  | EOnce of interval * extformula * oinfo
-  | ENUntil of comp_two * interval * extformula * extformula * uninfo
-  | EUntil of comp_two * interval * extformula * extformula * uinfo
-  | EEventuallyZ of interval * extformula * ezinfo
-  | EEventually of interval * extformula * einfo
+  | ERel of relation * int
+  | EPred of predicate * comp_one * info * int
+  | ELet of predicate * comp_one * extformula * extformula * linfo * int
+  | ENeg of extformula * int
+  | EAnd of comp_two * extformula * extformula * ainfo * int
+  | EOr of comp_two * extformula * extformula * ainfo * int
+  | EExists of comp_one * extformula * int
+  | EAggreg of agg_info * Aggreg.aggregator * extformula * int
+  | EAggOnce of agg_info * Aggreg.once_aggregator * extformula * int
+  | EPrev of interval * extformula * pinfo * int
+  | ENext of interval * extformula * ninfo * int
+  | ESinceA of comp_two * interval * extformula * extformula * sainfo * int
+  | ESince of comp_two * interval * extformula * extformula * sinfo * int
+  | EOnceA of interval * extformula * oainfo * int
+  | EOnceZ of interval * extformula * ozinfo * int
+  | EOnce of interval * extformula * oinfo * int
+  | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
+  | EUntil of comp_two * interval * extformula * extformula * uinfo * int
+  | EEventuallyZ of interval * extformula * ezinfo * int
+  | EEventually of interval * extformula * einfo * int
 
 val contains_eventually: extformula -> bool
 

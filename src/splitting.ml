@@ -214,34 +214,34 @@ let earliest_cell lastev mf =
     | MRel _
     | MPred _ -> ()
 
-    | MLet (_, _, f1, f2, c) -> update c; go f1; go f2
+    | MLet (_, _, f1, f2, c, _) -> update c; go f1; go f2
 
-    | MNeg f1
-    | MExists (_, f1)
-    | MAggreg (_, _, f1)
-    | MAggOnce (_, _, f1)
-    | MPrev (_, f1, _)
-    | MNext (_, f1, _)
-    | MOnceA (_, f1, _)
-    | MOnceZ (_, f1, _)
-    | MOnce (_, f1, _) -> go f1
+    | MNeg (f1, _)
+    | MExists (_, f1, _)
+    | MAggreg (_, _, f1, _)
+    | MAggOnce (_, _, f1, _)
+    | MPrev (_, f1, _, _)
+    | MNext (_, f1, _, _)
+    | MOnceA (_, f1, _, _)
+    | MOnceZ (_, f1, _, _)
+    | MOnce (_, f1, _, _) -> go f1
 
-    | MEventuallyZ (_, f1, inf) -> update inf.mezlastev; go f1
-    | MEventually (_, f1, inf) -> update inf.melastev; go f1
+    | MEventuallyZ (_, f1, inf, _) -> update inf.mezlastev; go f1
+    | MEventually (_, f1, inf, _) -> update inf.melastev; go f1
 
-    | MNUntil (_, _, f1, f2, inf) ->
+    | MNUntil (_, _, f1, f2, inf, _) ->
       update inf.mlast1;
       update inf.mlast2;
       go f1; go f2
 
-    | MUntil (_, _, f1, f2, inf) ->
+    | MUntil (_, _, f1, f2, inf, _) ->
       update inf.mulast;
       go f1; go f2
 
-    | MAnd (_, f1, f2, _)
-    | MOr (_, f1, f2, _)
-    | MSinceA (_, _, f1, f2, _)
-    | MSince (_, _, f1, f2, _) -> go f1; go f2
+    | MAnd (_, f1, f2, _, _)
+    | MOr (_, f1, f2, _, _)
+    | MSinceA (_, _, f1, f2, _, _)
+    | MSince (_, _, f1, f2, _, _) -> go f1; go f2
   in
   go mf; !earliest
 
@@ -360,44 +360,53 @@ let combine_einfo c0 meinf1 meinf2 =
 let comb_m lastev f1 f2 =
   let c0 = ref (earliest_cell lastev f1) in
   let rec comb_m f1 f2 = match (f1, f2) with
-    | (MRel  (rel1),          MRel(rel2))
-      -> MRel (Relation.union rel1 rel2)
-    | (MPred (p, comp, inf1), MPred(_, _, inf2))
-      -> MPred(p, comp, combine_info inf1 inf2)
-    | (MNeg  (f11), MNeg(f21))
-      -> MNeg (comb_m f11 f21)
-    | (MAnd  (c, f11, f12, ainf1), MAnd(_, f21, f22, ainf2))
-      -> MAnd (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
-    | (MOr   (c, f11, f12, ainf1), MOr (_, f21, f22, ainf2))
-      -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2))
-    | (MExists (c, f11), MExists(_,f21))
-      -> MExists        (c, comb_m f11 f21)
-    | (MAggreg (inf, c, f11), MAggreg(_,_,f21))
-      -> MAggreg        (inf, c, comb_m f11 f21)
-    | (MAggOnce (inf, state1, f11), MAggOnce (_, state2, f21))
-      -> MAggOnce  (inf, combine_agg_once state1 state2, comb_m f11 f21)
-    | (MPrev (dt, f11, pinf1), MPrev ( _, f21, pinf2))
-      -> MPrev          (dt, comb_m f11 f21, pinf1)
-    | (MNext (dt, f11, ninf1), MNext ( _, f21, ninf2))
-      -> MNext          (dt, comb_m f11 f21, ninf1)
-    | (MSinceA (c2, dt, f11, f12, sainf1), MSinceA( _, _, f21, f22, sainf2))
-      -> MSinceA        (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sainfo sainf1 sainf2)
-    | (MSince (c2, dt, f11, f12, sinf1), MSince( _, _, f21, f22, sinf2))
-      -> MSince         (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2)
-    | (MOnceA (dt, f11, oainf1), MOnceA ( _, f21, oainf2))
-      -> MOnceA         (dt, comb_m f11 f21, combine_oainfo oainf1 oainf2)
-    | (MOnceZ (dt, f11, ozinf1), MOnceZ ( _, f21, ozinf2))
-      -> MOnceZ         (dt, comb_m f11 f21, combine_ozinfo ozinf1 ozinf2)
-    | (MOnce (dt, f11, oinf1), MOnce ( _, f21, oinf2))
-      -> MOnce        (dt, comb_m f11 f21, combine_oinfo oinf1 oinf2)
-    | (MNUntil (c1, dt, f11, f12, muninf1), MNUntil  ( _, _, f21, f22, muninf2))
-      -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo c0 muninf1 muninf2)
-    | (MUntil (c1, dt, f11, f12, muinf1), MUntil ( _, _, f21, f22, muinf2))
-      -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo c0 muinf1 muinf2)
-    | (MEventuallyZ (dt, f11, ezinf1), MEventuallyZ (_, f21, ezinf2))
-      -> MEventuallyZ   (dt, comb_m f11 f21, combine_ezinfo c0 ezinf1 ezinf2)
-    | (MEventually (dt, f11, einf1), MEventually (_, f21, einf2))
-      -> MEventually   (dt, comb_m f11 f21, combine_einfo c0 einf1 einf2)
+    | (MRel  (rel1, loc1),          MRel(rel2, loc2)) when loc1 = loc2
+      -> MRel (Relation.union rel1 rel2, loc1)
+    | (MPred (p, comp, inf1, loc1), MPred(_, _, inf2, loc2)) when loc1 = loc2
+      -> MPred(p, comp, combine_info inf1 inf2, loc1)
+    | (MNeg  (f11, loc1), MNeg(f21, loc2)) when loc1 = loc2
+      -> MNeg (comb_m f11 f21, loc1)
+    | (MAnd  (c, f11, f12, ainf1, loc1), MAnd(_, f21, f22, ainf2, loc2)) when loc1 = loc2
+      -> MAnd (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2), loc1)
+    | (MOr   (c, f11, f12, ainf1, loc1), MOr (_, f21, f22, ainf2, loc2)) when loc1 = loc2
+      -> MOr  (c, comb_m f11 f21, comb_m f12 f22, (combine_ainfo ainf1 ainf2), loc1)
+    | (MExists (c, f11, loc1), MExists(_,f21, loc2)) when loc1 = loc2
+      -> MExists        (c, comb_m f11 f21, loc1)
+    | (MAggreg (inf, c, f11, loc1), MAggreg(_,_,f21, loc2)) when loc1 = loc2
+      -> MAggreg        (inf, c, comb_m f11 f21, loc1)
+    | (MAggOnce (inf, state1, f11, loc1), MAggOnce (_, state2, f21, loc2)) when loc1 = loc2
+      -> MAggOnce  (inf, combine_agg_once state1 state2, comb_m f11 f21, loc1)
+    | (MPrev (dt, f11, pinf1, loc1), MPrev ( _, f21, pinf2, loc2)) when loc1 = loc2
+      -> MPrev          (dt, comb_m f11 f21, pinf1, loc1)
+    | (MNext (dt, f11, ninf1, loc1), MNext ( _, f21, ninf2, loc2)) when loc1 = loc2
+      -> MNext          (dt, comb_m f11 f21, ninf1, loc1)
+    | (MSinceA (c2, dt, f11, f12, sainf1, loc1), MSinceA( _, _, f21, f22, sainf2, loc2))
+      when loc1 = loc2
+      -> MSinceA        (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sainfo sainf1 sainf2, loc1)
+    | (MSince (c2, dt, f11, f12, sinf1, loc1), MSince( _, _, f21, f22, sinf2, loc2))
+      when loc1 = loc2
+      -> MSince         (c2, dt, comb_m f11 f21, comb_m f12 f22, combine_sinfo sinf1 sinf2, loc1)
+    | (MOnceA (dt, f11, oainf1, loc1), MOnceA ( _, f21, oainf2, loc2))
+      when loc1 = loc2
+      -> MOnceA         (dt, comb_m f11 f21, combine_oainfo oainf1 oainf2, loc1)
+    | (MOnceZ (dt, f11, ozinf1, loc1), MOnceZ ( _, f21, ozinf2, loc2))
+      when loc1 = loc2
+      -> MOnceZ         (dt, comb_m f11 f21, combine_ozinfo ozinf1 ozinf2, loc1)
+    | (MOnce (dt, f11, oinf1, loc1), MOnce ( _, f21, oinf2, loc2))
+      when loc1 = loc2
+      -> MOnce        (dt, comb_m f11 f21, combine_oinfo oinf1 oinf2, loc1)
+    | (MNUntil (c1, dt, f11, f12, muninf1, loc1), MNUntil  ( _, _, f21, f22, muninf2, loc2))
+      when loc1 = loc2
+      -> MNUntil        (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muninfo c0 muninf1 muninf2, loc1)
+    | (MUntil (c1, dt, f11, f12, muinf1, loc1), MUntil ( _, _, f21, f22, muinf2, loc2))
+      when loc1 = loc2
+      -> MUntil         (c1, dt, comb_m f11 f21, comb_m f12 f22, combine_muinfo c0 muinf1 muinf2, loc1)
+    | (MEventuallyZ (dt, f11, ezinf1, loc1), MEventuallyZ (_, f21, ezinf2, loc2))
+      when loc1 = loc2
+      -> MEventuallyZ   (dt, comb_m f11 f21, combine_ezinfo c0 ezinf1 ezinf2, loc1)
+    | (MEventually (dt, f11, einf1, loc1), MEventually (_, f21, einf2, loc2))
+      when loc1 = loc2
+      -> MEventually   (dt, comb_m f11 f21, combine_einfo c0 einf1 einf2, loc1)
     | _ -> raise (Type_error ("Mismatched formulas in combine_states")) 
   in
   comb_m f1 f2
@@ -632,70 +641,70 @@ let split_state mapping mf size =
      - create and return an array of formulas:
           each index containing the relevant part of the state and relevant split of the subformula(s) *)
   let rec split_f = function
-    | MRel           (rel)                                      ->
+    | MRel           (rel, loc)                                      ->
       (*print_endline "rel";*)
-      Array.make size (MRel(rel)) 
-    | MPred          (p, comp, inf)                             ->
+      Array.make size (MRel(rel, loc)) 
+    | MPred          (p, comp, inf, loc)                             ->
       (*print_endline "pred";
       let vars = (pvars p) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
-      let arr = split_info inf (pvars p) in Array.map (fun e -> MPred(p, comp, e)) arr
-    | MLet           (p, comp, f1, f2, c)                       ->
+      let arr = split_info inf (pvars p) in Array.map (fun e -> MPred(p, comp, e, loc)) arr
+    | MLet           (p, comp, f1, f2, c, loc)                       ->
        failwith "[split_state] unsupported forumula"
-    | MNeg           (f1)                                       -> 
+    | MNeg           (f1, loc)                                       -> 
       (*print_endline "neg";*)
-      Array.map (fun e -> MNeg(e)) (split_f f1)                                                             
-    | MAnd           (c, f1, f2, ainf)                          -> 
+      Array.map (fun e -> MNeg(e, loc)) (split_f f1)                                                             
+    | MAnd           (c, f1, f2, ainf, loc)                          -> 
       (*print_endline "and";
       let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline ""; *)
-      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e)) (split_ainfo ainf (p1 f1))
-    | MOr            (c, f1, f2, ainf)                          ->
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MAnd(c, a1.(i), a2.(i), e, loc)) (split_ainfo ainf (p1 f1))
+    | MOr            (c, f1, f2, ainf, loc)                          ->
       (*print_endline "or";*)
-      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e)) (split_ainfo ainf (p1 f1))
-    | MExists        (c, f1)                                    ->
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MOr (c, a1.(i), a2.(i), e, loc)) (split_ainfo ainf (p1 f1))
+    | MExists        (c, f1, loc)                                    ->
       (*print_endline "exists";*)
-      Array.map (fun e -> MExists(c, e)) (split_f f1)
-    | MAggreg        (inf, comp, f1)                            ->
+      Array.map (fun e -> MExists(c, e, loc)) (split_f f1)
+    | MAggreg        (inf, comp, f1, loc)                            ->
       (*print_endline "aggreg";*)
-      Array.map (fun e -> MAggreg(inf, comp, e)) (split_f f1)
-    | MAggOnce       (inf, state, f1)                           ->
+      Array.map (fun e -> MAggreg(inf, comp, e, loc)) (split_f f1)
+    | MAggOnce       (inf, state, f1, loc)                           ->
       (*print_endline "aggonce";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MAggOnce(inf, e, a1.(i))) (split_agg_once state (p1 f1))
-    | MPrev          (dt, f1, pinf)                             ->
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MAggOnce(inf, e, a1.(i), loc)) (split_agg_once state (p1 f1))
+    | MPrev          (dt, f1, pinf, loc)                             ->
       (*print_endline "mprev";*)
-      Array.map (fun e -> MPrev(dt, e, pinf)) (split_f f1)
-    | MNext          (dt, f1, ninf)                             ->
+      Array.map (fun e -> MPrev(dt, e, pinf, loc)) (split_f f1)
+    | MNext          (dt, f1, ninf, loc)                             ->
       (*print_endline "next";*)
-      Array.map (fun e -> MNext(dt, e, ninf)) (split_f f1)
-    | MSinceA        (c, dt, f1, f2, sainf)                     ->
+      Array.map (fun e -> MNext(dt, e, ninf, loc)) (split_f f1)
+    | MSinceA        (c, dt, f1, f2, sainf, loc)                     ->
       (*print_endline "sincea";*)
-      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSinceA(c, dt, a1.(i), a2.(i), e)) (split_sainfo sainf (p1 f1) (p1 f2))
-    | MSince         (c, dt, f1, f2, sinf)                      -> 
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSinceA(c, dt, a1.(i), a2.(i), e, loc)) (split_sainfo sainf (p1 f1) (p1 f2))
+    | MSince         (c, dt, f1, f2, sinf, loc)                      -> 
       (*print_endline "since";*)
-      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c, dt, a1.(i), a2.(i), e)) (split_sinfo sinf (p1 f1) (p1 f2))
-    | MOnceA         (dt, f1, oainf)                            ->
+      let a1 = (split_f f1) in let a2 = (split_f f2) in  Array.mapi (fun i e -> MSince(c, dt, a1.(i), a2.(i), e, loc)) (split_sinfo sinf (p1 f1) (p1 f2))
+    | MOnceA         (dt, f1, oainf, loc)                            ->
       (*print_endline "oncea";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e)) (split_oainfo oainf (p1 f1))                      
-    | MOnceZ         (dt, f1, ozinf)                            ->
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceA(dt, a1.(i), e, loc)) (split_oainfo oainf (p1 f1))                      
+    | MOnceZ         (dt, f1, ozinf, loc)                            ->
       (*print_endline "oncez";
       let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e)) (split_mozinfo ozinf (p1 f1))                                
-    | MOnce          (dt, f1, oinf)                             ->
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnceZ(dt, a1.(i), e, loc)) (split_mozinfo ozinf (p1 f1))                                
+    | MOnce          (dt, f1, oinf, loc)                             ->
       (*print_endline "once";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e)) (split_moinfo oinf (p1 f1)) 
-    | MNUntil        (c, dt, f1, f2, muninf)                    ->
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MOnce(dt, a1.(i), e, loc)) (split_moinfo oinf (p1 f1)) 
+    | MNUntil        (c, dt, f1, f2, muninf, loc)                    ->
       (*print_endline "nuntil"; *)
-      let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c, dt, a1.(i), a2.(i), e)) (split_muninfo muninf (p1 f1) (p1 f2))   
-    | MUntil         (c, dt, f1, f2, muinf)                     ->
+      let a1 = (split_f f1) in let a2 = (split_f f2) in Array.mapi (fun i e -> MNUntil(c, dt, a1.(i), a2.(i), e, loc)) (split_muninfo muninf (p1 f1) (p1 f2))   
+    | MUntil         (c, dt, f1, f2, muinf, loc)                     ->
       (*print_endline "until";*)
       let a1 = (split_f f1) in
-      let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c, dt, a1.(i), a2.(i), e)) (split_muinfo muinf (p1 f1) (p1 f2))   
-    | MEventuallyZ   (dt, f1, mezinf)                           ->
+      let a2 = (split_f f2) in Array.mapi (fun i e -> MUntil(c, dt, a1.(i), a2.(i), e, loc)) (split_muinfo muinf (p1 f1) (p1 f2))   
+    | MEventuallyZ   (dt, f1, mezinf, loc)                           ->
       (*print_endline "eventuallyz";
       let vars = (p1 f1) in List.iter(fun v -> Printf.printf "%s, " (Predicate.string_of_var v)) vars; print_endline "";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e)) (split_mezinfo mezinf (p1 f1))            
-    | MEventually    (dt, f1, meinf)                            ->
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventuallyZ(dt, a1.(i), e, loc)) (split_mezinfo mezinf (p1 f1))            
+    | MEventually    (dt, f1, meinf, loc)                            ->
       (*print_endline "eventually";*)
-      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e)) (split_meinfo meinf (p1 f1))
+      let a1 = (split_f f1) in Array.mapi (fun i e -> MEventually(dt, a1.(i), e, loc)) (split_meinfo meinf (p1 f1))
     in
   split_f mf
     
@@ -754,23 +763,23 @@ let split_with_slicer slicer num_partitions mf =
 
 
 let rec print_ef = function
-  | ERel           (rel)                                      -> Printf.printf "Rel:"; Relation.print_rel "" rel; print_endline "";
-  | EPred          (p, comp, inf)                             -> print_endline "Pred:"; Queue.iter(fun e-> let _,_,r = e in Relation.print_rel "" r) inf; print_endline "";
-  | ELet           (p, comp, f1, f2, inf)                     -> print_endline "Let";print_ef f1; print_ef f2
-  | ENeg           (f1)                                       -> print_endline "Neg";print_ef f1
-  | EAnd           (c, f1, f2, ainf)                          -> print_endline "And";print_ef f1; print_ef f2
-  | EOr            (c, f1, f2, ainf)                          -> print_endline "Or";print_ef f1; print_ef f2
-  | EExists        (c, f1)                                    -> print_endline "Exists";print_ef f1
-  | EAggreg        (_inf, _comp, f1)                          -> print_endline "Aggreg";print_ef f1
-  | EAggOnce       (_inf, _state, f1)                         -> print_endline "AggOnce";print_ef f1
-  | EPrev          (dt, f1, pinf)                             -> print_endline "Prev";print_ef f1
-  | ENext          (dt, f1, ninf)                             -> print_endline "Next";print_ef f1
-  | ESinceA        (c2, dt, f1, f2, sainf)                    -> print_endline "SinceA";print_ef f1;print_ef f2
-  | ESince         (c2, dt, f1, f2, sinf)                     -> print_endline "Since";print_ef f1;print_ef f2
-  | EOnceA         (dt, f1, oainf)                            -> print_endline "OnceA";print_ef f1
-  | EOnceZ         (dt, f1, ozinf)                            -> print_endline "OnceZ";print_ef f1
-  | EOnce          (dt, f1, oinf)                             -> print_endline "Once";print_ef f1
-  | ENUntil        (c1, dt, f1, f2, muninf)                   -> print_endline "NUntil";print_ef f1;print_ef f2
-  | EUntil         (c1, dt, f1, f2, muinf)                    -> print_endline "Until";print_ef f1;print_ef f2
-  | EEventuallyZ   (dt, f1, mezinf)                           -> print_endline "EventuallyZ";print_ef f1
-  | EEventually    (dt, f1, meinf)                            -> print_endline "Eventually";print_ef f1
+  | ERel           (rel, _)                                      -> Printf.printf "Rel:"; Relation.print_rel "" rel; print_endline "";
+  | EPred          (p, comp, inf, _)                             -> print_endline "Pred:"; Queue.iter(fun e-> let _,_,r = e in Relation.print_rel "" r) inf; print_endline "";
+  | ELet           (p, comp, f1, f2, inf, _)                     -> print_endline "Let";print_ef f1; print_ef f2
+  | ENeg           (f1, _)                                       -> print_endline "Neg";print_ef f1
+  | EAnd           (c, f1, f2, ainf, _)                          -> print_endline "And";print_ef f1; print_ef f2
+  | EOr            (c, f1, f2, ainf, _)                          -> print_endline "Or";print_ef f1; print_ef f2
+  | EExists        (c, f1, _)                                    -> print_endline "Exists";print_ef f1
+  | EAggreg        (_inf, _comp, f1, _)                          -> print_endline "Aggreg";print_ef f1
+  | EAggOnce       (_inf, _state, f1, _)                         -> print_endline "AggOnce";print_ef f1
+  | EPrev          (dt, f1, pinf, _)                             -> print_endline "Prev";print_ef f1
+  | ENext          (dt, f1, ninf, _)                             -> print_endline "Next";print_ef f1
+  | ESinceA        (c2, dt, f1, f2, sainf, _)                    -> print_endline "SinceA";print_ef f1;print_ef f2
+  | ESince         (c2, dt, f1, f2, sinf, _)                     -> print_endline "Since";print_ef f1;print_ef f2
+  | EOnceA         (dt, f1, oainf, _)                            -> print_endline "OnceA";print_ef f1
+  | EOnceZ         (dt, f1, ozinf, _)                            -> print_endline "OnceZ";print_ef f1
+  | EOnce          (dt, f1, oinf, _)                             -> print_endline "Once";print_ef f1
+  | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> print_endline "NUntil";print_ef f1;print_ef f2
+  | EUntil         (c1, dt, f1, f2, muinf, _)                    -> print_endline "Until";print_ef f1;print_ef f2
+  | EEventuallyZ   (dt, f1, mezinf, _)                           -> print_endline "EventuallyZ";print_ef f1
+  | EEventually    (dt, f1, meinf, _)                            -> print_endline "Eventually";print_ef f1
