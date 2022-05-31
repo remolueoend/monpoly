@@ -401,3 +401,124 @@ let prerr_extf str ff =
   in
   prerr_string str;
   prerr_f_rec 0 ff
+
+let pp_print_comma ppf () =
+  Format.pp_print_string ppf ",";
+  Format.pp_print_space ppf ()
+
+let pp_print_term ppf t = Format.pp_print_string ppf (Predicate.string_of_term t)
+
+let pp_structure ppf ff =
+  let open Format in
+  let rec go = function
+    | ERel (rel, loc) ->
+        if Relation.is_empty rel then
+          fprintf ppf "@[<h>([%d]@ FALSE)@]" loc 
+        else
+          fprintf ppf "@[<h>([%d]@ TRUE)@]" loc 
+    | EPred ((p, _, args), _, _, loc) ->
+        fprintf ppf "@[<hov 2>([%d]@ %s(" loc p;
+        pp_print_list ~pp_sep:pp_print_comma pp_print_term ppf args;
+        fprintf ppf "@,)@]"
+    | ELet ((p, _, args), _, f1, f2, _, loc) ->
+        pp_open_hvbox ppf 0;
+        pp_open_hovbox ppf 4;
+        fprintf ppf "[%d]@ LET@ %s(" loc p;
+        pp_print_list ~pp_sep:pp_print_comma pp_print_term ppf args;
+        pp_print_string ppf ")";
+        pp_print_space ppf ();
+        pp_print_string ppf "=";
+        pp_close_box ppf ();
+        pp_print_break ppf 1 2;
+        go f1;
+        pp_print_space ppf ();
+        pp_print_string ppf "IN";
+        pp_print_space ppf ();
+        go f2;
+        pp_close_box ppf ()
+    | ENeg (f1, loc) ->
+        fprintf ppf "@[<b>([%d]@ NEG@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EAnd (_, f1, f2, _, loc) ->
+        fprintf ppf "@[<b>([%d] AND@;<1 2>" loc;
+        go f1;
+        pp_print_break ppf 1 2;
+        go f2;
+        fprintf ppf "@,)@]"
+    | EOr (_, f1, f2, _, loc) ->
+        fprintf ppf "@[<b>([%d] OR@;<1 2>" loc;
+        go f1;
+        pp_print_break ppf 1 2;
+        go f2;
+        fprintf ppf "@,)@]"
+    | EExists (_, f1, loc) ->
+        fprintf ppf "@[<b>([%d]@ EXISTS@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EAggreg (_, _, f1, loc) ->
+        fprintf ppf "@[<b>([%d]@ AGGREG@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EAggOnce (_, _, f1, loc) ->
+        fprintf ppf "@[<b>([%d]@ AGG ONCE@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EPrev (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ PREV@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | ENext (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ NEXT@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | ESinceA (_, _, f1, f2, _, loc) ->
+        fprintf ppf "@[<b>([%d] SINCE(A)@;<1 2>" loc;
+        go f1;
+        pp_print_break ppf 1 2;
+        go f2;
+        fprintf ppf "@,)@]"
+    | ESince (_, _, f1, f2, _, loc) ->
+        fprintf ppf "@[<b>([%d] SINCE@;<1 2>" loc;
+        go f1;
+        pp_print_break ppf 1 2;
+        go f2;
+        fprintf ppf "@,)@]"
+    | EOnceA (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ ONCE(A)@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EOnceZ (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ ONCE(Z)@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EOnce (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ ONCE@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | ENUntil (_, _, f1, f2, _, loc) ->
+        fprintf ppf "@[<b>([%d] NUNTIL@;<1 2>" loc;
+        go f1;
+        pp_print_break ppf 1 2;
+        go f2;
+        fprintf ppf "@,)@]"
+    | EUntil (_, _, f1, f2, _, loc) ->
+        fprintf ppf "@[<b>([%d] UNTIL@;<1 2>" loc;
+        go f1;
+        pp_print_break ppf 1 2;
+        go f2;
+        fprintf ppf "@,)@]"
+    | EEventuallyZ (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ EVENTUALLY(Z)@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+    | EEventually (_, f1, _, loc) ->
+        fprintf ppf "@[<b>([%d]@ EVENTUALLY@;<1 2>" loc;
+        go f1;
+        fprintf ppf "@,)@]"
+  in
+  go ff
+
+let extf_structure ff =
+  pp_structure Format.str_formatter ff;
+  Format.flush_str_formatter ()

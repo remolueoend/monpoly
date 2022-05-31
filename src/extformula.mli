@@ -83,3 +83,5 @@ val prerr_einfn: string -> einfo -> unit
 val prerr_ezinf: string -> ezinfo -> unit
 
 val prerr_extf: string -> extformula -> unit
+
+val extf_structure: extformula -> string

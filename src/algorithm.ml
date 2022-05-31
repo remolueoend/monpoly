@@ -1806,6 +1806,7 @@ let init_monitor_state dbschema fv f =
   assert (List.length fv_pos = List.length fv);
   let neval = Neval.create () in
   let extf, last = add_ext neval f in
+  Perf.profile_string Perf.tag_extformula (extf_structure extf);
   { s_posl = fv_pos;
     s_extf = extf;
     s_neval = neval;
