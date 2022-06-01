@@ -177,21 +177,13 @@ let end_profile () =
 
 (* New profiling infrastructure *)
 
-let tag_enter_main_loop = 0
-let tag_exit_main_loop = 1
-let tag_enter_read_tp = 2
-let tag_exit_read_tp = 3
-let tag_enter_eval_root = 4
-let tag_exit_eval_root = 5
-let tag_enter_compute = 8
-let tag_exit_compute = 9
+let loc_main_loop = -1
+let loc_read_tp = -2
+let loc_eval_root = -3
 
-(* Integer data: *)
-let tag_log_tp = 64
-let tag_eval_index = 65
-let tag_eval_size = 66
-
-(* Special: *)
+let tag_enter = 1
+let tag_exit = 2
+let tag_eval_result = 64
 let tag_extformula = 128
 
 let profile_enabled = ref false
@@ -212,24 +204,29 @@ let finalize_profile () =
       Buffer.output_buffer ch buf;
       close_out ch
 
-let profile_int tag loc x =
+let profile_int ~tag ~tp ~loc x =
   match !pbuf with
   | None -> ()
   | Some buf ->
       Buffer.add_uint8 buf tag;
+      Buffer.add_int32_le buf (Int32.of_int tp);
       Buffer.add_int32_le buf (Int32.of_int loc);
       Buffer.add_int32_le buf (Int32.of_int x)
 
-let profile_time tag loc =
+let profile_time ~tag ~tp ~loc =
   match !pbuf with
   | None -> ()
   | Some buf ->
       let now = Sys.time() in
       Buffer.add_uint8 buf tag;
+      Buffer.add_int32_le buf (Int32.of_int tp);
       Buffer.add_int32_le buf (Int32.of_int loc);
       Buffer.add_int64_le buf (Int64.bits_of_float now)
 
-let profile_string tag x =
+let profile_enter ~tp ~loc = profile_time ~tag:tag_enter ~tp ~loc
+let profile_exit ~tp ~loc = profile_time ~tag:tag_exit ~tp ~loc
+
+let profile_string ~tag x =
   match !pbuf with
   | None -> ()
   | Some buf ->

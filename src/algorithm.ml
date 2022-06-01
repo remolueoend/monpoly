@@ -542,7 +542,6 @@ let add_let_index f n rels =
 *)
 let rec eval f crt discard =
   let (q,tsq) = Neval.get_data crt in
-  Perf.profile_int Perf.tag_eval_index 0 q;
 
   if Misc.debugging Dbg_eval then
     begin
@@ -552,7 +551,7 @@ let rec eval f crt discard =
     end;
 
   let wrapper = function
-  | ERel (rel,loc) -> Some rel
+  | ERel (rel,loc) -> Some rel, loc
 
   | EPred (p,_,inf,loc) ->
     if Misc.debugging Dbg_eval then
@@ -562,13 +561,13 @@ let rec eval f crt discard =
         prerr_predinf  ": " inf
       end;
 
-    if Queue.is_empty inf
+    (if Queue.is_empty inf
     then None
     else begin
       let (cq,ctsq,rel) = Queue.pop inf in
       assert (cq = q && ctsq = tsq);
       Some rel
-    end
+    end), loc
 
   | ELet ((p, a, _), comp, f1, f2, inf, loc) ->
       let rec eval_f1 rels =
@@ -584,7 +583,7 @@ let rec eval f crt discard =
           | None -> rels
       in
       add_let_index f2 (p, a) (List.rev (eval_f1 []));
-      eval f2 crt discard
+      eval f2 crt discard, loc
 
   | ENeg (f1,loc) ->
     (match eval f1 crt discard with
@@ -597,17 +596,17 @@ let rec eval f crt discard =
        in
        Some res
      | None -> None
-    )
+    ), loc
 
   | EExists (comp,f1,loc) ->
     (match eval f1 crt discard with
      | Some rel ->
-       Perf.profile_time Perf.tag_enter_compute loc;
+       Perf.profile_enter ~tp:q ~loc;
        let result = comp rel in
-       Perf.profile_time Perf.tag_exit_compute loc;
+       Perf.profile_exit ~tp:q ~loc;
        Some result
      | None -> None
-    )
+    ), loc
 
   | EAnd (comp,f1,f2,inf,loc) ->
     (* we have to store rel1, if f2 cannot be evaluated *)
@@ -625,9 +624,9 @@ let rec eval f crt discard =
         (match eval f2 crt discard with
          | Some rel2 ->
            inf.arel <- None;
-           Perf.profile_time Perf.tag_enter_compute loc;
+           Perf.profile_enter ~tp:q ~loc;
            let result = comp rel1 rel2 in
-           Perf.profile_time Perf.tag_exit_compute loc;
+           Perf.profile_exit ~tp:q ~loc;
            Some result
          | None ->
            inf.arel <- Some rel1;
@@ -641,20 +640,20 @@ let rec eval f crt discard =
         | Some rel1 -> eval_and rel1
         | None -> None
        )
-    )
+    ), loc
 
   | EAggreg (inf, comp, f, loc) ->
     (match eval f crt discard with
      | Some rel ->
        Some (if discard then Relation.empty
          else begin
-           Perf.profile_time Perf.tag_enter_compute loc;
+           Perf.profile_enter ~tp:q ~loc;
            let result = comp rel in
-           Perf.profile_time Perf.tag_exit_compute loc;
+           Perf.profile_exit ~tp:q ~loc;
            warn_if_empty_aggreg inf result
          end)
      | None -> None
-    )
+    ), loc
 
   | EOr (comp, f1, f2, inf, loc) ->
     (* we have to store rel1, if f2 cannot be evaluated *)
@@ -663,9 +662,9 @@ let rec eval f crt discard =
        (match eval f2 crt discard with
         | Some rel2 ->
           inf.arel <- None;
-          Perf.profile_time Perf.tag_enter_compute loc;
+          Perf.profile_enter ~tp:q ~loc;
           let result = comp rel1 rel2 in
-          Perf.profile_time Perf.tag_exit_compute loc;
+          Perf.profile_exit ~tp:q ~loc;
           Some result
         | None -> None
        )
@@ -680,13 +679,13 @@ let rec eval f crt discard =
           )
         | None -> None
        )
-    )
+    ), loc
 
   | EPrev (intv,f1,inf,loc) ->
     if Misc.debugging Dbg_eval then
       Printf.eprintf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
 
-    if q = 0 then
+    (if q = 0 then
       Some Relation.empty
     else
       begin
@@ -701,7 +700,7 @@ let rec eval f crt discard =
           else
             Some Relation.empty
         | None -> None
-      end
+      end), loc
 
   | ENext (intv,f1,inf,loc) ->
     if Misc.debugging Dbg_eval then
@@ -714,7 +713,7 @@ let rec eval f crt discard =
         | _ -> ()
       end;
 
-    if Neval.is_last crt || inf.init then
+    (if Neval.is_last crt || inf.init then
       None
     else
       begin
@@ -728,7 +727,7 @@ let rec eval f crt discard =
           else
             Some Relation.empty
         | None -> None
-      end
+      end), loc
 
   | ESinceA (comp,intv,f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
@@ -738,9 +737,9 @@ let rec eval f crt discard =
       (match eval f1 crt false with
        | Some rel1 ->
          inf.sarel2 <- None;
-         Perf.profile_time Perf.tag_enter_compute loc;
+         Perf.profile_enter ~tp:q ~loc;
          let result = comp2 rel1 rel2 in
-         Perf.profile_time Perf.tag_exit_compute loc;
+         Perf.profile_exit ~tp:q ~loc;
          Some result
        | None ->
          inf.sarel2 <- Some rel2;
@@ -757,7 +756,7 @@ let rec eval f crt discard =
         | None -> None
         | Some rel2 -> eval_f1 rel2 update_sauxrels
        )
-    )
+    ), loc
 
   | ESince (comp,intv,f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
@@ -767,9 +766,9 @@ let rec eval f crt discard =
       (match eval f1 crt false with
        | Some rel1 ->
          inf.srel2 <- None;
-         Perf.profile_time Perf.tag_enter_compute loc;
+         Perf.profile_enter ~tp:q ~loc;
          let result = comp2 rel1 rel2 in
-         Perf.profile_time Perf.tag_exit_compute loc;
+         Perf.profile_exit ~tp:q ~loc;
          Some result
        | None ->
          inf.srel2 <- Some rel2;
@@ -786,7 +785,7 @@ let rec eval f crt discard =
         | None -> None
         | Some rel2 -> eval_f1 rel2 update_sauxrels
        )
-    )
+    ), loc
 
 
   | EOnceA ((c,_) as intv, f2, inf, loc) ->
@@ -796,7 +795,7 @@ let rec eval f crt discard =
        if Misc.debugging Dbg_eval then
          Printf.eprintf "[eval,OnceA] q=%d\n" q;
 
-       Perf.profile_time Perf.tag_enter_compute loc;
+       Perf.profile_enter ~tp:q ~loc;
        let result =
          if c = CBnd MFOTL.ts_null then
            begin
@@ -812,21 +811,21 @@ let rec eval f crt discard =
              Some inf.ores
            end
        in
-       Perf.profile_time Perf.tag_exit_compute loc;
+       Perf.profile_exit ~tp:q ~loc;
        result
-    )
+    ), loc
 
   | EAggOnce (inf, state, f, loc) ->
     (match eval f crt false with
      | Some rel ->
-       Perf.profile_time Perf.tag_enter_compute loc;
+       Perf.profile_enter ~tp:q ~loc;
        state#update tsq rel;
        let result = Some (if discard then Relation.empty
          else warn_if_empty_aggreg inf state#get_result) in
-       Perf.profile_time Perf.tag_exit_compute loc;
+       Perf.profile_exit ~tp:q ~loc;
        result
      | None -> None
-    )
+    ), loc
 
   (* We distinguish between whether the left margin of [intv] is
      zero or not, as we need to have two different ways of
@@ -841,11 +840,11 @@ let rec eval f crt discard =
        if Misc.debugging Dbg_eval then
          Printf.eprintf "[eval,OnceZ] q=%d\n" q;
 
-       Perf.profile_time Perf.tag_enter_compute loc;
+       Perf.profile_enter ~tp:q ~loc;
        let result = update_once_zero intv q tsq inf rel2 discard in
-       Perf.profile_time Perf.tag_exit_compute loc;
+       Perf.profile_exit ~tp:q ~loc;
        Some result
-    )
+    ), loc
 
   | EOnce (intv,f2,inf,loc) ->
     (match eval f2 crt false with
@@ -854,14 +853,14 @@ let rec eval f crt discard =
        if Misc.debugging Dbg_eval then
          Printf.eprintf "[eval,Once] q=%d\n" q;
 
-       Perf.profile_time Perf.tag_enter_compute loc;
+       Perf.profile_enter ~tp:q ~loc;
        if not (Relation.is_empty rel2) then
          dllist_add_last inf.oauxrels tsq rel2;
 
        let result = update_once intv tsq inf discard in
-       Perf.profile_time Perf.tag_exit_compute loc;
+       Perf.profile_exit ~tp:q ~loc;
        Some result
-    )
+    ), loc
 
   | EUntil (comp,intv,f1,f2,inf,loc) ->
     (* contents of inf:  (f = f1 UNTIL_intv f2)
@@ -883,13 +882,13 @@ let rec eval f crt discard =
 
     if inf.ufirst then
       begin
-        Perf.profile_time Perf.tag_enter_compute loc;
+        Perf.profile_enter ~tp:q ~loc;
         inf.ufirst <- false;
         let (i,_) = Neval.get_data inf.ulast in
         update_old_until q tsq i intv inf discard;
         if Misc.debugging Dbg_eval then
           prerr_uinf "[eval,Until,after_update] inf: " inf;
-        Perf.profile_time Perf.tag_exit_compute loc;
+        Perf.profile_exit ~tp:q ~loc
       end;
 
     (* we first evaluate f2, and then f1 *)
@@ -897,9 +896,9 @@ let rec eval f crt discard =
     let rec evalf1 i tsi rel2 ncrt =
       (match eval f1 ncrt false with
        | Some rel1 ->
-         Perf.profile_time Perf.tag_enter_compute loc;
+         Perf.profile_enter ~tp:q ~loc;
          update_until q tsq i tsi intv rel1 rel2 inf comp discard;
-         Perf.profile_time Perf.tag_exit_compute loc;
+         Perf.profile_exit ~tp:q ~loc;
          inf.urel2 <- None;
          inf.ulast <- ncrt;
          evalf2 ()
@@ -937,7 +936,7 @@ let rec eval f crt discard =
             )
           end
     in
-    evalf2()
+    evalf2(), loc
 
   | ENUntil (comp,intv,f1,f2,inf,loc) ->
     (* contents of inf:  (f = NOT f1 UNTIL_intv f2)
@@ -986,7 +985,7 @@ let rec eval f crt discard =
 
         NOTE: we could evaluate earlier with respect to f1, also in Until *)
       begin
-        Perf.profile_time Perf.tag_enter_compute loc;
+        Perf.profile_enter ~tp:q ~loc;
         (* we iteratively compute the union of the relations [f1]_j
           with q <= j <= j0-1, where j0 is the first index which
           satisfies the temporal constraint relative to q *)
@@ -1049,11 +1048,11 @@ let rec eval f crt discard =
             end
         in
         iter2();
-        Perf.profile_time Perf.tag_exit_compute loc;
-        Some !res
+        Perf.profile_exit ~tp:q ~loc;
+        Some !res, loc
       end
     else
-      None
+      None, loc
 
 
 
@@ -1077,7 +1076,7 @@ let rec eval f crt discard =
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
-            Perf.profile_time Perf.tag_enter_compute loc;
+            Perf.profile_enter ~tp:q ~loc;
             if Misc.debugging Dbg_eval then
               Printf.eprintf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
@@ -1141,7 +1140,7 @@ let rec eval f crt discard =
                 Some (Sliding.stree_res newt)
               end
             in
-            Perf.profile_time Perf.tag_exit_compute loc;
+            Perf.profile_exit ~tp:q ~loc;
             result
           end
         else (* we don't have the lookahead -> we cannot compute the result *)
@@ -1156,7 +1155,7 @@ let rec eval f crt discard =
               ez_update ()
           end
     in
-    ez_update ()
+    ez_update (), loc
 
 
   | EEventually (intv,f2,inf,loc) ->
@@ -1170,9 +1169,9 @@ let rec eval f crt discard =
     (* we could in principle do this update less often: that is, we
        can do after each evaluation, but we need to find out the
        value of ts_{q+1} *)
-    Perf.profile_time Perf.tag_enter_compute loc;
+    Perf.profile_enter ~tp:q ~loc;
     elim_old_eventually q tsq intv inf;
-    Perf.profile_time Perf.tag_exit_compute loc;
+    Perf.profile_exit ~tp:q ~loc;
 
     let rec e_update () =
       if Neval.is_last inf.elastev then
@@ -1184,7 +1183,7 @@ let rec eval f crt discard =
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
-            Perf.profile_time Perf.tag_enter_compute loc;
+            Perf.profile_enter ~tp:q ~loc;
             if Misc.debugging Dbg_eval then
               Printf.eprintf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
@@ -1232,7 +1231,7 @@ let rec eval f crt discard =
                   Some Relation.empty
                 end
             in
-            Perf.profile_time Perf.tag_exit_compute loc;
+            Perf.profile_exit ~tp:q ~loc;
             result
           end
         else
@@ -1248,14 +1247,14 @@ let rec eval f crt discard =
               e_update ()
           end
     in
-    e_update ()
+    e_update (), loc
   in
-  let result = wrapper f in
+  let result, loc = wrapper f in
   if !Perf.profile_enabled then
     begin
       match result with
       | None -> ()
-      | Some rel -> Perf.profile_int Perf.tag_eval_size q
+      | Some rel -> Perf.profile_int ~tag:Perf.tag_eval_result ~tp:q ~loc
           (Relation.cardinal rel)
     end;
   result
@@ -1717,9 +1716,9 @@ let process_index state =
     let (q, tsq) = Neval.get_data crt in
     if tsq < MFOTL.ts_max then
       begin
-        Perf.profile_time Perf.tag_enter_eval_root 0;
+        Perf.profile_enter ~tp:q ~loc:Perf.loc_eval_root;
         let result = eval state.s_extf crt false in
-        Perf.profile_time Perf.tag_exit_eval_root 0;
+        Perf.profile_exit ~tp:q ~loc:Perf.loc_eval_root;
         match result with
         | Some rel ->
           show_results state.s_posl state.s_in_tp q tsq rel;
@@ -1744,8 +1743,7 @@ module Monitor = struct
 
   let begin_tp ctxt ts =
     ctxt.s_log_tp <- ctxt.s_log_tp + 1;
-    Perf.profile_int Perf.tag_log_tp 0 ctxt.s_log_tp;
-    Perf.profile_time Perf.tag_enter_read_tp 0;
+    Perf.profile_enter ~tp:ctxt.s_log_tp ~loc:Perf.loc_read_tp;
     if ts >= ctxt.s_log_ts then
       ctxt.s_log_ts <- ts
     else
@@ -1802,7 +1800,7 @@ module Monitor = struct
       Hashtbl.clear ctxt.s_db
     else
       eval_tp ctxt;
-    Perf.profile_time Perf.tag_exit_read_tp 0
+    Perf.profile_exit ~tp:ctxt.s_log_tp ~loc:Perf.loc_read_tp
 
   let command ctxt name params =
     match name with
@@ -1878,7 +1876,7 @@ let init_monitor_state dbschema fv f =
   assert (List.length fv_pos = List.length fv);
   let neval = Neval.create () in
   let extf, last = add_ext neval f in
-  Perf.profile_string Perf.tag_extformula (extf_structure extf);
+  Perf.profile_string ~tag:Perf.tag_extformula (extf_structure extf);
   { s_posl = fv_pos;
     s_extf = extf;
     s_neval = neval;
@@ -1896,9 +1894,9 @@ let monitor_string dbschema log fv f =
 
 let monitor dbschema logfile fv f =
   let ctxt = init_monitor_state dbschema fv f in
-  Perf.profile_time Perf.tag_enter_main_loop 0;
+  Perf.profile_enter ~tp:(-1) ~loc:Perf.loc_main_loop;
   ignore (Parser.parse_file dbschema logfile ctxt);
-  Perf.profile_time Perf.tag_exit_main_loop 0
+  Perf.profile_exit ~tp:(-1) ~loc:Perf.loc_main_loop
 
 (* Unmarshals formula & state from resume file and then starts processing
    logfile. *)
