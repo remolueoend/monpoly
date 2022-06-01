@@ -1743,7 +1743,6 @@ module Monitor = struct
 
   let begin_tp ctxt ts =
     ctxt.s_log_tp <- ctxt.s_log_tp + 1;
-    Perf.profile_enter ~tp:ctxt.s_log_tp ~loc:Perf.loc_read_tp;
     if ts >= ctxt.s_log_ts then
       ctxt.s_log_ts <- ts
     else
