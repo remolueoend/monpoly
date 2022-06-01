@@ -53,23 +53,29 @@ val profile_enter: int -> unit
 val profile_exit: int -> 'a -> 'a
 val end_profile: unit -> unit
 
-val tag_enter_add_index: int
-val tag_exit_add_index: int
-val tag_enter_eval: int
-val tag_exit_eval: int
-val tag_enter_show_results: int
-val tag_exit_show_results: int
-val tag_enter_compute: int
-val tag_exit_compute: int
-val tag_enter_update: int
-val tag_exit_update: int
-val tag_pred_size: int
-val tag_eval_result: int
+(* New profiling infrastructure *)
+
+(* Timestamps: *)
+val tag_enter_main_loop: int
+val tag_exit_main_loop: int
+val tag_enter_read_tp: int
+val tag_exit_read_tp: int
+val tag_enter_eval_root: int
+val tag_exit_eval_root: int
+val tag_enter_compute: int  (* loc = extformula node *)
+val tag_exit_compute: int  (* loc = extformula node *)
+
+(* Integer data: *)
+val tag_log_tp: int
+val tag_eval_index: int  (* loc = extformula node *)
+val tag_eval_size: int  (* loc = extformula node *)
+
+(* String data: *)
 val tag_extformula: int
 
 val profile_enabled: bool ref
 val enable_profile: string -> unit
 val finalize_profile: unit -> unit
-val profile_int32: int -> int -> Int32.t -> unit
-val profile_now: int -> int -> unit
+val profile_int: int -> int -> int -> unit
+val profile_time: int -> int -> unit
 val profile_string: int -> string -> unit

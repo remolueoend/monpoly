@@ -177,21 +177,19 @@ let end_profile () =
 
 (* New profiling infrastructure *)
 
-(* Time measurements: *)
-let tag_enter_add_index = 1 (* loc = log index *)
-let tag_exit_add_index = 2
-let tag_enter_eval = 3 (* loc = timepoint *)
-let tag_exit_eval = 4
-let tag_enter_show_results = 5 (* loc = timepoint *)
-let tag_exit_show_results = 6
-let tag_enter_compute = 7 (* loc = extformula node *)
-let tag_exit_compute = 8 (* loc = extformula node *)
-let tag_enter_update = 9 (* loc = extformula node *)
-let tag_exit_update = 10 (* loc = extformula node *)
+let tag_enter_main_loop = 0
+let tag_exit_main_loop = 1
+let tag_enter_read_tp = 2
+let tag_exit_read_tp = 3
+let tag_enter_eval_root = 4
+let tag_exit_eval_root = 5
+let tag_enter_compute = 8
+let tag_exit_compute = 9
 
-(* Relation sizes: *)
-let tag_pred_size = 64 (* loc = extformula node *)
-let tag_eval_result = 65 (* loc = extformula node *)
+(* Integer data: *)
+let tag_log_tp = 64
+let tag_eval_index = 65
+let tag_eval_size = 66
 
 (* Special: *)
 let tag_extformula = 128
@@ -214,15 +212,15 @@ let finalize_profile () =
       Buffer.output_buffer ch buf;
       close_out ch
 
-let profile_int32 tag loc x =
+let profile_int tag loc x =
   match !pbuf with
   | None -> ()
   | Some buf ->
       Buffer.add_uint8 buf tag;
       Buffer.add_int32_le buf (Int32.of_int loc);
-      Buffer.add_int32_le buf x
+      Buffer.add_int32_le buf (Int32.of_int x)
 
-let profile_now tag loc =
+let profile_time tag loc =
   match !pbuf with
   | None -> ()
   | Some buf ->
