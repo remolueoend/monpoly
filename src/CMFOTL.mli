@@ -8,6 +8,7 @@ type cst =
   | Float of float
   (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
   | Regexp of (string * Str.regexp)
+  | Record of (string * ((string * cst) list))
 
 type tcst = Signature_ast.ty
 
