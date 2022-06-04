@@ -25,13 +25,13 @@ and ty = TInt | TStr | TFloat | TRegexp | TRef of string
     1. inline: tags records which have been declared as inline types in the signature file
        and have been extracted.
     2. event: tags  predicates which are considered when matching against top-level JSON log entries. *)
-type record_attrs = {inline: bool; event: bool}
+type product_attrs = {inline: bool; event: bool}
 
 (** represents a top level declaration in a signature.
     Either a predicate (e.g. q(int, string)) or a record type *)
 type decl =
   | Predicate of pred_decl node
-  | Record of record_attrs * record_decl node
+  | ProductSort of product_attrs * record_decl node
 
 (** top level type of a signature file: Represents a flat list of declarations. *)
 type signatures = decl list
@@ -44,7 +44,7 @@ let string_of_ty = function
   | TRegexp -> "TRegexp"
   | TRef ctor -> ctor
 
-let string_of_record (attrs : record_attrs) ((id, fields) : record_decl) =
+let string_of_record (attrs : product_attrs) ((id, fields) : record_decl) =
   let field_to_str {elt= {fname; ftyp}; _} =
     Printf.sprintf "%s: %s" fname (string_of_ty ftyp) in
   let fields_to_str = List.map field_to_str fields |> String.concat ", " in
@@ -66,7 +66,7 @@ let string_of_predicate ((id, args) : pred_decl) =
 let string_of_decl decl =
   match decl with
   | Predicate n -> string_of_predicate n.elt
-  | Record (attrs, {elt; _}) -> string_of_record attrs elt
+  | ProductSort (attrs, {elt; _}) -> string_of_record attrs elt
 
 (** The types of this module are the results of parsing the signature file.
     The signatures used throughout the application need to be transpiled fist:
@@ -128,7 +128,7 @@ let transpile_signatures (s : ParseTree.signatures) : signatures =
             let new_field = no_node {fname; ftyp= TRef extr_type_name} in
             ( new_field :: fs
             , s
-              @ Record ({inline= true; event= false}, no_node extracted_decl)
+              @ ProductSort ({inline= true; event= false}, no_node extracted_decl)
                 :: new_sigs )
         | _ -> ({elt= {fname; ftyp= transpile_ty ftyp}; loc} :: fs, s) )
       fields ([], []) in
@@ -149,7 +149,7 @@ let transpile_signatures (s : ParseTree.signatures) : signatures =
         | Record (is_event, {elt= name, fields; loc}) ->
             let new_fields, sigs = extract_inline_types name fields in
             sigs
-            @ Record
+            @ ProductSort
                 ( {inline= false; event= is_event}
                 , {elt= (name, new_fields); loc} )
               :: acc )

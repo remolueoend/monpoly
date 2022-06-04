@@ -63,6 +63,7 @@ type cst =
   | Float of float
   (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
   | Regexp of (string * Str.regexp)
+  | Record of (string * (string * cst) list)
 
 type tcst = Signature_ast.ty
 
@@ -77,6 +78,7 @@ let type_of_cst = function
   | Str _ -> TStr
   | Float _ -> TFloat
   | Regexp _ -> TRegexp
+  | Record (ctor, _) -> TRef ctor
 
 (** Γ *)
 type symbol_table = (cplx_term * tsymb) list
@@ -362,6 +364,10 @@ let rec string_of_cst c =
   | Float f -> Printf.sprintf "%f" f
   | Str s -> format_string s
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
+  | Record (ctor, fields) ->
+      Printf.sprintf "%s {%s}" ctor
+        ( List.map (fun (n, v) -> n ^ ": " ^ string_of_cst v) fields
+        |> String.concat ", " )
 
 let rec string_of_type (tctxt : type_context) = function
   | TCst t -> string_of_tcst tctxt t
@@ -1671,7 +1677,8 @@ module Monitorability = struct
       match (t1, t2) with
       | Var x, t when Misc.subset (tvars t) fv1 -> true
       | t, Var x when Misc.subset (tvars t) fv1 -> true
-      (* TODO: is this valid for projections? *)
+      (* TODO: is this valid for projections?
+         Report(u) AND u.user = r.user, bc. r is free on right but not on left *)
       | Proj (b, _), t when Misc.subset (tvars t) fv1 -> true
       | t, Proj (b, _) when Misc.subset (tvars t) fv1 -> true
       | _ -> Misc.subset (free_vars f) fv1 )
@@ -1725,14 +1732,17 @@ module Monitorability = struct
     | Equal (t1, t2) -> (
       match (t1, t2) with
       | Var _, Cst _ | Cst _, Var _ | Cst _, Cst _ -> (true, None)
-      (* TODO: is this valid for projections? *)
+      (* TODO: is this valid for projections?
+         Required for: u.url = "..." AND Request(r) *)
       | Proj _, Cst _ | Cst _, Proj _ -> (true, None)
       | _ -> (false, Some (f, msg_EQUAL)) )
     | Less _ | LessEq _ | Substring _ | Matches _ -> (false, Some (f, msg_LESS))
     | Neg (Equal (t1, t2)) -> (
       match (t1, t2) with
       | Var x, Var y when x = y -> (true, None)
-      (* TODO: is this valid for projections? *)
+      (* TODO: is this valid for projections?
+         Required for same case as above: Constraints guarantee that the expanded variables
+         will be equal, covering the variable case above. *)
       | Proj (xb, xf), Proj (yb, yf) when xb = yb && xf = yf -> (true, None)
       | Cst _, Cst _ -> (true, None)
       | _ -> (false, Some (f, msg_NOT_EQUAL)) )
@@ -1740,7 +1750,8 @@ module Monitorability = struct
         let tlist = get_predicate_args p in
         if
           List.for_all
-            (* TODO: is this valid for projections? *)
+            (* TODO: is this valid for projections?
+               Required for: isBad(r.url) *)
               (fun t ->
               match t with Var _ | Cst _ | Proj _ -> true | _ -> false )
             tlist
@@ -1860,7 +1871,7 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
               extr_nodes args |> List.map (fun {atyp; _} -> lift_type atyp)
             in
             ((name, List.length args), lifted_args) :: acc
-        | Record (attrs, {elt= name, fields; _}) ->
+        | ProductSort (attrs, {elt= name, fields; _}) ->
             (* do not add inline records to predicate schema: *)
             if not attrs.inline then
               let rec_pred = ((name, 1), [TCst (TRef name)]) in
@@ -1873,7 +1884,7 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
       (fun acc decl ->
         match decl with
         | Predicate _ -> acc
-        | Record (attrs, {elt= name, fields; _}) ->
+        | ProductSort (attrs, {elt= name, fields; _}) ->
             ( name
             , ( attrs.inline
               , extr_nodes fields
@@ -1956,7 +1967,7 @@ let let_body_ctx ((_, _, ts) : cplx_predicate) (ctx : context) (f : cplx_formula
   scoped_symbol_table arg_vars (sch, tctxt, []) f
 
 (** Returns the type of the given term derived from the provided symbol table.
-    Only implemented for variables and projections. *)
+    Only implemented for constants, variables and projections. *)
 let rec type_of_term (ctx : context) (t : cplx_term) : tcst =
   let sch, tctxt, vars = ctx in
   let concrete_ty = function
@@ -2151,6 +2162,7 @@ let compile_cst (cst : cst) : Predicate.cst =
   | Float v -> Float v
   | Str v -> Str v
   | Regexp v -> Regexp v
+  | Record _ -> failwith "invalid state"
 
 let rec compile_term (input : cplx_term) : Predicate.term =
   match input with

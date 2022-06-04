@@ -121,7 +121,7 @@
 %}
 
 %token FALSE TRUE
-%token LPA RPA LSB RSB COM SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
+%token LPA RPA LSB RSB LCB RCB COM COL SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
 %token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE R2S S2R I2S S2I F2S S2F
 %token <string> STR STR_CST REGEXP_CST
 %token <Z.t> INT
@@ -298,7 +298,15 @@ cst:
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }
   | REGEXP_CST              { f "cst(regex)"; compile_regexp $1 }
+  | pred LPA LCB rec_fields RCB RPA { f "cst(record)"; Record ($1, $4) }
 
+rec_fields:
+  | rec_field COM rec_fields { f "recfields(list)" ; $1 :: $3 }
+  | rec_field                { f "recfields(end)" ; [$1]}
+  |                          { f "recfields()" ; []}
+
+rec_field:
+  | STR COL cst             { f "rec_field"; ($1, $3) }
 
 termlist:
   | term COM termlist       { f "termlist(list)"; $1 :: $3 }
