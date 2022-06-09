@@ -86,7 +86,8 @@ type symbol_table = (cplx_term * tsymb) list
 (** Δ *)
 and predicate_schema = ((var * int) * tsymb list) list
 
-(** T *)
+(** T
+    a map from sort name to inline-flag and sort fields. *)
 and type_context = (var * (bool * (var * tcst) list)) list
 
 and context = predicate_schema * type_context * symbol_table
@@ -141,7 +142,7 @@ let pvars (p : cplx_predicate) =
       | _ -> get_vars assign res args' ) in
   get_vars [] [] (get_predicate_args p)
 
-let rec tvars = function
+let rec tvars : cplx_term -> var list = function
   | Var v -> [v]
   | Cst c -> []
   | F2i t
@@ -273,7 +274,10 @@ let rec get_var_usage (f : cplx_formula) (var : var) : TermSet.t =
 
 let unixts = ref false
 
-let rec free_vars = function
+(** Returns a list of free variables in the given formula.
+    One can provide an optional tvars function to be used,
+    returning the free variables for a given term. Default is `tvars`. *)
+let rec free_vars ?(tvars = tvars) = function
   | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
       Misc.union (tvars t1) (tvars t2)
   | Matches (t1, t2, tl) ->
@@ -282,13 +286,13 @@ let rec free_vars = function
         (fun s t -> match t with None -> s | Some t -> Misc.union s (tvars t))
         fv tl
   | Pred p -> pvars p
-  | Let (_, _, f) -> free_vars f
-  | LetPast (_, _, f) -> free_vars f
-  | Neg f -> free_vars f
+  | Let (_, _, f) -> free_vars ~tvars f
+  | LetPast (_, _, f) -> free_vars ~tvars f
+  | Neg f -> free_vars ~tvars f
   | And (f1, f2) | Or (f1, f2) | Implies (f1, f2) | Equiv (f1, f2) ->
-      Misc.union (free_vars f1) (free_vars f2)
+      Misc.union (free_vars ~tvars f1) (free_vars ~tvars f2)
   | Exists (vl, f) | ForAll (vl, f) ->
-      List.filter (fun x -> not (List.mem x vl)) (free_vars f)
+      List.filter (fun x -> not (List.mem x vl)) (free_vars ~tvars f)
   | Aggreg (rty, y, op, x, glist, f) ->
       y :: (List.map tvars glist |> List.flatten)
   | Prev (intv, f)
@@ -297,17 +301,17 @@ let rec free_vars = function
    |Once (intv, f)
    |Always (intv, f)
    |PastAlways (intv, f) ->
-      free_vars f
+      free_vars ~tvars f
   | Since (intv, f1, f2) | Until (intv, f1, f2) ->
-      Misc.union (free_vars f2) (free_vars f1)
-  | Frex (intv, r) | Prex (intv, r) -> free_re_vars r
+      Misc.union (free_vars ~tvars f2) (free_vars ~tvars f1)
+  | Frex (intv, r) | Prex (intv, r) -> free_re_vars ~tvars r
 
-and free_re_vars = function
+and free_re_vars ?(tvars = tvars) = function
   | Wild -> []
-  | Test f -> free_vars f
+  | Test f -> free_vars ~tvars f
   | Concat (r1, r2) | Plus (r1, r2) ->
-      Misc.union (free_re_vars r1) (free_re_vars r2)
-  | Star r -> free_re_vars r
+      Misc.union (free_re_vars ~tvars r1) (free_re_vars ~tvars r2)
+  | Star r -> free_re_vars ~tvars r
 
 let rec is_mfodl = function
   | Equal (t1, t2)
@@ -682,6 +686,71 @@ let string_of_parenthesized_formula str g =
             ^ ")"
         | _ -> failwith "[print_formula] impossible" ) ) in
   str ^ string_f_rec true false g
+
+let string_of_delta (tctxt : type_context) (sch : predicate_schema) : string =
+  if List.length sch > 0 then
+    let string_of_types ts =
+      if List.length ts > 0 then
+        let ft = List.hd ts in
+        List.fold_left
+          (fun a e -> a ^ ", " ^ string_of_type tctxt e)
+          (string_of_type tctxt ft) (List.tl ts)
+      else "()" in
+    let fp, fs = List.hd sch in
+    List.fold_left
+      (fun a (p, ts) -> a ^ ", " ^ fst p ^ "(" ^ string_of_types ts ^ ")")
+      (fst fp ^ "(" ^ string_of_types fs ^ ")")
+      (List.tl sch)
+  else "_"
+
+let string_of_gamma (tctxt : type_context) (vars : symbol_table) =
+  if List.length vars > 0 then
+    let fv, ft = List.hd vars in
+    List.fold_left
+      (fun a (v, t) ->
+        a ^ ", " ^ string_of_term v ^ ":" ^ string_of_type tctxt t )
+      (string_of_term fv ^ ":" ^ string_of_type tctxt ft)
+      (List.tl vars)
+  else "_"
+
+(** Returns the type of the given term derived from the provided symbol table.
+    Only implemented for constants, variables and projections. *)
+let rec type_of_term (ctx : context) (t : cplx_term) : tcst =
+  let _, tctxt, vars = ctx in
+  let concrete_ty = function
+    | TCst t -> t
+    | ty ->
+        failwith
+        @@ Printf.sprintf
+             "type_of_term: Expected %s to be of concrete type, found %s"
+             (string_of_term t) (string_of_type tctxt ty) in
+  match t with
+  | Var v -> (
+    match List.assoc_opt (Var v) vars with
+    | Some tsymb -> concrete_ty tsymb
+    | None ->
+        failwith
+        @@ Printf.sprintf "Cannov find var %s in symbol table %s" v
+             (string_of_gamma tctxt vars) )
+  | Proj (base, field) ->
+      let base_ctor =
+        match type_of_term ctx base with
+        | TRef ctor -> ctor
+        | t ->
+            failwith
+            @@ Printf.sprintf
+                 "type_of_term: exptected base to be TRef, found %s"
+                 (string_of_ty t) in
+      let base_fields = List.assoc base_ctor tctxt |> snd in
+      List.assoc field base_fields
+  | Cst (Int _) -> TInt
+  | Cst (Str _) -> TStr
+  | Cst (Float _) -> TFloat
+  | Cst (Regexp _) -> TRegexp
+  | t ->
+      failwith
+      @@ Printf.sprintf "type_of_term: not implemented for %s"
+           (string_of_term t)
 
 (* TYPE CHECKING *)
 
@@ -1142,32 +1211,6 @@ let rec check_unresolved_terms (pred : string option) (vars : symbol_table) :
         (match pred with Some n -> " in predicate '" ^ n ^ "'" | None -> "")
         terms_as_str in
     failwith msg
-
-let string_of_delta (tctxt : type_context) (sch : predicate_schema) : string =
-  if List.length sch > 0 then
-    let string_of_types ts =
-      if List.length ts > 0 then
-        let ft = List.hd ts in
-        List.fold_left
-          (fun a e -> a ^ ", " ^ string_of_type tctxt e)
-          (string_of_type tctxt ft) (List.tl ts)
-      else "()" in
-    let fp, fs = List.hd sch in
-    List.fold_left
-      (fun a (p, ts) -> a ^ ", " ^ fst p ^ "(" ^ string_of_types ts ^ ")")
-      (fst fp ^ "(" ^ string_of_types fs ^ ")")
-      (List.tl sch)
-  else "_"
-
-let string_of_gamma (tctxt : type_context) (vars : symbol_table) =
-  if List.length vars > 0 then
-    let fv, ft = List.hd vars in
-    List.fold_left
-      (fun a (v, t) ->
-        a ^ ", " ^ string_of_term v ^ ":" ^ string_of_type tctxt t )
-      (string_of_term fv ^ ":" ^ string_of_type tctxt ft)
-      (List.tl vars)
-  else "_"
 
 (*
 Type judgement is of the form (Δ;T;Γ) ⊢ t::τ  
@@ -1630,6 +1673,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
 let first_debug = ref true
 
 (** internal module for validating the monitorability of an extended formula. *)
+
 module Monitorability = struct
   let msg_PRED =
     "In subformulas p(t1,...,tn) each term ti should be a variable or a \
@@ -1670,26 +1714,64 @@ module Monitorability = struct
     "In subformulas of the form phi OR psi, phi and psi should have the same \
      set of free variables."
 
+  (** returns an extension of free variables used for validating the monitorability
+    of extended formulas. The mapping is the same as `tvars`, except for the case of
+    complex variables/projections: In these cases, the set of all recursive fields
+    as variables are returned instead.
+
+    Example: mtvars ctx r.user -> ["r.user.name"; "r.user.address", ...]*)
+  let rec mtvars (ctx : context) = function
+    | Cst c -> []
+    | F2i t
+     |I2f t
+     |I2s t
+     |S2i t
+     |F2s t
+     |S2f t
+     |DayOfMonth t
+     |Month t
+     |Year t
+     |FormatDate t
+     |UMinus t
+     |R2s t
+     |S2r t ->
+        mtvars ctx t
+    | Plus (t1, t2)
+     |Minus (t1, t2)
+     |Mult (t1, t2)
+     |Div (t1, t2)
+     |Mod (t1, t2) ->
+        mtvars ctx t1 @ mtvars ctx t2
+    | (Var _ as t) | (Proj _ as t) -> (
+        let ty = type_of_term ctx t in
+        match ty with
+        | TInt | TFloat | TStr | TRegexp -> [string_of_term t]
+        | TRef ctor ->
+            let _, tctxt, _ = ctx in
+            let fields = List.assoc ctor tctxt |> snd in
+            List.map (fun (fname, _) -> mtvars ctx (Proj (t, fname))) fields
+            |> List.flatten )
+
   (* In these special cases, no evaluation is needed for the formula [f2]. *)
-  let is_special_case fv1 f =
+  let is_special_case (ctx : context) fv1 f =
     match f with
     | Equal (t1, t2) -> (
       match (t1, t2) with
-      | Var x, t when Misc.subset (tvars t) fv1 -> true
-      | t, Var x when Misc.subset (tvars t) fv1 -> true
-      (* TODO: is this valid for projections?
-         Report(u) AND u.user = r.user, bc. r is free on right but not on left *)
-      | Proj (b, _), t when Misc.subset (tvars t) fv1 -> true
-      | t, Proj (b, _) when Misc.subset (tvars t) fv1 -> true
-      | _ -> Misc.subset (free_vars f) fv1 )
+      | Var x, t when Misc.subset (mtvars ctx t) fv1 -> true
+      | t, Var x when Misc.subset (mtvars ctx t) fv1 -> true
+      (* TODO: is this valid for projections:
+         Use new mtvars, but still cover projections *)
+      | Proj (b, _), t when Misc.subset (mtvars ctx t) fv1 -> true
+      | t, Proj (b, _) when Misc.subset (mtvars ctx t) fv1 -> true
+      | _ -> Misc.subset (free_vars ~tvars:(mtvars ctx) f) fv1 )
     | Matches (t1, t2, tl) ->
-        Misc.subset (tvars t1) fv1
-        && Misc.subset (tvars t2) fv1
+        Misc.subset (mtvars ctx t1) fv1
+        && Misc.subset (mtvars ctx t2) fv1
         && List.for_all
              (function
                | None -> true
                | Some (Var _) -> true
-               | Some t -> Misc.subset (tvars t) fv1 )
+               | Some t -> Misc.subset (mtvars ctx t) fv1 )
              tl
     | Less (_, _)
      |LessEq (_, _)
@@ -1699,7 +1781,7 @@ module Monitorability = struct
      |Neg (LessEq (_, _))
      |Neg (Substring (_, _))
      |Neg (Matches (_, _, _)) ->
-        Misc.subset (free_vars f) fv1
+        Misc.subset (free_vars ~tvars:(mtvars ctx) f) fv1
     | _ -> false
 
   let is_and_relop = function
@@ -1727,14 +1809,14 @@ module Monitorability = struct
     TSF safe range but not monitorable since our propagation function
     is still quite limited.
   *)
-  let rec is_monitorable f =
+  let rec is_monitorable (ctx : context) f =
     match f with
     | Equal (t1, t2) -> (
       match (t1, t2) with
       | Var _, Cst _ | Cst _, Var _ | Cst _, Cst _ -> (true, None)
-      (* TODO: is this valid for projections?
-         Required for: u.url = "..." AND Request(r) *)
-      | Proj _, Cst _ | Cst _, Proj _ -> (true, None)
+      (* TODO: is it correct to return always false for projections?
+         e.g. `u.url = "..."` by itself *)
+      | Proj _, Cst _ | Cst _, Proj _ -> (false, Some (f, msg_EQUAL))
       | _ -> (false, Some (f, msg_EQUAL)) )
     | Less _ | LessEq _ | Substring _ | Matches _ -> (false, Some (f, msg_LESS))
     | Neg (Equal (t1, t2)) -> (
@@ -1758,55 +1840,55 @@ module Monitorability = struct
         then (true, None)
         else (false, Some (f, msg_PRED))
     | Let (p, f1, f2) ->
-        let is_mon1, r1 = is_monitorable f1 in
-        if not is_mon1 then (is_mon1, r1) else is_monitorable f2
+        let is_mon1, r1 = is_monitorable ctx f1 in
+        if not is_mon1 then (is_mon1, r1) else is_monitorable ctx f2
     | LetPast (p, f1, f2) ->
-        let is_mon1, r1 = is_monitorable f1 in
-        if not is_mon1 then (is_mon1, r1) else is_monitorable f2
+        let is_mon1, r1 = is_monitorable ctx f1 in
+        if not is_mon1 then (is_mon1, r1) else is_monitorable ctx f2
     | Neg f1 ->
-        if free_vars f1 = [] then is_monitorable f1
+        if free_vars ~tvars:(mtvars ctx) f1 = [] then is_monitorable ctx f1
         else (false, Some (f, msg_NOT))
     | And (f1, f2) -> (
-        let is_mon1, r1 = is_monitorable f1 in
+        let is_mon1, r1 = is_monitorable ctx f1 in
         if not is_mon1 then (is_mon1, r1)
         else
-          let fv1 = free_vars f1 in
+          let fv1 = free_vars ~tvars:(mtvars ctx) f1 in
           if is_and_relop f2 then
-            if is_special_case fv1 f2 then (true, None)
+            if is_special_case ctx fv1 f2 then (true, None)
             else (false, Some (f, msg_ANDRELOP))
           else
             match f2 with
             | Neg f2' ->
-                let fv2 = free_vars f2 in
+                let fv2 = free_vars ~tvars:(mtvars ctx) f2 in
                 if not (Misc.subset fv2 fv1) then
                   ( false
                   , Some
                       ( f
                       , Printf.sprintf msg_SUBSET (String.concat "," fv2)
                           (String.concat "," fv1) ) )
-                else is_monitorable f2'
-            | _ -> is_monitorable f2 )
+                else is_monitorable ctx f2'
+            | _ -> is_monitorable ctx f2 )
     | Or (f1, f2) ->
-        let fv1 = free_vars f1 in
-        let fv2 = free_vars f2 in
+        let fv1 = free_vars ~tvars:(mtvars ctx) f1 in
+        let fv2 = free_vars ~tvars:(mtvars ctx) f2 in
         if (not (Misc.subset fv1 fv2)) || not (Misc.subset fv2 fv1) then
           (false, Some (f, msg_OR))
         else
-          let is_mon1, r1 = is_monitorable f1 in
-          if not is_mon1 then (is_mon1, r1) else is_monitorable f2
+          let is_mon1, r1 = is_monitorable ctx f1 in
+          if not is_mon1 then (is_mon1, r1) else is_monitorable ctx f2
     | Exists (_, f1)
      |Aggreg (_, _, _, _, _, f1)
      |Prev (_, f1)
      |Next (_, f1)
      |Eventually (_, f1)
      |Once (_, f1) ->
-        is_monitorable f1
+        is_monitorable ctx f1
     | Since (intv, f1, f2) | Until (intv, f1, f2) ->
-        let is_mon2, msg2 = is_monitorable f2 in
+        let is_mon2, msg2 = is_monitorable ctx f2 in
         if not is_mon2 then (is_mon2, msg2)
         else
-          let fv1 = free_vars f1 in
-          let fv2 = free_vars f2 in
+          let fv1 = free_vars ~tvars:(mtvars ctx) f1 in
+          let fv2 = free_vars ~tvars:(mtvars ctx) f2 in
           if not (Misc.subset fv1 fv2) then
             ( false
             , Some
@@ -1815,7 +1897,7 @@ module Monitorability = struct
                     (String.concat "," fv1) ) )
           else
             let f1' = match f1 with Neg f1' -> f1' | _ -> f1 in
-            is_monitorable f1'
+            is_monitorable ctx f1'
     | Frex (intv, f) ->
         failwith
           "[Rewriting.is_monitorable] The future match operator |.|> can be \
@@ -1900,6 +1982,7 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
       (fun vrs vr -> (Var vr, new_type_symbol TAny sch vrs) :: vrs)
       [] (free_vars f) in
   let s, v, f = type_check_formula_debug debug (sch, tctxt, fvs) f in
+  let final_ctx = (s, tctxt, v) in
   (* Make sure all variables in the symbol table have been resolved
      to a concrete type. *)
   check_unresolved_terms None v ;
@@ -1911,7 +1994,7 @@ let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
     Printf.eprintf "\n%!" ) ;
   first_debug := false ;
   (* check and print monitorablity results: *)
-  let is_mon, reason = Monitorability.is_monitorable f in
+  let is_mon, reason = Monitorability.is_monitorable final_ctx f in
   if not is_mon then Monitorability.print_results is_mon reason ;
   ((s, tctxt, v), f, is_mon)
 
@@ -1965,45 +2048,6 @@ let let_body_ctx ((_, _, ts) : cplx_predicate) (ctx : context) (f : cplx_formula
   (* The only symbols available in a LET body are the arguments;
      no outer variables are passed into the new symbol table: *)
   scoped_symbol_table arg_vars (sch, tctxt, []) f
-
-(** Returns the type of the given term derived from the provided symbol table.
-    Only implemented for constants, variables and projections. *)
-let rec type_of_term (ctx : context) (t : cplx_term) : tcst =
-  let sch, tctxt, vars = ctx in
-  let concrete_ty = function
-    | TCst t -> t
-    | ty ->
-        failwith
-        @@ Printf.sprintf
-             "type_of_term: Expected %s to be of concrete type, found %s"
-             (string_of_term t) (string_of_type tctxt ty) in
-  match t with
-  | Var v -> (
-    match List.assoc_opt (Var v) vars with
-    | Some tsymb -> concrete_ty tsymb
-    | None ->
-        failwith
-        @@ Printf.sprintf "Cannov find var %s in symbol table %s" v
-             (string_of_gamma tctxt vars) )
-  | Proj (base, field) ->
-      let base_ctor =
-        match type_of_term ctx base with
-        | TRef ctor -> ctor
-        | t ->
-            failwith
-            @@ Printf.sprintf
-                 "type_of_term: exptected base to be TRef, found %s"
-                 (string_of_ty t) in
-      let base_fields = List.assoc base_ctor tctxt |> snd in
-      List.assoc field base_fields
-  | Cst (Int _) -> TInt
-  | Cst (Str _) -> TStr
-  | Cst (Float _) -> TFloat
-  | Cst (Regexp _) -> TRegexp
-  | t ->
-      failwith
-      @@ Printf.sprintf "type_of_term: not implemented for %s"
-           (string_of_term t)
 
 let cplx_conjunction (fs : cplx_formula list) : cplx_formula =
   List.fold_left (fun acc f -> And (acc, f)) (List.hd fs) (List.tl fs)

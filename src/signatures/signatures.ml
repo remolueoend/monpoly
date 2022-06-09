@@ -14,7 +14,7 @@ exception DuplicateType of string * string
 exception UnknownType of string * string
 
 (* Gets raised whenever a cyclic type structure is encountered, which is currently not supported. *)
-exception RecursiveType of string * string
+exception CyclicSignature
 
 (* Gets raised whenever a record field is of a type marked as top level. This is currently not supported. *)
 exception NestedTopLevelType of string * string * string
@@ -184,7 +184,7 @@ let typecheck (signatures : signatures) : unit =
         | ProductSort (_, {elt= name, fields; _}) ->
             typecheck_record_decl deps (name, fields) )
       init_deps signatures in
-  if is_cyclic deps then raise (RecursiveType ("", "")) ;
+  if is_cyclic deps then raise CyclicSignature ;
   ()
 
 (** Returns a new DB schema for a given list of signature declarations *)
