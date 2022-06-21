@@ -1583,7 +1583,6 @@ let type_check_formula_debug d (sch, tctxt, vars) =
               :: vrs )
             reduced_vars v_terms in
         let s1, v1, f = type_check_formula (sch, tctxt, new_vars) f in
-        check_unresolved_terms None v1 ;
         let unshadowed_vars =
           List.filter (fun (vr, _) -> not (List.mem vr v_terms)) v1 in
         (s1, unshadowed_vars @ shadowed_vars, Exists (v, f))
@@ -1598,7 +1597,6 @@ let type_check_formula_debug d (sch, tctxt, vars) =
               :: vrs )
             reduced_vars v_terms in
         let s1, v1, f = type_check_formula (sch, tctxt, new_vars) f in
-        check_unresolved_terms None v1 ;
         let unshadowed_vars =
           List.filter (fun (vr, _) -> not (List.mem vr v_terms)) v1 in
         (s1, unshadowed_vars @ shadowed_vars, ForAll (v, f))
