@@ -1,0 +1,14 @@
+/// source: https://github.com/johnnymn/ocaml-devcontainer/blob/master/.devcontainer/devcontainer.json
+{
+  "name": "Monpoly-devcon",
+  "dockerFile": "Dockerfile",
+  "runArgs": ["--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined"],
+  "remoteUser": "opam",
+  "settings": {
+    "editor.formatOnSave": true,
+    "[ocaml]": {
+      "editor.defaultFormatter": "badochov.ocaml-formatter"
+    }
+  },
+  "extensions": ["ocamllabs.ocaml-platform", "badochov.ocaml-formatter"]
+}
