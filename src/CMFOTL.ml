@@ -164,47 +164,47 @@ let rec tvars : cplx_term -> var list = function
       tvars t1 @ tvars t2
   | Proj (t1, _) -> tvars t1
 
-type cplx_formula =
+type 'a cplx_formula =
   | Equal of (cplx_term * cplx_term)
   | Less of (cplx_term * cplx_term)
   | LessEq of (cplx_term * cplx_term)
   | Substring of (cplx_term * cplx_term)
   | Matches of (cplx_term * cplx_term * cplx_term option list)
   | Pred of cplx_predicate
-  | Let of (cplx_predicate * cplx_formula * cplx_formula)
-  | LetPast of (cplx_predicate * cplx_formula * cplx_formula)
-  | Neg of cplx_formula
-  | And of (cplx_formula * cplx_formula)
-  | Or of (cplx_formula * cplx_formula)
-  | Implies of (cplx_formula * cplx_formula)
-  | Equiv of (cplx_formula * cplx_formula)
-  | Exists of (var list * cplx_formula)
-  | ForAll of (var list * cplx_formula)
+  | Let of (cplx_predicate * 'a cplx_formula * 'a cplx_formula)
+  | LetPast of (cplx_predicate * 'a cplx_formula * 'a cplx_formula)
+  | Neg of 'a cplx_formula
+  | And of ('a cplx_formula * 'a cplx_formula)
+  | Or of ('a cplx_formula * 'a cplx_formula)
+  | Implies of ('a cplx_formula * 'a cplx_formula)
+  | Equiv of ('a cplx_formula * 'a cplx_formula)
+  | Exists of (var list * 'a cplx_formula)
+  | ForAll of (var list * 'a cplx_formula)
   | Aggreg of
-      (tsymb * var * MFOTL.agg_op * cplx_term * cplx_term list * cplx_formula)
-  | Prev of (MFOTL.interval * cplx_formula)
-  | Next of (MFOTL.interval * cplx_formula)
-  | Eventually of (MFOTL.interval * cplx_formula)
-  | Once of (MFOTL.interval * cplx_formula)
-  | Always of (MFOTL.interval * cplx_formula)
-  | PastAlways of (MFOTL.interval * cplx_formula)
-  | Since of (MFOTL.interval * cplx_formula * cplx_formula)
-  | Until of (MFOTL.interval * cplx_formula * cplx_formula)
-  | Frex of (MFOTL.interval * regex)
-  | Prex of (MFOTL.interval * regex)
+      (tsymb * var * MFOTL.agg_op * cplx_term * cplx_term list * 'a cplx_formula)
+  | Prev of (MFOTL.interval * 'a cplx_formula)
+  | Next of (MFOTL.interval * 'a cplx_formula)
+  | Eventually of (MFOTL.interval * 'a cplx_formula)
+  | Once of (MFOTL.interval * 'a cplx_formula)
+  | Always of (MFOTL.interval * 'a cplx_formula)
+  | PastAlways of (MFOTL.interval * 'a cplx_formula)
+  | Since of (MFOTL.interval * 'a cplx_formula * 'a cplx_formula)
+  | Until of (MFOTL.interval * 'a cplx_formula * 'a cplx_formula)
+  | Frex of (MFOTL.interval * 'a regex)
+  | Prex of (MFOTL.interval * 'a regex)
 
-and regex =
+and 'a regex =
   | Wild
-  | Test of cplx_formula
-  | Concat of (regex * regex)
-  | Plus of (regex * regex)
-  | Star of regex
+  | Test of 'a cplx_formula
+  | Concat of ('a regex * 'a regex)
+  | Plus of ('a regex * 'a regex)
+  | Star of 'a regex
 
 (** Accepts a variable 'var' and returns a set of terms depending on 'var'.
     The returned terms are either of type Var or Proj.
     Example: get_var_usage r (Request(r) AND r.user.name = "" AND EXISTS r . Report(r) AND r.reason = "")
     -> [r, r.user.name]. *)
-let rec get_var_usage (f : cplx_formula) (var : var) : TermSet.t =
+let rec get_var_usage (f : 'a cplx_formula) (var : var) : TermSet.t =
   let rec term_usage = function
     | Cst _ -> TermSet.empty
     | Var v ->
@@ -1008,7 +1008,7 @@ and check_re_aggregations = function
       check_re_aggregations r1 && check_re_aggregations r2
   | Star r -> check_re_aggregations r
 
-let check_wff (f : cplx_formula) =
+let check_wff (f : 'a cplx_formula) =
   (* we check that all LET bindings are well-formed *)
   let cl = check_let f in
   let ci = check_intervals f in
@@ -1391,7 +1391,7 @@ Returns a pair (Δ',Γ') where Δ' and Γ' are the new Δ and Γ
 Fails if ϕ is not a well formed formula
 *)
 let type_check_formula_debug d (sch, tctxt, vars) =
-  let rec type_check_formula ((sch, tctxt, vars) : context) (f : cplx_formula) =
+  let rec type_check_formula ((sch, tctxt, vars) : context) (f : 'a cplx_formula) =
     if d then (
       Printf.eprintf "[Typecheck.typecheck_formula] \n%!Δ: %s\n%!Γ: %s\n%!⊢ "
         (string_of_delta tctxt sch)
@@ -1935,8 +1935,8 @@ end
     1) The type checking context consisting of predicate schema, symbol table and type context.
     2) A possibly updated version of the input formula.
     3) A boolean flag indicating the monitorability (safety) of the input formula. *)
-let rec typecheck_formula (signatures : signatures) (f : cplx_formula) :
-    context * cplx_formula * bool =
+let rec typecheck_formula (signatures : signatures) (f : 'a cplx_formula) :
+    context * 'a cplx_formula * bool =
   let debug = !first_debug && Misc.debugging Dbg_typing in
   (* first of all check well-formedness of formula: *)
   ignore @@ ignore (check_wff f) ;
@@ -2020,7 +2020,7 @@ let rec projection_path = function
     Variables in the given context shadowed by scoped_vars will be replaced in the new context.
     This function can be used to typecheck a scoped formula under the new context. *)
 let scoped_symbol_table (scoped_vars : var list) (ctx : context)
-    (f : cplx_formula) : context * cplx_formula =
+    (f : 'a cplx_formula) : context * 'a cplx_formula =
   let sch, tctxt, vars = ctx in
   let v_terms = List.map (fun v -> Var v) scoped_vars in
   let shadowed_vars, reduced_vars =
@@ -2036,8 +2036,8 @@ let scoped_symbol_table (scoped_vars : var list) (ctx : context)
 
 (** Returns a typecheck context for a LET body, based on the LETs' predicate
     and an outer typecheck context. *)
-let let_body_ctx ((_, _, ts) : cplx_predicate) (ctx : context) (f : cplx_formula)
-    : context * cplx_formula =
+let let_body_ctx ((_, _, ts) : cplx_predicate) (ctx : context) (f : 'a cplx_formula)
+    : context * 'a cplx_formula =
   let sch, tctxt, vars = ctx in
   let arg_vars =
     List.fold_left
@@ -2047,7 +2047,7 @@ let let_body_ctx ((_, _, ts) : cplx_predicate) (ctx : context) (f : cplx_formula
      no outer variables are passed into the new symbol table: *)
   scoped_symbol_table arg_vars (sch, tctxt, []) f
 
-let cplx_conjunction (fs : cplx_formula list) : cplx_formula =
+let cplx_conjunction (fs : 'a cplx_formula list) : 'a cplx_formula =
   List.fold_left (fun acc f -> And (acc, f)) (List.hd fs) (List.tl fs)
 
 let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
@@ -2057,7 +2057,7 @@ let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
       expands it based on its usage in the given formula.
       It returns a new conjunction and a set of new variables introduced
       by the expansion. *)
-let expand_cplx_var (f : cplx_formula) (ctx : context) (var : var) :
+let expand_cplx_var (f : 'a cplx_formula) (ctx : context) (var : var) :
     MFOTL.formula * var list =
   let _, tctxt, _ = ctx in
   let get_ref_type t =
@@ -2108,7 +2108,7 @@ let free_ref_vars (vars : symbol_table) (accept_list : var list) =
 (** accepts two sides of an equality and returns a formula comparing both sides
     recursively/structurally. The returned formula  replaces the original equality. *)
 let expand_structural_equality (ctx : context) (left : cplx_term)
-    (right : cplx_term) : cplx_formula =
+    (right : cplx_term) : 'a cplx_formula =
   let sch, tctxt, vars = ctx in
   let rec terms left right =
     let left_ty, right_ty = (type_of_term ctx left, type_of_term ctx right) in
@@ -2131,7 +2131,7 @@ let expand_structural_equality (ctx : context) (left : cplx_term)
 
 (** pre-processes the given complex formula before the actual compilation step.
     Should be run once before compiling on the input formula. *)
-let rec preprocess_formula (ctx : context) (f : cplx_formula) : cplx_formula =
+let rec preprocess_formula (ctx : context) (f : 'a cplx_formula) : 'a cplx_formula =
   match f with
   | Equal (t1, t2) -> expand_structural_equality ctx t1 t2
   | Let (p, f1, f2) ->
@@ -2238,7 +2238,7 @@ let compile_predicate (ctx : context) ((name, arity, args) : cplx_predicate) :
    The given filter is used to only expand a certain set of free variables. If the filter is empty,
    all free variables in the formula's scope are expanded. *)
 let rec compile_formula_scope (ctx : context) (var_filter : var list)
-    (parent_scope : cplx_formula) (f : cplx_formula) : MFOTL.formula =
+    (parent_scope : 'a cplx_formula) (f : 'a cplx_formula) : MFOTL.formula =
   let sch, tctxt, vars = ctx in
   let new_ctx = (sch, tctxt, vars) in
   let free_cplx_vars = free_ref_vars vars var_filter in
@@ -2253,8 +2253,8 @@ let rec compile_formula_scope (ctx : context) (var_filter : var list)
 
 (** compiles a given complex formula to an MFOTL compatible formula under the given typecheck context.
     f_scope describes the current variable scope. *)
-and _compile_formula (ctx : context) (f_scope : cplx_formula)
-    (input : cplx_formula) : MFOTL.formula =
+and _compile_formula (ctx : context) (f_scope : 'a cplx_formula)
+    (input : 'a cplx_formula) : MFOTL.formula =
   let _, tctxt, vars = ctx in
   match input with
   | Equal (t1, t2) -> MFOTL.Equal (compile_term t1, compile_term t2)
@@ -2360,7 +2360,7 @@ and _compile_formula (ctx : context) (f_scope : cplx_formula)
   | Frex (i, r) -> Frex (i, compile_regex ctx f_scope r)
   | Prex (i, r) -> Prex (i, compile_regex ctx f_scope r)
 
-and compile_regex (ctx : context) (scope : cplx_formula) (input : regex) :
+and compile_regex (ctx : context) (scope : 'a cplx_formula) (input : 'a regex) :
     MFOTL.regex =
   match input with
   | Wild -> Wild
@@ -2373,7 +2373,7 @@ and compile_regex (ctx : context) (scope : cplx_formula) (input : regex) :
 
 (** compiles a MFOTL formula from a complex formula and the parsed signature definitions.
     Returns the compiled formula and a flag indicating the monitoriability of the formula. *)
-let compile_formula (signatures : signatures) (f : cplx_formula) :
+let compile_formula (signatures : signatures) (f : 'a cplx_formula) :
     MFOTL.formula * bool =
   let ctx, f, is_mon = typecheck_formula signatures f in
   let f = preprocess_formula ctx f in
