@@ -52,6 +52,9 @@
 
   let var_cnt = ref 0
 
+  (* returns a formula without annotations for the given AST *)
+  let formula ast = ((), ast)
+
   (* by default, the time unit is of 1 second *)
   let timeunits (n,c) =
     let d =
@@ -67,12 +70,12 @@
   let rec exists varlist f =
     match varlist with
     | [] -> failwith "[Formula_parser.exists] no variables"
-    | vl -> Exists (vl, f)
+    | vl -> formula (Exists (vl, f))
 
   let rec forall varlist f =
     match varlist with
     | [] -> failwith "[Formula_parser.forall] no variables"
-    | vl -> ForAll (vl, f)
+    | vl -> formula (ForAll (vl, f))
 
 
   let dfintv = (CBnd Z.zero, Inf)
@@ -85,8 +88,7 @@
       str
 
 
-
-  let check f = f
+  let check f = formula f
   let add_ex p =
     let args = CMFOTL.get_predicate_args p in
     let rec proc = function
@@ -95,8 +97,8 @@
       | _ :: rest -> proc rest
     in
     let vl = proc args in
-    let pred = Pred p in
-    if vl <> [] then Exists (vl, pred) else pred
+    let pred = formula (Pred p) in
+    if vl <> [] then formula (Exists (vl, pred)) else pred
 
   let strip s =
     let len = String.length s in
@@ -116,7 +118,7 @@
 
   (* The rule is: var LARROW aggreg var SC varlist formula  *)
   let aggreg res_var op agg_var groupby_vars f =
-    Aggreg ((TSymb (TAny, 0)),res_var, op, agg_var, groupby_vars, f)
+    formula (Aggreg ((TSymb (TAny, 0)),res_var, op, agg_var, groupby_vars, f))
 
 %}
 
@@ -162,27 +164,27 @@
 
 formula:
   | LPA formula RPA                 { f "f()"; $2 }
-  | FALSE                           { f "FALSE"; Equal (Cst (Int Z.zero), Cst (Int Z.one)) }
-  | TRUE                            { f "TRUE"; Equal (Cst (Int Z.zero), Cst (Int Z.zero)) }
+  | FALSE                           { f "FALSE"; formula (Equal (Cst (Int Z.zero), Cst (Int Z.one))) }
+  | TRUE                            { f "TRUE"; formula (Equal (Cst (Int Z.zero), Cst (Int Z.zero))) }
   | predicate                       { f "f(pred)"; $1 }
   | LET predicate EQ formula IN formula
                                     { f "f(let)"; match $2 with
-                                                  | Pred p -> Let (p,$4,$6)
+                                                  | (_, Pred p) -> formula (Let (p,$4,$6))
                                                   | _ -> failwith "[formula_parser.mly] expected predicate"}
   | LETPAST predicate EQ formula IN formula
                                     { f "f(letpast)"; match $2 with
-                                                  | Pred p -> LetPast (p,$4,$6)
+                                                  | (_, Pred p) -> formula (LetPast (p,$4,$6))
                                                   | _ -> failwith "[formula_parser.mly] expected predicate"}
   | term EQ term                    { f "f(eq)"; check (Equal ($1,$3)) }
   | term LESSEQ term                { f "f(leq)"; check (LessEq ($1,$3)) }
   | term LESS term                  { f "f(less)"; check (Less ($1,$3)) }
   | term GTR term                   { f "f(gtr)"; check (Less ($3,$1)) }
   | term GTREQ term                 { f "f(geq)"; check (LessEq ($3,$1)) }
-  | formula EQUIV formula           { f "f(<=>)"; Equiv ($1,$3) }
-  | formula IMPL formula            { f "f(=>)"; Implies ($1,$3) }
-  | formula OR formula              { f "f(or)"; Or ($1,$3) }
-  | formula AND formula             { f "f(and)"; And ($1,$3) }
-  | NOT formula                     { f "f(not)"; Neg ($2) }
+  | formula EQUIV formula           { f "f(<=>)"; formula (Equiv ($1,$3)) }
+  | formula IMPL formula            { f "f(=>)"; formula (Implies ($1,$3)) }
+  | formula OR formula              { f "f(or)"; formula (Or ($1,$3)) }
+  | formula AND formula             { f "f(and)"; formula (And ($1,$3)) }
+  | NOT formula                     { f "f(not)"; formula (Neg ($2)) }
   | EX varlist DOT formula %prec EX { f "f(ex)"; exists $2 $4 }
   | FA varlist DOT formula %prec FA { f "f(fa)"; forall $2 $4 }
   | var LARROW aggreg term formula   { f "f(agg1)"; aggreg $1 $3 $4 [] $5 }
@@ -190,27 +192,27 @@ formula:
                                     { f "f(agg2)"; aggreg $1 $3 $4 $6 $7 }
   | term SUBSTRING term             { f "f(substring)"; check (Substring ($1, $3)) }
   | term MATCHES term xopttermlist  { f "f(matches)"; check (Matches ($1, $3, $4)) }
-  | PREV interval formula           { f "f(prev)"; Prev ($2,$3) }
-  | PREV formula                    { f "f(prevdf)"; Prev (dfintv,$2) }
-  | NEXT interval formula           { f "f(next)"; Next ($2,$3) }
-  | NEXT formula                    { f "f(nextdf)"; Next (dfintv,$2) }
-  | EVENTUALLY interval formula     { f "f(ev)"; Eventually ($2,$3) }
-  | EVENTUALLY formula              { f "f(evdf)"; Eventually (dfintv,$2) }
-  | ONCE interval formula           { f "f(once)"; Once ($2,$3) }
-  | ONCE formula                    { f "f(oncedf)"; Once (dfintv,$2) }
-  | ALWAYS interval formula         { f "f(always)"; Always ($2,$3) }
-  | ALWAYS formula                  { f "f(alwaysdf)"; Always (dfintv,$2) }
-  | PAST_ALWAYS interval formula    { f "f(palways)"; PastAlways ($2,$3) }
-  | PAST_ALWAYS formula             { f "f(palwaysdf)"; PastAlways (dfintv,$2) }
-  | formula SINCE interval formula  { f "f(since)"; Since ($3,$1,$4) }
-  | formula SINCE formula           { f "f(sincedf)"; Since (dfintv,$1,$3) }
-  | formula UNTIL interval formula  { f "f(until)"; Until ($3,$1,$4) }
-  | formula UNTIL formula           { f "f(untildf)"; Until (dfintv,$1,$3) }
+  | PREV interval formula           { f "f(prev)"; formula (Prev ($2,$3)) }
+  | PREV formula                    { f "f(prevdf)"; formula (Prev (dfintv,$2)) }
+  | NEXT interval formula           { f "f(next)"; formula (Next ($2,$3)) }
+  | NEXT formula                    { f "f(nextdf)"; formula (Next (dfintv,$2)) }
+  | EVENTUALLY interval formula     { f "f(ev)"; formula (Eventually ($2,$3)) }
+  | EVENTUALLY formula              { f "f(evdf)"; formula (Eventually (dfintv,$2)) }
+  | ONCE interval formula           { f "f(once)"; formula (Once ($2,$3)) }
+  | ONCE formula                    { f "f(oncedf)"; formula (Once (dfintv,$2)) }
+  | ALWAYS interval formula         { f "f(always)"; formula (Always ($2,$3)) }
+  | ALWAYS formula                  { f "f(alwaysdf)"; formula (Always (dfintv,$2)) }
+  | PAST_ALWAYS interval formula    { f "f(palways)"; formula (PastAlways ($2,$3)) }
+  | PAST_ALWAYS formula             { f "f(palwaysdf)"; formula (PastAlways (dfintv,$2)) }
+  | formula SINCE interval formula  { f "f(since)"; formula (Since ($3,$1,$4)) }
+  | formula SINCE formula           { f "f(sincedf)"; formula (Since (dfintv,$1,$3)) }
+  | formula UNTIL interval formula  { f "f(until)"; formula (Until ($3,$1,$4)) }
+  | formula UNTIL formula           { f "f(untildf)"; formula (Until (dfintv,$1,$3)) }
 
-  | FREX interval fregex             { f "f(frexd)"; Frex ($2,$3) }
-  | FREX fregex                      { f "f(frexdf)"; Frex (dfintv,$2) }
-  | PREX interval pregex             { f "f(prexd)"; Prex ($2,$3) }
-  | PREX pregex                      { f "f(prexdf)"; Prex (dfintv,$2) }
+  | FREX interval fregex             { f "f(frexd)"; formula (Frex ($2,$3)) }
+  | FREX fregex                      { f "f(frexdf)"; formula (Frex (dfintv,$2)) }
+  | PREX interval pregex             { f "f(prexd)"; formula (Prex ($2,$3)) }
+  | PREX pregex                      { f "f(prexdf)"; formula (Prex (dfintv,$2)) }
 
 fregex:
   | LPA fregex RPA                   { f "r()"; $2 } 
