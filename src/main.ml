@@ -37,7 +37,6 @@
  * covered by the GNU Lesser General Public License.
  *)
 
-
 open Libmonpoly
 open Misc
 open Predicate
@@ -48,136 +47,109 @@ open Algorithm
 open Rewriting
 
 let usage_string =
-  "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]
-               [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]
-               [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]
-               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-stats]
-               [-ignore_parse_errors] [-stop_at_out_of_order_ts]
-               [-stop_at_first_viol] [-load <file>]"
+  "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]\n\
+  \               [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]\n\
+  \               [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]\n\
+  \               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-stats]\n\
+  \               [-ignore_parse_errors] [-stop_at_out_of_order_ts]\n\
+  \               [-stop_at_first_viol] [-load <file>]"
 
-let print_usage_and_exit () =
-  prerr_endline usage_string;
-  exit 2
-
-
+let print_usage_and_exit () = prerr_endline usage_string ; exit 2
 let formulafile = ref ""
 
 let analyze_formulafile () =
   let ic = open_in !formulafile in
   try
-    let f = Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) in
+    let f =
+      Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) in
     if Misc.debugging Dbg_all then
-      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n%!";
+      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n%!" ;
     f
-  with e -> Printf.eprintf "[Main.main] Failed to parse formula file\n%!"; raise e
-
-
-
-
+  with e ->
+    Printf.eprintf "[Main.main] Failed to parse formula file\n%!" ;
+    raise e
 
 let logfile = ref ""
 let sigfile = ref ""
 let debug = ref ""
-
 let negate = ref false
 let inc = ref false
 let memarg = ref false
 let sigout = ref false
 let statsarg = ref false
-
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
 
 (* Printexc.record_backtrace true;; *)
 
-let starttime = Unix.time()
-
+let starttime = Unix.time ()
 
 let sigusr1_handler =
-  (Sys.Signal_handle
-     (fun _ ->
-        prerr_endline "SIGUSR1 handler: exiting...";
-        exit 0))
+  Sys.Signal_handle
+    (fun _ ->
+      prerr_endline "SIGUSR1 handler: exiting..." ;
+      exit 0 )
 
-let sigusr2_handler =
-  (Sys.Signal_handle
-     (fun _ -> Misc.usr2 := true ))
-
-let sigalrm_handler =
-  (Sys.Signal_handle
-     (fun _ -> Misc.alrm := true ))
-
-
+let sigusr2_handler = Sys.Signal_handle (fun _ -> Misc.usr2 := true)
+let sigalrm_handler = Sys.Signal_handle (fun _ -> Misc.alrm := true)
 let displayver = ref false
 
 let print_banner () =
   let banner =
     match Build_info.V1.version () with
     | None -> "MonPoly (development build)"
-    | Some v -> "MonPoly, version " ^ Build_info.V1.Version.to_string v
-  in
+    | Some v -> "MonPoly, version " ^ Build_info.V1.Version.to_string v in
   print_endline banner
 
 let main () =
-  Sys.set_signal Sys.sigusr1 sigusr1_handler;
-  Sys.set_signal Sys.sigusr2 sigusr2_handler;
-  Sys.set_signal Sys.sigalrm sigalrm_handler;
-
-  Misc.split_debug !debug;
-
-  if !displayver then
-    print_banner ()
-  else if !formulafile = "" then
-    print_usage_and_exit ()
+  Sys.set_signal Sys.sigusr1 sigusr1_handler ;
+  Sys.set_signal Sys.sigusr2 sigusr2_handler ;
+  Sys.set_signal Sys.sigalrm sigalrm_handler ;
+  Misc.split_debug !debug ;
+  if !displayver then print_banner ()
+  else if !formulafile = "" then print_usage_and_exit ()
   else
     (* read formula file *)
     let f = analyze_formulafile () in
-    let f = if !negate then Neg f else f in
-    if !sigfile = "" then
-      print_usage_and_exit ()
+    let f = if !negate then ((), Neg f) else f in
+    if !sigfile = "" then print_usage_and_exit ()
     else
-      begin
-        (* read signature file *)
-        let signatures = Signatures.parse_signature_file !sigfile in
-        (* typecheck, compile and check monitorability of extended formula: *)
-        let f, is_cplx_mon = CMFOTL.compile_formula signatures f in
-        if MFOTL.is_mfodl f then Misc.verified := true;
-        (*  generate a DB schema from the parsed signatures: *)
-        let dbschema = Signatures.to_dbschema signatures in
-        let is_mon, pf, vartypes = check_formula dbschema f in
-        if is_mon <> is_cplx_mon then
-          failwith @@ Printf.sprintf "Invalid safety properties after compilation";
-        let fv = List.map fst vartypes in
-        if !sigout then
-          Predicate.print_vartypes_list vartypes
-        else if is_cplx_mon && is_mon && not !Misc.checkf then
-          begin
-            (* By default, that is without user specification (see option
-              -nonewlastts), we add a new maximal timestamp for future formulas;
-              that is, we assume that no more events will happen in the
-              future. For past-only formulas we never add such a timestamp. *)
-            if not (Rewriting.is_future pf) then
-              Misc.new_last_ts := false;
-            if not !nofilterrelopt then
-              Filter_rel.enable pf;
-            if not !nofilteremptytpopt && not !Misc.verified then
-              Filter_empty_tp.enable pf;
-            if !Algorithm.resumefile <> "" then
-              Algorithm.resume dbschema !logfile signatures
-            else if !Algorithm.combine_files <> "" then
-              Algorithm.combine dbschema !logfile signatures
-            else if !Misc.verified then
-              Algorithm_verified.monitor dbschema !logfile fv pf
-            else
-              Algorithm.monitor dbschema !logfile fv pf signatures
-          end
-      end
+      (* read signature file *)
+      let signatures = Signatures.parse_signature_file !sigfile in
+      (* typecheck, compile and check monitorability of extended formula: *)
+      let f, is_cplx_mon = CMFOTL.typecheck_formula signatures f in
+      let f = CMFOTL.compile_formula signatures f in
+      if MFOTL.is_mfodl f then Misc.verified := true ;
+      (*  generate a DB schema from the parsed signatures: *)
+      let dbschema = Signatures.to_dbschema signatures in
+      let is_mon, pf, vartypes = check_formula dbschema f in
+      if is_mon <> is_cplx_mon then
+        failwith @@ Printf.sprintf "Invalid safety properties after compilation" ;
+      let fv = List.map fst vartypes in
+      if !sigout then Predicate.print_vartypes_list vartypes
+      else if is_cplx_mon && is_mon && not !Misc.checkf then (
+        (* By default, that is without user specification (see option
+          -nonewlastts), we add a new maximal timestamp for future formulas;
+          that is, we assume that no more events will happen in the
+          future. For past-only formulas we never add such a timestamp. *)
+        if not (Rewriting.is_future pf) then
+          Misc.new_last_ts := false;
+        if not !nofilterrelopt then Filter_rel.enable pf ;
+        if (not !nofilteremptytpopt) && not !Misc.verified then
+          Filter_empty_tp.enable pf ;
+        if !Algorithm.resumefile <> "" then
+          Algorithm.resume dbschema !logfile signatures
+        else if !Algorithm.combine_files <> "" then
+          Algorithm.combine dbschema !logfile signatures
+        else if !Misc.verified then
+          Algorithm_verified.monitor dbschema !logfile fv pf
+        else Algorithm.monitor dbschema !logfile fv pf signatures )
 
 let set_unfold_let = function
   | "no" -> Rewriting.unfold_let := None
-  | "full" -> Rewriting.unfold_let := Some (Rewriting.ExpandAll)
-  | "smart" -> Rewriting.unfold_let := Some (Rewriting.ExpandNonshared)
-  | _ -> ()  (* impossible *)
+  | "full" -> Rewriting.unfold_let := Some Rewriting.ExpandAll
+  | "smart" -> Rewriting.unfold_let := Some Rewriting.ExpandNonshared
+  | _ -> () (* impossible *)
 
 let _ =
   Arg.parse [
