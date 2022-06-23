@@ -155,7 +155,7 @@
 %nonassoc UMINUS F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE /* highest precedence */
 
 %start formula
-%type <CMFOTL.cplx_formula> formula
+%type <unit CMFOTL.cplx_formula> formula
 
 %%
 
