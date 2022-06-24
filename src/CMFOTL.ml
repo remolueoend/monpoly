@@ -1080,8 +1080,7 @@ let rec compare_tcst (tctxt : tctxt) t1 t2 =
 
 (** Returns the meet of the two given types.
     Raises an IncompatibleTypes exception whenever the meet of the two types is the bottom type. *)
-let rec type_meet (ctx : type_context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb)
-    : tsymb =
+let rec type_meet (ctx : type_context) (t1 : tsymb) (t2 : tsymb) : tsymb =
   let _, tctxt, _ = ctx in
   match (t1, t2) with
   (* the meet of two constant types can only exist if they are structurally equal.
@@ -1101,7 +1100,7 @@ let rec type_meet (ctx : type_context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb)
   | TSymb (TAny, _), t | t, TSymb (TAny, _) -> t
   (* the meet of two partial types is their merged partial type *)
   | TSymb (TPartial fs1, _), TSymb (TPartial fs2, _) ->
-      merge_records ctx t fs1 fs2
+      merge_records ctx fs1 fs2
   (* the meet between a ref type and a partial type is the ref type,
      as long as the partial type can be casted. *)
   | TCst (TRef ctor), TSymb (TPartial partial_fields, _)
@@ -1109,7 +1108,7 @@ let rec type_meet (ctx : type_context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb)
     match List.assoc_opt ctor tctxt with
     | None -> failwith ("Unknown record type: " ^ ctor)
     | Some (_, ref_fields) ->
-        let success = cast_to_record ctx t ref_fields partial_fields in
+        let success = cast_to_record ctx ref_fields partial_fields in
         if success then TCst (TRef ctor) else raise (IncompatibleTypes (t1, t2))
     )
   (* for any other case, we assume the meet is the bottom type *)
@@ -1118,8 +1117,8 @@ let rec type_meet (ctx : type_context) (t : cplx_term) (t1 : tsymb) (t2 : tsymb)
 (** Accepts the fields of two symbolic record types and returns their meet.
     Raises an IncompatibleTypes exception whenever the meet of the types of a common field
     are incompatible, i.e. equal to bottom type. *)
-and merge_records (ctx : type_context) (t : cplx_term)
-    (t1_fields : (var * tsymb) list) (t2_fields : (var * tsymb) list) : tsymb =
+and merge_records (ctx : type_context) (t1_fields : (var * tsymb) list)
+    (t2_fields : (var * tsymb) list) : tsymb =
   let sch, _, vars = ctx in
   (* works similar to the merge function of a merge-sort. Assumes fields to be sorted by name. *)
   let rec merge = function
@@ -1131,7 +1130,7 @@ and merge_records (ctx : type_context) (t : cplx_term)
       | -1 -> (n1, t1) :: merge (f1s, t2_fields)
       | 1 -> (n2, t2) :: merge (t1_fields, f2s)
       | 0 ->
-          let meet = type_meet ctx t t1 t2 in
+          let meet = type_meet ctx t1 t2 in
           (n1, meet) :: merge (f1s, f2s)
       | _ -> failwith "[CMFOTL:merge_records]: invalid state" ) in
   let sort_fields (n1, _) (n2, _) = compare n1 n2 in
@@ -1142,7 +1141,7 @@ and merge_records (ctx : type_context) (t : cplx_term)
 (** Tries to cast a partial record type to a given list of fields.
     Raises an error if the record fields do not describe a subtype of the partial type
     described by its fields. *)
-and cast_to_record ((sch, tctxt, vs) : type_context) (t : cplx_term)
+and cast_to_record ((sch, tctxt, vs) : type_context)
     (fields : (var * tcst) list) (fs : (var * tsymb) list) : bool =
   (* raise if reference type is missing a field: *)
   if List.exists (fun (name, _) -> List.assoc_opt name fields = None) fs then
@@ -1155,11 +1154,11 @@ and cast_to_record ((sch, tctxt, vs) : type_context) (t : cplx_term)
       (fun (name, ty) ->
         match List.assoc_opt name fs with
         | None -> ()
-        | Some sty -> ignore (type_meet (sch, tctxt, vs) t (TCst ty) sty) )
+        | Some sty -> ignore (type_meet (sch, tctxt, vs) (TCst ty) sty) )
       fields ;
     true )
 
-let more_spec_type ctx t t1 t2 = type_meet ctx t t1 t2
+let more_spec_type ctx t1 t2 = type_meet ctx t1 t2
 
 let propagate_to_predicate_schema (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
     (sch : predicate_schema) : predicate_schema =
@@ -1188,7 +1187,7 @@ let propagate_to_symbol_table (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
 let propagate_constraints t1 t2 (t : cplx_term)
     ((sch, tctxt, vars) : type_context) : predicate_schema * symbol_table =
   try
-    let meet = type_meet (sch, tctxt, vars) t t1 t2 in
+    let meet = type_meet (sch, tctxt, vars) t1 t2 in
     let vars = if List.mem_assoc t vars then vars else (t, meet) :: vars in
     ( propagate_to_predicate_schema t1 t2 meet sch
     , propagate_to_symbol_table t1 t2 meet vars )
@@ -1339,7 +1338,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
         let s, v, t_typ = type_check_term (sch, tctxt, vars) exp_typ t in
         let s, v = propagate_constraints exp_typ t_typ t (s, tctxt, v) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) tt t_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t_typ exp_typ in
         (s, v, exp_typ)
     | (Plus (t1, t2) | Minus (t1, t2) | Mult (t1, t2) | Div (t1, t2)) as tt ->
         let exp_typ = new_type_symbol TNum sch vars in
@@ -1347,10 +1346,10 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           propagate_constraints exp_typ typ tt (sch, tctxt, vars) in
         let s1, v1, t1_typ = type_check_term (sch, tctxt, vars) exp_typ t1 in
         let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) tt t1_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t1_typ exp_typ in
         let s2, v2, t2_typ = type_check_term (s1, tctxt, v1) exp_typ t2 in
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) tt t2_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t2_typ exp_typ in
         (s2, v2, exp_typ)
     | Mod (t1, t2) as tt ->
         let exp_typ = TCst TInt in
@@ -1371,7 +1370,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           type_check_term (sch', tctxt, vars') exp_t1_typ t1 in
         let sch', vars' =
           propagate_constraints t1_ty exp_t1_typ t1 (sch', tctxt, vars') in
-        let t1_ty = more_spec_type (sch', tctxt, vars') tt t1_ty exp_t1_typ in
+        let t1_ty = more_spec_type (sch', tctxt, vars') t1_ty exp_t1_typ in
         let f_ty =
           match t1_ty with
           | TSymb (TPartial fields, _) -> List.assoc f fields
@@ -1381,7 +1380,7 @@ let type_check_term_debug d (sch, tctxt, vars) typ term =
           | _ -> failwith "typecheck_term: invalid state" in
         let sch', vars' =
           propagate_constraints typ f_ty tt (sch', tctxt, vars') in
-        let f_ty = more_spec_type (sch', tctxt, vars') tt typ f_ty in
+        let f_ty = more_spec_type (sch', tctxt, vars') typ f_ty in
         (sch', vars', f_ty) in
   type_check_term (sch, tctxt, vars) typ term
 
@@ -1399,17 +1398,17 @@ Parameters:
 Returns a pair (Δ',Γ') where Δ' and Γ' are the new Δ and Γ
 Fails if ϕ is not a well formed formula
 *)
-let type_check_formula_debug d (sch, tctxt, vars) =
+let type_check_formula_debug (d : bool) (tsymb_index : int) =
   (* reference counter for symbolic types.
-     Use new_type_symbol to generate a new symbolic type of a specific type class. *)
-  let tsymb_index = ref 0 in
+     Use new_type_symbol to generate a new symbolic type of a specific type class.
+     TODO: Could we infer this from the current symbol table without visiting all sub-formulas? *)
+  let tsymb_index = ref tsymb_index in
   let new_type_symbol (cls : tcl) =
     tsymb_index := !tsymb_index + 1 ;
     TSymb (cls, !tsymb_index) in
-  let rec type_check_formula ((sch, tctxt, vars) : type_context)
-      (f : type_context cplx_formula) :
+  let rec type_check_formula (f : type_context cplx_formula) :
       predicate_schema * symbol_table * type_context cplx_formula =
-    let fdata, fast = f in
+    let (sch, tctxt, vars), fast = f in
     if d then (
       Printf.eprintf "[Typecheck.typecheck_formula] \n%!Δ: %s\n%!Γ: %s\n%!⊢ "
         (string_of_delta tctxt sch)
@@ -1422,7 +1421,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
         let s1, v1, t1_typ =
           type_check_term_debug d (sch, tctxt, vars) exp_typ t1 in
         let s1, v1 = propagate_constraints exp_typ t1_typ t1 (s1, tctxt, v1) in
-        let exp_typ = more_spec_type (sch, tctxt, vars) t1 t1_typ exp_typ in
+        let exp_typ = more_spec_type (sch, tctxt, vars) t1_typ exp_typ in
         let s2, v2, t2_typ =
           type_check_term_debug d (s1, tctxt, v1) exp_typ t2 in
         let s2, v2 = propagate_constraints exp_typ t2_typ t2 (s2, tctxt, v2) in
@@ -1676,7 +1675,7 @@ let type_check_formula_debug d (sch, tctxt, vars) =
     | Star r ->
         let s, v, r = type_check_re_formula (sch, vars) r in
         (s, v, Star r) in
-  type_check_formula (sch, tctxt, vars)
+  type_check_formula
 
 let first_debug = ref true
 
@@ -1946,7 +1945,7 @@ end
     the predicate schema and tctxt are set to the given values.
     *)
 let init_type_context (sch : predicate_schema) (tctxt : tctxt)
-    (f : unit cplx_formula) : type_context cplx_formula =
+    (f : unit cplx_formula) : type_context cplx_formula * int =
   let tsymb_index = ref 0 in
   let new_type_symbol (cls : tcl) =
     tsymb_index := !tsymb_index + 1 ;
@@ -2045,7 +2044,8 @@ let init_type_context (sch : predicate_schema) (tctxt : tctxt)
             , aux (new_sch, tctxt, vars) f ) )
     | Aggreg (rty, r, op, x, gs, f) ->
         failwith "init_type_context: Aggreg not implemented yet" in
-  aux (sch, tctxt, global_vars) f
+  let tf = aux (sch, tctxt, global_vars) f in
+  (tf, !tsymb_index)
 
 (** type checks a complex formula given matching signature definitions.
     Returns a triple consiting of:
@@ -2088,17 +2088,8 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
                 |> List.map (fun {fname; ftyp} -> (fname, ftyp)) ) )
             :: acc )
       [] signatures in
-  (* create Γ *)
-  (* TODO: do we really need to pre-fill the symbol table?
-     Terms will be added if they are not part of the table while
-      type checking. *)
-  let fvs : symbol_table =
-    List.fold_left
-      (fun vrs vr -> (Var vr, new_type_symbol TAny sch vrs) :: vrs)
-      [] (free_vars f) in
-  let s, v, f =
-    type_check_formula_debug debug (sch, tctxt, fvs)
-      (init_type_context sch tctxt f) in
+  let init_formula, tsymb_index = init_type_context sch tctxt f in
+  let s, v, f = type_check_formula_debug debug tsymb_index init_formula in
   let final_ctx = (s, tctxt, v) in
   (* Make sure all variables in the symbol table have been resolved
      to a concrete type. *)
