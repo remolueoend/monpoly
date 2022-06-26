@@ -81,7 +81,7 @@ let type_of_cst = function
   | Record (ctor, _) -> TRef ctor
 
 (** Γ *)
-type symbol_table = (cplx_term * tsymb ref) list
+type symbol_table = (var * tsymb ref) list
 
 (** Δ *)
 and predicate_schema = ((var * int) * tsymb list ref) list
@@ -734,9 +734,8 @@ let string_of_gamma (tctxt : tctxt) (vars : symbol_table) =
   if List.length vars > 0 then
     let fv, ft = List.hd vars in
     List.fold_left
-      (fun a (v, t) ->
-        a ^ ", " ^ string_of_term v ^ ":" ^ string_of_type tctxt !t )
-      (string_of_term fv ^ ":" ^ string_of_type tctxt !ft)
+      (fun a (v, t) -> a ^ ", " ^ v ^ ":" ^ string_of_type tctxt !t)
+      (fv ^ ":" ^ string_of_type tctxt !ft)
       (List.tl vars)
   else "_"
 
@@ -753,7 +752,7 @@ let rec type_of_term (ctx : type_context) (t : cplx_term) : tcst =
              (string_of_term t) (string_of_type tctxt ty) in
   match t with
   | Var v -> (
-    match List.assoc_opt (Var v) vars with
+    match List.assoc_opt v vars with
     | Some tsymb -> concrete_ty !tsymb
     | None ->
         failwith
@@ -1221,14 +1220,11 @@ let rec check_unresolved_terms (pred : string option) (free_vars : var list)
   let unresolved_vars =
     List.filter
       (fun (v, t) ->
-        match (v, !t) with
-        | Var v, TSymb st -> List.mem v free_vars
-        | _ -> false )
+        match (v, !t) with v, TSymb st -> List.mem v free_vars | _ -> false )
       vars
     |> List.map fst in
   if List.length unresolved_vars > 0 then
-    let terms_as_str =
-      List.map string_of_term unresolved_vars |> String.concat ", " in
+    let terms_as_str = String.concat ", " unresolved_vars in
     let msg =
       Printf.sprintf
         "Type Error: Following terms%s could not be resolved to a type: %s"
@@ -1266,8 +1262,8 @@ let type_check_term_debug (d : bool) (ctx : type_context) (typ : tsymb)
       Printf.eprintf "\n%!\n%!" ) ;
     match term with
     | Var v as tt ->
-        if List.mem_assoc tt vars then (
-          let vtyp = !(List.assoc tt vars) in
+        if List.mem_assoc v vars then (
+          let vtyp = !(List.assoc v vars) in
           propagate_constraints typ vtyp tt ctx ;
           vtyp )
         else
@@ -1490,8 +1486,7 @@ let type_check_formula_debug (d : bool) =
         check_unresolved_terms (Some n) pred_args v1 ;
         (* TODO: re-enable after refactoring symbol table: *)
         (* assert (List.length v1 = List.length new_typed_vars) ; *)
-        let new_sig = List.map (fun v -> (v, !(List.assoc v v1))) ts in
-        let new_sig = List.map (fun (_, t) -> t) new_sig in
+        let new_sig = List.map (fun (_, t) -> !t) v1 in
         (* this is a reference to the old predicate schema of this LET predicate in the inner formula.sorts
            we replace its value with the updated (type-checked) schema: *)
         let old_sch = f_annot f2 |> t_preds |> List.assoc (n, a) in
@@ -1841,25 +1836,14 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
   let new_type_symbol (cls : tcl) =
     incr tsymb_id ;
     TSymb (cls, !tsymb_id) in
-  let filter_vars (vars : symbol_table) (f : var -> bool) : symbol_table =
-    List.filter
-      (fun (v, _) -> match v with Var v -> f v | _ -> failwith "remove")
-      vars in
   (* free variables ranging over the whole formula: *)
   let global_vars : symbol_table =
-    List.fold_left
-      (fun vrs vr -> (Var vr, ref (new_type_symbol TAny)) :: vrs)
-      [] (free_vars f) in
+    List.map (fun v -> (v, ref (new_type_symbol TAny))) (free_vars f) in
   let rec aux (ctx : type_context) (f : unit cplx_formula) :
       type_context cplx_formula =
     let local_vars = free_vars f in
     let filtered_vars =
-      List.filter
-        (fun (v, _) ->
-          match v with
-          | Var n -> List.mem n local_vars
-          | _ -> failwith "remove after symbol_table refactoring" )
-        ctx.vars in
+      List.filter (fun (v, _) -> List.mem v local_vars) ctx.vars in
     let fctxt =
       create_type_context ctx.predicates tctxt filtered_vars tsymb_id in
     let rec aux_regex (regex : unit regex) : type_context regex =
@@ -1893,21 +1877,19 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
     | Frex (i, r) -> (fctxt, Frex (i, aux_regex r))
     | Prex (i, r) -> (fctxt, Prex (i, aux_regex r))
     | Exists (l, f) ->
-        let non_shadowed = filter_vars ctx.vars (fun v -> not (List.mem v l)) in
+        let non_shadowed =
+          List.filter (fun (v, _) -> not (List.mem v l)) ctx.vars in
         let new_vars =
-          non_shadowed
-          @ List.fold_left
-              (fun vrs vr -> (Var vr, ref (new_type_symbol TAny)) :: vrs)
-              [] l in
+          non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
+        in
         ( fctxt
         , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
     | ForAll (l, f) ->
-        let non_shadowed = filter_vars ctx.vars (fun v -> not (List.mem v l)) in
+        let non_shadowed =
+          List.filter (fun (v, _) -> not (List.mem v l)) ctx.vars in
         let new_vars =
-          non_shadowed
-          @ List.fold_left
-              (fun vrs vr -> (Var vr, ref (new_type_symbol TAny)) :: vrs)
-              [] l in
+          non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
+        in
         ( fctxt
         , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
     | Let ((name, arity, targs), body, f) ->
@@ -1916,8 +1898,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
             (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
             targs in
         let arg_types = List.map (fun a -> new_type_symbol TAny) arg_names in
-        let new_vars =
-          List.map2 (fun n t -> (Var n, ref t)) arg_names arg_types in
+        let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
         let non_shadowed = List.filter (fun ((n, _), _) -> n <> name) sch in
         let new_sch = ((name, arity), ref arg_types) :: non_shadowed in
         ( fctxt
@@ -1931,8 +1912,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
             (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
             targs in
         let arg_types = List.map (fun a -> new_type_symbol TAny) arg_names in
-        let new_vars =
-          List.map2 (fun n t -> (Var n, ref t)) arg_names arg_types in
+        let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
         let new_sch = ((name, arity), ref arg_types) :: sch in
         ( fctxt
         , LetPast
@@ -2081,7 +2061,7 @@ let free_ref_vars (vars : symbol_table) (accept_list : var list) =
   List.fold_left
     (fun acc (t, ty) ->
       match (t, !ty) with
-      | Var v, TCst (TRef _) -> if filter_var v then v :: acc else acc
+      | v, TCst (TRef _) -> if filter_var v then v :: acc else acc
       | _ -> acc )
     [] vars
 
