@@ -1175,37 +1175,34 @@ and cast_to_record (ctx : type_context) (fields : (var * tcst) list)
 
 let more_spec_type ctx t1 t2 = type_meet ctx t1 t2
 
-let propagate_to_predicate_schema (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
-    (sch : predicate_schema) : unit =
-  List.iter
-    (fun (n, args) ->
-      let new_args =
-        List.map (fun typ -> if typ = t1 || typ = t2 then meet else typ) !args
-      in
-      args := new_args )
-    sch
-
-let propagate_to_symbol_table (t1 : tsymb) (t2 : tsymb) (meet : tsymb)
-    (vars : symbol_table) : unit =
-  let rec propagate_to_tsymb (tsymb : tsymb) : tsymb =
+(** Given that v:t1 and v:t2 for some v,
+   check which type is more specific and update Γ accordingly *)
+let propagate_constraints t1 t2 (t : cplx_term) (ctx : type_context) : unit =
+  let rec propagate_to_tsymb (meet : tsymb) (tsymb : tsymb) : tsymb =
     if tsymb = t1 || tsymb = t2 then meet
     else
       match tsymb with
       | TSymb (TPartial fields, i) ->
           let new_fields =
-            List.map (fun (name, typ) -> (name, propagate_to_tsymb typ)) fields
-          in
+            List.map
+              (fun (name, typ) -> (name, propagate_to_tsymb meet typ))
+              fields in
           TSymb (TPartial new_fields, i)
       | _ -> tsymb in
-  List.iter (fun (name, typ) -> typ := propagate_to_tsymb !typ) vars
-
-(** Given that v:t1 and v:t2 for some v,
-   check which type is more specific and update Γ accordingly *)
-let propagate_constraints t1 t2 (t : cplx_term) (ctx : type_context) : unit =
+  let propagate_to_predicate_schema (meet : tsymb) (sch : predicate_schema) :
+      unit =
+    List.iter
+      (fun (n, args) ->
+        let new_args = List.map (propagate_to_tsymb meet) !args in
+        args := new_args )
+      sch in
+  let propagate_to_symbol_table (meet : tsymb) (vars : symbol_table) : unit =
+    List.iter (fun (name, typ) -> typ := propagate_to_tsymb meet !typ) vars
+  in
   try
     let meet = type_meet ctx t1 t2 in
-    propagate_to_predicate_schema t1 t2 meet ctx.predicates ;
-    propagate_to_symbol_table t1 t2 meet ctx.vars
+    propagate_to_predicate_schema meet ctx.predicates ;
+    propagate_to_symbol_table meet ctx.vars
   with IncompatibleTypes (t1, t2) ->
     let err_str =
       Printf.sprintf
