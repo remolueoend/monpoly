@@ -81,7 +81,7 @@ let type_of_cst = function
   | Record (ctor, _) -> TRef ctor
 
 (** Γ *)
-type symbol_table = (cplx_term * tsymb ref) list
+type symbol_table = (var * tsymb ref) list
 
 (** Δ *)
 and predicate_schema = ((var * int) * tsymb list ref) list
@@ -173,12 +173,13 @@ let rec tvars : cplx_term -> var list = function
       tvars t1 @ tvars t2
   | Proj (t1, _) -> tvars t1
 
-let pvars (p : cplx_predicate) =
+let pvars ?(tvars : 'a -> cplx_term -> var list = fun (_: 'a) t -> tvars t) (annot : 'a)
+    (p : cplx_predicate) =
   List.fold_left
     (fun acc a ->
       List.fold_left
         (fun acc v -> if List.mem v acc then acc else v :: acc)
-        acc (tvars a) )
+        acc (tvars annot a) )
     [] (get_predicate_args p)
 
 type 'a cplx_formula = 'a * 'a formula_ast
@@ -302,16 +303,18 @@ let unixts = ref false
 (** Returns a list of free variables in the given formula.
     One can provide an optional tvars function to be used,
     returning the free variables for a given term. Default is `tvars`. *)
-let rec free_vars ?(tvars = tvars) ((_, f) : 'a cplx_formula) =
+let rec free_vars ?(tvars : 'a -> cplx_term -> var list = fun (_ : 'a) t -> tvars t)
+    ((annot, f) : 'a cplx_formula) =
   match f with
   | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
-      Misc.union (tvars t1) (tvars t2)
+      Misc.union (tvars annot t1) (tvars annot t2)
   | Matches (t1, t2, tl) ->
-      let fv = Misc.union (tvars t1) (tvars t2) in
+      let fv = Misc.union (tvars annot t1) (tvars annot t2) in
       List.fold_left
-        (fun s t -> match t with None -> s | Some t -> Misc.union s (tvars t))
+        (fun s t ->
+          match t with None -> s | Some t -> Misc.union s (tvars annot t) )
         fv tl
-  | Pred p -> pvars p
+  | Pred p -> pvars annot ~tvars p
   | Let (_, _, f) -> free_vars ~tvars f
   | LetPast (_, _, f) -> free_vars ~tvars f
   | Neg f -> free_vars ~tvars f
@@ -320,7 +323,7 @@ let rec free_vars ?(tvars = tvars) ((_, f) : 'a cplx_formula) =
   | Exists (vl, f) | ForAll (vl, f) ->
       List.filter (fun x -> not (List.mem x vl)) (free_vars ~tvars f)
   | Aggreg (rty, y, op, x, glist, f) ->
-      y :: (List.map tvars glist |> List.flatten)
+      y :: (List.map (tvars annot) glist |> List.flatten)
   | Prev (intv, f)
    |Next (intv, f)
    |Eventually (intv, f)
@@ -332,7 +335,7 @@ let rec free_vars ?(tvars = tvars) ((_, f) : 'a cplx_formula) =
       Misc.union (free_vars ~tvars f2) (free_vars ~tvars f1)
   | Frex (intv, r) | Prex (intv, r) -> free_re_vars ~tvars r
 
-and free_re_vars ?(tvars = tvars) = function
+and free_re_vars ?(tvars = fun (_: 'a) t -> tvars t) = function
   | Wild -> []
   | Test f -> free_vars ~tvars f
   | Concat (r1, r2) | Plus (r1, r2) ->
@@ -450,116 +453,124 @@ let string_of_opt_term = function None -> "_" | Some t -> string_of_term t
 
 (* we always put parantheses for binary operators like "(f1 AND f2)", and around unary
    ones only if they occur on the left-hand side of a binary operator: like "((NOT f1) AND f2)"*)
-let string_of_formula str ((fdata, g) : 'a cplx_formula) =
+let string_of_formula str ?(string_of_annot : 'a -> string = fun _ -> "")
+    ((fdata, g) : 'a cplx_formula) =
   let pps = String.split_on_char '\n' str in
   let padding =
     if pps == [] then ""
     else String.map (fun s -> ' ') (List.nth pps (List.length pps - 1)) in
   let rec string_f_rec top par ((fdata, h) : 'a cplx_formula) =
-    match h with
-    | Equal (t1, t2) -> string_of_term t1 ^ " = " ^ string_of_term t2
-    | Less (t1, t2) -> string_of_term t1 ^ " < " ^ string_of_term t2
-    | LessEq (t1, t2) -> string_of_term t1 ^ " <= " ^ string_of_term t2
-    | Substring (t1, t2) ->
-        string_of_term t1 ^ " SUBSTRING " ^ string_of_term t2
-    | Matches (t1, t2, tl) ->
-        string_of_term t1 ^ " MATCHES " ^ string_of_term t2
-        ^
-        if tl = [] then ""
-        else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl
-    | Pred p -> string_of_predicate p
-    | _ ->
-        (if par && not top then "(" else "")
-        ^ ( match h with
-          | Neg f -> "NOT " ^ string_f_rec false false f
-          | Exists (vl, f) ->
-              "EXISTS "
-              ^ Misc.string_of_list_ext "" "" ", " string_of_term
-                  (List.map (fun v -> Var v) vl)
-              ^ ". " ^ string_f_rec false false f
-          | ForAll (vl, f) ->
-              "FORALL "
-              ^ Misc.string_of_list_ext "" "" ", " string_of_term
-                  (List.map (fun v -> Var v) vl)
-              ^ ". " ^ string_f_rec false false f
-          | Aggreg (rty, y, op, x, glist, f) ->
-              string_of_term (Var y) ^ " <- " ^ MFOTL.string_of_agg_op op ^ " "
-              ^ string_of_term x
-              ^ ( if glist <> [] then
-                  "; "
-                  ^ Misc.string_of_list_ext "" "" ","
-                      (fun z -> string_of_term (Var z))
-                      (List.map string_of_term glist)
-                else "" )
-              ^ " " ^ string_f_rec false false f
-          | Prev (intv, f) ->
-              "PREVIOUS"
-              ^ MFOTL.string_of_interval intv
-              ^ " " ^ string_f_rec false false f
-          | Next (intv, f) ->
-              "NEXT"
-              ^ MFOTL.string_of_interval intv
-              ^ " " ^ string_f_rec false false f
-          | Eventually (intv, f) ->
-              "EVENTUALLY"
-              ^ MFOTL.string_of_interval intv
-              ^ " " ^ string_f_rec false false f
-          | Once (intv, f) ->
-              "ONCE"
-              ^ MFOTL.string_of_interval intv
-              ^ " " ^ string_f_rec false false f
-          | Always (intv, f) ->
-              "ALWAYS"
-              ^ MFOTL.string_of_interval intv
-              ^ " " ^ string_f_rec false false f
-          | PastAlways (intv, f) ->
-              "PAST_ALWAYS"
-              ^ MFOTL.string_of_interval intv
-              ^ " " ^ string_f_rec false false f
-          | Frex (intv, r) ->
-              "|>" ^ MFOTL.string_of_interval intv ^ string_r_rec false false r
-          | Prex (intv, r) ->
-              "<|" ^ MFOTL.string_of_interval intv ^ string_r_rec false false r
-          | _ ->
-              (if (not par) && not top then "(" else "")
-              ^ ( match h with
-                | And (f1, f2) ->
-                    string_f_rec false true f1 ^ " AND "
-                    ^ string_f_rec false true f2
-                | Or (f1, f2) ->
-                    string_f_rec false true f1 ^ " OR "
-                    ^ string_f_rec false false f2
-                | Implies (f1, f2) ->
-                    string_f_rec false true f1 ^ " IMPLIES "
-                    ^ string_f_rec false false f2
-                | Equiv (f1, f2) ->
-                    string_f_rec false true f1 ^ " EQUIV "
-                    ^ string_f_rec false false f2
-                | Let (p, f1, f2) ->
-                    "LET" ^ " "
-                    ^ string_f_rec false true (fdata, Pred p)
-                    ^ " = " ^ string_f_rec false true f1 ^ "\n" ^ padding ^ "IN"
-                    ^ " "
-                    ^ string_f_rec false false f2
-                | LetPast (p, f1, f2) ->
-                    "LETPAST" ^ " "
-                    ^ string_f_rec false true (fdata, Pred p)
-                    ^ " = " ^ string_f_rec false true f1 ^ "\n" ^ padding ^ "IN"
-                    ^ " "
-                    ^ string_f_rec false false f2
-                | Since (intv, f1, f2) ->
-                    string_f_rec false true f1 ^ " SINCE"
-                    ^ MFOTL.string_of_interval intv
-                    ^ " "
-                    ^ string_f_rec false false f2
-                | Until (intv, f1, f2) ->
-                    string_f_rec false true f1 ^ " UNTIL"
-                    ^ MFOTL.string_of_interval intv
-                    ^ " "
-                    ^ string_f_rec false false f2
-                | _ -> failwith "[print_formula] impossible" )
-              ^ if (not par) && not top then ")" else "" )
-        ^ if par && not top then ")" else ""
+    let str =
+      match h with
+      | Equal (t1, t2) -> string_of_term t1 ^ " = " ^ string_of_term t2
+      | Less (t1, t2) -> string_of_term t1 ^ " < " ^ string_of_term t2
+      | LessEq (t1, t2) -> string_of_term t1 ^ " <= " ^ string_of_term t2
+      | Substring (t1, t2) ->
+          string_of_term t1 ^ " SUBSTRING " ^ string_of_term t2
+      | Matches (t1, t2, tl) ->
+          string_of_term t1 ^ " MATCHES " ^ string_of_term t2
+          ^
+          if tl = [] then ""
+          else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl
+      | Pred p -> string_of_predicate p
+      | _ ->
+          (if par && not top then "(" else "")
+          ^ ( match h with
+            | Neg f -> "NOT " ^ string_f_rec false false f
+            | Exists (vl, f) ->
+                "EXISTS "
+                ^ Misc.string_of_list_ext "" "" ", " string_of_term
+                    (List.map (fun v -> Var v) vl)
+                ^ ". " ^ string_f_rec false false f
+            | ForAll (vl, f) ->
+                "FORALL "
+                ^ Misc.string_of_list_ext "" "" ", " string_of_term
+                    (List.map (fun v -> Var v) vl)
+                ^ ". " ^ string_f_rec false false f
+            | Aggreg (rty, y, op, x, glist, f) ->
+                string_of_term (Var y) ^ " <- " ^ MFOTL.string_of_agg_op op
+                ^ " " ^ string_of_term x
+                ^ ( if glist <> [] then
+                    "; "
+                    ^ Misc.string_of_list_ext "" "" ","
+                        (fun z -> string_of_term (Var z))
+                        (List.map string_of_term glist)
+                  else "" )
+                ^ " " ^ string_f_rec false false f
+            | Prev (intv, f) ->
+                "PREVIOUS"
+                ^ MFOTL.string_of_interval intv
+                ^ " " ^ string_f_rec false false f
+            | Next (intv, f) ->
+                "NEXT"
+                ^ MFOTL.string_of_interval intv
+                ^ " " ^ string_f_rec false false f
+            | Eventually (intv, f) ->
+                "EVENTUALLY"
+                ^ MFOTL.string_of_interval intv
+                ^ " " ^ string_f_rec false false f
+            | Once (intv, f) ->
+                "ONCE"
+                ^ MFOTL.string_of_interval intv
+                ^ " " ^ string_f_rec false false f
+            | Always (intv, f) ->
+                "ALWAYS"
+                ^ MFOTL.string_of_interval intv
+                ^ " " ^ string_f_rec false false f
+            | PastAlways (intv, f) ->
+                "PAST_ALWAYS"
+                ^ MFOTL.string_of_interval intv
+                ^ " " ^ string_f_rec false false f
+            | Frex (intv, r) ->
+                "|>"
+                ^ MFOTL.string_of_interval intv
+                ^ string_r_rec false false r
+            | Prex (intv, r) ->
+                "<|"
+                ^ MFOTL.string_of_interval intv
+                ^ string_r_rec false false r
+            | _ ->
+                (if (not par) && not top then "(" else "")
+                ^ ( match h with
+                  | And (f1, f2) ->
+                      string_f_rec false true f1 ^ " AND "
+                      ^ string_f_rec false true f2
+                  | Or (f1, f2) ->
+                      string_f_rec false true f1 ^ " OR "
+                      ^ string_f_rec false false f2
+                  | Implies (f1, f2) ->
+                      string_f_rec false true f1 ^ " IMPLIES "
+                      ^ string_f_rec false false f2
+                  | Equiv (f1, f2) ->
+                      string_f_rec false true f1 ^ " EQUIV "
+                      ^ string_f_rec false false f2
+                  | Let (p, f1, f2) ->
+                      "LET" ^ " "
+                      ^ string_f_rec false true (fdata, Pred p)
+                      ^ " = " ^ string_f_rec false true f1 ^ "\n" ^ padding
+                      ^ "IN" ^ " "
+                      ^ string_f_rec false false f2
+                  | LetPast (p, f1, f2) ->
+                      "LETPAST" ^ " "
+                      ^ string_f_rec false true (fdata, Pred p)
+                      ^ " = " ^ string_f_rec false true f1 ^ "\n" ^ padding
+                      ^ "IN" ^ " "
+                      ^ string_f_rec false false f2
+                  | Since (intv, f1, f2) ->
+                      string_f_rec false true f1 ^ " SINCE"
+                      ^ MFOTL.string_of_interval intv
+                      ^ " "
+                      ^ string_f_rec false false f2
+                  | Until (intv, f1, f2) ->
+                      string_f_rec false true f1 ^ " UNTIL"
+                      ^ MFOTL.string_of_interval intv
+                      ^ " "
+                      ^ string_f_rec false false f2
+                  | _ -> failwith "[print_formula] impossible" )
+                ^ if (not par) && not top then ")" else "" )
+          ^ if par && not top then ")" else "" in
+    let annot = string_of_annot fdata in
+    if String.length annot > 0 then str ^ " [" ^ annot ^ "]" else str
   and string_r_rec top par h =
     match h with
     | Wild -> "."
@@ -583,117 +594,123 @@ let string_of_formula str ((fdata, g) : 'a cplx_formula) =
   str ^ string_f_rec true false (fdata, g)
 
 (* Fully parenthesize an MFOTL formula *)
-let string_of_parenthesized_formula str ((fdata, g) : 'a cplx_formula) =
+let string_of_parenthesized_formula str
+    ?(string_of_annot : 'a -> string = fun _ -> "")
+    ((fdata, g) : 'a cplx_formula) =
   let pps = String.split_on_char '\n' str in
   let padding =
     if pps == [] then ""
     else String.map (fun s -> ' ') (List.nth pps (List.length pps - 1)) in
   let rec string_f_rec top par ((fdata, h) : 'a cplx_formula) =
-    match h with
-    | Equal (t1, t2) ->
-        "(" ^ string_of_term t1 ^ " = " ^ string_of_term t2 ^ ")"
-    | Less (t1, t2) -> "(" ^ string_of_term t1 ^ " < " ^ string_of_term t2 ^ ")"
-    | LessEq (t1, t2) ->
-        "(" ^ string_of_term t1 ^ " <= " ^ string_of_term t2 ^ ")"
-    | Substring (t1, t2) ->
-        "(" ^ string_of_term t1 ^ " SUBSTRING " ^ string_of_term t2 ^ ")"
-    | Matches (t1, t2, tl) ->
-        "(" ^ string_of_term t1 ^ " MATCHES " ^ string_of_term t2
-        ^ ( if tl = [] then ""
-          else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl )
-        ^ ")"
-    | Pred p -> string_of_predicate p
-    | _ -> (
+    let str =
       match h with
-      | Neg f -> "(" ^ "NOT " ^ string_f_rec false false f ^ ")"
-      | Exists (vl, f) ->
-          "(" ^ "EXISTS "
-          ^ Misc.string_of_list_ext "" "" ", " string_of_term
-              (List.map (fun v -> Var v) vl)
-          ^ ". " ^ string_f_rec false false f ^ ")"
-      | ForAll (vl, f) ->
-          "(" ^ "FORALL "
-          ^ Misc.string_of_list_ext "" "" ", " string_of_term
-              (List.map (fun v -> Var v) vl)
-          ^ ". " ^ string_f_rec false false f ^ ")"
-      | Aggreg (rty, y, op, x, glist, f) ->
-          "(" ^ string_of_term (Var y) ^ " <- " ^ MFOTL.string_of_agg_op op
-          ^ " " ^ string_of_term x
-          ^ ( if glist <> [] then
-              "; "
-              ^ Misc.string_of_list_ext "" "" ","
-                  (fun z -> string_of_term (Var z))
-                  (List.map string_of_term glist)
-            else "" )
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | Prev (intv, f) ->
-          "(" ^ "PREVIOUS"
-          ^ MFOTL.string_of_interval intv
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | Next (intv, f) ->
-          "(" ^ "NEXT"
-          ^ MFOTL.string_of_interval intv
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | Eventually (intv, f) ->
-          "(" ^ "EVENTUALLY"
-          ^ MFOTL.string_of_interval intv
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | Once (intv, f) ->
-          "(" ^ "ONCE"
-          ^ MFOTL.string_of_interval intv
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | Always (intv, f) ->
-          "(" ^ "ALWAYS"
-          ^ MFOTL.string_of_interval intv
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | PastAlways (intv, f) ->
-          "(" ^ "PAST_ALWAYS"
-          ^ MFOTL.string_of_interval intv
-          ^ " " ^ string_f_rec false false f ^ ")"
-      | Frex (intv, r) ->
-          "(" ^ "|>"
-          ^ MFOTL.string_of_interval intv
-          ^ string_r_rec false false r ^ ")"
-      | Prex (intv, r) ->
-          "(" ^ "<|"
-          ^ MFOTL.string_of_interval intv
-          ^ string_r_rec false false r ^ ")"
+      | Equal (t1, t2) ->
+          "(" ^ string_of_term t1 ^ " = " ^ string_of_term t2 ^ ")"
+      | Less (t1, t2) ->
+          "(" ^ string_of_term t1 ^ " < " ^ string_of_term t2 ^ ")"
+      | LessEq (t1, t2) ->
+          "(" ^ string_of_term t1 ^ " <= " ^ string_of_term t2 ^ ")"
+      | Substring (t1, t2) ->
+          "(" ^ string_of_term t1 ^ " SUBSTRING " ^ string_of_term t2 ^ ")"
+      | Matches (t1, t2, tl) ->
+          "(" ^ string_of_term t1 ^ " MATCHES " ^ string_of_term t2
+          ^ ( if tl = [] then ""
+            else Misc.string_of_list_ext " (" ")" ", " string_of_opt_term tl )
+          ^ ")"
+      | Pred p -> string_of_predicate p
       | _ -> (
         match h with
-        | And (f1, f2) ->
-            "(" ^ string_f_rec false true f1 ^ " AND "
-            ^ string_f_rec false true f2 ^ ")"
-        | Or (f1, f2) ->
-            "(" ^ string_f_rec false true f1 ^ " OR "
-            ^ string_f_rec false false f2
-            ^ ")"
-        | Implies (f1, f2) ->
-            "(" ^ string_f_rec false true f1 ^ " IMPLIES "
-            ^ string_f_rec false false f2
-            ^ ")"
-        | Equiv (f1, f2) ->
-            "(" ^ string_f_rec false true f1 ^ " EQUIV "
-            ^ string_f_rec false false f2
-            ^ ")"
-        | Let (p, f1, f2) ->
-            "(" ^ "LET" ^ " "
-            ^ string_f_rec false true (fdata, Pred p)
-            ^ " = " ^ string_f_rec false true f1 ^ "\n" ^ padding ^ "IN" ^ " "
-            ^ string_f_rec false false f2
-            ^ ")"
-        | Since (intv, f1, f2) ->
-            "(" ^ string_f_rec false true f1 ^ " SINCE"
+        | Neg f -> "(" ^ "NOT " ^ string_f_rec false false f ^ ")"
+        | Exists (vl, f) ->
+            "(" ^ "EXISTS "
+            ^ Misc.string_of_list_ext "" "" ", " string_of_term
+                (List.map (fun v -> Var v) vl)
+            ^ ". " ^ string_f_rec false false f ^ ")"
+        | ForAll (vl, f) ->
+            "(" ^ "FORALL "
+            ^ Misc.string_of_list_ext "" "" ", " string_of_term
+                (List.map (fun v -> Var v) vl)
+            ^ ". " ^ string_f_rec false false f ^ ")"
+        | Aggreg (rty, y, op, x, glist, f) ->
+            "(" ^ string_of_term (Var y) ^ " <- " ^ MFOTL.string_of_agg_op op
+            ^ " " ^ string_of_term x
+            ^ ( if glist <> [] then
+                "; "
+                ^ Misc.string_of_list_ext "" "" ","
+                    (fun z -> string_of_term (Var z))
+                    (List.map string_of_term glist)
+              else "" )
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | Prev (intv, f) ->
+            "(" ^ "PREVIOUS"
             ^ MFOTL.string_of_interval intv
-            ^ " "
-            ^ string_f_rec false false f2
-            ^ ")"
-        | Until (intv, f1, f2) ->
-            "(" ^ string_f_rec false true f1 ^ " UNTIL"
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | Next (intv, f) ->
+            "(" ^ "NEXT"
             ^ MFOTL.string_of_interval intv
-            ^ " "
-            ^ string_f_rec false false f2
-            ^ ")"
-        | _ -> failwith "[print_formula] impossible" ) )
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | Eventually (intv, f) ->
+            "(" ^ "EVENTUALLY"
+            ^ MFOTL.string_of_interval intv
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | Once (intv, f) ->
+            "(" ^ "ONCE"
+            ^ MFOTL.string_of_interval intv
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | Always (intv, f) ->
+            "(" ^ "ALWAYS"
+            ^ MFOTL.string_of_interval intv
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | PastAlways (intv, f) ->
+            "(" ^ "PAST_ALWAYS"
+            ^ MFOTL.string_of_interval intv
+            ^ " " ^ string_f_rec false false f ^ ")"
+        | Frex (intv, r) ->
+            "(" ^ "|>"
+            ^ MFOTL.string_of_interval intv
+            ^ string_r_rec false false r ^ ")"
+        | Prex (intv, r) ->
+            "(" ^ "<|"
+            ^ MFOTL.string_of_interval intv
+            ^ string_r_rec false false r ^ ")"
+        | _ -> (
+          match h with
+          | And (f1, f2) ->
+              "(" ^ string_f_rec false true f1 ^ " AND "
+              ^ string_f_rec false true f2 ^ ")"
+          | Or (f1, f2) ->
+              "(" ^ string_f_rec false true f1 ^ " OR "
+              ^ string_f_rec false false f2
+              ^ ")"
+          | Implies (f1, f2) ->
+              "(" ^ string_f_rec false true f1 ^ " IMPLIES "
+              ^ string_f_rec false false f2
+              ^ ")"
+          | Equiv (f1, f2) ->
+              "(" ^ string_f_rec false true f1 ^ " EQUIV "
+              ^ string_f_rec false false f2
+              ^ ")"
+          | Let (p, f1, f2) ->
+              "(" ^ "LET" ^ " "
+              ^ string_f_rec false true (fdata, Pred p)
+              ^ " = " ^ string_f_rec false true f1 ^ "\n" ^ padding ^ "IN" ^ " "
+              ^ string_f_rec false false f2
+              ^ ")"
+          | Since (intv, f1, f2) ->
+              "(" ^ string_f_rec false true f1 ^ " SINCE"
+              ^ MFOTL.string_of_interval intv
+              ^ " "
+              ^ string_f_rec false false f2
+              ^ ")"
+          | Until (intv, f1, f2) ->
+              "(" ^ string_f_rec false true f1 ^ " UNTIL"
+              ^ MFOTL.string_of_interval intv
+              ^ " "
+              ^ string_f_rec false false f2
+              ^ ")"
+          | _ -> failwith "[print_formula] impossible" ) ) in
+    let annot = string_of_annot fdata in
+    if String.length annot > 0 then str ^ " [" ^ annot ^ "]" else str
   and string_r_rec top par h =
     match h with
     | Wild -> "(" ^ "." ^ ")"
@@ -734,9 +751,8 @@ let string_of_gamma (tctxt : tctxt) (vars : symbol_table) =
   if List.length vars > 0 then
     let fv, ft = List.hd vars in
     List.fold_left
-      (fun a (v, t) ->
-        a ^ ", " ^ string_of_term v ^ ":" ^ string_of_type tctxt !t )
-      (string_of_term fv ^ ":" ^ string_of_type tctxt !ft)
+      (fun a (v, t) -> a ^ ", " ^ v ^ ":" ^ string_of_type tctxt !t)
+      (fv ^ ":" ^ string_of_type tctxt !ft)
       (List.tl vars)
   else "_"
 
@@ -753,11 +769,11 @@ let rec type_of_term (ctx : type_context) (t : cplx_term) : tcst =
              (string_of_term t) (string_of_type tctxt ty) in
   match t with
   | Var v -> (
-    match List.assoc_opt (Var v) vars with
+    match List.assoc_opt v vars with
     | Some tsymb -> concrete_ty !tsymb
     | None ->
         failwith
-        @@ Printf.sprintf "Cannov find var %s in symbol table %s" v
+        @@ Printf.sprintf "Cannot find var %s in symbol table %s" v
              (string_of_gamma tctxt vars) )
   | Proj (base, field) ->
       let base_ctor =
@@ -1221,14 +1237,11 @@ let rec check_unresolved_terms (pred : string option) (free_vars : var list)
   let unresolved_vars =
     List.filter
       (fun (v, t) ->
-        match (v, !t) with
-        | Var v, TSymb st -> List.mem v free_vars
-        | _ -> false )
+        match (v, !t) with v, TSymb st -> List.mem v free_vars | _ -> false )
       vars
     |> List.map fst in
   if List.length unresolved_vars > 0 then
-    let terms_as_str =
-      List.map string_of_term unresolved_vars |> String.concat ", " in
+    let terms_as_str = String.concat ", " unresolved_vars in
     let msg =
       Printf.sprintf
         "Type Error: Following terms%s could not be resolved to a type: %s"
@@ -1266,8 +1279,8 @@ let type_check_term_debug (d : bool) (ctx : type_context) (typ : tsymb)
       Printf.eprintf "\n%!\n%!" ) ;
     match term with
     | Var v as tt ->
-        if List.mem_assoc tt vars then (
-          let vtyp = !(List.assoc tt vars) in
+        if List.mem_assoc v vars then (
+          let vtyp = !(List.assoc v vars) in
           propagate_constraints typ vtyp tt ctx ;
           vtyp )
         else
@@ -1490,26 +1503,24 @@ let type_check_formula_debug (d : bool) =
         check_unresolved_terms (Some n) pred_args v1 ;
         (* TODO: re-enable after refactoring symbol table: *)
         (* assert (List.length v1 = List.length new_typed_vars) ; *)
-        let new_sig = List.map (fun v -> (v, !(List.assoc v v1))) ts in
-        let new_sig = List.map (fun (_, t) -> t) new_sig in
+        let new_sig = List.map (fun (_, t) -> !t) v1 in
         (* this is a reference to the old predicate schema of this LET predicate in the inner formula.sorts
            we replace its value with the updated (type-checked) schema: *)
         let old_sch = f_annot f2 |> t_preds |> List.assoc (n, a) in
         old_sch := new_sig ;
         type_check_formula f2
     | Neg f -> type_check_formula f
-    | Prev (intv, f) -> type_check_formula f
-    | Next (intv, f) -> type_check_formula f
-    | Eventually (intv, f) -> type_check_formula f
-    | Once (intv, f) -> type_check_formula f
-    | Always (intv, f) -> type_check_formula f
-    | PastAlways (intv, f) -> type_check_formula f
-    | And (f1, f2) -> type_check_formula f1 ; type_check_formula f2
-    | Or (f1, f2) -> type_check_formula f1 ; type_check_formula f2
-    | Implies (f1, f2) -> type_check_formula f1 ; type_check_formula f2
-    | Equiv (f1, f2) -> type_check_formula f1 ; type_check_formula f2
-    | Since (intv, f1, f2) -> type_check_formula f1 ; type_check_formula f2
-    | Until (intv, f1, f2) -> type_check_formula f ; type_check_formula f
+    | Prev (intv, f)
+     |Next (intv, f)
+     |Eventually (intv, f)
+     |Once (intv, f)
+     |Always (intv, f)
+     |PastAlways (intv, f) ->
+        type_check_formula f
+    | And (f1, f2) | Or (f1, f2) | Implies (f1, f2) | Equiv (f1, f2) ->
+        type_check_formula f1 ; type_check_formula f2
+    | Since (intv, f1, f2) | Until (intv, f1, f2) ->
+        type_check_formula f1 ; type_check_formula f2
     | Exists (l, f) | ForAll (l, f) ->
         type_check_formula f ;
         check_unresolved_terms None l (f_annot f).vars
@@ -1619,36 +1630,42 @@ module Monitorability = struct
     as variables are returned instead.
 
     Example: mtvars ctx r.user -> ["r.user.name"; "r.user.address", ...]*)
-  let rec mtvars (ctx : type_context) = function
-    | Cst c -> []
-    | F2i t
-     |I2f t
-     |I2s t
-     |S2i t
-     |F2s t
-     |S2f t
-     |DayOfMonth t
-     |Month t
-     |Year t
-     |FormatDate t
-     |UMinus t
-     |R2s t
-     |S2r t ->
-        mtvars ctx t
-    | Plus (t1, t2)
-     |Minus (t1, t2)
-     |Mult (t1, t2)
-     |Div (t1, t2)
-     |Mod (t1, t2) ->
-        mtvars ctx t1 @ mtvars ctx t2
-    | (Var _ as t) | (Proj _ as t) -> (
-        let ty = type_of_term ctx t in
-        match ty with
-        | TInt | TFloat | TStr | TRegexp -> [string_of_term t]
-        | TRef ctor ->
-            let fields = List.assoc ctor ctx.sorts |> snd in
-            List.map (fun (fname, _) -> mtvars ctx (Proj (t, fname))) fields
-            |> List.flatten )
+  let rec mtvars (ctx : type_context) (term : cplx_term) : var list =
+    let aux =
+      match term with
+      | Cst c -> []
+      | F2i t
+       |I2f t
+       |I2s t
+       |S2i t
+       |F2s t
+       |S2f t
+       |DayOfMonth t
+       |Month t
+       |Year t
+       |FormatDate t
+       |UMinus t
+       |R2s t
+       |S2r t ->
+          mtvars ctx t
+      | Plus (t1, t2)
+       |Minus (t1, t2)
+       |Mult (t1, t2)
+       |Div (t1, t2)
+       |Mod (t1, t2) ->
+          mtvars ctx t1 @ mtvars ctx t2
+      | (Var _ as t) | (Proj _ as t) -> (
+          let ty = type_of_term ctx t in
+          match ty with
+          | TInt | TFloat | TStr | TRegexp -> [string_of_term t]
+          | TRef ctor ->
+              let fields = List.assoc ctor ctx.sorts |> snd in
+              List.map (fun (fname, _) -> mtvars ctx (Proj (t, fname))) fields
+              |> List.flatten ) in
+    let res = aux in
+    (* Printf.eprintf "MTVARS: %s -> %s\n" (string_of_term term)
+      (String.concat "," res) ; *)
+    res
 
   (* In these special cases, no evaluation is needed for the formula [f2]. *)
   let is_special_case (ctx : type_context) fv1 (f : 'a cplx_formula) =
@@ -1661,7 +1678,7 @@ module Monitorability = struct
          Use new mtvars, but still cover projections *)
       | Proj (b, _), t when Misc.subset (mtvars ctx t) fv1 -> true
       | t, Proj (b, _) when Misc.subset (mtvars ctx t) fv1 -> true
-      | _ -> Misc.subset (free_vars ~tvars:(mtvars ctx) f) fv1 )
+      | _ -> Misc.subset (free_vars ~tvars:mtvars f) fv1 )
     | Matches (t1, t2, tl) ->
         Misc.subset (mtvars ctx t1) fv1
         && Misc.subset (mtvars ctx t2) fv1
@@ -1679,7 +1696,7 @@ module Monitorability = struct
      |Neg (_, LessEq (_, _))
      |Neg (_, Substring (_, _))
      |Neg (_, Matches (_, _, _)) ->
-        Misc.subset (free_vars ~tvars:(mtvars ctx) f) fv1
+        Misc.subset (free_vars ~tvars:mtvars f) fv1
     | _ -> false
 
   let is_and_relop ((_, f) : 'a cplx_formula) =
@@ -1722,9 +1739,6 @@ module Monitorability = struct
     | Neg (_, Equal (t1, t2)) -> (
       match (t1, t2) with
       | Var x, Var y when x = y -> (true, None)
-      (* TODO: is this valid for projections?
-         Required for same case as above: Constraints guarantee that the expanded variables
-         will be equal, covering the variable case above. *)
       | Proj (xb, xf), Proj (yb, yf) when xb = yb && xf = yf -> (true, None)
       | Cst _, Cst _ -> (true, None)
       | _ -> (false, Some (f, msg_NOT_EQUAL)) )
@@ -1732,10 +1746,7 @@ module Monitorability = struct
         let tlist = get_predicate_args p in
         if
           List.for_all
-            (* TODO: is this valid for projections?
-               Required for: isBad(r.url) *)
-              (fun t ->
-              match t with Var _ | Cst _ | Proj _ -> true | _ -> false )
+            (fun t -> match t with Var _ | Cst _ | Proj _ -> true | _ -> false)
             tlist
         then (true, None)
         else (false, Some (f, msg_PRED))
@@ -1746,20 +1757,20 @@ module Monitorability = struct
         let is_mon1, r1 = is_monitorable f1 in
         if not is_mon1 then (is_mon1, r1) else is_monitorable f2
     | Neg f1 ->
-        if free_vars ~tvars:(mtvars ctx) f1 = [] then is_monitorable f1
+        if free_vars ~tvars:mtvars f1 = [] then is_monitorable f1
         else (false, Some (f, msg_NOT))
     | And (f1, f2) -> (
         let is_mon1, r1 = is_monitorable f1 in
         if not is_mon1 then (is_mon1, r1)
         else
-          let fv1 = free_vars ~tvars:(mtvars ctx) f1 in
+          let fv1 = free_vars ~tvars:mtvars f1 in
           if is_and_relop f2 then
             if is_special_case ctx fv1 f2 then (true, None)
             else (false, Some (f, msg_ANDRELOP))
           else
             match snd f2 with
             | Neg f2' ->
-                let fv2 = free_vars ~tvars:(mtvars ctx) f2 in
+                let fv2 = free_vars ~tvars:mtvars f2 in
                 if not (Misc.subset fv2 fv1) then
                   ( false
                   , Some
@@ -1769,8 +1780,8 @@ module Monitorability = struct
                 else is_monitorable f2'
             | _ -> is_monitorable f2 )
     | Or (f1, f2) ->
-        let fv1 = free_vars ~tvars:(mtvars ctx) f1 in
-        let fv2 = free_vars ~tvars:(mtvars ctx) f2 in
+        let fv1 = free_vars ~tvars:mtvars f1 in
+        let fv2 = free_vars ~tvars:mtvars f2 in
         if (not (Misc.subset fv1 fv2)) || not (Misc.subset fv2 fv1) then
           (false, Some (f, msg_OR))
         else
@@ -1787,8 +1798,8 @@ module Monitorability = struct
         let is_mon2, msg2 = is_monitorable f2 in
         if not is_mon2 then (is_mon2, msg2)
         else
-          let fv1 = free_vars ~tvars:(mtvars ctx) f1 in
-          let fv2 = free_vars ~tvars:(mtvars ctx) f2 in
+          let fv1 = free_vars ~tvars:mtvars f1 in
+          let fv2 = free_vars ~tvars:mtvars f2 in
           if not (Misc.subset fv1 fv2) then
             ( false
             , Some
@@ -1841,25 +1852,14 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
   let new_type_symbol (cls : tcl) =
     incr tsymb_id ;
     TSymb (cls, !tsymb_id) in
-  let filter_vars (vars : symbol_table) (f : var -> bool) : symbol_table =
-    List.filter
-      (fun (v, _) -> match v with Var v -> f v | _ -> failwith "remove")
-      vars in
   (* free variables ranging over the whole formula: *)
   let global_vars : symbol_table =
-    List.fold_left
-      (fun vrs vr -> (Var vr, ref (new_type_symbol TAny)) :: vrs)
-      [] (free_vars f) in
+    List.map (fun v -> (v, ref (new_type_symbol TAny))) (free_vars f) in
   let rec aux (ctx : type_context) (f : unit cplx_formula) :
       type_context cplx_formula =
     let local_vars = free_vars f in
     let filtered_vars =
-      List.filter
-        (fun (v, _) ->
-          match v with
-          | Var n -> List.mem n local_vars
-          | _ -> failwith "remove after symbol_table refactoring" )
-        ctx.vars in
+      List.filter (fun (v, _) -> List.mem v local_vars) ctx.vars in
     let fctxt =
       create_type_context ctx.predicates tctxt filtered_vars tsymb_id in
     let rec aux_regex (regex : unit regex) : type_context regex =
@@ -1893,21 +1893,19 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
     | Frex (i, r) -> (fctxt, Frex (i, aux_regex r))
     | Prex (i, r) -> (fctxt, Prex (i, aux_regex r))
     | Exists (l, f) ->
-        let non_shadowed = filter_vars ctx.vars (fun v -> not (List.mem v l)) in
+        let non_shadowed =
+          List.filter (fun (v, _) -> not (List.mem v l)) ctx.vars in
         let new_vars =
-          non_shadowed
-          @ List.fold_left
-              (fun vrs vr -> (Var vr, ref (new_type_symbol TAny)) :: vrs)
-              [] l in
+          non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
+        in
         ( fctxt
         , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
     | ForAll (l, f) ->
-        let non_shadowed = filter_vars ctx.vars (fun v -> not (List.mem v l)) in
+        let non_shadowed =
+          List.filter (fun (v, _) -> not (List.mem v l)) ctx.vars in
         let new_vars =
-          non_shadowed
-          @ List.fold_left
-              (fun vrs vr -> (Var vr, ref (new_type_symbol TAny)) :: vrs)
-              [] l in
+          non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
+        in
         ( fctxt
         , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
     | Let ((name, arity, targs), body, f) ->
@@ -1916,8 +1914,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
             (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
             targs in
         let arg_types = List.map (fun a -> new_type_symbol TAny) arg_names in
-        let new_vars =
-          List.map2 (fun n t -> (Var n, ref t)) arg_names arg_types in
+        let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
         let non_shadowed = List.filter (fun ((n, _), _) -> n <> name) sch in
         let new_sch = ((name, arity), ref arg_types) :: non_shadowed in
         ( fctxt
@@ -1931,8 +1928,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
             (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
             targs in
         let arg_types = List.map (fun a -> new_type_symbol TAny) arg_names in
-        let new_vars =
-          List.map2 (fun n t -> (Var n, ref t)) arg_names arg_types in
+        let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
         let new_sch = ((name, arity), ref arg_types) :: sch in
         ( fctxt
         , LetPast
@@ -1998,7 +1994,10 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
       "[Typecheck.typecheck_formula] The final type judgement is (%s; %s) ⊢ "
       (string_of_delta tctxt sch)
       (string_of_gamma tctxt ctx.vars) ;
-    Printf.eprintf "%s" (string_of_formula "" f) ;
+    Printf.eprintf "%s"
+      (string_of_parenthesized_formula ""
+         ~string_of_annot:(fun ctx -> string_of_gamma ctx.sorts ctx.vars)
+         f ) ;
     Printf.eprintf "\n%!" ) ;
   first_debug := false ;
   (* check and print monitorablity results: *)
@@ -2081,7 +2080,7 @@ let free_ref_vars (vars : symbol_table) (accept_list : var list) =
   List.fold_left
     (fun acc (t, ty) ->
       match (t, !ty) with
-      | Var v, TCst (TRef _) -> if filter_var v then v :: acc else acc
+      | v, TCst (TRef _) -> if filter_var v then v :: acc else acc
       | _ -> acc )
     [] vars
 
