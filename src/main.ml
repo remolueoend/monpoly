@@ -117,7 +117,8 @@ let main () =
       (* read signature file *)
       let signatures = Signatures.parse_signature_file !sigfile in
       (* typecheck, compile and check monitorability of extended formula: *)
-      let f, is_cplx_mon = CMFOTL.compile_formula signatures f in
+      let f, is_cplx_mon = CMFOTL.typecheck_formula signatures f in
+      let f = CMFOTL.compile_formula signatures f in
       if MFOTL.is_mfodl f then Misc.verified := true ;
       (*  generate a DB schema from the parsed signatures: *)
       let dbschema = Signatures.to_dbschema signatures in
