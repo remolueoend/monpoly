@@ -173,8 +173,8 @@ let rec tvars : cplx_term -> var list = function
       tvars t1 @ tvars t2
   | Proj (t1, _) -> tvars t1
 
-let pvars ?(tvars : 'a -> cplx_term -> var list = fun (_: 'a) t -> tvars t) (annot : 'a)
-    (p : cplx_predicate) =
+let pvars ?(tvars : 'a -> cplx_term -> var list = fun (_ : 'a) t -> tvars t)
+    (annot : 'a) (p : cplx_predicate) =
   List.fold_left
     (fun acc a ->
       List.fold_left
@@ -303,7 +303,8 @@ let unixts = ref false
 (** Returns a list of free variables in the given formula.
     One can provide an optional tvars function to be used,
     returning the free variables for a given term. Default is `tvars`. *)
-let rec free_vars ?(tvars : 'a -> cplx_term -> var list = fun (_ : 'a) t -> tvars t)
+let rec free_vars
+    ?(tvars : 'a -> cplx_term -> var list = fun (_ : 'a) t -> tvars t)
     ((annot, f) : 'a cplx_formula) =
   match f with
   | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
@@ -335,7 +336,7 @@ let rec free_vars ?(tvars : 'a -> cplx_term -> var list = fun (_ : 'a) t -> tvar
       Misc.union (free_vars ~tvars f2) (free_vars ~tvars f1)
   | Frex (intv, r) | Prex (intv, r) -> free_re_vars ~tvars r
 
-and free_re_vars ?(tvars = fun (_: 'a) t -> tvars t) = function
+and free_re_vars ?(tvars = fun (_ : 'a) t -> tvars t) = function
   | Wild -> []
   | Test f -> free_vars ~tvars f
   | Concat (r1, r2) | Plus (r1, r2) ->
@@ -1660,8 +1661,10 @@ module Monitorability = struct
           | TInt | TFloat | TStr | TRegexp -> [string_of_term t]
           | TRef ctor ->
               let fields = List.assoc ctor ctx.sorts |> snd in
-              List.map (fun (fname, _) -> mtvars ctx (Proj (t, fname))) fields
-              |> List.flatten ) in
+              let subfields =
+                List.map (fun (fname, _) -> mtvars ctx (Proj (t, fname))) fields
+                |> List.flatten in
+              string_of_term t :: subfields ) in
     let res = aux in
     (* Printf.eprintf "MTVARS: %s -> %s\n" (string_of_term term)
       (String.concat "," res) ; *)
@@ -1832,7 +1835,7 @@ module Monitorability = struct
           (string_of_formula "" f) msg
     | None -> failwith "[Rewriting.print_reason] internal error"
 
-  let print_results is_mon reason =
+  let print_results (is_mon, reason) =
     if !Misc.verbose || !Misc.checkf then
       if is_mon then Printf.eprintf "The extended formula is monitorable.\n%!"
       else print_reason "The extended formula is NOT monitorable" reason
@@ -1947,12 +1950,12 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
     2) A possibly updated version of the input formula.
     3) A boolean flag indicating the monitorability (safety) of the input formula. *)
 let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
-    type_context cplx_formula * bool =
+    type_context cplx_formula =
   let debug = !first_debug && Misc.debugging Dbg_typing in
   (* first of all check well-formedness of formula: *)
   ignore @@ ignore (check_wff f) ;
   let lift_type t = TCst t in
-  (* create Δ *)
+  (* create initial Δ *)
   let sch : predicate_schema =
     List.fold_left
       (fun acc decl ->
@@ -2000,10 +2003,7 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
          f ) ;
     Printf.eprintf "\n%!" ) ;
   first_debug := false ;
-  (* check and print monitorablity results: *)
-  let is_mon, reason = Monitorability.is_monitorable f in
-  if not is_mon then Monitorability.print_results is_mon reason ;
-  (f, is_mon)
+  f
 
 (* COMPILE FUNCTIONS *)
 
