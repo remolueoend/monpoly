@@ -117,17 +117,22 @@ let main () =
       (* read signature file *)
       let signatures = Signatures.parse_signature_file !sigfile in
       (* typecheck, compile and check monitorability of extended formula: *)
-      let f, is_cplx_mon = CMFOTL.typecheck_formula signatures f in
-      let f = CMFOTL.compile_formula signatures f in
-      if MFOTL.is_mfodl f then Misc.verified := true ;
+      let f = CMFOTL.typecheck_formula signatures f in
+      let compiled_f = CMFOTL.compile_formula signatures f in
+      if MFOTL.is_mfodl compiled_f then Misc.verified := true ;
       (*  generate a DB schema from the parsed signatures: *)
       let dbschema = Signatures.to_dbschema signatures in
-      let is_mon, pf, vartypes = check_formula dbschema f in
-      if is_mon <> is_cplx_mon then
-        failwith @@ Printf.sprintf "Invalid safety properties after compilation" ;
+      let is_mon, pf, vartypes = check_formula dbschema compiled_f in
       let fv = List.map fst vartypes in
       if !sigout then Predicate.print_vartypes_list vartypes
-      else if is_cplx_mon && is_mon && not !Misc.checkf then (
+        (* if the compiled formula is monitorable, we continue with the monitoring.
+           Otherwise, we print the monitorability results of the extended formula. *)
+      else if not is_mon then
+        match CMFOTL.Monitorability.is_monitorable f with
+        | (false, Some reason) as result ->
+            CMFOTL.Monitorability.print_results result
+        | _ -> failwith ""
+      else if not !Misc.checkf then (
         if not !nofilterrelopt then Filter_rel.enable pf ;
         if (not !nofilteremptytpopt) && not !Misc.verified then
           Filter_empty_tp.enable pf ;
