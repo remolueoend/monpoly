@@ -1,3 +1,2 @@
-P(x:int)
-Q(x:int, y:string)
+withdraw(client:string, amount:int)
 
