@@ -1904,7 +1904,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
     | Prex (i, r) -> (fctxt, Prex (i, aux_regex r))
     | Exists (l, f) ->
         let non_shadowed =
-          List.filter (fun (v, _) -> not (List.mem v l)) ctx.vars in
+          List.filter (fun (v, _) -> not (List.mem v l)) filtered_vars in
         let new_vars =
           non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
         in
@@ -1912,7 +1912,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
         , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
     | ForAll (l, f) ->
         let non_shadowed =
-          List.filter (fun (v, _) -> not (List.mem v l)) ctx.vars in
+          List.filter (fun (v, _) -> not (List.mem v l)) filtered_vars in
         let new_vars =
           non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
         in
@@ -1946,7 +1946,7 @@ let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
             , aux (create_type_context sch tctxt new_vars tsymb_id) body
             , aux (create_type_context new_sch tctxt ctx.vars tsymb_id) f ) )
     | Aggreg (rty, r, op, x, gs, f) ->
-        failwith "init_type_context: Aggreg not implemented yet" in
+        (fctxt, Aggreg (rty, r, op, x, gs, aux fctxt f)) in
   let typed_formula =
     aux (create_type_context sch tctxt global_vars tsymb_id) f in
   typed_formula
