@@ -1667,7 +1667,7 @@ module Monitorability = struct
               string_of_term t :: subfields ) in
     let res = aux in
     (* Printf.eprintf "MTVARS: %s -> %s\n" (string_of_term term)
-      (String.concat "," res) ; *)
+       (String.concat "," res) ; *)
     res
 
   (* In these special cases, no evaluation is needed for the formula [f2]. *)
@@ -1845,6 +1845,13 @@ module Monitorability = struct
          flags.\n\
          %!"
 end
+
+let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
+  let ctx = f_annot f in
+  Printf.eprintf "The input formula is: %s\n%!" (string_of_formula "" f) ;
+  Printf.eprintf "The analyzed formula is: %s\n" (MFOTL.string_of_formula "" c) ;
+  Printf.eprintf "The sequence of free variables and their types is: %s\n%!"
+    (string_of_gamma ctx.sorts ctx.vars)
 
 (** initializes the type annotations for all sub formulas in the given formula.
     All free variables of a sub-formula are initialized with TAny.

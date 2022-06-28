@@ -1675,25 +1675,17 @@ let check_formula s f =
     | None -> f
     | Some mode -> expand_let mode f
   in
+  
+  (f, fvtypes)
 
+
+let check_monitorability s f =
   (* Check monitorability *)
   let check_mon = if !Misc.verified then Verified_adapter.is_monitorable s
     else is_monitorable
   in
   if !no_rw then
-    let is_mon, reason = check_mon f in
-    if !Misc.verbose || !Misc.checkf then
-      begin
-        MFOTL.prerrnl_formula "The input formula is:\n  " f;
-        prerr_string "The sequence of free variables is: ";
-        Misc.prerr_list prerr_string orig_fv;
-        prerr_newline();
-        if is_mon then prerr_endline "The formula is monitorable."
-        else prerr_reason "The formula is NOT monitorable" reason
-      end
-    else if not is_mon then
-      prerr_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
-    (is_mon, f, fvtypes)
+    check_mon f
   else
     (* Rewriting and checking monitorability again *)
     let nf = normalize f in
@@ -1712,41 +1704,31 @@ let check_formula s f =
     if not (is_future rf) then
       Misc.new_last_ts := false;
 
-    if !Misc.verbose || !Misc.checkf then
-      begin
-        if rf <> f then
-          MFOTL.prerrnl_formula "The input formula is:\n  " f;
-
-        MFOTL.prerrnl_formula "The analyzed formula is:\n  " rf;
-        prerr_string "The sequence of free variables is: ";
-        Misc.prerr_list prerr_string orig_fv;
-        prerr_newline()
-      end;
-
     let is_mon = if not (fst is_mon) then check_mon rf else is_mon in
-    if (not (fst is_mon)) then
-      begin
-        if !Misc.verbose || !Misc.checkf then
-          begin
-            prerr_reason "The analyzed formula is NOT monitorable" (snd is_mon);
-            let is_sr = is_saferange nf in
-            (* assert(is_sr = is_saferange rf); *)
-            if is_sr then
-              prerr_endline "However, the input (and also the analyzed) formula is safe-range, \n\
-                             hence one should be able to rewrite it into a monitorable formula."
-            else
-              prerr_endline "The analyzed formula is neither safe-range.";
-            let is_tsfsr = is_tsfsaferange rf in
-            if is_tsfsr then
-              prerr_endline "By the way, the analyzed formula is TSF safe-range."
-            else
-              prerr_endline "By the way, the analyzed formula is not TSF safe-range.";
-          end
-          else 
-            prerr_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
-      end
-    else if !Misc.checkf then
-      prerr_string "The analyzed formula is monitorable.\n";
+    is_mon
 
-    (* let (_,rf) = check_syntax s rf in *) (* TODO: why is this needed? *)
-    (fst is_mon, rf, fvtypes)
+
+let print_monitorability_results f is_mon =
+  if (not (fst is_mon)) then
+    begin
+      if !Misc.verbose || !Misc.checkf then
+        begin
+          prerr_reason "The analyzed formula is NOT monitorable" (snd is_mon);
+          let is_sr = is_saferange f in
+          (* assert(is_sr = is_saferange rf); *)
+          if is_sr then
+            prerr_endline "However, the input (and also the analyzed) formula is safe-range, \n\
+                           hence one should be able to rewrite it into a monitorable formula."
+          else
+            prerr_endline "The analyzed formula is neither safe-range.";
+          let is_tsfsr = is_tsfsaferange f in
+          if is_tsfsr then
+            prerr_endline "By the way, the analyzed formula is TSF safe-range."
+          else
+            prerr_endline "By the way, the analyzed formula is not TSF safe-range.";
+        end
+        else 
+          prerr_string "The formula is NOT monitorable. Use the -check or -verbose flags.\n";
+    end
+  else if !Misc.checkf then
+    prerr_string "The analyzed formula is monitorable.\n";

@@ -118,20 +118,23 @@ let main () =
       let signatures = Signatures.parse_signature_file !sigfile in
       (* typecheck, compile and check monitorability of extended formula: *)
       let f = CMFOTL.typecheck_formula signatures f in
-      let compiled_f = CMFOTL.compile_formula signatures f in
-      if MFOTL.is_mfodl compiled_f then Misc.verified := true ;
+      let pf = CMFOTL.compile_formula signatures f in
+      if MFOTL.is_mfodl pf then Misc.verified := true ;
       (*  generate a DB schema from the parsed signatures: *)
       let dbschema = Signatures.to_dbschema signatures in
-      let is_mon, pf, vartypes = check_formula dbschema compiled_f in
+      let pf, vartypes = check_formula dbschema pf in
       let fv = List.map fst vartypes in
+      if !Misc.verbose || !Misc.checkf then CMFOTL.print_formula_details f pf ;
+      let is_mon = Rewriting.check_monitorability dbschema pf in
       if !sigout then Predicate.print_vartypes_list vartypes
+      else if not (fst is_mon) then
         (* if the compiled formula is monitorable, we continue with the monitoring.
            Otherwise, we print the monitorability results of the extended formula. *)
-      else if not is_mon then
         match CMFOTL.Monitorability.is_monitorable f with
         | (false, Some reason) as result ->
             CMFOTL.Monitorability.print_results result
-        | _ -> failwith ""
+        | _ -> Rewriting.print_monitorability_results pf is_mon;
+               failwith "Invariant violation: Extended formula is monitorable while compiled formula is not."
       else if not !Misc.checkf then (
         if not !nofilterrelopt then Filter_rel.enable pf ;
         if (not !nofilteremptytpopt) && not !Misc.verified then
