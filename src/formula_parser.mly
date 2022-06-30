@@ -119,13 +119,17 @@
   (* The rule is: var LARROW aggreg var SC varlist formula  *)
   let aggreg res_var op agg_var groupby_vars f =
     formula (Aggreg (res_var, op, agg_var, groupby_vars, f))
+    
+  (* the fields of a record constant should be sorted alphabetically *)
+  let record_cst sort fields =
+    Record (sort, List.sort (fun (a, _) (b, _) -> compare a b) fields)
 
 %}
 
 %token FALSE TRUE
 %token LPA RPA LSB RSB LCB RCB COM COL SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
 %token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE R2S S2R I2S S2I F2S S2F
-%token <string> STR STR_CST REGEXP_CST
+%token <string> IDENT STR_CST REGEXP_CST
 %token <Z.t> INT
 %token <float> RAT
 %token <int*char> TU
@@ -267,7 +271,7 @@ predicate:
                             }
 
 pred:
-  | STR                     { f "pred"; $1 }
+  | IDENT                     { f "pred"; $1 }
 
 
 term:
@@ -300,7 +304,7 @@ cst:
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }
   | REGEXP_CST              { f "cst(regex)"; compile_regexp $1 }
-  | pred LPA LCB rec_fields RCB RPA { f "cst(record)"; Record ($1, $4) }
+  | pred LCB rec_fields RCB { f "cst(record)"; record_cst $1 $3 }
 
 rec_fields:
   | rec_field COM rec_fields { f "recfields(list)" ; $1 :: $3 }
@@ -308,7 +312,7 @@ rec_fields:
   |                          { f "recfields()" ; []}
 
 rec_field:
-  | STR COL cst             { f "rec_field"; ($1, $3) }
+  | IDENT COL term           { f "rec_field"; ($1, $3) }
 
 termlist:
   | term COM termlist       { f "termlist(list)"; $1 :: $3 }
@@ -335,4 +339,4 @@ optterm:
 
 var:
   | LD                      { f "unnamed var"; incr var_cnt; "_" ^ (string_of_int !var_cnt) }
-  | STR                     { f "var"; assert (String.length $1 > 0); $1 }
+  | IDENT                   { f "var"; assert (String.length $1 > 0); $1 }

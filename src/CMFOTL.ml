@@ -64,14 +64,6 @@ let ( ?! ) l =
 
 (* DATA STRUCTURES *)
 
-type cst =
-  | Int of Z.t
-  | Str of string
-  | Float of float
-  (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
-  | Regexp of (string * Str.regexp)
-  | Record of (string * (string * cst) list)
-
 type tcst = Signature_ast.ty
 
 type tcl = TNum | TAny | TPartial of (var * tsymb) list
@@ -80,15 +72,16 @@ and tsymb = TSymb of (tcl * int) | TCst of tcst | TBot
 type table_schema = var * (string * tcst) list
 type db_schema = table_schema list
 
-let type_of_cst = function
-  | Int _ -> TInt
-  | Str _ -> TStr
-  | Float _ -> TFloat
-  | Regexp _ -> TRegexp
-  | Record (ctor, _) -> TRef ctor
-
 (** Γ *)
 type symbol_table = (var * tsymb ref) list
+
+and cst =
+  | Int of Z.t
+  | Str of string
+  | Float of float
+  (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
+  | Regexp of (string * Str.regexp)
+  | Record of (string * (string * cplx_term) list)
 
 (** Δ *)
 and predicate_schema = ((var * int) * tsymb list ref) list
@@ -128,6 +121,13 @@ and type_context =
   ; vars: symbol_table
   ; new_type_symbol: tcl -> tsymb }
 
+let type_of_cst = function
+  | Int _ -> TInt
+  | Str _ -> TStr
+  | Float _ -> TFloat
+  | Regexp _ -> TRegexp
+  | Record (ctor, _) -> TRef ctor
+
 let update_type_context (ctx : type_context) (sch : predicate_schema)
     (vars : symbol_table) : type_context =
   {predicates= sch; sorts= ctx.sorts; vars; new_type_symbol= ctx.new_type_symbol}
@@ -154,6 +154,8 @@ let get_predicate_args ((name, ar, args) : cplx_predicate) = args
 
 let rec tvars : cplx_term -> var list = function
   | Var v -> [v]
+  | Cst (Record (_, cfields)) ->
+      List.map (fun (_, v) -> tvars v) cfields |> List.flatten
   | Cst c -> []
   | F2i t
    |I2f t
@@ -388,6 +390,16 @@ let rec string_of_tcst (tctxt : tctxt) = function
           |> String.concat ", " )
         ^ "}" )
 
+let rec string_of_type (tctxt : tctxt) = function
+  | TCst t -> string_of_tcst tctxt t
+  | TSymb (TNum, a) -> "(Num t" ^ string_of_int a ^ ") =>  t" ^ string_of_int a
+  | TSymb (TPartial fs, a) ->
+      Printf.sprintf "t%i{%s}" a
+        ( List.map (fun (n, t) -> n ^ ":" ^ string_of_type tctxt t) fs
+        |> String.concat ", " )
+  | TSymb (TAny, a) -> "t" ^ string_of_int a
+  | TBot -> "Never"
+
 let rec string_of_cst c =
   let format_string s =
     if s = "" then "\"\""
@@ -400,20 +412,10 @@ let rec string_of_cst c =
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
   | Record (ctor, fields) ->
       Printf.sprintf "%s {%s}" ctor
-        ( List.map (fun (n, v) -> n ^ ": " ^ string_of_cst v) fields
+        ( List.map (fun (n, v) -> n ^ ": " ^ string_of_term v) fields
         |> String.concat ", " )
 
-let rec string_of_type (tctxt : tctxt) = function
-  | TCst t -> string_of_tcst tctxt t
-  | TSymb (TNum, a) -> "(Num t" ^ string_of_int a ^ ") =>  t" ^ string_of_int a
-  | TSymb (TPartial fs, a) ->
-      Printf.sprintf "t%i{%s}" a
-        ( List.map (fun (n, t) -> n ^ ":" ^ string_of_type tctxt t) fs
-        |> String.concat ", " )
-  | TSymb (TAny, a) -> "t" ^ string_of_int a
-  | TBot -> "Never"
-
-let rec string_of_term term =
+and string_of_term term =
   let add_paren str = "(" ^ str ^ ")" in
   let rec t2s b term =
     let b', str =
@@ -1237,10 +1239,44 @@ let type_check_term_debug (d : bool) (ctx : type_context) (typ : tsymb)
                v
                (string_of_gamma tctxt vars)
                (string_of_term term)
+    | Cst (Record (ctor, cfields)) ->
+        let sort_name, (_, sort_fields) =
+          match
+            List.find_opt
+              (fun (name, (inline, _)) -> name = ctor && not inline)
+              ctx.sorts
+          with
+          | Some s -> s
+          | None ->
+              failwith @@ Printf.sprintf "Unknown sort %s of constant" ctor
+        in
+        let cfield_names = List.map fst cfields in
+        let sort_field_names = List.map fst sort_fields in
+        let missing_fields =
+          List.filter (fun f -> List.mem f cfield_names) sort_field_names in
+        let unknown_fields =
+          List.filter (fun f -> List.mem f sort_field_names) cfield_names in
+        if not (List.length missing_fields > 0) then
+          failwith
+          @@ Printf.sprintf "Missing fields %s in constant of type %s"
+               (String.concat ", " missing_fields)
+               ctor ;
+        if not (List.length unknown_fields > 0) then
+          failwith
+          @@ Printf.sprintf "Unknown fields %s in constant of type %s"
+               (String.concat ", " missing_fields)
+               ctor ;
+        List.iter
+          (fun (cfield, v) ->
+            let sort_field = List.find (fun (n, _) -> n = cfield) sort_fields in
+            let _ = type_check_term ctx (TCst (snd sort_field)) v in
+            () )
+          cfields ;
+        TCst (TRef ctor)
     | Cst c as tt ->
-        let ctyp = TCst (type_of_cst c) in
-        propagate_constraints typ ctyp tt ctx ;
-        ctyp
+        let ctyp = type_of_cst c in
+        propagate_constraints typ (TCst ctyp) tt ctx ;
+        TCst ctyp
     | F2i t as tt ->
         propagate_constraints (TCst TInt) typ tt ctx ;
         let t_typ = type_check_term ctx (TCst TFloat) t in
@@ -1517,17 +1553,24 @@ let rec type_of_term (ctx : type_context) (t : cplx_term) : tcst =
            "type_of_term: Expected %s to be of concrete type, found %s"
            (string_of_term t) (string_of_type tctxt ty)
 
-(** returns all the leaves as projections of a given term.
+(** returns all leaf fields of a given term.
     The provided term is expected to be either a variable or a projection.
-    Example: get_reacord_leaves r.user -> r.user.name, r.user.address.city *)
+    Example 1: get_reacord_leaves r.user -> r.user.name, r.user.address.city
+    Example 2: record_leaves Client {name: "n", address: {street: "s", city: "c"}} -> "c", "s", "n"
+    Example 3: record_leaves Client {name: "n", address: a} -> a.city, a.street, "n" *)
 let record_leaves (ctx : type_context) (t : cplx_term) : cplx_term list =
   let rec leaves t ty =
-    match ty with
-    | TRef ctor ->
-        let fields = List.assoc ctor ctx.sorts |> snd in
-        List.map (fun (fname, ftyp) -> leaves (Proj (t, fname)) ftyp) fields
+    match t with
+    | Cst (Record (ctor, cfields)) ->
+        List.map (fun (n, v) -> leaves v (type_of_term ctx v)) cfields
         |> List.flatten
-    | _ -> [t] in
+    | _ -> (
+      match ty with
+      | TRef ctor ->
+          let fields = List.assoc ctor ctx.sorts |> snd in
+          List.map (fun (fname, ftyp) -> leaves (Proj (t, fname)) ftyp) fields
+          |> List.flatten
+      | _ -> [t] ) in
   leaves t (type_of_term ctx t)
 
 (** internal module for validating the monitorability of an extended formula. *)
@@ -1800,7 +1843,6 @@ let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
     (MFOTL.string_of_formula "" c) ;
   Printf.eprintf "The sequence of free variables and their types is: %s\n%!"
     (string_of_gamma ctx.sorts ctx.vars)
-
 
 (** initializes the type annotations for all sub formulas in the given formula.
     All free variables of a sub-formula are initialized with TAny.
@@ -2084,9 +2126,7 @@ let expand_structural_equality (ctx : type_context) (left : cplx_term)
           %s"
          (string_of_term left) (string_of_ty left_ty) (string_of_term right)
          (string_of_ty right_ty) ;
-  let leaves =
-    List.combine (record_leaves ctx left) (record_leaves ctx right)
-  in
+  let leaves = List.combine (record_leaves ctx left) (record_leaves ctx right) in
   let equal_terms = List.map (fun (l, r) -> (ctx, Equal (l, r))) leaves in
   cplx_conjunction ctx equal_terms
 
@@ -2160,7 +2200,9 @@ let compile_cst (cst : cst) : Predicate.cst =
   | Float v -> Float v
   | Str v -> Str v
   | Regexp v -> Regexp v
-  | Record _ -> failwith "invalid state"
+  | Record _ ->
+      failwith
+        "invalid state: Constant records must be expanded before compilation"
 
 let rec compile_term (input : cplx_term) : Predicate.term =
   match input with
@@ -2184,7 +2226,7 @@ let rec compile_term (input : cplx_term) : Predicate.term =
   | Mult (t1, t2) -> Mult (compile_term t1, compile_term t2)
   | Div (t1, t2) -> Div (compile_term t1, compile_term t2)
   | Mod (t1, t2) -> Mod (compile_term t1, compile_term t2)
-  | Proj (t, field) -> Var (projection_path t ^ "_" ^ field)
+  | Proj _ as p -> Var (projection_path p)
 
 let compile_predicate (ctx : type_context) ((name, arity, args) : cplx_predicate)
     : predicate =
@@ -2278,7 +2320,6 @@ and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
   | ForAll (l, f) -> ForAll (l, compile_formula_scope l f)
   | Aggreg (r, op, x, gs, f) ->
       let sz = List.filter (fun v -> not (List.mem v gs)) (free_vars f) in
-      Printf.eprintf ">>> gs is %s\n%!" (String.concat ", " gs) ;
       let expanded_gs =
         List.map (fun g -> record_leaves ctx (Var g)) gs
         |> List.flatten |> List.map projection_path in
@@ -2317,10 +2358,13 @@ and compile_regex (scope : type_context cplx_formula)
 let compile_formula (signatures : signatures) (f : type_context cplx_formula) :
     MFOTL.formula =
   let f = preprocess_formula f in
+  if Misc.debugging Dbg_rewriting then
+    Printf.eprintf "[compile_formula] Formula after preprocessing: \n%s\n%!"
+      (string_of_formula "" f) ;
   let output = compile_formula_scope [] f in
   let output = postprocess_formula output in
   if Misc.debugging Dbg_rewriting then
     Printf.eprintf
-      "\n%!\n%![Rewriting.compile_formula] The compilation output is %s\n%!\n%!"
+      "\n%!\n%![compile_formula] The compilation output is %s\n%!\n%!"
       (MFOTL.string_of_formula "" output) ;
   output
