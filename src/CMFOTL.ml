@@ -55,6 +55,13 @@ let t_snd (_, b, _) = b
 (** Returns the third entry of a given triple. *)
 let t_thd (_, _, c) = c
 
+(** prefix operator filtering a list of optional values. *)
+let ( ?! ) l =
+  List.fold_left
+    (fun (acc : 'a list) (v : 'a option) ->
+      match v with Some v -> v :: acc | None -> acc )
+    [] l
+
 (* DATA STRUCTURES *)
 
 type cst =
@@ -749,45 +756,6 @@ let string_of_gamma (tctxt : tctxt) (vars : symbol_table) =
       (List.tl vars)
   else "_"
 
-(** Returns the type of the given term derived from the provided symbol table.
-    Only implemented for constants, variables and projections. *)
-let rec type_of_term (ctx : type_context) (t : cplx_term) : tcst =
-  let tctxt, vars = (ctx.sorts, ctx.vars) in
-  let concrete_ty = function
-    | TCst t -> t
-    | ty ->
-        failwith
-        @@ Printf.sprintf
-             "type_of_term: Expected %s to be of concrete type, found %s"
-             (string_of_term t) (string_of_type tctxt ty) in
-  match t with
-  | Var v -> (
-    match List.assoc_opt v vars with
-    | Some tsymb -> concrete_ty !tsymb
-    | None ->
-        failwith
-        @@ Printf.sprintf "Cannot find var %s in symbol table %s" v
-             (string_of_gamma tctxt vars) )
-  | Proj (base, field) ->
-      let base_ctor =
-        match type_of_term ctx base with
-        | TRef ctor -> ctor
-        | t ->
-            failwith
-            @@ Printf.sprintf
-                 "type_of_term: exptected base to be TRef, found %s"
-                 (string_of_ty t) in
-      let base_fields = List.assoc base_ctor tctxt |> snd in
-      List.assoc field base_fields
-  | Cst (Int _) -> TInt
-  | Cst (Str _) -> TStr
-  | Cst (Float _) -> TFloat
-  | Cst (Regexp _) -> TRegexp
-  | t ->
-      failwith
-      @@ Printf.sprintf "type_of_term: not implemented for %s"
-           (string_of_term t)
-
 (* TYPE CHECKING *)
 
 (** Returns true iff the given term is either a variable
@@ -802,8 +770,8 @@ let rec is_var_or_proj = function
 
 (** Returns the base of (a chain of) projections:
     Example 0: projection_base r -> r
-    Example 1: projection_base r.user -> r.
-    Example 2: projection_base r.user.name -> r. *)
+    Example 1: projection_base r.user -> r
+    Example 2: projection_base r.user.name -> r *)
 let rec projection_base (t : cplx_term) : var =
   match t with
   | Var v -> v
@@ -1061,19 +1029,6 @@ let check_wff (f : 'a cplx_formula) =
   cl && ci && cb && ca
 
 let ( << ) f g x = f (g x)
-
-let merge_types (sch : predicate_schema) (vars : symbol_table) =
-  let rec merge_tsymb (tsymb : tsymb) : tsymb list =
-    match tsymb with
-    | TSymb (TPartial fields, _) ->
-        (* TODO: is this recursion really necessary? *)
-        (* tsymb :: List.map snd fields |> List.map merge_tsymb |> List.flatten *)
-        [tsymb]
-    | _ -> [tsymb] in
-  List.append
-    (List.map (fun v -> !(snd v)) vars |> List.map merge_tsymb |> List.flatten)
-    ( List.map (fun s -> !(snd s)) sch
-    |> List.flatten |> List.map merge_tsymb |> List.flatten )
 
 exception IncompatibleTypes of tsymb * tsymb
 
@@ -1549,6 +1504,32 @@ let type_check_formula_debug (d : bool) =
 
 let first_debug = ref true
 
+(** Returns the type of the given term derived from the provided symbol table.
+    Requires all variables in the given type context to be resolved. *)
+let rec type_of_term (ctx : type_context) (t : cplx_term) : tcst =
+  let tctxt, vars = (ctx.sorts, ctx.vars) in
+  let tsymb = type_check_term_debug false ctx (TSymb (TAny, 0)) t in
+  match tsymb with
+  | TCst t -> t
+  | ty ->
+      failwith
+      @@ Printf.sprintf
+           "type_of_term: Expected %s to be of concrete type, found %s"
+           (string_of_term t) (string_of_type tctxt ty)
+
+(** returns all the leaves as projections of a given term.
+    The provided term is expected to be either a variable or a projection.
+    Example: get_reacord_leaves r.user -> r.user.name, r.user.address.city *)
+let record_leaves (ctx : type_context) (t : cplx_term) : cplx_term list =
+  let rec leaves t ty =
+    match ty with
+    | TRef ctor ->
+        let fields = List.assoc ctor ctx.sorts |> snd in
+        List.map (fun (fname, ftyp) -> leaves (Proj (t, fname)) ftyp) fields
+        |> List.flatten
+    | _ -> [t] in
+  leaves t (type_of_term ctx t)
+
 (** internal module for validating the monitorability of an extended formula. *)
 
 module Monitorability = struct
@@ -1820,6 +1801,7 @@ let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
   Printf.eprintf "The sequence of free variables and their types is: %s\n%!"
     (string_of_gamma ctx.sorts ctx.vars)
 
+
 (** initializes the type annotations for all sub formulas in the given formula.
     All free variables of a sub-formula are initialized with TAny.
     the predicate schema and tctxt are set to the given values.
@@ -2040,18 +2022,17 @@ let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
       It returns a new conjunction and a set of new variables introduced
       by the expansion. *)
 let expand_cplx_var (f : type_context cplx_formula) (var : var) :
-    MFOTL.formula * var list =
-  Printf.eprintf ">>> Expanding complex var %s\n%!" var ;
+    (MFOTL.formula * var list) option =
   let ctx = f_annot f in
-  let get_ref_type t =
-    let ty = type_check_term_debug false ctx (TSymb (TAny, -1)) t in
+  let type_ctor t =
+    let ty = type_of_term ctx t in
     match ty with
-    | TCst (TRef r) -> r
+    | TRef r -> r
     | _ ->
         failwith
         @@ Printf.sprintf "could not find ref type of %s: is of type %s"
              (string_of_term t)
-             (string_of_type ctx.sorts ty) in
+             (string_of_tcst ctx.sorts ty) in
   let usages = get_var_usage f var |> TermSet.elements in
   (* list of triples: (ctor, Record, prefix) *)
   let required_expansions =
@@ -2059,7 +2040,7 @@ let expand_cplx_var (f : type_context cplx_formula) (var : var) :
       (fun u acc ->
         match u with
         | (Var _ as b) | Proj (b, _) ->
-            let ctor = get_ref_type b in
+            let ctor = type_ctor b in
             let record = List.assoc ctor ctx.sorts |> snd in
             (ctor, record, projection_path b) ^:: acc
         | _ -> acc )
@@ -2076,7 +2057,9 @@ let expand_cplx_var (f : type_context cplx_formula) (var : var) :
         (new_pred, new_vars) )
       required_expansions in
   let new_preds, new_vars = List.split expansions in
-  (conjunction new_preds, List.flatten new_vars)
+  if List.length expansions > 0 then
+    Some (conjunction new_preds, List.flatten new_vars)
+  else None
 
 (** returns a list of free complex variable names in the given symbol table.
     If the provided accept_list is not empty, only variables contained in this list are returned. *)
@@ -2093,24 +2076,19 @@ let free_ref_vars (vars : symbol_table) (accept_list : var list) =
     recursively/structurally. The returned formula  replaces the original equality. *)
 let expand_structural_equality (ctx : type_context) (left : cplx_term)
     (right : cplx_term) : 'a cplx_formula =
-  let rec terms left right =
-    let left_ty, right_ty = (type_of_term ctx left, type_of_term ctx right) in
-    if compare left_ty right_ty <> 0 then
-      failwith
-      @@ Printf.sprintf
-           "expand_structural_equality: type %s of %s is not equal to type %s \
-            of %s"
-           (string_of_term left) (string_of_ty left_ty) (string_of_term right)
-           (string_of_ty right_ty) ;
-    match left_ty with
-    | TRef ctor ->
-        let fields = List.assoc ctor ctx.sorts |> snd in
-        List.map
-          (fun (name, _) -> terms (Proj (left, name)) (Proj (right, name)))
-          fields
-        |> List.flatten
-    | _ -> [(ctx, Equal (left, right))] in
-  cplx_conjunction ctx (terms left right)
+  let left_ty, right_ty = (type_of_term ctx left, type_of_term ctx right) in
+  if compare left_ty right_ty <> 0 then
+    failwith
+    @@ Printf.sprintf
+         "expand_structural_equality: type %s of %s is not equal to type %s of \
+          %s"
+         (string_of_term left) (string_of_ty left_ty) (string_of_term right)
+         (string_of_ty right_ty) ;
+  let leaves =
+    List.combine (record_leaves ctx left) (record_leaves ctx right)
+  in
+  let equal_terms = List.map (fun (l, r) -> (ctx, Equal (l, r))) leaves in
+  cplx_conjunction ctx equal_terms
 
 (** pre-processes the given complex formula before the actual compilation step.
     Should be run once before compiling on the input formula. *)
@@ -2220,7 +2198,7 @@ let rec compile_formula_scope (var_filter : var list)
   let ctx = f_annot f in
   let free_cplx_vars = free_ref_vars ctx.vars var_filter in
   let _, new_vars_list =
-    List.map (expand_cplx_var f) free_cplx_vars |> List.split in
+    ?!(List.map (expand_cplx_var f) free_cplx_vars) |> List.split in
   (* Compile the given input formula and wrap it with an EXISTS quantifier,
      binding all variables introduced by the expansion above: *)
   let new_vars = List.flatten new_vars_list in
@@ -2266,7 +2244,7 @@ and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
                   (List.map string_of_term ts |> String.concat ",") in
               failwith msg in
         let expansions, _ =
-          List.map (expand_cplx_var f_scope) [var_name] |> List.split in
+          ?!(List.map (expand_cplx_var f_scope) [var_name]) |> List.split in
         conjunction expansions )
   | Let (p, f1, f2) ->
       let n, a, ts = p in
@@ -2300,8 +2278,18 @@ and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
   | ForAll (l, f) -> ForAll (l, compile_formula_scope l f)
   | Aggreg (r, op, x, gs, f) ->
       let sz = List.filter (fun v -> not (List.mem v gs)) (free_vars f) in
+      Printf.eprintf ">>> gs is %s\n%!" (String.concat ", " gs) ;
+      let expanded_gs =
+        List.map (fun g -> record_leaves ctx (Var g)) gs
+        |> List.flatten |> List.map projection_path in
       let compiled_f = compile_formula_scope sz f in
-      Aggreg (compile_tsymb !(List.assoc r ctx.vars), r, op, x, gs, compiled_f)
+      Aggreg
+        ( compile_tsymb !(List.assoc r ctx.vars)
+        , r
+        , op
+        , x
+        , expanded_gs
+        , compiled_f )
   | Prev (i, f) -> Prev (i, _compile_formula f_scope f)
   | Next (i, f) -> Next (i, _compile_formula f_scope f)
   | Eventually (i, f) -> Eventually (i, _compile_formula f_scope f)
