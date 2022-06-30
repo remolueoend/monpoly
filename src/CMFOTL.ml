@@ -121,15 +121,9 @@ and type_context =
   ; vars: symbol_table
   ; new_type_symbol: tcl -> tsymb }
 
-let create_type_context (sch : predicate_schema) (sorts : tctxt)
-    (vars : symbol_table) (tsymb_id : int ref) : type_context =
-  { predicates= sch
-  ; sorts
-  ; vars
-  ; new_type_symbol=
-      (fun cls ->
-        incr tsymb_id ;
-        TSymb (cls, !tsymb_id) ) }
+let update_type_context (ctx : type_context) (sch : predicate_schema)
+    (vars : symbol_table) : type_context =
+  {predicates= sch; sorts= ctx.sorts; vars; new_type_symbol= ctx.new_type_symbol}
 
 (** returns the predicate schema of a given type context *)
 let t_preds (c : type_context) = c.predicates
@@ -200,8 +194,7 @@ and 'a formula_ast =
   | Equiv of ('a cplx_formula * 'a cplx_formula)
   | Exists of (var list * 'a cplx_formula)
   | ForAll of (var list * 'a cplx_formula)
-  | Aggreg of
-      (tsymb * var * MFOTL.agg_op * cplx_term * cplx_term list * 'a cplx_formula)
+  | Aggreg of (var * MFOTL.agg_op * var * var list * 'a cplx_formula)
   | Prev of (MFOTL.interval * 'a cplx_formula)
   | Next of (MFOTL.interval * 'a cplx_formula)
   | Eventually of (MFOTL.interval * 'a cplx_formula)
@@ -323,8 +316,7 @@ let rec free_vars
       Misc.union (free_vars ~tvars f1) (free_vars ~tvars f2)
   | Exists (vl, f) | ForAll (vl, f) ->
       List.filter (fun x -> not (List.mem x vl)) (free_vars ~tvars f)
-  | Aggreg (rty, y, op, x, glist, f) ->
-      y :: (List.map (tvars annot) glist |> List.flatten)
+  | Aggreg (y, op, x, glist, f) -> y :: glist
   | Prev (intv, f)
    |Next (intv, f)
    |Eventually (intv, f)
@@ -358,7 +350,7 @@ let rec is_mfodl ((_, f) : 'a cplx_formula) =
   | And (f1, f2) | Or (f1, f2) | Implies (f1, f2) | Equiv (f1, f2) ->
       is_mfodl f1 || is_mfodl f2
   | Exists (v, f) | ForAll (v, f) -> is_mfodl f
-  | Aggreg (_, _, _, _, _, f) -> is_mfodl f
+  | Aggreg (_, _, _, _, f) -> is_mfodl f
   | Prev (intv, f)
    |Next (intv, f)
    |Eventually (intv, f)
@@ -488,14 +480,14 @@ let string_of_formula str ?(string_of_annot : 'a -> string = fun _ -> "")
                 ^ Misc.string_of_list_ext "" "" ", " string_of_term
                     (List.map (fun v -> Var v) vl)
                 ^ ". " ^ string_f_rec false false f
-            | Aggreg (rty, y, op, x, glist, f) ->
+            | Aggreg (y, op, x, glist, f) ->
                 string_of_term (Var y) ^ " <- " ^ MFOTL.string_of_agg_op op
-                ^ " " ^ string_of_term x
+                ^ " " ^ x
                 ^ ( if glist <> [] then
                     "; "
                     ^ Misc.string_of_list_ext "" "" ","
                         (fun z -> string_of_term (Var z))
-                        (List.map string_of_term glist)
+                        glist
                   else "" )
                 ^ " " ^ string_f_rec false false f
             | Prev (intv, f) ->
@@ -632,14 +624,14 @@ let string_of_parenthesized_formula str
             ^ Misc.string_of_list_ext "" "" ", " string_of_term
                 (List.map (fun v -> Var v) vl)
             ^ ". " ^ string_f_rec false false f ^ ")"
-        | Aggreg (rty, y, op, x, glist, f) ->
+        | Aggreg (y, op, x, glist, f) ->
             "(" ^ string_of_term (Var y) ^ " <- " ^ MFOTL.string_of_agg_op op
-            ^ " " ^ string_of_term x
+            ^ " " ^ x
             ^ ( if glist <> [] then
                 "; "
                 ^ Misc.string_of_list_ext "" "" ","
                     (fun z -> string_of_term (Var z))
-                    (List.map string_of_term glist)
+                    glist
               else "" )
             ^ " " ^ string_f_rec false false f ^ ")"
         | Prev (intv, f) ->
@@ -898,7 +890,7 @@ let rec check_let ((fdata, f) : 'a cplx_formula) =
   | Neg f
    |Exists (_, f)
    |ForAll (_, f)
-   |Aggreg (_, _, _, _, _, f)
+   |Aggreg (_, _, _, _, f)
    |Prev (_, f)
    |Once (_, f)
    |PastAlways (_, f)
@@ -936,7 +928,7 @@ let rec check_intervals =
   let check ((_, f) : 'a cplx_formula) =
     match f with
     | Equal _ | Less _ | LessEq _ | Pred _ | Substring _ | Matches _ -> true
-    | Neg f | Exists (_, f) | ForAll (_, f) | Aggreg (_, _, _, _, _, f) ->
+    | Neg f | Exists (_, f) | ForAll (_, f) | Aggreg (_, _, _, _, f) ->
         check_intervals f
     | And (f1, f2)
      |Or (f1, f2)
@@ -975,7 +967,7 @@ let rec check_bounds =
     | Neg f
      |Exists (_, f)
      |ForAll (_, f)
-     |Aggreg (_, _, _, _, _, f)
+     |Aggreg (_, _, _, _, f)
      |Prev (_, f)
      |Next (_, f)
      |Once (_, f)
@@ -1005,31 +997,23 @@ and check_re_bounds = function
 
 let rec check_aggregations ((fdata, f) : 'a cplx_formula) =
   match f with
-  | Aggreg (ytyp, y, op, x, g, f) as a ->
+  | Aggreg (y, op, x, g, f) as a ->
       let sf = check_aggregations f in
       let ffv = free_vars f in
       let check =
         sf
-        (* the term grouping over has to be a var or projection: *)
-        && is_var_or_proj x
-        (* each group-by term has to be a var or projection: *)
-        && List.for_all is_var_or_proj g
         (* the resulting var cannot be part of the group-by vars: *)
-        && (not (List.mem (Var y) g))
+        && (not (List.mem y g))
         (* the base of x has to be part of the free variables in the sub-formula *)
-        && List.mem (projection_base x) ffv
-        (* the base of each group-by term has to be part
-           of the free variables in the sub-formula *)
-        && List.for_all (fun g' -> List.mem (projection_base g') ffv) g in
+        && List.mem x ffv in
       if check then check
       else
         failwith
           ( "[Typecheck.check_aggregations] Aggregation "
           ^ string_of_formula "" (fdata, a)
           ^ " is not well formed. " ^ "Variable " ^ y
-          ^ " may not be among the group variables and variable "
-          ^ string_of_term x ^ " must be among the free variables of "
-          ^ string_of_formula "" f )
+          ^ " may not be among the group variables and variable " ^ x
+          ^ " must be among the free variables of " ^ string_of_formula "" f )
   | Equal _ | Less _ | LessEq _ | Pred _ | Substring _ | Matches _ -> true
   | Neg f
    |Exists (_, f)
@@ -1131,6 +1115,12 @@ let rec type_meet (ctx : type_context) (t1 : tsymb) (t2 : tsymb) : tsymb =
       if n1 <= n2 then t1 else t2
   (* the meet of TAny with any type t is always type t *)
   | TSymb (TAny, _), t | t, TSymb (TAny, _) -> t
+  (* the meet of two TNum instances is the one with the lower index *)
+  | (TSymb (TNum, n1) as t1), (TSymb (TNum, n2) as t2) ->
+      if n1 <= n2 then t1 else t2
+  (* resolve concrete types if they are castable from TNum *)
+  | TSymb (TNum, _), TCst TInt | TCst TInt, TSymb (TNum, _) -> TCst TInt
+  | TSymb (TNum, _), TCst TFloat | TCst TFloat, TSymb (TNum, _) -> TCst TFloat
   (* the meet of two partial types is their merged partial type *)
   | TSymb (TPartial fs1, _), TSymb (TPartial fs2, _) ->
       merge_records ctx fs1 fs2
@@ -1525,52 +1515,28 @@ let type_check_formula_debug (d : bool) =
     | Exists (l, f) | ForAll (l, f) ->
         type_check_formula f ;
         check_unresolved_terms None l (f_annot f).vars
-    | Aggreg (rty, r, op, x, gs, f) ->
-        failwith "[type_check_formula_debug] Aggreg not implemented yet."
-        (* let gs_vars = List.map projection_base gs in
-           (* free vars in sub-formula and not part of group-by terms *)
-           let zs = List.filter (fun v -> not (List.mem v gs_vars)) (free_vars f) in
-           let zs_terms = List.map (fun z -> Var z) zs in
-           let shadowed_vars, reduced_vars =
-             List.partition (fun (vr, _) -> List.mem vr zs_terms) vars in
-           let vars' =
-             List.fold_left
-               (fun vrs vr -> (vr, new_type_symbol TAny) :: vrs)
-               reduced_vars zs_terms in
-           let type_check_aggregation exp_typ1 exp_typ2 =
-             (* Type check variable x *)
-             let _ =
-               type_check_term_debug d (sch, tctxt, vars') exp_typ2 x in
-             (* Type check formula f *)
-             let s2, v2, f = type_check_formula (s1, tctxt, v1) f in
-             (* Get the updated types for gs vars *)
-             let reduced_vars =
-               List.filter (fun (v, _) -> List.mem_assoc v reduced_vars) v2 in
-             (* Restore the top-level vars with updated vars *)
-             let vars = shadowed_vars @ reduced_vars in
-             (* Type check variable r *)
-             let s3, v3, _ =
-               type_check_term_debug d (sch, tctxt, vars) exp_typ1 (Var r) in
-             let s3, v3 =
-               if
-                 exp_typ1 = exp_typ2
-                 (* If the expected types of r and x are the same *)
-               then
-                 propagate_constraints (List.assoc x v2) (List.assoc (Var r) v3)
-                   (Var r) (s3, tctxt, v3)
-                 (* and have compatible types, propagate the more specific type *)
-               else (s3, v3) in
-             ( s3
-             , v3
-             , ((s3, tctxt, v3), Aggreg (List.assoc (Var r) v3, r, op, x, gs, f))
-             ) in
-           let exp_typ = new_type_symbol TAny in
-           let exp_num_typ = new_type_symbol TNum in
-           match op with
-           | Min | Max -> type_check_aggregation exp_typ exp_typ
-           | Cnt -> type_check_aggregation (TCst TInt) exp_typ
-           | Sum -> type_check_aggregation exp_num_typ exp_num_typ
-           | Avg | Med -> type_check_aggregation (TCst TFloat) exp_num_typ ) *)
+    | Aggreg (r, op, x, gs, f) -> (
+        let f_ctx = f_annot f in
+        let typecheck_aggregation exp_ret_ty exp_agg_ty =
+          (* typecheck x under the type context of the inner formula: *)
+          let agg_ty = type_check_term_debug d f_ctx exp_agg_ty (Var x) in
+          type_check_formula f ;
+          (* expect all free variables of f (including gs) to be resolved: *)
+          check_unresolved_terms None (free_vars f) f_ctx.vars ;
+          (* typecheck the return variable under the current context: *)
+          let ret_ty = type_check_term_debug d ctx exp_ret_ty (Var r) in
+          (* if _expected_ type of aggregation variable and return type are the same
+             (e.g. SUM: both TNum), we propagate the more specific _actual_ type for r. *)
+          if exp_agg_ty = exp_ret_ty then
+            propagate_constraints agg_ty ret_ty (Var r) ctx ;
+          () in
+        let exp_any_typ = ctx.new_type_symbol TAny in
+        let exp_num_typ = ctx.new_type_symbol TNum in
+        match op with
+        | Min | Max -> typecheck_aggregation exp_any_typ exp_any_typ
+        | Cnt -> typecheck_aggregation (TCst TInt) exp_any_typ
+        | Sum -> typecheck_aggregation exp_num_typ exp_num_typ
+        | Avg | Med -> typecheck_aggregation (TCst TFloat) exp_num_typ )
     | Frex (intv, r) -> type_check_re_formula r
     | Prex (intv, r) -> type_check_re_formula r
   and type_check_re_formula = function
@@ -1791,7 +1757,7 @@ module Monitorability = struct
           let is_mon1, r1 = is_monitorable f1 in
           if not is_mon1 then (is_mon1, r1) else is_monitorable f2
     | Exists (_, f1)
-     |Aggreg (_, _, _, _, _, f1)
+     |Aggreg (_, _, _, _, f1)
      |Prev (_, f1)
      |Next (_, f1)
      |Eventually (_, f1)
@@ -1849,7 +1815,8 @@ end
 let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
   let ctx = f_annot f in
   Printf.eprintf "The input formula is: %s\n%!" (string_of_formula "" f) ;
-  Printf.eprintf "The analyzed formula is: %s\n" (MFOTL.string_of_formula "" c) ;
+  Printf.eprintf "The analyzed formula is: %s\n%!"
+    (MFOTL.string_of_formula "" c) ;
   Printf.eprintf "The sequence of free variables and their types is: %s\n%!"
     (string_of_gamma ctx.sorts ctx.vars)
 
@@ -1857,111 +1824,110 @@ let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
     All free variables of a sub-formula are initialized with TAny.
     the predicate schema and tctxt are set to the given values.
     *)
-let init_type_context (tsymb_id : int ref) (sch : predicate_schema)
-    (tctxt : tctxt) (f : unit cplx_formula) : type_context cplx_formula =
+let rec init_typed_formula (ctx : type_context) (f : unit cplx_formula) :
+    type_context cplx_formula =
+  let self = init_typed_formula in
+  let local_vars f =
+    List.filter (fun (v, _) -> List.mem v (free_vars f)) ctx.vars in
+  let l_ctx f =
+    { ctx with
+      vars= List.filter (fun (v, _) -> List.mem v (free_vars f)) ctx.vars }
+  in
+  let rec aux_regex (regex : unit regex) : type_context regex =
+    match regex with
+    | Wild as r -> r
+    | Concat (r1, r2) -> Concat (aux_regex r1, aux_regex r2)
+    | Plus (r1, r2) -> Plus (aux_regex r1, aux_regex r2)
+    | Star r1 -> Star (aux_regex r1)
+    | Test f -> Test (ctx, self (l_ctx f) f |> snd) in
+  match snd f with
+  | (Equal _ as f)
+   |(Less _ as f)
+   |(LessEq _ as f)
+   |(Substring _ as f)
+   |(Matches _ as f) ->
+      (ctx, f)
+  | Neg f -> (ctx, Neg (self (l_ctx f) f))
+  | And (f1, f2) -> (ctx, And (self (l_ctx f1) f1, self (l_ctx f2) f2))
+  | Or (f1, f2) -> (ctx, Or (self (l_ctx f1) f1, self (l_ctx f2) f2))
+  | Implies (f1, f2) -> (ctx, Implies (self (l_ctx f1) f1, self (l_ctx f2) f2))
+  | Equiv (f1, f2) -> (ctx, Equiv (self (l_ctx f1) f1, self (l_ctx f2) f2))
+  | Prev (i, f) -> (ctx, Prev (i, self (l_ctx f) f))
+  | Next (i, f) -> (ctx, Next (i, self (l_ctx f) f))
+  | Eventually (i, f) -> (ctx, Eventually (i, self (l_ctx f) f))
+  | Once (i, f) -> (ctx, Once (i, self (l_ctx f) f))
+  | Always (i, f) -> (ctx, Always (i, self (l_ctx f) f))
+  | PastAlways (i, f) -> (ctx, PastAlways (i, self (l_ctx f) f))
+  | Since (i, f1, f2) -> (ctx, Since (i, self (l_ctx f1) f1, self (l_ctx f2) f2))
+  | Until (i, f1, f2) -> (ctx, Until (i, self (l_ctx f1) f1, self (l_ctx f2) f2))
+  | Pred _ as p -> (ctx, p)
+  | Frex (i, r) -> (ctx, Frex (i, aux_regex r))
+  | Prex (i, r) -> (ctx, Prex (i, aux_regex r))
+  | Exists (l, f) ->
+      let non_shadowed =
+        List.filter (fun (v, _) -> not (List.mem v l)) (local_vars f) in
+      let new_vars =
+        non_shadowed @ List.map (fun v -> (v, ref (ctx.new_type_symbol TAny))) l
+      in
+      (ctx, Exists (l, self {ctx with vars= new_vars} f))
+  | ForAll (l, f) ->
+      let non_shadowed =
+        List.filter (fun (v, _) -> not (List.mem v l)) (local_vars f) in
+      let new_vars =
+        non_shadowed @ List.map (fun v -> (v, ref (ctx.new_type_symbol TAny))) l
+      in
+      (ctx, ForAll (l, self {ctx with vars= new_vars} f))
+  | Let ((name, arity, targs), body, f) ->
+      let arg_names =
+        List.map
+          (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
+          targs in
+      let arg_types = List.map (fun a -> ctx.new_type_symbol TAny) arg_names in
+      let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
+      let non_shadowed =
+        List.filter (fun ((n, _), _) -> n <> name) ctx.predicates in
+      let new_sch = ((name, arity), ref arg_types) :: non_shadowed in
+      ( ctx
+      , Let
+          ( (name, arity, targs)
+          , self {ctx with vars= new_vars} body
+          , self {ctx with predicates= new_sch} f ) )
+  | LetPast ((name, arity, targs), body, f) ->
+      let arg_names =
+        List.map
+          (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
+          targs in
+      let arg_types = List.map (fun a -> ctx.new_type_symbol TAny) arg_names in
+      let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
+      let new_sch = ((name, arity), ref arg_types) :: ctx.predicates in
+      ( ctx
+      , LetPast
+          ( (name, arity, targs)
+          , self {ctx with vars= new_vars} body
+          , self {ctx with predicates= new_sch} f ) )
+  | Aggreg (r, op, x, gs, f) ->
+      let zs = List.filter (fun v -> not (List.mem v gs)) (free_vars f) in
+      (* symbol table of inner formula consists of gs variables inherited from outer symbol table,
+         plus new free variables introduced by the inner formula itself (possibly shadowing free vars from outside). *)
+      let new_vars =
+        List.filter (fun (v, _) -> List.mem v gs) ctx.vars
+        @ List.map (fun v -> (v, ref (ctx.new_type_symbol TAny))) zs in
+      (ctx, Aggreg (r, op, x, gs, self {ctx with vars= new_vars} f))
+
+(** returns an initial type context for the given formula.
+    the predicate schema is initialized with the native predicates (tp, ts, ..)
+    plus the custom sorts defined in the signatures.
+    The custom sorts are loaded from the signatures.
+    The symbol table is filled with the global variables of f, initialized to TAny. *)
+let initial_type_context (signatures : signatures) (f : unit cplx_formula) :
+    type_context =
+  let tsymb_id = ref 0 in
   let new_type_symbol (cls : tcl) =
     incr tsymb_id ;
     TSymb (cls, !tsymb_id) in
-  (* free variables ranging over the whole formula: *)
-  let global_vars : symbol_table =
-    List.map (fun v -> (v, ref (new_type_symbol TAny))) (free_vars f) in
-  let rec aux (ctx : type_context) (f : unit cplx_formula) :
-      type_context cplx_formula =
-    let local_vars = free_vars f in
-    let filtered_vars =
-      List.filter (fun (v, _) -> List.mem v local_vars) ctx.vars in
-    let fctxt =
-      create_type_context ctx.predicates tctxt filtered_vars tsymb_id in
-    let rec aux_regex (regex : unit regex) : type_context regex =
-      match regex with
-      | Wild as r -> r
-      | Concat (r1, r2) -> Concat (aux_regex r1, aux_regex r2)
-      | Plus (r1, r2) -> Plus (aux_regex r1, aux_regex r2)
-      | Star r1 -> Star (aux_regex r1)
-      | Test f -> Test (fctxt, aux fctxt f |> snd) in
-    match snd f with
-    | (Equal _ as f)
-     |(Less _ as f)
-     |(LessEq _ as f)
-     |(Substring _ as f)
-     |(Matches _ as f) ->
-        (fctxt, f)
-    | Neg f -> (fctxt, Neg (aux fctxt f))
-    | And (f1, f2) -> (fctxt, And (aux fctxt f1, aux fctxt f2))
-    | Or (f1, f2) -> (fctxt, Or (aux fctxt f1, aux fctxt f2))
-    | Implies (f1, f2) -> (fctxt, Implies (aux fctxt f1, aux fctxt f2))
-    | Equiv (f1, f2) -> (fctxt, Equiv (aux fctxt f1, aux fctxt f2))
-    | Prev (i, f) -> (fctxt, Prev (i, aux fctxt f))
-    | Next (i, f) -> (fctxt, Next (i, aux fctxt f))
-    | Eventually (i, f) -> (fctxt, Eventually (i, aux fctxt f))
-    | Once (i, f) -> (fctxt, Once (i, aux fctxt f))
-    | Always (i, f) -> (fctxt, Always (i, aux fctxt f))
-    | PastAlways (i, f) -> (fctxt, PastAlways (i, aux fctxt f))
-    | Since (i, f1, f2) -> (fctxt, Since (i, aux fctxt f1, aux fctxt f2))
-    | Until (i, f1, f2) -> (fctxt, Until (i, aux fctxt f1, aux fctxt f2))
-    | Pred _ as p -> (fctxt, p)
-    | Frex (i, r) -> (fctxt, Frex (i, aux_regex r))
-    | Prex (i, r) -> (fctxt, Prex (i, aux_regex r))
-    | Exists (l, f) ->
-        let non_shadowed =
-          List.filter (fun (v, _) -> not (List.mem v l)) filtered_vars in
-        let new_vars =
-          non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
-        in
-        ( fctxt
-        , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
-    | ForAll (l, f) ->
-        let non_shadowed =
-          List.filter (fun (v, _) -> not (List.mem v l)) filtered_vars in
-        let new_vars =
-          non_shadowed @ List.map (fun v -> (v, ref (new_type_symbol TAny))) l
-        in
-        ( fctxt
-        , Exists (l, aux (create_type_context sch tctxt new_vars tsymb_id) f) )
-    | Let ((name, arity, targs), body, f) ->
-        let arg_names =
-          List.map
-            (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
-            targs in
-        let arg_types = List.map (fun a -> new_type_symbol TAny) arg_names in
-        let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
-        let non_shadowed = List.filter (fun ((n, _), _) -> n <> name) sch in
-        let new_sch = ((name, arity), ref arg_types) :: non_shadowed in
-        ( fctxt
-        , Let
-            ( (name, arity, targs)
-            , aux (create_type_context sch tctxt new_vars tsymb_id) body
-            , aux (create_type_context new_sch tctxt ctx.vars tsymb_id) f ) )
-    | LetPast ((name, arity, targs), body, f) ->
-        let arg_names =
-          List.map
-            (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
-            targs in
-        let arg_types = List.map (fun a -> new_type_symbol TAny) arg_names in
-        let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
-        let new_sch = ((name, arity), ref arg_types) :: sch in
-        ( fctxt
-        , LetPast
-            ( (name, arity, targs)
-            , aux (create_type_context sch tctxt new_vars tsymb_id) body
-            , aux (create_type_context new_sch tctxt ctx.vars tsymb_id) f ) )
-    | Aggreg (rty, r, op, x, gs, f) ->
-        (fctxt, Aggreg (rty, r, op, x, gs, aux fctxt f)) in
-  let typed_formula =
-    aux (create_type_context sch tctxt global_vars tsymb_id) f in
-  typed_formula
-
-(** type checks a complex formula given matching signature definitions.
-    Returns a triple consiting of:
-    1) The type checking context consisting of predicate schema, symbol table and type context.
-    2) A possibly updated version of the input formula.
-    3) A boolean flag indicating the monitorability (safety) of the input formula. *)
-let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
-    type_context cplx_formula =
-  let debug = !first_debug && Misc.debugging Dbg_typing in
-  (* first of all check well-formedness of formula: *)
-  ignore @@ ignore (check_wff f) ;
-  let lift_type t = TCst t in
+  let native_predicates : predicate_schema =
+    [ (("tp", 1), ref [TCst TInt]); (("ts", 1), ref [TCst TInt])
+    ; (("tpts", 1), ref [TCst TInt; TCst TInt]) ] in
   (* create initial Δ *)
   let sch : predicate_schema =
     List.fold_left
@@ -1969,8 +1935,7 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
         match decl with
         | Predicate {elt= name, args; _} ->
             let lifted_args =
-              extr_nodes args |> List.map (fun {atyp; _} -> lift_type atyp)
-            in
+              extr_nodes args |> List.map (fun {atyp; _} -> TCst atyp) in
             ((name, List.length args), ref lifted_args) :: acc
         | ProductSort (attrs, {elt= name, fields; _}) ->
             (* do not add inline records to predicate schema: *)
@@ -1992,8 +1957,28 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
                 |> List.map (fun {fname; ftyp} -> (fname, ftyp)) ) )
             :: acc )
       [] signatures in
-  let tsymb_index = ref 0 in
-  let f = init_type_context tsymb_index sch tctxt f in
+  (* create initial Γ *)
+  let native_vars = [("i", ref (TCst TInt))] in
+  let globals =
+    List.map (fun v -> (v, ref (new_type_symbol TAny))) (free_vars f) in
+  { predicates= sch @ native_predicates
+  ; sorts= tctxt
+  ; vars= globals @ native_vars
+  ; new_type_symbol }
+(* update_type_context sch tctxt globals tsymb_id *)
+
+(** type checks a complex formula given matching signature definitions.
+    Returns a triple consiting of:
+    1) The type checking context consisting of predicate schema, symbol table and type context.
+    2) A possibly updated version of the input formula.
+    3) A boolean flag indicating the monitorability (safety) of the input formula. *)
+let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
+    type_context cplx_formula =
+  let debug = !first_debug && Misc.debugging Dbg_typing in
+  (* first of all check well-formedness of formula: *)
+  ignore @@ ignore (check_wff f) ;
+  let init_ctx = initial_type_context signatures f in
+  let f = init_typed_formula init_ctx f in
   type_check_formula_debug debug f ;
   let ctx = f_annot f in
   (* Make sure all variables in the symbol table have been resolved
@@ -2002,8 +1987,8 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
   if debug then (
     Printf.eprintf
       "[Typecheck.typecheck_formula] The final type judgement is (%s; %s) ⊢ "
-      (string_of_delta tctxt sch)
-      (string_of_gamma tctxt ctx.vars) ;
+      (string_of_delta ctx.sorts ctx.predicates)
+      (string_of_gamma ctx.sorts ctx.vars) ;
     Printf.eprintf "%s"
       (string_of_parenthesized_formula ""
          ~string_of_annot:(fun ctx -> string_of_gamma ctx.sorts ctx.vars)
@@ -2013,7 +1998,6 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
   f
 
 (* COMPILE FUNCTIONS *)
-
 let compile_tcst (tcst : tcst) : Predicate.tcst =
   match tcst with
   | TInt -> TInt
@@ -2021,6 +2005,18 @@ let compile_tcst (tcst : tcst) : Predicate.tcst =
   | TStr -> TStr
   | TRegexp -> TRegexp
   | TRef _ -> TInt
+
+let compile_tcl (tcl : tcl) : Predicate.tcl =
+  match tcl with
+  | TNum -> TNum
+  | TAny -> TAny
+  | TPartial _ -> failwith "[compile_tcl] Cannot compile TPartial"
+
+let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
+  match tsymb with
+  | TSymb (s, i) -> TSymb (compile_tcl s, i)
+  | TCst c -> TCst (compile_tcst c)
+  | TBot -> failwith "[compile_tsymb] Cannot compile TBot"
 
 (** The full path of a given projection term.
     Example: The term r.user.name maps to the string 'r_user_name' *)
@@ -2043,9 +2039,10 @@ let conjunction (fs : MFOTL.formula list) : MFOTL.formula =
       expands it based on its usage in the given formula.
       It returns a new conjunction and a set of new variables introduced
       by the expansion. *)
-let expand_cplx_var (f : 'a cplx_formula) (ctx : type_context) (var : var) :
+let expand_cplx_var (f : type_context cplx_formula) (var : var) :
     MFOTL.formula * var list =
-  let tctxt = ctx.sorts in
+  Printf.eprintf ">>> Expanding complex var %s\n%!" var ;
+  let ctx = f_annot f in
   let get_ref_type t =
     let ty = type_check_term_debug false ctx (TSymb (TAny, -1)) t in
     match ty with
@@ -2053,7 +2050,8 @@ let expand_cplx_var (f : 'a cplx_formula) (ctx : type_context) (var : var) :
     | _ ->
         failwith
         @@ Printf.sprintf "could not find ref type of %s: is of type %s"
-             (string_of_term t) (string_of_type tctxt ty) in
+             (string_of_term t)
+             (string_of_type ctx.sorts ty) in
   let usages = get_var_usage f var |> TermSet.elements in
   (* list of triples: (ctor, Record, prefix) *)
   let required_expansions =
@@ -2062,7 +2060,7 @@ let expand_cplx_var (f : 'a cplx_formula) (ctx : type_context) (var : var) :
         match u with
         | (Var _ as b) | Proj (b, _) ->
             let ctor = get_ref_type b in
-            let record = List.assoc ctor tctxt |> snd in
+            let record = List.assoc ctor ctx.sorts |> snd in
             (ctor, record, projection_path b) ^:: acc
         | _ -> acc )
       usages [] in
@@ -2133,8 +2131,8 @@ let rec preprocess_formula (f : type_context cplx_formula) : 'a cplx_formula =
       (fdata, Equiv (preprocess_formula f1, preprocess_formula f2))
   | Exists (vl, f) -> (fdata, Exists (vl, preprocess_formula f))
   | ForAll (vl, f) -> (fdata, ForAll (vl, preprocess_formula f))
-  | Aggreg (rty, y, op, x, glist, f) ->
-      (fdata, Aggreg (rty, y, op, x, glist, preprocess_formula f))
+  | Aggreg (y, op, x, glist, f) ->
+      (fdata, Aggreg (y, op, x, glist, preprocess_formula f))
   | Prev (intv, f) -> (fdata, Prev (intv, preprocess_formula f))
   | Next (intv, f) -> (fdata, Next (intv, preprocess_formula f))
   | Eventually (intv, f) -> (fdata, Eventually (intv, preprocess_formula f))
@@ -2217,24 +2215,25 @@ let compile_predicate (ctx : type_context) ((name, arity, args) : cplx_predicate
 (* compiles the given formula and expands all complex free variables.
    The given filter is used to only expand a certain set of free variables. If the filter is empty,
    all free variables in the formula's scope are expanded. *)
-let rec compile_formula_scope (var_filter : var list) (f : 'a cplx_formula) :
-    MFOTL.formula =
+let rec compile_formula_scope (var_filter : var list)
+    (f : type_context cplx_formula) : MFOTL.formula =
   let ctx = f_annot f in
   let free_cplx_vars = free_ref_vars ctx.vars var_filter in
   let _, new_vars_list =
-    List.map (expand_cplx_var f ctx) free_cplx_vars |> List.split in
+    List.map (expand_cplx_var f) free_cplx_vars |> List.split in
   (* Compile the given input formula and wrap it with an EXISTS quantifier,
      binding all variables introduced by the expansion above: *)
   let new_vars = List.flatten new_vars_list in
-  let compiled = _compile_formula ctx f f in
+  let compiled = _compile_formula f f in
   if List.length new_vars = 0 then compiled
   else MFOTL.Exists (new_vars, compiled)
 
 (** compiles a given complex formula to an MFOTL compatible formula under the given typecheck context.
     f_scope describes the current variable scope. *)
-and _compile_formula (ctx : type_context) (f_scope : 'a cplx_formula)
-    (input : 'a cplx_formula) : MFOTL.formula =
-  match snd input with
+and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
+    MFOTL.formula =
+  let ctx = f_annot input in
+  match f_ast input with
   | Equal (t1, t2) -> MFOTL.Equal (compile_term t1, compile_term t2)
   | Less (t1, t2) -> Less (compile_term t1, compile_term t2)
   | LessEq (t1, t2) -> LessEq (compile_term t1, compile_term t2)
@@ -2267,7 +2266,7 @@ and _compile_formula (ctx : type_context) (f_scope : 'a cplx_formula)
                   (List.map string_of_term ts |> String.concat ",") in
               failwith msg in
         let expansions, _ =
-          List.map (expand_cplx_var f_scope ctx) [var_name] |> List.split in
+          List.map (expand_cplx_var f_scope) [var_name] |> List.split in
         conjunction expansions )
   | Let (p, f1, f2) ->
       let n, a, ts = p in
@@ -2278,7 +2277,7 @@ and _compile_formula (ctx : type_context) (f_scope : 'a cplx_formula)
       Let
         ( compile_predicate ctx p
         , compile_formula_scope arg_vars f1
-        , _compile_formula ctx f_scope f2 )
+        , _compile_formula f_scope f2 )
   | LetPast (p, f1, f2) ->
       let n, a, ts = p in
       let arg_vars =
@@ -2288,57 +2287,42 @@ and _compile_formula (ctx : type_context) (f_scope : 'a cplx_formula)
       LetPast
         ( compile_predicate ctx p
         , compile_formula_scope arg_vars f1
-        , _compile_formula ctx f_scope f2 )
-  | Neg f -> Neg (_compile_formula ctx f_scope f)
+        , _compile_formula f_scope f2 )
+  | Neg f -> Neg (_compile_formula f_scope f)
   | And (f1, f2) ->
-      And (_compile_formula ctx f_scope f1, _compile_formula ctx f_scope f2)
-  | Or (f1, f2) ->
-      Or (_compile_formula ctx f_scope f1, _compile_formula ctx f_scope f2)
+      And (_compile_formula f_scope f1, _compile_formula f_scope f2)
+  | Or (f1, f2) -> Or (_compile_formula f_scope f1, _compile_formula f_scope f2)
   | Implies (f1, f2) ->
-      Implies (_compile_formula ctx f_scope f1, _compile_formula ctx f_scope f2)
+      Implies (_compile_formula f_scope f1, _compile_formula f_scope f2)
   | Equiv (f1, f2) ->
-      Equiv (_compile_formula ctx f_scope f1, _compile_formula ctx f_scope f2)
+      Equiv (_compile_formula f_scope f1, _compile_formula f_scope f2)
   | Exists (l, f) -> Exists (l, compile_formula_scope l f)
   | ForAll (l, f) -> ForAll (l, compile_formula_scope l f)
-  | Aggreg (rty, r, op, x, gs, f) ->
-      (* let sch, _, vars = ctx in
-         let gs_vars = List.map projection_base gs in
-         (* free vars in sub-formula and not part of group-by terms *)
-         let zs = List.filter (fun v -> not (List.mem v gs_vars)) (free_vars f) in
-         let zs_terms = List.map (fun z -> Var z) zs in
-         let shadowed_vars, reduced_vars =
-           List.partition (fun (vr, _) -> List.mem vr zs_terms) vars in
-         let new_vars =
-           List.fold_left
-             (fun vrs vr ->
-               (vr, new_type_symbol TAny sch (List.append shadowed_vars vrs))
-               :: vrs )
-             reduced_vars zs_terms in
-         let x = _compile_formula (s, tctxt, v) f in *)
-      failwith "not implemented"
-  | Prev (i, f) -> Prev (i, _compile_formula ctx f_scope f)
-  | Next (i, f) -> Next (i, _compile_formula ctx f_scope f)
-  | Eventually (i, f) -> Eventually (i, _compile_formula ctx f_scope f)
-  | Once (i, f) -> Once (i, _compile_formula ctx f_scope f)
-  | Always (i, f) -> Always (i, _compile_formula ctx f_scope f)
-  | PastAlways (i, f) -> PastAlways (i, _compile_formula ctx f_scope f)
+  | Aggreg (r, op, x, gs, f) ->
+      let sz = List.filter (fun v -> not (List.mem v gs)) (free_vars f) in
+      let compiled_f = compile_formula_scope sz f in
+      Aggreg (compile_tsymb !(List.assoc r ctx.vars), r, op, x, gs, compiled_f)
+  | Prev (i, f) -> Prev (i, _compile_formula f_scope f)
+  | Next (i, f) -> Next (i, _compile_formula f_scope f)
+  | Eventually (i, f) -> Eventually (i, _compile_formula f_scope f)
+  | Once (i, f) -> Once (i, _compile_formula f_scope f)
+  | Always (i, f) -> Always (i, _compile_formula f_scope f)
+  | PastAlways (i, f) -> PastAlways (i, _compile_formula f_scope f)
   | Since (i, f1, f2) ->
-      Since (i, _compile_formula ctx f_scope f1, _compile_formula ctx f_scope f2)
+      Since (i, _compile_formula f_scope f1, _compile_formula f_scope f2)
   | Until (i, f1, f2) ->
-      Since (i, _compile_formula ctx f_scope f1, _compile_formula ctx f_scope f2)
-  | Frex (i, r) -> Frex (i, compile_regex ctx f_scope r)
-  | Prex (i, r) -> Prex (i, compile_regex ctx f_scope r)
+      Since (i, _compile_formula f_scope f1, _compile_formula f_scope f2)
+  | Frex (i, r) -> Frex (i, compile_regex f_scope r)
+  | Prex (i, r) -> Prex (i, compile_regex f_scope r)
 
-and compile_regex (ctx : type_context) (scope : 'a cplx_formula)
-    (input : 'a regex) : MFOTL.regex =
+and compile_regex (scope : type_context cplx_formula)
+    (input : type_context regex) : MFOTL.regex =
   match input with
   | Wild -> Wild
-  | Test f -> Test (_compile_formula ctx scope f)
-  | Concat (r1, r2) ->
-      Concat (compile_regex ctx scope r1, compile_regex ctx scope r2)
-  | Plus (r1, r2) ->
-      Plus (compile_regex ctx scope r1, compile_regex ctx scope r2)
-  | Star r -> Star (compile_regex ctx scope r)
+  | Test f -> Test (_compile_formula scope f)
+  | Concat (r1, r2) -> Concat (compile_regex scope r1, compile_regex scope r2)
+  | Plus (r1, r2) -> Plus (compile_regex scope r1, compile_regex scope r2)
+  | Star r -> Star (compile_regex scope r)
 
 (** compiles a MFOTL formula from a complex formula and the parsed signature definitions.
     Returns the compiled formula and a flag indicating the monitoriability of the formula. *)

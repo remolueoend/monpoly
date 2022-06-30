@@ -118,7 +118,7 @@
 
   (* The rule is: var LARROW aggreg var SC varlist formula  *)
   let aggreg res_var op agg_var groupby_vars f =
-    formula (Aggreg ((TSymb (TAny, 0)),res_var, op, agg_var, groupby_vars, f))
+    formula (Aggreg (res_var, op, agg_var, groupby_vars, f))
 
 %}
 
@@ -187,8 +187,8 @@ formula:
   | NOT formula                     { f "f(not)"; formula (Neg ($2)) }
   | EX varlist DOT formula %prec EX { f "f(ex)"; exists $2 $4 }
   | FA varlist DOT formula %prec FA { f "f(fa)"; forall $2 $4 }
-  | var LARROW aggreg term formula   { f "f(agg1)"; aggreg $1 $3 $4 [] $5 }
-  | var LARROW aggreg term SC termlist formula
+  | var LARROW aggreg var formula   { f "f(agg1)"; aggreg $1 $3 $4 [] $5 }
+  | var LARROW aggreg var SC varlist formula
                                     { f "f(agg2)"; aggreg $1 $3 $4 $6 $7 }
   | term SUBSTRING term             { f "f(substring)"; check (Substring ($1, $3)) }
   | term MATCHES term xopttermlist  { f "f(matches)"; check (Matches ($1, $3, $4)) }

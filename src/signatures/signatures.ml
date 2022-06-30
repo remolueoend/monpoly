@@ -216,11 +216,11 @@ let parse_signature_file (fname : string) : signatures =
         Signature_parser.signatures Signature_lexer.token lexbuf in
       let signatures = Signature_ast.transpile_signatures parsed_signatures in
       (let _ = typecheck signatures in
-       if Misc.debugging Dbg_signatures then
+       if Misc.debugging Dbg_signatures then (
          Printf.eprintf "[Signatures]: Parsed signatures after transpiling:\n%!" ;
-       List.iter
-         (fun d -> Printf.eprintf "%s\n%!" (string_of_decl d))
-         signatures ) ;
+         List.iter
+           (fun d -> Printf.eprintf "%s\n%!" (string_of_decl d))
+           signatures ) ) ;
       signatures
     with Signature_parser.Error ->
       failwith
