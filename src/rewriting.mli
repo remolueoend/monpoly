@@ -67,9 +67,9 @@ val is_special_case: (var list) -> formula -> bool
 
 val is_monitorable: formula -> bool * (formula * string) option
 
-val check_formula: schema -> formula -> bool * formula * (var * tcst) list
-(** Returns [true, pf, vtypes] if the formula is monitorable by our
-    implementation, where [pf] is a formula equivalent with input
+val check_formula: schema -> formula -> formula * (var * tcst) list
+(** Checks well-formedness and syntax of the given formula.
+    Returns [pf, vtypes], where [pf] is a formula equivalent with input
     formula and [vtypes] is the list of free variables of [pf]
     together with their types *)
 
@@ -78,3 +78,6 @@ val check_syntax: schema -> formula -> ((var * tcst) list  * formula)
 val check_let: formula -> bool
 
 val expand_let: expand_mode -> formula -> formula
+
+val check_monitorability: schema -> formula -> bool * (formula * var) option
+val print_monitorability_results: formula -> bool * (formula * var) option -> unit

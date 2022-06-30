@@ -1,0 +1,17 @@
+(s <- SUM t.amount; t.client.name ONCE [0, 50] Transaction(t) AND t.baz = "...") AND s >= 500
+
+
+(*
+
+(s <- SUM t_amount; t_client_name ONCE [0, 50]
+	Transaction(t, t_client, t_amount, t_baz) AND
+	Client(t_client, t_client_name) AND
+	t_baz = "..."
+) AND s >= 500
+
+
+
+withdraw(x, y) AND (s <- SUM a; u
+	ONCE[0, 30] withdraw(u, a) AND tp(i) AND u = x AND a = y) AND s > 300
+
+*)
