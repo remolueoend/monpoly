@@ -13,20 +13,24 @@
 set -euo pipefail
 
 read -r -d '' HELP_TEXT <<-EOM || :
-Usage: cat json.log | ./extract-ts.sh ".path.to.timestamp" | monpoly
+Usage: ./extract-ts.sh <TIMESTAMP_PATH>
+Example: cat json.log | ./extract-ts.sh ".path.to.timestamp" | monpoly
 
 Formats the content of a JSON log file to be passed to Monpoly.
 
-The content of the log file must be passed via STDIN to this script.
-This script writes the formatted lines to STDOUT.
+The content of the log file must be passed via STDIN to this script,
+while the formatted output is written to STDOUT.
+Each input line must consist of a single JSON record string.
 
-Each line is expected to consist of a single JSON record string.
-This script accepts a JSON-path pointing to the field containing the timestamp to extract. This path is passed directly to jq.
+This script accepts a JSON-path pointing to the field containing the timestamp to extract.
+This path is passed directly to jq and follows the same syntactic rules:
+https://stedolan.github.io/jq/manual/#Basicfilters
+
 EOM
 
 if [ $# != 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     if [ $# != 1 ]; then
-        printf "Invalid number of arguments\n\n"
+        printf "Invalid number of arguments (expected 1, but %i provided)\n\n" "$#"
     fi
     echo "$HELP_TEXT"
     exit 1
