@@ -62,6 +62,7 @@ let digit = ['0'-'9']
 let integer = ('-')? digit+
 let rational = ('-')? digit+ '.' digit*
 let unit =  digit+ letter
+let ident = (letter | digit) (letter | digit | '_')*
 let any_string = (letter | digit | '_' | '-' | '/' | ':' | '\'' | '\"')*
 let string = (letter | digit | '_') any_string
 let quoted_string = '"' ([^ '"' '\\'] | '\\' _)* '"'
@@ -147,7 +148,8 @@ rule
   | rational as lxm             { f "RAT" lexbuf; RAT (float_of_string lxm) }
   | quoted_string as lxm        { f "STR_CST" lexbuf; STR_CST lxm }
   | 'r' quoted_string as lxm    { f "REGEXP" lexbuf; REGEXP_CST lxm }
-  | string as lxm               { f "STR" lexbuf; STR lxm }
+  | ident as lxm                { f "IDENT" lexbuf ; IDENT lxm }
+  (* | string as lxm               { f "STR" lexbuf; STR lxm } *)
 
   | "(*"                        { f "multi-line comment" lexbuf; comment lexbuf }
   | "#"                         { f "line comment" lexbuf; line_comment lexbuf}
