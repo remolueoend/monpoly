@@ -1825,7 +1825,7 @@ module Monitorability = struct
           (string_of_formula "" f) msg
     | None -> failwith "[Rewriting.print_reason] internal error"
 
-  let print_results (is_mon, reason) =
+  let print_results (f : MFOTL.formula) (is_mon, reason) =
     if !Misc.verbose || !Misc.checkf then
       if is_mon then Printf.eprintf "The extended formula is monitorable.\n%!"
       else print_reason "The extended formula is NOT monitorable" reason

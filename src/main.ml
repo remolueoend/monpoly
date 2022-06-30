@@ -127,14 +127,19 @@ let main () =
       if !Misc.verbose || !Misc.checkf then CMFOTL.print_formula_details f pf ;
       let is_mon = Rewriting.check_monitorability dbschema pf in
       if !sigout then Predicate.print_vartypes_list vartypes
-      else if not (fst is_mon) then
+      else if not (fst is_mon) then (
         (* if the compiled formula is monitorable, we continue with the monitoring.
            Otherwise, we print the monitorability results of the extended formula. *)
         match CMFOTL.Monitorability.is_monitorable f with
         | (false, Some reason) as result ->
-            CMFOTL.Monitorability.print_results result
-        | _ -> Rewriting.print_monitorability_results pf is_mon;
-               failwith "Invariant violation: Extended formula is monitorable while compiled formula is not."
+            CMFOTL.Monitorability.print_results pf result ;
+            Printf.eprintf "\n\n%!" ;
+            Rewriting.print_monitorability_results pf is_mon
+        | _ ->
+            Rewriting.print_monitorability_results pf is_mon ;
+            failwith
+              "Invariant violation: Extended formula is monitorable while \
+               compiled formula is not." )
       else if not !Misc.checkf then (
         if not !nofilterrelopt then Filter_rel.enable pf ;
         if (not !nofilteremptytpopt) && not !Misc.verified then
