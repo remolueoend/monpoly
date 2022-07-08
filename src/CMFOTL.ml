@@ -129,6 +129,10 @@ type cplx_predicate = string * int * cplx_term list
 
 let get_predicate_args ((name, ar, args) : cplx_predicate) = args
 
+(** assigns a new type to an existing variable in the given symbol table. *)
+let update_var_ty (vars : symbol_table) (var : var) (new_ty : tsymb) : unit =
+  List.iter (fun (v, tyr) -> if v == var then tyr := new_ty) vars
+
 (** returns the free variables in a given term *)
 let rec tvars : cplx_term -> var list = function
   | Var v -> [v]
@@ -201,7 +205,7 @@ let f_annot = fst
     The returned terms are either of type Var or Proj.
     Example: get_var_usage r (Request(r) AND r.user.name = "" AND EXISTS r . Report(r) AND r.reason = "")
     -> [r, r.user.name]. *)
-let rec get_var_usage ((_, f) : 'a cplx_formula) (var : var) : TermSet.t =
+let rec var_usage ((_, f) : 'a cplx_formula) (var : var) : TermSet.t =
   let rec term_usage = function
     | Cst _ -> TermSet.empty
     | Var v ->
@@ -229,6 +233,10 @@ let rec get_var_usage ((_, f) : 'a cplx_formula) (var : var) : TermSet.t =
     | Proj (base, _) as p ->
         if term_usage base = TermSet.empty then TermSet.empty
         else TermSet.singleton p in
+  let var_usage_re r =
+    match r with
+    | Wild | Concat _ | Plus _ | Star _ -> TermSet.empty
+    | Test f -> var_usage f var in
   match f with
   | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) | Substring (t1, t2) ->
       TermSet.union (term_usage t1) (term_usage t2)
@@ -245,28 +253,28 @@ let rec get_var_usage ((_, f) : 'a cplx_formula) (var : var) : TermSet.t =
       List.fold_left
         (fun acc a -> TermSet.union acc (term_usage a))
         TermSet.empty args
-  | Neg f1 -> get_var_usage f1 var
+  | Neg f1 -> var_usage f1 var
   | And (f1, f2) | Or (f1, f2) | Implies (f1, f2) | Equiv (f1, f2) ->
-      TermSet.union (get_var_usage f1 var) (get_var_usage f2 var)
+      TermSet.union (var_usage f1 var) (var_usage f2 var)
   | Exists (vs, f1) | ForAll (vs, f1) ->
       (* do not visit nested scope if var is shadowed: *)
-      if not (List.mem var vs) then get_var_usage f1 var else TermSet.empty
+      if not (List.mem var vs) then var_usage f1 var else TermSet.empty
   | Let (p, f1, f2) | LetPast (p, f1, f2) ->
       (* free variables in f1 (body of LET) have to be arguments to p by definition,
          and therefore always shadow variables from outer scope. *)
-      get_var_usage f2 var
+      var_usage f2 var
   | Prev (_, f1)
    |Next (_, f1)
    |Eventually (_, f1)
    |Once (_, f1)
    |Always (_, f1)
    |PastAlways (_, f1) ->
-      get_var_usage f1 var
-  (* TODO is this really the correct behavior? *)
+      var_usage f1 var
   | Since (_, f1, f2) | Until (_, f1, f2) ->
-      TermSet.union (get_var_usage f1 var) (get_var_usage f2 var)
-  | Frex _ | Prex _ -> TermSet.empty
-  | Aggreg _ -> TermSet.empty
+      TermSet.union (var_usage f1 var) (var_usage f2 var)
+  | Frex (_, r) | Prex (_, r) -> var_usage_re r
+  (* the only outside variables used inside an aggregation are the ones we group over: *)
+  | Aggreg (_, _, _, gs, f) -> TermSet.of_list (List.map (fun v -> Var v) gs)
 
 (** Returns a list of free variables in the given formula.
     One can provide an optional tvars function to be used,
@@ -727,6 +735,12 @@ let string_of_gamma (sorts : sorts) (vars : symbol_table) =
 
 (* TYPE CHECKING *)
 
+(** Returns the variable identifier of the given term
+    or throws if the term is not a variable. *)
+let expect_var = function
+  | Var v -> v
+  | t -> failwith @@ Printf.sprintf "Expected Var, got %s" (string_of_term t)
+
 let rec check_let ((fdata, f) : 'a cplx_formula) =
   match f with
   | Let (p, f1, f2) ->
@@ -1020,7 +1034,8 @@ let rec type_meet (tctxt : type_context) (t1 : tsymb) (t2 : tsymb) : tsymb =
   | TSymb (TNum, _), TCst TInt | TCst TInt, TSymb (TNum, _) -> TCst TInt
   | TSymb (TNum, _), TCst TFloat | TCst TFloat, TSymb (TNum, _) -> TCst TFloat
   (* the meet of two partial types is their merged partial type *)
-  | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) -> merge_records tctxt fs1 fs2
+  | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) ->
+      merge_records tctxt fs1 fs2
   (* the meet between a ref type and a partial type is the ref type,
      as long as the partial type can be casted. *)
   | TCst (TRef ctor), TSymb (TRecord partial_fields, _)
@@ -1408,23 +1423,22 @@ let type_check_formula_debug (d : bool) =
             let t1 = type_check_term_debug d tctxt exp_t t in
             propagate_constraints exp_t t1 t tctxt )
           indices
-    | Let (p, f1, f2) | LetPast (p, f1, f2) ->
+    | Let (p, body, in_f) | LetPast (p, body, in_f) ->
         let n, a, ts = p in
-        type_check_formula f1 ;
-        let v1 = (f_annot f1).vars in
+        (* first typecheck usage of LET predicate, then the body.
+           If there are still unresolved variable types, raise an error: *)
+        type_check_formula in_f ;
+        (* new types of predicate args after typechecking its usage: *)
+        let pred_sch = !(List.assoc (n, a) (f_annot in_f).predicates) in
+        (* udpate body vars (arguments only) before typechecking it: *)
+        let body_vars = (f_annot body).vars in
+        List.iter2
+          (fun t ty -> update_var_ty body_vars (expect_var t) ty)
+          ts pred_sch ;
+        type_check_formula body ;
         (* throw if at least one variable in the symbol table of the predicate
            body is unresolved (= has still a symbolic type): *)
-        let pred_args =
-          List.map
-            (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
-            ts in
-        check_unresolved_terms (Some n) pred_args v1 ;
-        let new_sig = List.map (fun (_, t) -> !t) v1 in
-        (* this is a reference to the old predicate schema of this LET predicate in the inner formula.sorts
-           we replace its value with the updated (type-checked) schema: *)
-        let old_sch = (f_annot f2).predicates |> List.assoc (n, a) in
-        old_sch := new_sig ;
-        type_check_formula f2
+        check_unresolved_terms (Some n) (List.map expect_var ts) body_vars
     | Neg f -> type_check_formula f
     | Prev (intv, f)
      |Next (intv, f)
@@ -1471,8 +1485,6 @@ let type_check_formula_debug (d : bool) =
         type_check_re_formula r1 ; type_check_re_formula r2
     | Star r -> type_check_re_formula r in
   type_check_formula
-
-let first_debug = ref true
 
 (** Returns the type of the given term derived from the provided symbol table.
     Requires all variables in the given type context to be resolved. *)
@@ -1779,7 +1791,7 @@ let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
     All free variables of a sub-formula are initialized with TAny.
     the predicate schema and sorts are set to the given values.
     *)
-let rec init_typed_formula (tctxt : type_context) (f : unit cplx_formula) :
+let rec init_typed_formula (tctxt : type_context) (f : 'a cplx_formula) :
     type_context cplx_formula =
   let self = init_typed_formula in
   let local_vars f =
@@ -1788,7 +1800,7 @@ let rec init_typed_formula (tctxt : type_context) (f : unit cplx_formula) :
     { tctxt with
       vars= List.filter (fun (v, _) -> List.mem v (free_vars f)) tctxt.vars }
   in
-  let rec aux_regex (regex : unit regex) : type_context regex =
+  let rec aux_regex (regex : 'a regex) : type_context regex =
     match regex with
     | Wild as r -> r
     | Concat (r1, r2) -> Concat (aux_regex r1, aux_regex r2)
@@ -1931,7 +1943,7 @@ let initial_type_context (signatures : signatures) (f : unit cplx_formula) :
     3) A boolean flag indicating the monitorability (safety) of the input formula. *)
 let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
     type_context cplx_formula =
-  let debug = !first_debug && Misc.debugging Dbg_typing in
+  let debug = Misc.debugging Dbg_typing in
   (* first of all check well-formedness of formula: *)
   ignore @@ ignore (check_wff f) ;
   let init_ctx = initial_type_context signatures f in
@@ -1951,10 +1963,161 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
          ~string_of_annot:(fun tctxt -> string_of_gamma tctxt.sorts tctxt.vars)
          f ) ;
     Printf.eprintf "\n%!" ) ;
-  first_debug := false ;
   f
 
 (* COMPILE FUNCTIONS *)
+
+(** returns the base of a given projection or variable:
+    Example 1: projection_base r.user -> r
+    Example 2: projection_base u -> u 
+    Throws an error if the given term is neither a projection or a variable.
+    *)
+let rec projection_base = function
+  | Var v -> v
+  | Proj (base, field) -> projection_base base
+  | t ->
+      failwith
+      @@ Printf.sprintf
+           "[projection_base]: Given term %s is neither a variable nor a \
+            projection"
+           (string_of_term t)
+
+(** replaces the given variable or projection with a new one in the given formula.
+    Shadowed variables in nested scopes won't be updated. *)
+let rec replace_var (old : cplx_term) (n : cplx_term) (f : 'a cplx_formula) :
+    'a cplx_formula =
+  let base = projection_base old in
+  let replace t_old = if old = t_old then n else t_old in
+  let rec replace_term_re r =
+    match r with
+    | Wild | Concat _ | Plus _ | Star _ -> r
+    | Test f -> Test (replace_var old n f) in
+  let fdata, fast = f in
+  let new_fast =
+    match fast with
+    | Equal (t1, t2) -> Equal (replace t1, replace t2)
+    | Less (t1, t2) -> Less (replace t1, replace t2)
+    | LessEq (t1, t2) -> LessEq (replace t1, replace t2)
+    | Substring (t1, t2) -> Substring (replace t1, replace t2)
+    | Matches (t1, t2, i) -> Matches (replace t1, replace t2, i)
+    | Pred (name, arity, args) -> Pred (name, arity, List.map replace args)
+    (* only free variables in LETs are its args and therefore shadow every outer var in body *)
+    | Let (p, f1, f2) -> Let (p, f1, replace_var old n f2)
+    | LetPast (p, f1, f2) -> LetPast (p, f1, replace_var old n f2)
+    | Neg f -> Neg (replace_var old n f)
+    | And (f1, f2) -> And (replace_var old n f1, replace_var old n f2)
+    | Or (f1, f2) -> Or (replace_var old n f1, replace_var old n f2)
+    | Implies (f1, f2) -> Implies (replace_var old n f1, replace_var old n f2)
+    | Equiv (f1, f2) -> Equiv (replace_var old n f1, replace_var old n f2)
+    (* do not replace terms if their base is shadowed in a nested scope: *)
+    | Exists (vs, f) ->
+        if not (List.mem base vs) then Exists (vs, replace_var old n f)
+        else fast
+    | ForAll (vs, f) ->
+        if not (List.mem base vs) then ForAll (vs, replace_var old n f)
+        else fast
+    | Aggreg (_, _, _, _, _) -> fast
+    | Prev (intv, f) -> Prev (intv, replace_var old n f)
+    | Next (intv, f) -> Next (intv, replace_var old n f)
+    | Eventually (intv, f) -> Eventually (intv, replace_var old n f)
+    | Once (intv, f) -> Once (intv, replace_var old n f)
+    | Always (intv, f) -> Always (intv, replace_var old n f)
+    | PastAlways (intv, f) -> PastAlways (intv, replace_var old n f)
+    | Since (intv, f1, f2) ->
+        Since (intv, replace_var old n f1, replace_var old n f2)
+    | Until (intv, f1, f2) ->
+        Until (intv, replace_var old n f1, replace_var old n f2)
+    | Frex (intv, r) -> Frex (intv, replace_term_re r)
+    | Prex (intv, r) -> Prex (intv, replace_term_re r) in
+  (fdata, new_fast)
+
+(** replaces the arguments in the usage of the given predicate with a new argument list.
+    new_args will be called with the list of original arguments.
+    shadowed predicates in LET statements won't be updated. *)
+let rec replace_pred_args (p : cplx_predicate) (new_arg_tys : tsymb list)
+    (new_args : cplx_term list -> cplx_term list) (f : type_context cplx_formula)
+    : type_context cplx_formula =
+  let rec replace_pred_re r =
+    match r with
+    | Wild | Concat _ | Plus _ | Star _ -> r
+    | Test f -> Test (replace_pred_args p new_arg_tys new_args f) in
+  let old_name, old_arity, _ = p in
+  let fast = f_ast f in
+  let tctxt = f_annot f in
+  (* replace the old predicate schema with the new one: *)
+  let new_sch =
+    ((old_name, old_arity), ref new_arg_tys)
+    :: List.remove_assoc (old_name, old_arity) tctxt.predicates in
+  let new_fast =
+    match fast with
+    | Equal _ | Less _ | LessEq _ | Substring _ | Matches _ -> fast
+    | Pred (name, arity, args) ->
+        if name = old_name && arity = old_arity then
+          let na = new_args args in
+          Pred (name, List.length na, na)
+        else fast
+    (* do not replace pred in f if it is shadowed (same name and arity) *)
+    | Let ((name, arity, args), b, f) ->
+        if name == old_name && arity == old_arity then
+          Let
+            ((name, arity, args), replace_pred_args p new_arg_tys new_args b, f)
+        else
+          Let
+            ( (name, arity, args)
+            , replace_pred_args p new_arg_tys new_args b
+            , replace_pred_args p new_arg_tys new_args f )
+    | LetPast ((name, arity, args), b, f) ->
+        if name == old_name && arity == old_arity then
+          LetPast
+            ((name, arity, args), replace_pred_args p new_arg_tys new_args b, f)
+        else
+          LetPast
+            ( (name, arity, args)
+            , replace_pred_args p new_arg_tys new_args b
+            , replace_pred_args p new_arg_tys new_args f )
+    | Neg f -> Neg (replace_pred_args p new_arg_tys new_args f)
+    | And (f1, f2) ->
+        And
+          ( replace_pred_args p new_arg_tys new_args f1
+          , replace_pred_args p new_arg_tys new_args f2 )
+    | Or (f1, f2) ->
+        Or
+          ( replace_pred_args p new_arg_tys new_args f1
+          , replace_pred_args p new_arg_tys new_args f2 )
+    | Implies (f1, f2) ->
+        Implies
+          ( replace_pred_args p new_arg_tys new_args f1
+          , replace_pred_args p new_arg_tys new_args f2 )
+    | Equiv (f1, f2) ->
+        Equiv
+          ( replace_pred_args p new_arg_tys new_args f1
+          , replace_pred_args p new_arg_tys new_args f2 )
+    | Exists (vs, f) -> Exists (vs, replace_pred_args p new_arg_tys new_args f)
+    | ForAll (vs, f) -> ForAll (vs, replace_pred_args p new_arg_tys new_args f)
+    | Aggreg (_, _, _, _, _) -> fast
+    | Prev (intv, f) -> Prev (intv, replace_pred_args p new_arg_tys new_args f)
+    | Next (intv, f) -> Next (intv, replace_pred_args p new_arg_tys new_args f)
+    | Eventually (intv, f) ->
+        Eventually (intv, replace_pred_args p new_arg_tys new_args f)
+    | Once (intv, f) -> Once (intv, replace_pred_args p new_arg_tys new_args f)
+    | Always (intv, f) ->
+        Always (intv, replace_pred_args p new_arg_tys new_args f)
+    | PastAlways (intv, f) ->
+        PastAlways (intv, replace_pred_args p new_arg_tys new_args f)
+    | Since (intv, f1, f2) ->
+        Since
+          ( intv
+          , replace_pred_args p new_arg_tys new_args f1
+          , replace_pred_args p new_arg_tys new_args f2 )
+    | Until (intv, f1, f2) ->
+        Until
+          ( intv
+          , replace_pred_args p new_arg_tys new_args f1
+          , replace_pred_args p new_arg_tys new_args f2 )
+    | Frex (intv, r) -> Frex (intv, replace_pred_re r)
+    | Prex (intv, r) -> Prex (intv, replace_pred_re r) in
+  ({tctxt with predicates= new_sch}, new_fast)
+
 let compile_tcst (tcst : tcst) : Predicate.tcst =
   match tcst with
   | TInt -> TInt
@@ -2008,7 +2171,7 @@ let expand_cplx_var (f : type_context cplx_formula) (var : var) :
         @@ Printf.sprintf "could not find ref type of %s: is of type %s"
              (string_of_term t)
              (string_of_tcst tctxt.sorts ty) in
-  let usages = get_var_usage f var |> TermSet.elements in
+  let usages = var_usage f var |> TermSet.elements in
   (* list of triples: (ctor, Record, prefix) *)
   let required_expansions =
     List.fold_right
@@ -2064,16 +2227,89 @@ let expand_structural_equality (tctxt : type_context) (left : cplx_term)
   let equal_terms = List.map (fun (l, r) -> (tctxt, Equal (l, r))) leaves in
   cplx_conjunction tctxt equal_terms
 
+(** expands the complex arguments of a given predicate, by extending its arguments list,
+    updating the usage of the original arguments in the body and predicate usages in the in_f formula accordingly.
+    Each complex argument is replaced by its leaves accessed in the body of the LET statement.
+    This function also makes sure to update the type annotations of the predicate schema
+    in the affected formulas. *)
+let rec expand_predicate_params (p : cplx_predicate)
+    (body : type_context cplx_formula) (in_f : type_context cplx_formula) =
+  let name, _, args = p in
+  (* extends a parameter of a predicate and returnn
+     the new body and a list of expanded parameters: *)
+  let expand_param body (arg : var) =
+    (* get the used leaves and their types of an argument in the LET body: *)
+    let usages = var_usage body arg in
+    let leaves = record_leaves (f_annot body) (Var arg) |> TermSet.of_list in
+    let used_leaves = TermSet.inter usages leaves |> TermSet.elements in
+    let leave_tys =
+      List.map (fun t -> type_of_term (f_annot body) t) used_leaves in
+    (* replace all used leaves by their new (flattened) variable in the body of the LET: *)
+    let new_body =
+      List.fold_left
+        (fun b l -> replace_var l (Var (projection_path l)) b)
+        body used_leaves in
+    (new_body, List.combine used_leaves leave_tys) in
+  (* expands a single argument passed to the given parameter.
+     param is the leaf used inside the body, arg is the term passed as argument: *)
+  let rec expand_arg arg param =
+    match param with
+    | Var _ -> arg
+    | Proj (b, f) -> (
+      match arg with
+      | Var _ | Proj _ -> Proj (expand_arg arg b, f)
+      | Cst (Record (_, fs)) -> (
+        match expand_arg arg b with
+        | Cst (Record (_, fs)) -> List.assoc f fs
+        | _ -> failwith "[expand_arg] invalid state 0" )
+      | _ -> failwith "[expand_arg] invalid state 1" )
+    | _ -> failwith "[expand_arg] invalid state 2" in
+  let new_body, leaves =
+    (* fold over all arguments to gather new LET body and all accessed leaves: *)
+    List.fold_right
+      (fun arg (b, l) ->
+        let new_body, new_leaves = expand_param b (expect_var arg) in
+        (new_body, new_leaves :: l) )
+      args (body, []) in
+  (* gather new symbol table initialized with the concrete types of the new arguments.
+     re-init the type context of the body and type check if afterwards: *)
+  let new_pred_vars =
+    List.flatten leaves
+    |> List.map (fun (p, ty) -> (projection_path p, ref (TCst ty))) in
+  let new_body =
+    init_typed_formula {(f_annot body) with vars= new_pred_vars} new_body in
+  type_check_formula_debug false new_body ;
+  let new_param_tys = List.map (fun (_, t) -> !t) new_pred_vars in
+  (* replace the predicate usages in in_f by replacing the single argument by a new list of leaf arguments:  *)
+  let new_f_in =
+    replace_pred_args p new_param_tys
+      (fun args ->
+        List.map2
+          (fun arg pl -> List.map (fun (p, _) -> expand_arg arg p) pl)
+          args leaves
+        |> List.flatten )
+      in_f in
+  let new_args = List.map (fun (v, _) -> Var v) new_pred_vars in
+  ( (name, List.length new_args, new_args)
+  , preprocess_formula new_body
+  , preprocess_formula new_f_in )
+
 (** pre-processes the given complex formula before the actual compilation step.
     Should be run once before compiling on the input formula. *)
-let rec preprocess_formula (f : type_context cplx_formula) : 'a cplx_formula =
+and preprocess_formula (f : type_context cplx_formula) : 'a cplx_formula =
   let fdata, fast = f in
   match fast with
   | Equal (t1, t2) -> expand_structural_equality fdata t1 t2
   | Let (p, f1, f2) ->
-      (fdata, Let (p, preprocess_formula f1, preprocess_formula f2))
+      ( fdata
+      , Let
+          (expand_predicate_params p (preprocess_formula f1)
+             (preprocess_formula f2) ) )
   | LetPast (p, f1, f2) ->
-      (fdata, LetPast (p, preprocess_formula f1, preprocess_formula f2))
+      ( fdata
+      , LetPast
+          (expand_predicate_params p (preprocess_formula f1)
+             (preprocess_formula f2) ) )
   | Neg f -> (fdata, Neg (preprocess_formula f))
   | And (f1, f2) -> (fdata, And (preprocess_formula f1, preprocess_formula f2))
   | Or (f1, f2) -> (fdata, Or (preprocess_formula f1, preprocess_formula f2))
