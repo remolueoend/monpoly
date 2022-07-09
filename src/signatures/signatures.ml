@@ -51,9 +51,13 @@ module SignTable = struct
     let open Yojson.Basic in
     match json with
     | `Assoc json_fields ->
-        if List.length json_fields <> List.length record_fields then false
+        let non_list_fields =
+          List.filter
+            (fun f -> match snd f with `List _ -> false | _ -> true)
+            json_fields in
+        if List.length non_list_fields <> List.length record_fields then false
         else
-          List.combine json_fields record_fields
+          List.combine non_list_fields record_fields
           |> List.for_all (fun ((jf_name, jf_val), {elt= {fname; ftyp}; _}) ->
                  compare jf_name fname = 0
                  &&
