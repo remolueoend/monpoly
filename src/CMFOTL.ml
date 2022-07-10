@@ -59,7 +59,7 @@ let filter_some l =
 (* DATA STRUCTURES *)
 type tcst = Signature_ast.ty
 
-type tcl = TNum | TAny | TRecord of (string * tsymb) list
+type tcl = TNum | TAny | TOrd | TRecord of (string * tsymb) list
 and tsymb = TSymb of (tcl * int) | TCst of tcst | TNever
 
 (** represents a single custom sort *)
@@ -368,6 +368,7 @@ let rec string_of_tcst (sorts : sorts) = function
 let rec string_of_type (sorts : sorts) = function
   | TCst t -> string_of_tcst sorts t
   | TSymb (TNum, a) -> "(Num t" ^ string_of_int a ^ ") =>  t" ^ string_of_int a
+  | TSymb (TOrd, a) -> "(TOrd t" ^ string_of_int a ^ ") =>  t" ^ string_of_int a
   | TSymb (TRecord fs, a) ->
       Printf.sprintf "t%i{%s}" a
         ( List.map (fun (n, t) -> n ^ ":" ^ string_of_type sorts t) fs
@@ -989,6 +990,29 @@ let check_wff (f : 'a cplx_formula) =
 
 exception IncompatibleTypes of tsymb * tsymb
 
+module TypeMap = Map.Make (struct
+  type t = tsymb
+
+  let compare = compare
+end)
+
+(** describes the 'more-precise' relation of a subset of all types.
+    All record-related types are not included, because their 'more-precise
+    relation depends dynamically on their structure. *)
+let type_lattice =
+  [ (TCst TInt, TNum); (TCst TFloat, TNum); (TCst TStr, TOrd)
+  ; (TCst TRegexp, TOrd); (TSymb (TNum, 0), TOrd); (TSymb (TOrd, 0), TAny) ]
+  |> List.to_seq |> TypeMap.of_seq
+
+(** returns whether ty1 is more precise than t2 based on the 'type_lattice' relation.
+    If one of the two types is not part of the type_lattice relation the result is always false. *)
+let rec is_more_precise (ty1 : tsymb) (ty2 : tsymb) : bool =
+  let gen = function TSymb (cls, _) -> TSymb (cls, 0) | t -> t in
+  if TypeMap.mem (gen ty1) type_lattice then
+    let next = TSymb (TypeMap.find (gen ty1) type_lattice, 0) in
+    next = gen ty2 || is_more_precise next ty2
+  else false
+
 (* compares two types for structural equality.
    Returns either true of false (no order). *)
 let rec compare_tcst (sorts : sorts) t1 t2 =
@@ -1005,49 +1029,48 @@ let rec compare_tcst (sorts : sorts) t1 t2 =
             | None -> false
             | Some t2 -> compare_tcst sorts t1 t2 )
           fs1
-  | t1, t2 -> compare t1 t2 = 0
+  | t1, t2 -> t1 = t2
 
 (** Returns the meet of the two given types.
     Raises an IncompatibleTypes exception whenever the meet of the two types is the bottom type. *)
 let rec type_meet (tctxt : type_context) (t1 : tsymb) (t2 : tsymb) : tsymb =
-  let sorts = tctxt.sorts in
-  match (t1, t2) with
-  (* the meet of two constant types can only exist if they are structurally equal.
-     if both are TRef types, we return the named typed in favor of any inline type: *)
-  | (TCst (TRef c1 as ref1) as t1), (TCst (TRef c2 as ref2) as t2) ->
-      let ttt =
-        if compare_tcst sorts ref1 ref2 then
-          if (List.assoc c1 sorts).inline then t2 else t1
-        else raise (IncompatibleTypes (t1, t2)) in
-      ttt
-  | (TCst a as t1), TCst b ->
-      if compare_tcst sorts a b then t1 else raise (IncompatibleTypes (t1, t2))
-  (* the meet of two TAny instances is the one with the lower index *)
-  | (TSymb (TAny, n1) as t1), (TSymb (TAny, n2) as t2) ->
-      if n1 <= n2 then t1 else t2
-  (* the meet of TAny with any type t is always type t *)
-  | TSymb (TAny, _), t | t, TSymb (TAny, _) -> t
-  (* the meet of two TNum instances is the one with the lower index *)
-  | (TSymb (TNum, n1) as t1), (TSymb (TNum, n2) as t2) ->
-      if n1 <= n2 then t1 else t2
-  (* resolve concrete types if they are castable from TNum *)
-  | TSymb (TNum, _), TCst TInt | TCst TInt, TSymb (TNum, _) -> TCst TInt
-  | TSymb (TNum, _), TCst TFloat | TCst TFloat, TSymb (TNum, _) -> TCst TFloat
-  (* the meet of two partial types is their merged partial type *)
-  | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) ->
-      merge_records tctxt fs1 fs2
-  (* the meet between a ref type and a partial type is the ref type,
-     as long as the partial type can be casted. *)
-  | TCst (TRef ctor), TSymb (TRecord partial_fields, _)
-   |TSymb (TRecord partial_fields, _), TCst (TRef ctor) -> (
-    match List.assoc_opt ctor sorts with
-    | None -> failwith ("Unknown record type: " ^ ctor)
-    | Some {fields= ref_fields; _} ->
-        let success = cast_to_record tctxt ref_fields partial_fields in
-        if success then TCst (TRef ctor) else raise (IncompatibleTypes (t1, t2))
-    )
-  (* for any other case, we assume the meet is the bottom type *)
-  | _ -> raise (IncompatibleTypes (t1, t2))
+  (* first use the more-precise relation whenever possible and return
+     the more precise type of the two: *)
+  if is_more_precise t1 t2 then t1
+  else if is_more_precise t2 t1 then t2
+  else
+    let sorts = tctxt.sorts in
+    match (t1, t2) with
+    (* the meet of two constant types can only exist if they are structurally equal.
+       if both are TRef types, we return the named typed in favor of any inline type: *)
+    | (TCst (TRef c1 as ref1) as t1), (TCst (TRef c2 as ref2) as t2) ->
+        let ttt =
+          if compare_tcst sorts ref1 ref2 then
+            if (List.assoc c1 sorts).inline then t2 else t1
+          else raise (IncompatibleTypes (t1, t2)) in
+        ttt
+    | (TCst a as t1), TCst b ->
+        if compare_tcst sorts a b then t1 else raise (IncompatibleTypes (t1, t2))
+    (* for two symbolic types of equal type class, return the one with lower identifier: *)
+    | TSymb (cls1, n1), TSymb (cls2, n2) when cls1 = cls2 ->
+        TSymb (cls1, min n1 n2)
+    (* the meet of TAny with any type t is always type t *)
+    | TSymb (TAny, _), t | t, TSymb (TAny, _) -> t
+    (* the meet of two partial types is their merged partial type *)
+    | TSymb (TRecord fs1, _), TSymb (TRecord fs2, _) ->
+        merge_records tctxt fs1 fs2
+    (* the meet between a ref type and a partial type is the ref type,
+       as long as the partial type can be casted. *)
+    | TCst (TRef ctor), TSymb (TRecord partial_fields, _)
+     |TSymb (TRecord partial_fields, _), TCst (TRef ctor) -> (
+      match List.assoc_opt ctor sorts with
+      | None -> failwith ("Unknown record type: " ^ ctor)
+      | Some {fields= ref_fields; _} ->
+          let success = cast_to_record tctxt ref_fields partial_fields in
+          if success then TCst (TRef ctor)
+          else raise (IncompatibleTypes (t1, t2)) )
+    (* for any other case, we assume the meet is the bottom type *)
+    | _ -> raise (IncompatibleTypes (t1, t2))
 
 (** Accepts the fields of two symbolic record types and returns their meet.
     Raises an IncompatibleTypes exception whenever the meet of the types of a common field
@@ -1175,14 +1198,13 @@ let type_check_term_debug (d : bool) (tctxt : type_context) (typ : tsymb)
         (string_of_delta sorts sch)
         (string_of_gamma sorts vars) ;
       Printf.eprintf "%s" (string_of_term term) ;
-      Printf.eprintf ": %s" (string_of_type sorts typ) ;
-      Printf.eprintf "\n%!\n%!" ) ;
+      Printf.eprintf ": %s\n%!" (string_of_type sorts typ) ) ;
     match term with
     | Var v as tt ->
         if List.mem_assoc v vars then (
           let vtyp = !(List.assoc v vars) in
           propagate_constraints typ vtyp tt tctxt ;
-          vtyp )
+          type_meet tctxt typ vtyp )
         else
           failwith
           @@ Printf.sprintf
@@ -1331,7 +1353,9 @@ let type_check_term_debug (d : bool) (tctxt : type_context) (typ : tsymb)
         propagate_constraints typ f_ty tt tctxt ;
         let f_ty = type_meet tctxt typ f_ty in
         f_ty in
-  type_check_term tctxt typ term
+  let ret_ty = type_check_term tctxt typ term in
+  if d then Printf.eprintf "→ %s\n\n%!" (string_of_type tctxt.sorts ret_ty) ;
+  ret_ty
 
 (*
 Type judgement is of the form (Δ;T;Γ) ⊢ ϕ wff  
@@ -1357,8 +1381,16 @@ let type_check_formula_debug (d : bool) =
       Printf.eprintf "%s" (string_of_formula "" f) ;
       Printf.eprintf "\n%!\n%!" ) ;
     match fast with
-    | Equal (t1, t2) | Less (t1, t2) | LessEq (t1, t2) ->
+    | Equal (t1, t2) ->
         let exp_typ = tctxt.new_type_symbol TAny in
+        let t1_typ = type_check_term_debug d tctxt exp_typ t1 in
+        propagate_constraints exp_typ t1_typ t1 tctxt ;
+        let exp_typ = type_meet tctxt t1_typ exp_typ in
+        let t2_typ = type_check_term_debug d tctxt exp_typ t2 in
+        propagate_constraints exp_typ t2_typ t2 tctxt ;
+        propagate_constraints t1_typ t2_typ t2 tctxt
+    | Less (t1, t2) | LessEq (t1, t2) ->
+        let exp_typ = tctxt.new_type_symbol TOrd in
         let t1_typ = type_check_term_debug d tctxt exp_typ t1 in
         propagate_constraints exp_typ t1_typ t1 tctxt ;
         let exp_typ = type_meet tctxt t1_typ exp_typ in
@@ -1457,11 +1489,23 @@ let type_check_formula_debug (d : bool) =
     | Aggreg (r, op, x, gs, f) -> (
         let f_ctx = f_annot f in
         let typecheck_aggregation exp_ret_ty exp_agg_ty =
+          type_check_formula f ;
           (* typecheck x under the type context of the inner formula: *)
           let agg_ty = type_check_term_debug d f_ctx exp_agg_ty (Var x) in
-          type_check_formula f ;
           (* expect all free variables of f (including gs) to be resolved: *)
           check_unresolved_terms None (free_vars f) f_ctx.vars ;
+          (* TODO: allow gs to be of complex type by expanding their leaves: *)
+          if
+            List.exists
+              (fun g ->
+                match !(List.assoc g f_ctx.vars) with
+                | TCst (TRef _) -> true
+                | _ -> false )
+              gs
+          then
+            failwith
+              "[type_check_formula_debug] group-by terms of complex type are \
+               not supported yet." ;
           (* typecheck the return variable under the current context: *)
           let ret_ty = type_check_term_debug d tctxt exp_ret_ty (Var r) in
           (* if _expected_ type of aggregation variable and return type are the same
@@ -1471,8 +1515,9 @@ let type_check_formula_debug (d : bool) =
           () in
         let exp_any_typ = tctxt.new_type_symbol TAny in
         let exp_num_typ = tctxt.new_type_symbol TNum in
+        let exp_ord_typ = tctxt.new_type_symbol TOrd in
         match op with
-        | Min | Max -> typecheck_aggregation exp_any_typ exp_any_typ
+        | Min | Max -> typecheck_aggregation exp_ord_typ exp_ord_typ
         | Cnt -> typecheck_aggregation (TCst TInt) exp_any_typ
         | Sum -> typecheck_aggregation exp_num_typ exp_num_typ
         | Avg | Med -> typecheck_aggregation (TCst TFloat) exp_num_typ )
