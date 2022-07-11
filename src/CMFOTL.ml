@@ -43,6 +43,9 @@ open Signature_ast
 
 (* COMMON HELPERS (may be moved to another module?) *)
 
+(** function composition operator *)
+let ( << ) f g a = f (g a)
+
 (** Same as :: operator, but does not add duplicates to the list. *)
 let ( ^:: ) v l = if List.mem v l then l else v :: l
 
@@ -77,7 +80,7 @@ and cst =
   | Record of (string * (string * cplx_term) list)
 
 (** Δ *)
-and predicate_schema = ((string * int) * tsymb list ref) list
+and predicate_schema = ((string * int) * tsymb ref list) list
 
 (** T *)
 and sorts = (var * sort) list
@@ -715,13 +718,13 @@ let string_of_delta (sorts : sorts) (sch : predicate_schema) : string =
       if List.length ts > 0 then
         let ft = List.hd ts in
         List.fold_left
-          (fun a e -> a ^ ", " ^ string_of_type sorts e)
-          (string_of_type sorts ft) (List.tl ts)
+          (fun a e -> a ^ ", " ^ string_of_type sorts !e)
+          (string_of_type sorts !ft) (List.tl ts)
       else "()" in
     let fp, fs = List.hd sch in
     List.fold_left
-      (fun a (p, ts) -> a ^ ", " ^ fst p ^ "(" ^ string_of_types !ts ^ ")")
-      (fst fp ^ "(" ^ string_of_types !fs ^ ")")
+      (fun a (p, ts) -> a ^ ", " ^ fst p ^ "(" ^ string_of_types ts ^ ")")
+      (fst fp ^ "(" ^ string_of_types fs ^ ")")
       (List.tl sch)
   else "_"
 
@@ -1117,27 +1120,51 @@ and cast_to_record (tctxt : type_context) (fields : (var * tcst) list)
 
 (** Given that v:t1 and v:t2 for some v,
    check which type is more specific and update Γ accordingly *)
-let propagate_constraints t1 t2 (t : cplx_term) (tctxt : type_context) : unit =
-  let rec propagate_to_tsymb (meet : tsymb) (tsymb : tsymb) : tsymb =
-    if tsymb = t1 || tsymb = t2 then meet
+let rec propagate_constraints (t1 : tsymb) (t2 : tsymb) (t : cplx_term)
+    (tctxt : type_context) : unit =
+  let rec propagate_to_tsymb (meet : tsymb) (cur_ty : tsymb ref) : tsymb =
+    if !cur_ty = t1 || !cur_ty = t2 then (
+      (* whenever we replace the current type with a meet and both of them are
+         of complex type, we first need to recurse over their fields and propagate
+         the constraints introduced by their respective types: *)
+      ( match (meet, !cur_ty) with
+      | TCst (TRef ctor), TSymb (TRecord fields, _) ->
+          (* fields is a subset of meet_fields: *)
+          let meet_fields = (List.assoc ctor tctxt.sorts).fields in
+          List.iter
+            (fun (fname, ftyp) ->
+              propagate_constraints
+                (TCst (List.assoc fname meet_fields))
+                ftyp t tctxt )
+            fields ;
+          ()
+      | TSymb (TRecord meet_fields, _), TSymb (TRecord fields, _) ->
+          List.iter
+            (fun (fname, ftyp) ->
+              propagate_constraints (List.assoc fname meet_fields) ftyp t tctxt
+              )
+            fields ;
+          ()
+      | _ -> () ) ;
+      cur_ty := meet ;
+      meet )
     else
-      match tsymb with
+      (* propagate over nested fields of current type: *)
+      match !cur_ty with
       | TSymb (TRecord fields, i) ->
           let new_fields =
             List.map
-              (fun (name, typ) -> (name, propagate_to_tsymb meet typ))
+              (fun (name, typ) -> (name, propagate_to_tsymb meet (ref typ)))
               fields in
           TSymb (TRecord new_fields, i)
-      | _ -> tsymb in
+      | _ -> meet in
   let propagate_to_predicate_schema (meet : tsymb) (sch : predicate_schema) :
       unit =
     List.iter
-      (fun (n, args) ->
-        let new_args = List.map (propagate_to_tsymb meet) !args in
-        args := new_args )
+      (fun (n, args) -> List.iter (ignore << propagate_to_tsymb meet) args)
       sch in
   let propagate_to_symbol_table (meet : tsymb) (vars : symbol_table) : unit =
-    List.iter (fun (name, typ) -> typ := propagate_to_tsymb meet !typ) vars
+    List.iter (fun (name, typ) -> ignore @@ propagate_to_tsymb meet typ) vars
   in
   try
     let meet = type_meet tctxt t1 t2 in
@@ -1433,8 +1460,7 @@ let type_check_formula_debug (d : bool) =
     | Pred p ->
         let name, arity, _ = p in
         let exp_typ_list =
-          if List.mem_assoc (name, arity) sch then
-            !(List.assoc (name, arity) sch)
+          if List.mem_assoc (name, arity) sch then List.assoc (name, arity) sch
           else
             failwith
               ( "[Typecheck.typecheck_formula] unknown predicate " ^ name ^ "/"
@@ -1450,10 +1476,10 @@ let type_check_formula_debug (d : bool) =
         let indices = idx (List.length t_list) in
         List.iter
           (fun i ->
-            let exp_t = List.nth !(List.assoc (name, arity) sch) i in
+            let exp_t = List.nth (List.assoc (name, arity) sch) i in
             let t = List.nth t_list i in
-            let t1 = type_check_term_debug d tctxt exp_t t in
-            propagate_constraints exp_t t1 t tctxt )
+            let t1 = type_check_term_debug d tctxt !exp_t t in
+            propagate_constraints !exp_t t1 t tctxt )
           indices
     | Let (p, body, in_f) | LetPast (p, body, in_f) ->
         let n, a, ts = p in
@@ -1461,11 +1487,11 @@ let type_check_formula_debug (d : bool) =
            If there are still unresolved variable types, raise an error: *)
         type_check_formula in_f ;
         (* new types of predicate args after typechecking its usage: *)
-        let pred_sch = !(List.assoc (n, a) (f_annot in_f).predicates) in
+        let pred_sch = List.assoc (n, a) (f_annot in_f).predicates in
         (* udpate body vars (arguments only) before typechecking it: *)
         let body_vars = (f_annot body).vars in
         List.iter2
-          (fun t ty -> update_var_ty body_vars (expect_var t) ty)
+          (fun t ty -> update_var_ty body_vars (expect_var t) !ty)
           ts pred_sch ;
         type_check_formula body ;
         (* throw if at least one variable in the symbol table of the predicate
@@ -1839,12 +1865,15 @@ let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
 let rec init_typed_formula (tctxt : type_context) (f : 'a cplx_formula) :
     type_context cplx_formula =
   let self = init_typed_formula in
-  let local_vars f =
-    List.filter (fun (v, _) -> List.mem v (free_vars f)) tctxt.vars in
-  let l_ctx f =
-    { tctxt with
-      vars= List.filter (fun (v, _) -> List.mem v (free_vars f)) tctxt.vars }
-  in
+  (* TODO: if the symbol table of a sub-formula contains only a subset of all
+     free variables of its scope, the constraint propagation won't be able
+     to update the type of variables not part of the symbol table.
+     we therefore include all free variables from the parent formula for now,
+     until the constraint propagation has been improved. *)
+  (* let local_vars f =
+     List.filter (fun (v, _) -> List.mem v (free_vars f)) tctxt.vars in *)
+  let local_vars f = tctxt.vars in
+  let l_ctx f = {tctxt with vars= local_vars f} in
   let rec aux_regex (regex : 'a regex) : type_context regex =
     match regex with
     | Wild as r -> r
@@ -1892,15 +1921,15 @@ let rec init_typed_formula (tctxt : type_context) (f : 'a cplx_formula) :
         @ List.map (fun v -> (v, ref (tctxt.new_type_symbol TAny))) l in
       (tctxt, ForAll (l, self {tctxt with vars= new_vars} f))
   | Let ((name, arity, targs), body, f) ->
-      let arg_names =
-        List.map
-          (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
-          targs in
-      let arg_types = List.map (fun a -> tctxt.new_type_symbol TAny) arg_names in
-      let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
+      let arg_names = List.map expect_var targs in
+      (* introduce a new reference for each argument type
+         and re-use it in the body's symbol table: *)
+      let arg_types =
+        List.map (fun a -> ref (tctxt.new_type_symbol TAny)) arg_names in
+      let new_vars = List.map2 (fun n t -> (n, t)) arg_names arg_types in
       let non_shadowed =
         List.filter (fun ((n, _), _) -> n <> name) tctxt.predicates in
-      let new_sch = ((name, arity), ref arg_types) :: non_shadowed in
+      let new_sch = ((name, arity), arg_types) :: non_shadowed in
       ( tctxt
       , Let
           ( (name, arity, targs)
@@ -1911,9 +1940,10 @@ let rec init_typed_formula (tctxt : type_context) (f : 'a cplx_formula) :
         List.map
           (fun t -> match t with Var v -> v | _ -> failwith "invalid state")
           targs in
-      let arg_types = List.map (fun a -> tctxt.new_type_symbol TAny) arg_names in
-      let new_vars = List.map2 (fun n t -> (n, ref t)) arg_names arg_types in
-      let new_sch = ((name, arity), ref arg_types) :: tctxt.predicates in
+      let arg_types =
+        List.map (fun a -> ref (tctxt.new_type_symbol TAny)) arg_names in
+      let new_vars = List.map2 (fun n t -> (n, t)) arg_names arg_types in
+      let new_sch = ((name, arity), arg_types) :: tctxt.predicates in
       ( tctxt
       , LetPast
           ( (name, arity, targs)
@@ -1940,8 +1970,8 @@ let initial_type_context (signatures : signatures) (f : unit cplx_formula) :
     incr tsymb_id ;
     TSymb (cls, !tsymb_id) in
   let native_predicates : predicate_schema =
-    [ (("tp", 1), ref [TCst TInt]); (("ts", 1), ref [TCst TInt])
-    ; (("tpts", 1), ref [TCst TInt; TCst TInt]) ] in
+    [ (("tp", 1), [ref (TCst TInt)]); (("ts", 1), [ref (TCst TInt)])
+    ; (("tpts", 1), [ref (TCst TInt); ref (TCst TInt)]) ] in
   (* create initial Δ *)
   let sch : predicate_schema =
     List.fold_left
@@ -1949,12 +1979,13 @@ let initial_type_context (signatures : signatures) (f : unit cplx_formula) :
         match decl with
         | Predicate {elt= name, args; _} ->
             let lifted_args =
-              extr_nodes args |> List.map (fun {atyp; _} -> TCst atyp) in
-            ((name, List.length args), ref lifted_args) :: acc
+              extr_nodes args |> List.map (fun {atyp; _} -> ref (TCst atyp))
+            in
+            ((name, List.length args), lifted_args) :: acc
         | ProductSort (attrs, {elt= name, fields; _}) ->
             (* do not add inline records to predicate schema: *)
             if not attrs.inline then
-              let rec_pred = ((name, 1), ref [TCst (TRef name)]) in
+              let rec_pred = ((name, 1), [ref (TCst (TRef name))]) in
               rec_pred :: acc
             else acc )
       [] signatures in
@@ -2079,7 +2110,7 @@ let rec replace_var (old : cplx_term) (n : cplx_term) (f : 'a cplx_formula) :
 (** replaces the arguments in the usage of the given predicate with a new argument list.
     new_args will be called with the list of original arguments.
     shadowed predicates in LET statements won't be updated. *)
-let rec replace_pred_args (p : cplx_predicate) (new_arg_tys : tsymb list)
+let rec replace_pred_args (p : cplx_predicate) (new_arg_tys : tsymb ref list)
     (new_args : cplx_term list -> cplx_term list) (f : type_context cplx_formula)
     : type_context cplx_formula =
   let rec replace_pred_re r =
@@ -2091,7 +2122,7 @@ let rec replace_pred_args (p : cplx_predicate) (new_arg_tys : tsymb list)
   let tctxt = f_annot f in
   (* replace the old predicate schema with the new one: *)
   let new_sch =
-    ((old_name, old_arity), ref new_arg_tys)
+    ((old_name, old_arity), new_arg_tys)
     :: List.remove_assoc (old_name, old_arity) tctxt.predicates in
   let new_fast =
     match fast with
@@ -2324,7 +2355,7 @@ let rec expand_predicate_params (p : cplx_predicate)
   let new_body =
     init_typed_formula {(f_annot body) with vars= new_pred_vars} new_body in
   type_check_formula_debug false new_body ;
-  let new_param_tys = List.map (fun (_, t) -> !t) new_pred_vars in
+  let new_param_tys = List.map (fun (_, t) -> t) new_pred_vars in
   (* replace the predicate usages in in_f by replacing the single argument by a new list of leaf arguments:  *)
   let new_f_in =
     replace_pred_args p new_param_tys
