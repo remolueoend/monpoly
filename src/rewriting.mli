@@ -78,3 +78,6 @@ val check_syntax: schema -> formula -> ((var * tcst) list  * formula)
 val check_let: formula -> bool
 
 val expand_let: expand_mode -> formula -> formula
+
+val is_future: formula -> bool
+(** Returns [true] if formula contains future operators *)

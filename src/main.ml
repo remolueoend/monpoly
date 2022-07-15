@@ -147,6 +147,12 @@ let main () =
           Predicate.print_vartypes_list vartypes
         else if is_mon && not !Misc.checkf then
           begin
+            (* By default, that is without user specification (see option
+              -nonewlastts), we add a new maximal timestamp for future formulas;
+              that is, we assume that no more events will happen in the
+              future. For past-only formulas we never add such a timestamp. *)
+            if not (Rewriting.is_future pf) then
+              Misc.new_last_ts := false;
             if not !nofilterrelopt then
               Filter_rel.enable pf;
             if not !nofilteremptytpopt && not !Misc.verified then

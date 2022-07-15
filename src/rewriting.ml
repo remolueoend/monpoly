@@ -1705,12 +1705,6 @@ let check_formula s f =
     if (Misc.debugging Dbg_monitorable) && rf <> nf then
       MFOTL.prerrnl_formula "The \"rewritten\" formula is:\n  " rf;
 
-    (* By default, that is without user specification (see option
-       -nonewlastts), we add a new maximal timestamp for future formulas;
-       that is, we assume that no more events will happen in the
-       future. For past-only formulas we never add such a timestamp. *)
-    if not (is_future rf) then
-      Misc.new_last_ts := false;
 
     if !Misc.verbose || !Misc.checkf then
       begin
