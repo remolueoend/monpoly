@@ -364,6 +364,7 @@ let get_tf attr = function
   | _ -> failwith "[Tuple.get_processing_func, formula] internal error"
 
 
+
 exception Not_joinable
 
 
@@ -382,6 +383,20 @@ let join posval t1 t2 =
     | _,[] -> failwith "[Tuple.join] bad posval list"
   in
   t1 @ (join' 0 posval t2)
+
+(* Does not check equality of shared positions! *)
+let join_unchecked matches t1 t2 =
+  let rec sel crtpos pp t =
+    match pp, t with
+    | (pos2, _)::ppt, c::tt ->
+        if pos2 = crtpos then
+          sel (crtpos+1) ppt tt
+        else
+          c :: sel (crtpos+1) pp tt
+    | [], _ -> t
+    | _, [] -> failwith "[Tuple.join_unchecked] bad matches list"
+  in
+  t1 @ sel 0 matches t2
 
 (* the result should be the same as [join t1 t2] *)
 (* [join'] just checks that values in [t1] are correspct with respect

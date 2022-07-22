@@ -1346,7 +1346,7 @@ let add_ext neval f =
           else if Misc.subset attr2 attr1 then
             fun rel1 rel2 -> Relation.natural_join_sc2 matches1 rel1 rel2
           else
-            fun rel1 rel2 -> Relation.natural_join matches1 matches2 rel1 rel2
+            fun rel1 rel2 -> Relation.natural_join matches1 rel1 rel2
     in
     EAnd (comp, ff1, ff2, {arel = None})
 

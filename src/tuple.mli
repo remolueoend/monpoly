@@ -136,9 +136,9 @@ val join: (int * cst) list -> tuple -> tuple -> tuple
       [t1] and [t2]. The list [posvall] consists of pairs of positions
       and values, indicating what the values at the corresponding
       positions in [t2] should be. In other words, if [(pos,val)]
-      appears in [posvall], then [t] should have value [val] at
+      appears in [posvall], then [t2] should have value [val] at
       position [pos]. If this is not the case then the {!Not_joinable}
-      exception is raised. The result is obtained by appending [t1] to
+      exception is raised. The result is obtained by prepending [t1] to
       the what remains of [t2] after ignoring the values at the
       positions appearing in [posvall].
       (The list of positions in [posvall] is assumed to be ordered
@@ -149,7 +149,7 @@ val join: (int * cst) list -> tuple -> tuple -> tuple
       [["a";"c";"b";"d"]].
   *)
 
-val join_rev: int list -> (int * cst) list -> tuple -> tuple -> tuple
+val join_unchecked: (int * int) list -> tuple -> tuple -> tuple
 
 (** Pretty-printing functions: *)
 

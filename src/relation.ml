@@ -149,13 +149,9 @@ let eval_not_equal t1 t2 =
 
 (**********************************************************************)
 
-
-(** [matches] gives the columns which should match in the two
-    relations in form of a list of tuples [(pos2,pos1)]: column [pos2] in
-    [rel2] should match column [pos1] in [rel1] *)
-let natural_join matches1 matches2 rel1 rel2 =
+let nested_loop_join matches rel1 rel2 =
   let joinrel = ref Tuple_set.empty in
-  let process_rel_tuple join_fun matches rel2 t1 =
+  let process_rel_tuple t1 =
     (* For each tuple in [rel1] we compute the columns (i.e. positions)
        in rel2 for which there should be matching values and the values
        tuples in rel2 should have at these columns.
@@ -169,25 +165,65 @@ let natural_join matches1 matches2 rel1 rel2 =
       matches
     in
       Tuple_set.iter
-  (fun t2 ->
-     try
-       let t = join_fun pv t1 t2 in
-         joinrel := Tuple_set.add t !joinrel
-     with
-         Not_joinable -> ()
-  )
-  rel2
+        (fun t2 ->
+           try
+             let t = Tuple.join pv t1 t2 in
+             joinrel := Tuple_set.add t !joinrel
+           with Not_joinable -> ()
+        )
+        rel2
   in
-  if Tuple_set.cardinal rel1 < Tuple_set.cardinal rel2 then
-    let join_fun = Tuple.join in
-    Tuple_set.iter (process_rel_tuple join_fun matches1 rel2) rel1
-  else
-    begin
-      let pos2 = List.map fst matches1 in
-      let join_fun = Tuple.join_rev pos2 in
-      Tuple_set.iter (process_rel_tuple join_fun matches2 rel1) rel2
-    end;
+  Tuple_set.iter process_rel_tuple rel1;
   !joinrel
+
+let build_hash_index key_posl rel =
+  let n = Tuple_set.cardinal rel / 4 in
+  let tbl = Hashtbl.create n in
+  Tuple_set.iter
+    (fun t ->
+      let k = List.map (Tuple.get_at_pos t) key_posl in
+      Hashtbl.add tbl k t
+    )
+    rel;
+  tbl
+
+let hash_join_with_index tbl key_posl join_fun rel =
+  let joinrel = ref Tuple_set.empty in
+  Tuple_set.iter
+    (fun t1 ->
+      let k = List.map (Tuple.get_at_pos t1) key_posl in
+      List.iter
+        (fun t2 ->
+          let t = join_fun t1 t2 in
+          joinrel := Tuple_set.add t !joinrel
+        )
+        (Hashtbl.find_all tbl k)
+    )
+    rel;
+  !joinrel
+
+let hash_join_with_cards matches card1 rel1 card2 rel2 =
+  let key_posl2, key_posl1 = List.split matches in
+  if card1 < card2 then
+    let tbl = build_hash_index key_posl1 rel1 in
+    let join_fun t2 t1 = Tuple.join_unchecked matches t1 t2 in
+    hash_join_with_index tbl key_posl2 join_fun rel2
+  else
+    let tbl = build_hash_index key_posl2 rel2 in
+    hash_join_with_index tbl key_posl1 (Tuple.join_unchecked matches) rel1
+
+(** [matches] gives the columns which should match in the two
+    relations in form of a list of tuples [(pos2,pos1)]: column [pos2] in
+    [rel2] should match column [pos1] in [rel1] *)
+let natural_join matches rel1 rel2 =
+  let card1 = Tuple_set.cardinal rel1 in
+  let card2 = Tuple_set.cardinal rel2 in
+  if card1 = 0 || card2 = 0 then
+    Tuple_set.empty
+  else if card1 < 8 || card2 < 8 then
+    nested_loop_join matches rel1 rel2
+  else
+    hash_join_with_cards matches card1 rel1 card2 rel2
 
 
 let in_t2_not_in_t1 t2 matches =
@@ -249,7 +285,7 @@ let natural_join_sc2 matches rel1 rel2 =
 
 
 let cross_product rel1 rel2 =
-  natural_join [] [] rel1 rel2
+  natural_join [] rel1 rel2
 
 
 

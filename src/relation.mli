@@ -79,13 +79,17 @@ val is_empty: relation -> bool
   (** [is_empty rel] returns true if the relation is empty (has no tuples). *)
 
 
-val natural_join: (int * int) list -> (int * int) list -> relation -> relation -> relation
+val natural_join: (int * int) list -> relation -> relation -> relation
   (** [natural_join matches rel1 rel2] returns the natural join of
       relations [rel1] and [rel2]. The parameter [matches] gives the
       columns which should match in the two relations in form of a
       list of tuples [(pos2,pos1)]: column [pos2] in [rel2] should
       match column [pos1] in [rel1].
   *)
+
+val nested_loop_join: (int * int) list -> relation -> relation -> relation
+val hash_join_with_cards: (int * int) list -> int -> relation ->
+  int -> relation -> relation
 
 val natural_join_sc1: (int * int) list -> relation -> relation -> relation
 (** [natural_join] special case 1: attr1 are included in attr2 *)

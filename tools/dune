@@ -10,3 +10,10 @@
   (package monpoly-tools)
   (modules Random_generator Formula_generator Gen_fma)
   (libraries libmonpoly qcheck))
+
+(executable
+  (name join_test)
+  (public_name join_test)
+  (package monpoly-tools)
+  (modules Join_test)
+  (libraries libmonpoly))
