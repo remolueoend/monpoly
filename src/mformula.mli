@@ -34,26 +34,26 @@ type muninfo = { mlast1   :  Neval.cell;
 
 (* Immutable version of eformula used for marshalling *)
 type mformula =
-  | MRel of relation
-  | MPred of predicate * comp_one * info
-  | MLet of predicate * comp_one * mformula * mformula * Neval.cell
-  | MNeg of mformula
-  | MAnd of comp_two * mformula * mformula * ainfo
-  | MOr of comp_two * mformula * mformula * ainfo
-  | MExists of comp_one * mformula
-  | MAggreg of agg_info * Aggreg.aggregator * mformula
-  | MAggOnce of agg_info * Aggreg.once_aggregator * mformula
-  | MPrev of interval * mformula * pinfo
-  | MNext of interval * mformula * ninfo
-  | MSinceA of comp_two * interval * mformula * mformula * sainfo
-  | MSince of comp_two * interval * mformula * mformula * sinfo
-  | MOnceA of interval * mformula * oainfo
-  | MOnceZ of interval * mformula * mozinfo
-  | MOnce of interval * mformula  * moinfo
-  | MNUntil of comp_two * interval * mformula * mformula * muninfo
-  | MUntil of comp_two * interval * mformula * mformula * muinfo
-  | MEventuallyZ of interval * mformula * mezinfo
-  | MEventually of interval * mformula * meinfo
+  | MRel of relation * int
+  | MPred of predicate * comp_one * info * int
+  | MLet of predicate * comp_one * mformula * mformula * Neval.cell * int
+  | MNeg of mformula * int
+  | MAnd of comp_two * mformula * mformula * ainfo * int
+  | MOr of comp_two * mformula * mformula * ainfo * int
+  | MExists of comp_one * mformula * int
+  | MAggreg of agg_info * Aggreg.aggregator * mformula * int
+  | MAggOnce of agg_info * Aggreg.once_aggregator * mformula * int
+  | MPrev of interval * mformula * pinfo * int
+  | MNext of interval * mformula * ninfo * int
+  | MSinceA of comp_two * interval * mformula * mformula * sainfo * int
+  | MSince of comp_two * interval * mformula * mformula * sinfo * int
+  | MOnceA of interval * mformula * oainfo * int
+  | MOnceZ of interval * mformula * mozinfo * int
+  | MOnce of interval * mformula  * moinfo * int
+  | MNUntil of comp_two * interval * mformula * mformula * muninfo * int
+  | MUntil of comp_two * interval * mformula * mformula * muinfo * int
+  | MEventuallyZ of interval * mformula * mezinfo * int
+  | MEventually of interval * mformula * meinfo * int
 
 val free_vars: mformula -> Predicate.var list
 val predicates: mformula -> Predicate.predicate list

@@ -52,49 +52,49 @@ type comp_one = relation -> relation
 type comp_two = relation -> relation -> relation
 
 type extformula =
-  | ERel of relation
-  | EPred of predicate * comp_one * info
-  | ELet of predicate * comp_one * extformula * extformula * linfo
-  | ENeg of extformula
-  | EAnd of comp_two * extformula * extformula * ainfo
-  | EOr of comp_two * extformula * extformula * ainfo
-  | EExists of comp_one * extformula
-  | EAggreg of agg_info * Aggreg.aggregator * extformula
-  | EAggOnce of agg_info * Aggreg.once_aggregator * extformula
-  | EPrev of interval * extformula * pinfo
-  | ENext of interval * extformula * ninfo
-  | ESinceA of comp_two * interval * extformula * extformula * sainfo
-  | ESince of comp_two * interval * extformula * extformula * sinfo
-  | EOnceA of interval * extformula * oainfo
-  | EOnceZ of interval * extformula * ozinfo
-  | EOnce of interval * extformula * oinfo
-  | ENUntil of comp_two * interval * extformula * extformula * uninfo
-  | EUntil of comp_two * interval * extformula * extformula * uinfo
-  | EEventuallyZ of interval * extformula * ezinfo
-  | EEventually of interval * extformula * einfo
+  | ERel of relation * int
+  | EPred of predicate * comp_one * info * int
+  | ELet of predicate * comp_one * extformula * extformula * linfo * int
+  | ENeg of extformula * int
+  | EAnd of comp_two * extformula * extformula * ainfo * int
+  | EOr of comp_two * extformula * extformula * ainfo * int
+  | EExists of comp_one * extformula * int
+  | EAggreg of agg_info * Aggreg.aggregator * extformula * int
+  | EAggOnce of agg_info * Aggreg.once_aggregator * extformula * int
+  | EPrev of interval * extformula * pinfo * int
+  | ENext of interval * extformula * ninfo * int
+  | ESinceA of comp_two * interval * extformula * extformula * sainfo * int
+  | ESince of comp_two * interval * extformula * extformula * sinfo * int
+  | EOnceA of interval * extformula * oainfo * int
+  | EOnceZ of interval * extformula * ozinfo * int
+  | EOnce of interval * extformula * oinfo * int
+  | ENUntil of comp_two * interval * extformula * extformula * uninfo * int
+  | EUntil of comp_two * interval * extformula * extformula * uinfo * int
+  | EEventuallyZ of interval * extformula * ezinfo * int
+  | EEventually of interval * extformula * einfo * int
 
 
   let rec contains_eventually = function
-  | ERel           (rel)                                      -> false
-  | EPred          (p, comp, inf)                             -> false
-  | ELet           (p, comp, f1, f2, inf)                     -> contains_eventually f1 || contains_eventually f2
-  | ENeg           (f1)                                       -> contains_eventually f1
-  | EAnd           (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
-  | EOr            (c, f1, f2, ainf)                          -> contains_eventually f1 || contains_eventually f2
-  | EExists        (c, f1)                                    -> contains_eventually f1
-  | EAggreg        (_inf, _comp, f1)                          -> contains_eventually f1
-  | EAggOnce       (_inf, _state, f1)                         -> contains_eventually f1
-  | EPrev          (dt, f1, pinf)                             -> contains_eventually f1
-  | ENext          (dt, f1, ninf)                             -> contains_eventually f1
-  | ESinceA        (c2, dt, f1, f2, sainf)                    -> contains_eventually f1 || contains_eventually f2
-  | ESince         (c2, dt, f1, f2, sinf)                     -> contains_eventually f1 || contains_eventually f2
-  | EOnceA         (dt, f1, oainf)                            -> contains_eventually f1
-  | EOnceZ         (dt, f1, ozinf)                            -> contains_eventually f1
-  | EOnce          (dt, f1, oinf)                             -> contains_eventually f1
-  | ENUntil        (c1, dt, f1, f2, muninf)                   -> contains_eventually f1 || contains_eventually f2
-  | EUntil         (c1, dt, f1, f2, muinf)                    -> contains_eventually f1 || contains_eventually f2
-  | EEventuallyZ   (dt, f1, mezinf)                           -> true
-  | EEventually    (dt, f1, meinf)                            -> true
+  | ERel           (rel, _)                                      -> false
+  | EPred          (p, comp, inf, _)                             -> false
+  | ELet           (p, comp, f1, f2, inf, _)                     -> contains_eventually f1 || contains_eventually f2
+  | ENeg           (f1, _)                                       -> contains_eventually f1
+  | EAnd           (c, f1, f2, ainf, _)                          -> contains_eventually f1 || contains_eventually f2
+  | EOr            (c, f1, f2, ainf, _)                          -> contains_eventually f1 || contains_eventually f2
+  | EExists        (c, f1, _)                                    -> contains_eventually f1
+  | EAggreg        (_inf, _comp, f1, _)                          -> contains_eventually f1
+  | EAggOnce       (_inf, _state, f1, _)                         -> contains_eventually f1
+  | EPrev          (dt, f1, pinf, _)                             -> contains_eventually f1
+  | ENext          (dt, f1, ninf, _)                             -> contains_eventually f1
+  | ESinceA        (c2, dt, f1, f2, sainf, _)                    -> contains_eventually f1 || contains_eventually f2
+  | ESince         (c2, dt, f1, f2, sinf, _)                     -> contains_eventually f1 || contains_eventually f2
+  | EOnceA         (dt, f1, oainf, _)                            -> contains_eventually f1
+  | EOnceZ         (dt, f1, ozinf, _)                            -> contains_eventually f1
+  | EOnce          (dt, f1, oinf, _)                             -> contains_eventually f1
+  | ENUntil        (c1, dt, f1, f2, muninf, _)                   -> contains_eventually f1 || contains_eventually f2
+  | EUntil         (c1, dt, f1, f2, muinf, _)                    -> contains_eventually f1 || contains_eventually f2
+  | EEventuallyZ   (dt, f1, mezinf, _)                           -> true
+  | EEventually    (dt, f1, meinf, _)                            -> true
 
 (* 
   Print functions used for debugging
@@ -256,10 +256,10 @@ let prerr_extf str ff =
   let rec prerr_f_rec d f =
     prerr_spaces d;
     (match f with
-      | ERel _ ->
+      | ERel (_, loc) ->
         prerr_string "ERel\n";
 
-      | EPred (p,_,inf) ->
+      | EPred (p,_,inf,loc) ->
         Predicate.prerr_predicate p;
         prerr_string ": inf=";
         prerr_inf inf;
@@ -267,15 +267,15 @@ let prerr_extf str ff =
 
       | _ ->
         (match f with
-        | ENeg f ->
+        | ENeg (f,loc) ->
           prerr_string "NOT\n";
           prerr_f_rec (d+1) f;
 
-        | EExists (_,f) ->
+        | EExists (_,f,loc) ->
           prerr_string "EXISTS\n";
           prerr_f_rec (d+1) f;
 
-        | EPrev (intv,f,pinf) ->
+        | EPrev (intv,f,pinf,loc) ->
           prerr_string "PREVIOUS";
           MFOTL.prerr_interval intv;
           prerr_string ": plast=";
@@ -283,7 +283,7 @@ let prerr_extf str ff =
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
-        | ENext (intv,f,ninf) ->
+        | ENext (intv,f,ninf,loc) ->
           prerr_string "NEXT";
           MFOTL.prerr_interval intv;
           prerr_string ": init=";
@@ -291,7 +291,7 @@ let prerr_extf str ff =
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
-        | EOnceA (intv,f,inf) ->
+        | EOnceA (intv,f,inf,loc) ->
           prerr_string "ONCE";
           MFOTL.prerr_interval intv;
           Relation.prerr_rel ": rel = " inf.ores;
@@ -300,40 +300,40 @@ let prerr_extf str ff =
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
-        | EOnceZ (intv,f,oinf) ->
+        | EOnceZ (intv,f,oinf,loc) ->
           prerr_string "ONCE";
           MFOTL.prerr_interval intv;
           prerr_ozinf ": ozinf=" oinf;
           prerr_f_rec (d+1) f
 
-        | EOnce (intv,f,oinf) ->
+        | EOnce (intv,f,oinf,loc) ->
           prerr_string "ONCE";
           MFOTL.prerr_interval intv;
           prerr_oinf ": oinf = " oinf;
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
-        | EEventuallyZ (intv,f,einf) ->
+        | EEventuallyZ (intv,f,einf,loc) ->
           prerr_string "EVENTUALLY";
           MFOTL.prerr_interval intv;
           prerr_ezinf ": ezinf=" einf;
           prerr_f_rec (d+1) f
 
-        | EEventually (intv,f,einf) ->
+        | EEventually (intv,f,einf,loc) ->
           prerr_string "EVENTUALLY";
           MFOTL.prerr_interval intv;
           prerr_einf ": einf=" einf;
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
-        | EAggreg (info,_,f) -> 
+        | EAggreg (info,_,f,loc) -> 
           prerr_string (string_of_agg_op info.op);
           prerr_string "_";
           prerr_string (string_of_cst info.default);
           prerr_string "\n";
           prerr_f_rec (d+1) f
 
-        | EAggOnce (info,aggr,f) -> 
+        | EAggOnce (info,aggr,f,loc) -> 
             prerr_string (string_of_agg_op info.op);
             prerr_string "ONCE";
             prerr_string "_";
@@ -345,26 +345,26 @@ let prerr_extf str ff =
 
         | _ ->
           (match f with
-            | ELet (p,_,f1,f2,linf) ->
+            | ELet (p,_,f1,f2,linf,loc) ->
               prerr_string "LET: ";
               Predicate.prerr_predicate p;
               prerr_linf " linf=" linf;
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | EAnd (_,f1,f2,ainf) ->
+            | EAnd (_,f1,f2,ainf,loc) ->
               prerr_ainf "AND: ainf=" ainf.arel;
               prerr_string "\n";
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | EOr (_,f1,f2,ainf) ->
+            | EOr (_,f1,f2,ainf,loc) ->
               prerr_ainf "OR: ainf=" ainf.arel;
               prerr_string "\n";
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | ESinceA (_,intv,f1,f2,sinf) ->
+            | ESinceA (_,intv,f1,f2,sinf,loc) ->
               prerr_string "SINCE";
               MFOTL.prerr_interval intv;
               prerr_sainf ": sinf = " sinf;
@@ -372,7 +372,7 @@ let prerr_extf str ff =
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | ESince (_,intv,f1,f2,sinf) ->
+            | ESince (_,intv,f1,f2,sinf,loc) ->
               prerr_string "SINCE";
               MFOTL.prerr_interval intv;
               prerr_sinf ": sinf=" sinf;
@@ -380,14 +380,14 @@ let prerr_extf str ff =
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | EUntil (_,intv,f1,f2,uinf) ->
+            | EUntil (_,intv,f1,f2,uinf,loc) ->
               prerr_string "UNTIL";
               MFOTL.prerr_interval intv;
               prerr_uinf ": uinf=" uinf;
               prerr_f_rec (d+1) f1;
               prerr_f_rec (d+1) f2
 
-            | ENUntil (_,intv,f1,f2,uninf) ->
+            | ENUntil (_,intv,f1,f2,uninf,loc) ->
               prerr_string "NUNTIL";
               MFOTL.prerr_interval intv;
               prerr_uninf ": uninf=" uninf;
@@ -401,3 +401,61 @@ let prerr_extf str ff =
   in
   prerr_string str;
   prerr_f_rec 0 ff
+
+let pp_print_comma ppf () =
+  Format.pp_print_string ppf ",";
+  Format.pp_print_space ppf ()
+
+let pp_print_term ppf t = Format.pp_print_string ppf (Predicate.string_of_term t)
+
+let rec pp_structure ppf ff =
+  let open Format in
+  let pp_unary name loc f1 =
+    fprintf ppf "@[(%d:@;<1 2>%s@;<1 2>%a@,)@]" loc name pp_structure f1
+  in
+  let pp_binary name loc f1 f2 =
+    fprintf ppf "@[(%d:@;<1 2>%s@;<1 2>@[<hv>%a@ %a@]@,)@]"
+      loc
+      name
+      pp_structure f1
+      pp_structure f2
+  in
+  match ff with
+  | ERel (rel, loc) ->
+      if Relation.is_empty rel then
+        fprintf ppf "@[<h>(%d:@ FALSE)@]" loc
+      else
+        fprintf ppf "@[<h>(%d:@ TRUE)@]" loc
+  | EPred ((p, _, args), _, _, loc) ->
+      fprintf ppf "@[<h>(%d:@ @[<hov 2>%s(@,%a)@])@]"
+        loc
+        p
+        (pp_print_list ~pp_sep:pp_print_comma pp_print_term) args
+  | ELet ((p, _, args), _, f1, f2, _, loc) ->
+      fprintf ppf "@[<hv>@[<hov 4>%d: LET@ %s(@,%a)@ =@]@;<1 2>%a@ IN@ %a@]"
+        loc
+        p
+        (pp_print_list ~pp_sep:pp_print_comma pp_print_term) args
+        pp_structure f1
+        pp_structure f2
+  | ENeg (f1, loc) -> pp_unary "NEG" loc f1
+  | EAnd (_, f1, f2, _, loc) -> pp_binary "AND" loc f1 f2
+  | EOr (_, f1, f2, _, loc) -> pp_binary "OR" loc f1 f2
+  | EExists (_, f1, loc) -> pp_unary "EXISTS" loc f1
+  | EAggreg (_, _, f1, loc) -> pp_unary "AGGREG" loc f1
+  | EAggOnce (_, _, f1, loc) -> pp_unary "AGG ONCE" loc f1
+  | EPrev (_, f1, _, loc) -> pp_unary "PREV" loc f1
+  | ENext (_, f1, _, loc) -> pp_unary "NEXT" loc f1
+  | ESinceA (_, _, f1, f2, _, loc) -> pp_binary "SINCE(A)" loc f1 f2
+  | ESince (_, _, f1, f2, _, loc) -> pp_binary "SINCE" loc f1 f2
+  | EOnceA (_, f1, _, loc) -> pp_unary "ONCE(A)" loc f1
+  | EOnceZ (_, f1, _, loc) -> pp_unary "ONCE(Z)" loc f1
+  | EOnce (_, f1, _, loc) -> pp_unary "ONCE" loc f1
+  | ENUntil (_, _, f1, f2, _, loc) -> pp_binary "NUNTIL" loc f1 f2
+  | EUntil (_, _, f1, f2, _, loc) -> pp_binary "UNTIL" loc f1 f2
+  | EEventuallyZ (_, f1, _, loc) -> pp_unary "EVENTUALLY(Z)" loc f1
+  | EEventually (_, f1, _, loc) -> pp_unary "EVENTUALLY" loc f1
+
+let extf_structure ff =
+  pp_structure Format.str_formatter ff;
+  Format.flush_str_formatter ()

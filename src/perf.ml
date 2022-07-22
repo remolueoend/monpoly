@@ -173,3 +173,63 @@ let end_profile () =
     | None -> ()
   done;
   Printf.eprintf "===========================\n"
+
+
+(* New profiling infrastructure *)
+
+let loc_main_loop = -1
+let loc_read_tp = -2
+let loc_eval_root = -3
+
+let tag_enter = 1
+let tag_exit = 2
+let tag_eval_result = 64
+let tag_extformula = 128
+
+let profile_enabled = ref false
+let filename = ref ""
+let pbuf = ref None
+
+let enable_profile outfile =
+  assert (not !profile_enabled);
+  profile_enabled := true;
+  filename := outfile;
+  pbuf := Some (Buffer.create 1000000)
+
+let finalize_profile () =
+  match !pbuf with
+  | None -> ()
+  | Some buf ->
+      let ch = open_out_bin !filename in
+      Buffer.output_buffer ch buf;
+      close_out ch
+
+let profile_int ~tag ~tp ~loc x =
+  match !pbuf with
+  | None -> ()
+  | Some buf ->
+      Buffer.add_uint8 buf tag;
+      Buffer.add_int32_le buf (Int32.of_int tp);
+      Buffer.add_int32_le buf (Int32.of_int loc);
+      Buffer.add_int32_le buf (Int32.of_int x)
+
+let profile_time ~tag ~tp ~loc =
+  match !pbuf with
+  | None -> ()
+  | Some buf ->
+      let now = Sys.time() in
+      Buffer.add_uint8 buf tag;
+      Buffer.add_int32_le buf (Int32.of_int tp);
+      Buffer.add_int32_le buf (Int32.of_int loc);
+      Buffer.add_int64_le buf (Int64.bits_of_float now)
+
+let profile_enter ~tp ~loc = profile_time ~tag:tag_enter ~tp ~loc
+let profile_exit ~tp ~loc = profile_time ~tag:tag_exit ~tp ~loc
+
+let profile_string ~tag x =
+  match !pbuf with
+  | None -> ()
+  | Some buf ->
+      Buffer.add_uint8 buf tag;
+      Buffer.add_int32_le buf (Int32.of_int (String.length x));
+      Buffer.add_string buf x

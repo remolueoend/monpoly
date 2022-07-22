@@ -495,36 +495,36 @@ let warn_if_empty_aggreg {op; default} {Aggreg.empty_rel; Aggreg.rel} =
 
 let add_let_index f n rels =
   let rec update = function
-    | EPred ((p, a, _), comp, inf) ->
+    | EPred ((p, a, _), comp, inf, _) ->
       if (p, a) = n then
         List.iter (fun (i,tsi,rel) -> Queue.add (i,tsi, comp rel) inf) rels
       else ()
 
-    | ELet ((p, a, _), comp, f1, f2, inf) ->
+    | ELet ((p, a, _), comp, f1, f2, inf, _) ->
       update f1;
       if (p, a) = n then () else update f2
 
     | ERel _ -> ()
 
-    | ENeg f1
-    | EExists (_,f1)
-    | EAggOnce (_,_,f1)
-    | EAggreg (_,_,f1)
-    | ENext (_,f1,_)
-    | EPrev (_,f1,_)
-    | EOnceA (_,f1,_)
-    | EOnceZ (_,f1,_)
-    | EOnce (_,f1,_)
-    | EEventuallyZ (_,f1,_)
-    | EEventually (_,f1,_) ->
+    | ENeg (f1,_)
+    | EExists (_,f1,_)
+    | EAggOnce (_,_,f1,_)
+    | EAggreg (_,_,f1,_)
+    | ENext (_,f1,_,_)
+    | EPrev (_,f1,_,_)
+    | EOnceA (_,f1,_,_)
+    | EOnceZ (_,f1,_,_)
+    | EOnce (_,f1,_,_)
+    | EEventuallyZ (_,f1,_,_)
+    | EEventually (_,f1,_,_) ->
       update f1
 
-    | EAnd (_,f1,f2,_)
-    | EOr (_,f1,f2,_)
-    | ESinceA (_,_,f1,f2,_)
-    | ESince (_,_,f1,f2,_)
-    | ENUntil (_,_,f1,f2,_)
-    | EUntil (_,_,f1,f2,_) ->
+    | EAnd (_,f1,f2,_,_)
+    | EOr (_,f1,f2,_,_)
+    | ESinceA (_,_,f1,f2,_,_)
+    | ESince (_,_,f1,f2,_,_)
+    | ENUntil (_,_,f1,f2,_,_)
+    | EUntil (_,_,f1,f2,_,_) ->
       update f1;
       update f2
   in
@@ -550,10 +550,10 @@ let rec eval f crt discard =
         q (MFOTL.string_of_ts tsq) discard
     end;
 
-  match f with
-  | ERel rel -> Some rel
+  let wrapper = function
+  | ERel (rel,loc) -> Some rel, loc
 
-  | EPred (p,_,inf) ->
+  | EPred (p,_,inf,loc) ->
     if Misc.debugging Dbg_eval then
       begin
         prerr_string "[eval,Pred] ";
@@ -561,15 +561,15 @@ let rec eval f crt discard =
         prerr_predinf  ": " inf
       end;
 
-    if Queue.is_empty inf
+    (if Queue.is_empty inf
     then None
     else begin
       let (cq,ctsq,rel) = Queue.pop inf in
       assert (cq = q && ctsq = tsq);
       Some rel
-    end
+    end), loc
 
-  | ELet ((p, a, _), comp, f1, f2, inf) ->
+  | ELet ((p, a, _), comp, f1, f2, inf, loc) ->
       let rec eval_f1 rels =
         if Neval.is_last inf.llast then
           rels
@@ -583,9 +583,9 @@ let rec eval f crt discard =
           | None -> rels
       in
       add_let_index f2 (p, a) (List.rev (eval_f1 []));
-      eval f2 crt discard
+      eval f2 crt discard, loc
 
-  | ENeg f1 ->
+  | ENeg (f1,loc) ->
     (match eval f1 crt discard with
      | Some rel ->
        let res =
@@ -596,15 +596,19 @@ let rec eval f crt discard =
        in
        Some res
      | None -> None
-    )
+    ), loc
 
-  | EExists (comp,f1) ->
+  | EExists (comp,f1,loc) ->
     (match eval f1 crt discard with
-     | Some rel -> Some (comp rel)
+     | Some rel ->
+       Perf.profile_enter ~tp:q ~loc;
+       let result = comp rel in
+       Perf.profile_exit ~tp:q ~loc;
+       Some result
      | None -> None
-    )
+    ), loc
 
-  | EAnd (comp,f1,f2,inf) ->
+  | EAnd (comp,f1,f2,inf,loc) ->
     (* we have to store rel1, if f2 cannot be evaluated *)
     let eval_and rel1 =
       if Relation.is_empty rel1 then
@@ -620,7 +624,10 @@ let rec eval f crt discard =
         (match eval f2 crt discard with
          | Some rel2 ->
            inf.arel <- None;
-           Some (comp rel1 rel2)
+           Perf.profile_enter ~tp:q ~loc;
+           let result = comp rel1 rel2 in
+           Perf.profile_exit ~tp:q ~loc;
+           Some result
          | None ->
            inf.arel <- Some rel1;
            None
@@ -633,24 +640,32 @@ let rec eval f crt discard =
         | Some rel1 -> eval_and rel1
         | None -> None
        )
-    )
+    ), loc
 
-  | EAggreg (inf, comp, f) ->
+  | EAggreg (inf, comp, f, loc) ->
     (match eval f crt discard with
      | Some rel ->
        Some (if discard then Relation.empty
-         else warn_if_empty_aggreg inf (comp rel))
+         else begin
+           Perf.profile_enter ~tp:q ~loc;
+           let result = comp rel in
+           Perf.profile_exit ~tp:q ~loc;
+           warn_if_empty_aggreg inf result
+         end)
      | None -> None
-    )
+    ), loc
 
-  | EOr (comp, f1, f2, inf) ->
+  | EOr (comp, f1, f2, inf, loc) ->
     (* we have to store rel1, if f2 cannot be evaluated *)
     (match inf.arel with
      | Some rel1 ->
        (match eval f2 crt discard with
         | Some rel2 ->
           inf.arel <- None;
-          Some (comp rel1 rel2)
+          Perf.profile_enter ~tp:q ~loc;
+          let result = comp rel1 rel2 in
+          Perf.profile_exit ~tp:q ~loc;
+          Some result
         | None -> None
        )
      | None ->
@@ -664,13 +679,13 @@ let rec eval f crt discard =
           )
         | None -> None
        )
-    )
+    ), loc
 
-  | EPrev (intv,f1,inf) ->
+  | EPrev (intv,f1,inf,loc) ->
     if Misc.debugging Dbg_eval then
       Printf.eprintf "[eval,Prev] inf.plast=%s\n%!" (Neval.string_of_cell inf.plast);
 
-    if q = 0 then
+    (if q = 0 then
       Some Relation.empty
     else
       begin
@@ -685,9 +700,9 @@ let rec eval f crt discard =
           else
             Some Relation.empty
         | None -> None
-      end
+      end), loc
 
-  | ENext (intv,f1,inf) ->
+  | ENext (intv,f1,inf,loc) ->
     if Misc.debugging Dbg_eval then
       Printf.eprintf "[eval,Next] inf.init=%b\n%!" inf.init;
 
@@ -698,7 +713,7 @@ let rec eval f crt discard =
         | _ -> ()
       end;
 
-    if Neval.is_last crt || inf.init then
+    (if Neval.is_last crt || inf.init then
       None
     else
       begin
@@ -712,9 +727,9 @@ let rec eval f crt discard =
           else
             Some Relation.empty
         | None -> None
-      end
+      end), loc
 
-  | ESinceA (comp,intv,f1,f2,inf) ->
+  | ESinceA (comp,intv,f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
       Printf.eprintf "[eval,SinceA] q=%d\n%!" q;
 
@@ -722,7 +737,10 @@ let rec eval f crt discard =
       (match eval f1 crt false with
        | Some rel1 ->
          inf.sarel2 <- None;
-         Some (comp2 rel1 rel2)
+         Perf.profile_enter ~tp:q ~loc;
+         let result = comp2 rel1 rel2 in
+         Perf.profile_exit ~tp:q ~loc;
+         Some result
        | None ->
          inf.sarel2 <- Some rel2;
          None
@@ -738,9 +756,9 @@ let rec eval f crt discard =
         | None -> None
         | Some rel2 -> eval_f1 rel2 update_sauxrels
        )
-    )
+    ), loc
 
-  | ESince (comp,intv,f1,f2,inf) ->
+  | ESince (comp,intv,f1,f2,inf,loc) ->
     if Misc.debugging Dbg_eval then
       Printf.eprintf "[eval,Since] q=%d\n" q;
 
@@ -748,7 +766,10 @@ let rec eval f crt discard =
       (match eval f1 crt false with
        | Some rel1 ->
          inf.srel2 <- None;
-         Some (comp2 rel1 rel2)
+         Perf.profile_enter ~tp:q ~loc;
+         let result = comp2 rel1 rel2 in
+         Perf.profile_exit ~tp:q ~loc;
+         Some result
        | None ->
          inf.srel2 <- Some rel2;
          None
@@ -764,39 +785,47 @@ let rec eval f crt discard =
         | None -> None
         | Some rel2 -> eval_f1 rel2 update_sauxrels
        )
-    )
+    ), loc
 
 
-  | EOnceA ((c,_) as intv, f2, inf) ->
+  | EOnceA ((c,_) as intv, f2, inf, loc) ->
     (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
          Printf.eprintf "[eval,OnceA] q=%d\n" q;
 
-       if c = CBnd MFOTL.ts_null then
-         begin
-           inf.ores <- Relation.union inf.ores rel2;
-           Some inf.ores
-         end
-       else
-         begin
-           if not (Relation.is_empty rel2) then
-             mqueue_add_last inf.oaauxrels tsq rel2;
+       Perf.profile_enter ~tp:q ~loc;
+       let result =
+         if c = CBnd MFOTL.ts_null then
+           begin
+             inf.ores <- Relation.union inf.ores rel2;
+             Some inf.ores
+           end
+         else
+           begin
+             if not (Relation.is_empty rel2) then
+               mqueue_add_last inf.oaauxrels tsq rel2;
 
-           update_once_all intv tsq inf;
-           Some inf.ores
-         end
-    )
+             update_once_all intv tsq inf;
+             Some inf.ores
+           end
+       in
+       Perf.profile_exit ~tp:q ~loc;
+       result
+    ), loc
 
-  | EAggOnce (inf, state, f) ->
+  | EAggOnce (inf, state, f, loc) ->
     (match eval f crt false with
      | Some rel ->
+       Perf.profile_enter ~tp:q ~loc;
        state#update tsq rel;
-       Some (if discard then Relation.empty
-         else warn_if_empty_aggreg inf state#get_result)
+       let result = Some (if discard then Relation.empty
+         else warn_if_empty_aggreg inf state#get_result) in
+       Perf.profile_exit ~tp:q ~loc;
+       result
      | None -> None
-    )
+    ), loc
 
   (* We distinguish between whether the left margin of [intv] is
      zero or not, as we need to have two different ways of
@@ -804,30 +833,36 @@ let rec eval f crt discard =
      is not included we can use the timestamps and merge
      relations at equal timestamps; otherwise, when 0 is not
      included, we need to use the timepoints. *)
-  | EOnceZ (intv,f2,inf) ->
+  | EOnceZ (intv,f2,inf,loc) ->
     (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
          Printf.eprintf "[eval,OnceZ] q=%d\n" q;
 
-       Some (update_once_zero intv q tsq inf rel2 discard)
-    )
+       Perf.profile_enter ~tp:q ~loc;
+       let result = update_once_zero intv q tsq inf rel2 discard in
+       Perf.profile_exit ~tp:q ~loc;
+       Some result
+    ), loc
 
-  | EOnce (intv,f2,inf) ->
+  | EOnce (intv,f2,inf,loc) ->
     (match eval f2 crt false with
      | None -> None
      | Some rel2 ->
        if Misc.debugging Dbg_eval then
          Printf.eprintf "[eval,Once] q=%d\n" q;
 
+       Perf.profile_enter ~tp:q ~loc;
        if not (Relation.is_empty rel2) then
          dllist_add_last inf.oauxrels tsq rel2;
 
-       Some (update_once intv tsq inf discard)
-    )
+       let result = update_once intv tsq inf discard in
+       Perf.profile_exit ~tp:q ~loc;
+       Some result
+    ), loc
 
-  | EUntil (comp,intv,f1,f2,inf) ->
+  | EUntil (comp,intv,f1,f2,inf,loc) ->
     (* contents of inf:  (f = f1 UNTIL_intv f2)
        ulast:        last cell of neval for which both f1 and f2 are evaluated
        ufirst:       boolean flag indicating if we are at the first
@@ -847,11 +882,13 @@ let rec eval f crt discard =
 
     if inf.ufirst then
       begin
+        Perf.profile_enter ~tp:q ~loc;
         inf.ufirst <- false;
         let (i,_) = Neval.get_data inf.ulast in
         update_old_until q tsq i intv inf discard;
         if Misc.debugging Dbg_eval then
-          prerr_uinf "[eval,Until,after_update] inf: " inf
+          prerr_uinf "[eval,Until,after_update] inf: " inf;
+        Perf.profile_exit ~tp:q ~loc
       end;
 
     (* we first evaluate f2, and then f1 *)
@@ -859,7 +896,9 @@ let rec eval f crt discard =
     let rec evalf1 i tsi rel2 ncrt =
       (match eval f1 ncrt false with
        | Some rel1 ->
+         Perf.profile_enter ~tp:q ~loc;
          update_until q tsq i tsi intv rel1 rel2 inf comp discard;
+         Perf.profile_exit ~tp:q ~loc;
          inf.urel2 <- None;
          inf.ulast <- ncrt;
          evalf2 ()
@@ -897,9 +936,9 @@ let rec eval f crt discard =
             )
           end
     in
-    evalf2()
+    evalf2(), loc
 
-  | ENUntil (comp,intv,f1,f2,inf) ->
+  | ENUntil (comp,intv,f1,f2,inf,loc) ->
     (* contents of inf:  (f = NOT f1 UNTIL_intv f2)
        ulast1:       last cell of neval for which f1 is evaluated
        ulast2:       last cell of neval for which f2 is evaluated
@@ -946,6 +985,7 @@ let rec eval f crt discard =
 
         NOTE: we could evaluate earlier with respect to f1, also in Until *)
       begin
+        Perf.profile_enter ~tp:q ~loc;
         (* we iteratively compute the union of the relations [f1]_j
           with q <= j <= j0-1, where j0 is the first index which
           satisfies the temporal constraint relative to q *)
@@ -1008,16 +1048,17 @@ let rec eval f crt discard =
             end
         in
         iter2();
-        Some !res
+        Perf.profile_exit ~tp:q ~loc;
+        Some !res, loc
       end
     else
-      None
+      None, loc
 
 
 
 
 
-  | EEventuallyZ (intv,f2,inf) ->
+  | EEventuallyZ (intv,f2,inf,loc) ->
     (* contents of inf:
        elastev: Neval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info       the auxiliary relations (up to elastev)
@@ -1035,11 +1076,13 @@ let rec eval f crt discard =
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
+            Perf.profile_enter ~tp:q ~loc;
             if Misc.debugging Dbg_eval then
               Printf.eprintf "[eval,EventuallyZ] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
 
             let auxrels = inf.ezauxrels in
+            let result =
             if Dllist.is_empty auxrels then
               Some Relation.empty
             else if discard then
@@ -1096,6 +1139,9 @@ let rec eval f crt discard =
                 inf.eztree <- newt;
                 Some (Sliding.stree_res newt)
               end
+            in
+            Perf.profile_exit ~tp:q ~loc;
+            result
           end
         else (* we don't have the lookahead -> we cannot compute the result *)
           begin
@@ -1109,10 +1155,10 @@ let rec eval f crt discard =
               ez_update ()
           end
     in
-    ez_update ()
+    ez_update (), loc
 
 
-  | EEventually (intv,f2,inf) ->
+  | EEventually (intv,f2,inf,loc) ->
     (* contents of inf:
        elastev:  Neval.cell  last cell of neval for which f2 is evaluated
        eauxrels: info        the auxiliary relations (up to elastev)
@@ -1123,7 +1169,9 @@ let rec eval f crt discard =
     (* we could in principle do this update less often: that is, we
        can do after each evaluation, but we need to find out the
        value of ts_{q+1} *)
+    Perf.profile_enter ~tp:q ~loc;
     elim_old_eventually q tsq intv inf;
+    Perf.profile_exit ~tp:q ~loc;
 
     let rec e_update () =
       if Neval.is_last inf.elastev then
@@ -1135,11 +1183,13 @@ let rec eval f crt discard =
         if not (MFOTL.in_left_ext (MFOTL.ts_minus tsi tsq) intv) then
           (* we have the lookahead, we can compute the result *)
           begin
+            Perf.profile_enter ~tp:q ~loc;
             if Misc.debugging Dbg_eval then
               Printf.eprintf "[eval,Eventually] evaluation possible q=%d tsq=%s tsi=%s\n%!"
                 q (MFOTL.string_of_ts tsq) (MFOTL.string_of_ts tsi);
 
             let auxrels = inf.eauxrels in
+            let result =
             if Dllist.is_empty auxrels || discard then
               Some Relation.empty
             else
@@ -1180,6 +1230,9 @@ let rec eval f crt discard =
                   inf.elast <- Dllist.void;
                   Some Relation.empty
                 end
+            in
+            Perf.profile_exit ~tp:q ~loc;
+            result
           end
         else
           begin
@@ -1194,11 +1247,21 @@ let rec eval f crt discard =
               e_update ()
           end
     in
-    e_update ()
+    e_update (), loc
+  in
+  let result, loc = wrapper f in
+  if !Perf.profile_enabled then
+    begin
+      match result with
+      | None -> ()
+      | Some rel -> Perf.profile_int ~tag:Perf.tag_eval_result ~tp:q ~loc
+          (Relation.cardinal rel)
+    end;
+  result
 
 let add_index f i tsi db =
   let rec update lets = function
-    | EPred (p, comp, inf) ->
+    | EPred (p, comp, inf, _) ->
       let name = Predicate.get_name p in
       if List.mem name lets
       then ()
@@ -1217,31 +1280,31 @@ let add_index f i tsi db =
         let rel = comp rel in
         Queue.add (i,tsi,rel) inf
 
-    | ELet (p, comp, f1, f2, inf) ->
+    | ELet (p, comp, f1, f2, inf, _) ->
       update lets f1;
       update (Predicate.get_name p :: lets) f2
 
     | ERel _ -> ()
 
-    | ENeg f1
-    | EExists (_,f1)
-    | EAggOnce (_,_,f1)
-    | EAggreg (_,_,f1)
-    | ENext (_,f1,_)
-    | EPrev (_,f1,_)
-    | EOnceA (_,f1,_)
-    | EOnceZ (_,f1,_)
-    | EOnce (_,f1,_)
-    | EEventuallyZ (_,f1,_)
-    | EEventually (_,f1,_) ->
+    | ENeg (f1,_)
+    | EExists (_,f1,_)
+    | EAggOnce (_,_,f1,_)
+    | EAggreg (_,_,f1,_)
+    | ENext (_,f1,_,_)
+    | EPrev (_,f1,_,_)
+    | EOnceA (_,f1,_,_)
+    | EOnceZ (_,f1,_,_)
+    | EOnce (_,f1,_,_)
+    | EEventuallyZ (_,f1,_,_)
+    | EEventually (_,f1,_,_) ->
       update lets f1
 
-    | EAnd (_,f1,f2,_)
-    | EOr (_,f1,f2,_)
-    | ESinceA (_,_,f1,f2,_)
-    | ESince (_,_,f1,f2,_)
-    | ENUntil (_,_,f1,f2,_)
-    | EUntil (_,_,f1,f2,_) ->
+    | EAnd (_,f1,f2,_,_)
+    | EOr (_,f1,f2,_,_)
+    | ESinceA (_,_,f1,f2,_,_)
+    | ESince (_,_,f1,f2,_,_)
+    | ENUntil (_,_,f1,f2,_,_)
+    | EUntil (_,_,f1,f2,_,_) ->
       update lets f1;
       update lets f2
   in
@@ -1249,28 +1312,30 @@ let add_index f i tsi db =
 
 let add_ext neval f =
   let neval0 = Neval.get_last neval in
+  let loc = ref 0 in
+  let next_loc () = incr loc; !loc in
   let rec add_ext = function
   | Pred p ->
-    EPred (p, Relation.eval_pred p, Queue.create())
+    EPred (p, Relation.eval_pred p, Queue.create(), next_loc())
 
   | Let (p, f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
     let attrp = Predicate.pvars p in
     let new_pos = List.map snd (Table.get_matches attr1 attrp) in
     let comp = Relation.reorder new_pos in
-    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0})
+    ELet (p, comp, add_ext f1, add_ext f2, {llast = neval0}, next_loc())
 
   | LetPast _ -> failwith "LETPAST is not supported except in -verified mode"
 
   | Equal (t1, t2) ->
     let rel = Relation.eval_equal t1 t2 in
-    ERel rel
+    ERel (rel, next_loc())
 
   | Neg (Equal (t1, t2)) ->
     let rel = Relation.eval_not_equal t1 t2 in
-    ERel rel
+    ERel (rel, next_loc())
 
-  | Neg f -> ENeg (add_ext f)
+  | Neg f -> ENeg (add_ext f, next_loc())
 
   | Exists (vl, f1) ->
     let ff1 = add_ext f1 in
@@ -1278,7 +1343,7 @@ let add_ext neval f =
     let pos = List.map (fun v -> Misc.get_pos v attr1) vl in
     let pos = List.sort Stdlib.compare pos in
     let comp = Relation.project_away pos in
-    EExists (comp,ff1)
+    EExists (comp,ff1,next_loc())
 
   | Or (f1, f2) ->
     let ff1 = add_ext f1 in
@@ -1297,7 +1362,7 @@ let add_ext neval f =
            Relation.union rel1 rel2'
         )
     in
-    EOr (comp, ff1, ff2, {arel = None})
+    EOr (comp, ff1, ff2, {arel = None}, next_loc())
 
   | And (f1, f2) ->
     let attr1 = MFOTL.free_vars f1 in
@@ -1305,7 +1370,7 @@ let add_ext neval f =
     let ff1 = add_ext f1 in
     let f2_is_special = Rewriting.is_special_case attr1 f2 in
     let ff2 =
-      if f2_is_special then ERel Relation.empty
+      if f2_is_special then ERel (Relation.empty, next_loc())
       else match f2 with
         | Neg f2' -> add_ext f2'
         | _ -> add_ext f2
@@ -1348,7 +1413,7 @@ let add_ext neval f =
           else
             fun rel1 rel2 -> Relation.natural_join matches1 rel1 rel2
     in
-    EAnd (comp, ff1, ff2, {arel = None})
+    EAnd (comp, ff1, ff2, {arel = None}, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, Once (intv, f)) ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -1365,7 +1430,7 @@ let add_ext neval f =
       | Avg -> Aggreg.avg_once default intv 0 posx posG
       | Med -> Aggreg.med_once default intv 0 posx posG
     in
-    EAggOnce ({op; default}, state, add_ext f)
+    EAggOnce ({op; default}, state, add_ext f, next_loc())
 
   | Aggreg (t_y, y, op, x, glist, f)  ->
     let t_y = match t_y with TCst a -> a | _ -> failwith "Internal error" in
@@ -1382,15 +1447,15 @@ let add_ext neval f =
       | Avg -> Aggreg.avg default 0 posx posG
       | Med -> Aggreg.med default 0 posx posG
     in
-    EAggreg ({op; default}, comp, add_ext f)
+    EAggreg ({op; default}, comp, add_ext f, next_loc())
 
   | Prev (intv, f) ->
     let ff = add_ext f in
-    EPrev (intv, ff, {plast = neval0})
+    EPrev (intv, ff, {plast = neval0}, next_loc())
 
   | Next (intv, f) ->
     let ff = add_ext f in
-    ENext (intv, ff, {init = true})
+    ENext (intv, ff, {init = true}, next_loc())
 
   | Since (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in
@@ -1414,15 +1479,15 @@ let add_ext neval f =
     let ff2 = add_ext f2 in
     if snd intv = Inf then
       let inf = {sres = Relation.empty; sarel2 = None; saauxrels = Mqueue.create()} in
-      ESinceA (comp,intv,ff1,ff2,inf)
+      ESinceA (comp,intv,ff1,ff2,inf, next_loc())
     else
       let inf = {srel2 = None; sauxrels = Mqueue.create()} in
-      ESince (comp,intv,ff1,ff2,inf)
+      ESince (comp,intv,ff1,ff2,inf, next_loc())
 
   | Once ((_, Inf) as intv, f) ->
     let ff = add_ext f in
     EOnceA (intv,ff,{ores = Relation.empty;
-                     oaauxrels = Mqueue.create()})
+                     oaauxrels = Mqueue.create()}, next_loc())
 
   | Once (intv,f) ->
     let ff = add_ext f in
@@ -1431,13 +1496,13 @@ let add_ext neval f =
                                        r = -1;
                                        res = Some (Relation.empty)};
                        ozlast = Dllist.void;
-                       ozauxrels = Dllist.empty()})
+                       ozauxrels = Dllist.empty()}, next_loc())
     else
       EOnce (intv,ff,{otree = LNode {l = MFOTL.ts_invalid;
                                      r = MFOTL.ts_invalid;
                                      res = Some (Relation.empty)};
                       olast = Dllist.void;
-                      oauxrels = Dllist.empty()})
+                      oauxrels = Dllist.empty()}, next_loc())
 
   | Until (intv,f1,f2) ->
     let attr1 = MFOTL.free_vars f1 in
@@ -1462,7 +1527,7 @@ let add_ext neval f =
         listrel1 = Dllist.empty();
         listrel2 = Dllist.empty()}
       in
-      ENUntil (comp,intv,ff1,ff2,inf)
+      ENUntil (comp,intv,ff1,ff2,inf, next_loc())
     else
       let comp =
         let matches2 = Table.get_matches attr2 attr1 in
@@ -1475,7 +1540,7 @@ let add_ext neval f =
                  raux = Sj.empty();
                  saux = Sk.empty()}
       in
-      EUntil (comp,intv,ff1,ff2,inf)
+      EUntil (comp,intv,ff1,ff2,inf, next_loc())
 
 
   | Eventually (intv,f) ->
@@ -1486,14 +1551,14 @@ let add_ext neval f =
                                              res = Some (Relation.empty)};
                              ezlast = Dllist.void;
                              ezlastev = neval0;
-                             ezauxrels = Dllist.empty()})
+                             ezauxrels = Dllist.empty()}, next_loc())
     else
       EEventually (intv,ff,{etree = LNode {l = MFOTL.ts_invalid;
                                            r = MFOTL.ts_invalid;
                                            res = Some (Relation.empty)};
                             elast = Dllist.void;
                             elastev = neval0;
-                            eauxrels = Dllist.empty()})
+                            eauxrels = Dllist.empty()}, next_loc())
 
   | _ -> failwith "[add_ext] internal error"
   in
@@ -1650,14 +1715,19 @@ let process_index state =
     let crt = Neval.get_next state.s_last in
     let (q, tsq) = Neval.get_data crt in
     if tsq < MFOTL.ts_max then
-      match eval state.s_extf crt false with
-      | Some rel ->
-        show_results state.s_posl state.s_in_tp q tsq rel;
-        state.s_last <- crt;
-        if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
-        else if Neval.is_last crt then true
-        else eval_loop ()
-      | None -> true
+      begin
+        Perf.profile_enter ~tp:q ~loc:Perf.loc_eval_root;
+        let result = eval state.s_extf crt false in
+        Perf.profile_exit ~tp:q ~loc:Perf.loc_eval_root;
+        match result with
+        | Some rel ->
+          show_results state.s_posl state.s_in_tp q tsq rel;
+          state.s_last <- crt;
+          if !Misc.stop_at_first_viol && not (Relation.is_empty rel) then false
+          else if Neval.is_last crt then true
+          else eval_loop ()
+        | None -> true
+      end
     else false
   in
   eval_loop ()
@@ -1728,7 +1798,8 @@ module Monitor = struct
     else if !Filter_empty_tp.enabled && Hashtbl.length ctxt.s_db = 0 then
       Hashtbl.clear ctxt.s_db
     else
-      eval_tp ctxt
+      eval_tp ctxt;
+    Perf.profile_exit ~tp:ctxt.s_log_tp ~loc:Perf.loc_read_tp
 
   let command ctxt name params =
     match name with
@@ -1804,6 +1875,7 @@ let init_monitor_state dbschema fv f =
   assert (List.length fv_pos = List.length fv);
   let neval = Neval.create () in
   let extf, last = add_ext neval f in
+  Perf.profile_string ~tag:Perf.tag_extformula (extf_structure extf);
   { s_posl = fv_pos;
     s_extf = extf;
     s_neval = neval;
@@ -1821,7 +1893,9 @@ let monitor_string dbschema log fv f =
 
 let monitor dbschema logfile fv f =
   let ctxt = init_monitor_state dbschema fv f in
-  ignore (Parser.parse_file dbschema logfile ctxt)
+  Perf.profile_enter ~tp:(-1) ~loc:Perf.loc_main_loop;
+  ignore (Parser.parse_file dbschema logfile ctxt);
+  Perf.profile_exit ~tp:(-1) ~loc:Perf.loc_main_loop
 
 (* Unmarshals formula & state from resume file and then starts processing
    logfile. *)
