@@ -65,6 +65,7 @@ module SignTable = struct
                  | `Int _, TInt -> true
                  | `Float _, TFloat -> true
                  | `String _, TStr -> true
+                 | `Bool _, TBool -> true
                  | `Assoc fs, TRef ctor ->
                      match_json signs (find_record_decl signs ctor) (`Assoc fs)
                  | _ -> false )

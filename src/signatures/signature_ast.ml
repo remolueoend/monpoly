@@ -19,7 +19,7 @@ type record_field = {fname: string; ftyp: ty}
 and record_decl = string * record_field node list
 and pred_arg = {aname: string; atyp: ty}
 and pred_decl = string * pred_arg node list
-and ty = TInt | TStr | TFloat | TRegexp | TRef of string
+and ty = TInt | TStr | TFloat | TRegexp | TRef of string | TBool
 
 (** Describes several attributes of a record declared in a signature:
     1. inline: tags records which have been declared as inline types in the signature file
@@ -43,6 +43,7 @@ let string_of_ty = function
   | TFloat -> "TFloat"
   | TRegexp -> "TRegexp"
   | TRef ctor -> ctor
+  | TBool -> "TBool"
 
 let string_of_record (attrs : product_attrs) ((id, fields) : record_decl) =
   let field_to_str {elt= {fname; ftyp}; _} =
@@ -84,6 +85,7 @@ module ParseTree = struct
     | TStr
     | TFloat
     | TRegexp
+    | TBool
     | TRef of string
     | TInline of record_field list
 
@@ -106,6 +108,7 @@ let transpile_signatures (s : ParseTree.signatures) : signatures =
     | TStr -> TStr
     | TFloat -> TFloat
     | TRegexp -> TRegexp
+    | TBool -> TBool
     | TRef ctor -> TRef ctor
     | TInline _ -> failwith "not valid" in
   (* Transforms every field in the given list and returns:

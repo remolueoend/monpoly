@@ -157,6 +157,11 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
         parse_record pb reg_tuple
           (SignTable.find_record_decl pb.signature_table ctor)
           json_value
+    | TBool -> (
+      match json_value with
+      | `Bool b -> if b then "1" else "0"
+      | _ -> failwith "invalid state: expected boolean value for boolean field."
+      )
     | _ -> ( match json_value with `String s -> s | v -> to_string v ) in
   let tuple_values = List.map get_field_value (extr_nodes rec_fields) in
   let inst_id = Int.to_string pb.id_index in

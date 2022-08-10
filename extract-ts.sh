@@ -26,6 +26,12 @@ This script accepts a JSON-path pointing to the field containing the timestamp t
 This path is passed directly to jq and follows the same syntactic rules:
 https://stedolan.github.io/jq/manual/#Basicfilters
 
+Concrete example:
+printf '{"ts": 3, "data": {}}\n{"ts": 4, "data": {}}' | ./extract-ts.sh ".ts"
+results in:
+@3 {"ts": 3, "data": {}}
+@4 {"ts": 4, "data": {}}
+
 EOM
 
 if [ $# != 1 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then

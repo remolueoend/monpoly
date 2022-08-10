@@ -62,6 +62,7 @@ let filter_some l =
 (* DATA STRUCTURES *)
 type tcst = Signature_ast.ty
 
+(* TODO: should be string * tsymb ref: *)
 type tcl = TNum | TAny | TOrd | TRecord of (string * tsymb) list
 and tsymb = TSymb of (tcl * int) | TCst of tcst | TNever
 
@@ -71,6 +72,8 @@ type sort = {inline: bool; fields: (string * tcst) list}
 (** Γ *)
 type symbol_table = (string * tsymb ref) list
 
+and cst_bool = True | False
+
 and cst =
   | Int of Z.t
   | Str of string
@@ -78,6 +81,7 @@ and cst =
   (* (string used to produce the regexp, the compiled regexp) because Str library doesn't provide regexp to string functionality *)
   | Regexp of (string * Str.regexp)
   | Record of (string * (string * cplx_term) list)
+  | Bool of cst_bool
 
 (** Δ *)
 and predicate_schema = ((string * int) * tsymb ref list) list
@@ -120,6 +124,7 @@ let type_of_cst = function
   | Float _ -> TFloat
   | Regexp _ -> TRegexp
   | Record (ctor, _) -> TRef ctor
+  | Bool _ -> TBool
 
 module TermSet = Set.Make (struct
   type t = cplx_term
@@ -356,6 +361,7 @@ let rec string_of_tcst (sorts : custom_sorts) = function
   | TInt -> "TInt"
   | TStr -> "TStr"
   | TRegexp -> "TRegexp"
+  | TBool -> "TBool"
   | TRef ctor -> (
     (* print their structure instead of teir ctor name for inline type *)
     match List.assoc ctor sorts with
@@ -389,6 +395,7 @@ let rec string_of_cst c =
   | Float f -> Printf.sprintf "%f" f
   | Str s -> format_string s
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
+  | Bool t -> ( match t with True -> "true" | False -> "false" )
   | Record (ctor, fields) ->
       Printf.sprintf "%s {%s}" ctor
         ( List.map (fun (n, v) -> n ^ ": " ^ string_of_term v) fields
@@ -983,11 +990,11 @@ let check_wff (f : 'a cplx_formula) =
   (* we then check that it contains wf intervals *)
   if not ci then
     failwith
-      "[Typecheck.check_wff] The formula contains a negative or empty interval" ;
+      "[Rewriting.check_wff] The formula contains a negative or empty interval" ;
   (* we then check that it is a bounded future formula *)
   if not cb then
     failwith
-      "[Typecheck.check_wff] The formula contains an unbounded future temporal \
+      "[Rewriting.check_wff] The formula contains an unbounded future temporal \
        operator. It is hence not monitorable." ;
   cl && ci && cb && ca
 
@@ -1000,10 +1007,10 @@ module TypeMap = Map.Make (struct
 end)
 
 (** describes the 'more-precise' relation of a subset of all types.
-    All record-related types are not included, because their 'more-precise
+    All product-related types are not included, because their 'more-precise
     relation depends dynamically on their structure. *)
 let type_lattice =
-  [ (TCst TInt, TNum); (TCst TFloat, TNum); (TCst TStr, TOrd)
+  [ (TCst TBool, TAny); (TCst TInt, TNum); (TCst TFloat, TNum); (TCst TStr, TOrd)
   ; (TCst TRegexp, TOrd); (TSymb (TNum, 0), TOrd); (TSymb (TOrd, 0), TAny) ]
   |> List.to_seq |> TypeMap.of_seq
 
@@ -1476,15 +1483,14 @@ let type_check_formula_debug (d : bool) =
         let indices = idx (List.length t_list) in
         List.iter
           (fun i ->
-            let exp_t = List.nth (List.assoc (name, arity) sch) i in
+            let exp_ty = List.nth exp_typ_list i in
             let t = List.nth t_list i in
-            let t1 = type_check_term_debug d tctxt !exp_t t in
-            propagate_constraints !exp_t t1 t tctxt )
+            let t1 = type_check_term_debug d tctxt !exp_ty t in
+            propagate_constraints !exp_ty t1 t tctxt )
           indices
     | Let (p, body, in_f) | LetPast (p, body, in_f) ->
         let n, a, ts = p in
-        (* first typecheck usage of LET predicate, then the body.
-           If there are still unresolved variable types, raise an error: *)
+        (* first typecheck the right hand side formula *)
         type_check_formula in_f ;
         (* new types of predicate args after typechecking its usage: *)
         let pred_sch = List.assoc (n, a) (f_annot in_f).predicates in
@@ -1664,7 +1670,7 @@ module Monitorability = struct
       | (Var _ as t) | (Proj _ as t) -> (
           let ty = type_of_term tctxt t in
           match ty with
-          | TInt | TFloat | TStr | TRegexp -> [string_of_term t]
+          | TInt | TFloat | TStr | TRegexp | TBool -> [string_of_term t]
           | TRef ctor ->
               let {fields; _} = List.assoc ctor tctxt.sorts in
               let subfields =
@@ -2196,6 +2202,7 @@ let compile_tcst (tcst : tcst) : Predicate.tcst =
   | TFloat -> TFloat
   | TStr -> TStr
   | TRegexp -> TRegexp
+  | TBool -> TInt
   | TRef _ -> TInt
 
 let compile_tcl (tcl : tcl) : Predicate.tcl =
@@ -2433,6 +2440,8 @@ let compile_cst (cst : cst) : Predicate.cst =
   | Float v -> Float v
   | Str v -> Str v
   | Regexp v -> Regexp v
+  | Bool v -> (
+    match v with False -> Int (Z.of_int 0) | True -> Int (Z.of_int 1) )
   | Record _ ->
       failwith
         "invalid state: Constant records must be expanded before compilation"

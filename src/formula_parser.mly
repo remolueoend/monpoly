@@ -126,7 +126,8 @@
 
 %}
 
-%token FALSE TRUE
+%token FALSE_F TRUE_F /* constant formulas. Parsed as 1 = 0 and 0 = 0 */
+%token FALSE_T TRUE_T /* constant terms. Available as constant value in formulas */
 %token LPA RPA LSB RSB LCB RCB COM COL SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
 %token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE R2S S2R I2S S2I F2S S2F
 %token <string> IDENT STR_CST REGEXP_CST
@@ -168,8 +169,8 @@
 
 formula:
   | LPA formula RPA                 { f "f()"; $2 }
-  | FALSE                           { f "FALSE"; formula (Equal (Cst (Int Z.zero), Cst (Int Z.one))) }
-  | TRUE                            { f "TRUE"; formula (Equal (Cst (Int Z.zero), Cst (Int Z.zero))) }
+  | FALSE_F                           { f "FALSE"; formula (Equal (Cst (Int Z.zero), Cst (Int Z.one))) }
+  | TRUE_F                            { f "TRUE"; formula (Equal (Cst (Int Z.zero), Cst (Int Z.zero))) }
   | predicate                       { f "f(pred)"; $1 }
   | LET predicate EQ formula IN formula
                                     { f "f(let)"; match $2 with
@@ -300,6 +301,8 @@ term:
 
 
 cst:
+  | FALSE_T                 { f "cst(false)"; Bool False }
+  | TRUE_T                  { f "cst(true)"; Bool True }
   | INT                     { f "cst(int)"; Int $1 }
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }

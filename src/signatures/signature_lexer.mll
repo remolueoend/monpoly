@@ -22,6 +22,7 @@
     ("float", TFLOAT);
     ("regexp", TREGEXP);
     ("event", EVENT);
+    ("bool", TBOOL);
     
     (* symbol *)
     ("(", LPA);

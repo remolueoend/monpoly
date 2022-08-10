@@ -39,7 +39,7 @@ let sort_rec_decl ((name, fields) : record_decl) : record_decl =
 
 %token EOF
 %token <string> IDENT
-%token TINT TSTRING TFLOAT TREGEXP
+%token TINT TSTRING TFLOAT TREGEXP TBOOL
 %token EVENT
 %token LPA RPA LCB RCB COM SEP COL
 
@@ -92,3 +92,4 @@ native_ty:
   | TFLOAT   { TFloat }
   | TSTRING { TStr }
   | TREGEXP { TRegexp }
+  | TBOOL { TBool }

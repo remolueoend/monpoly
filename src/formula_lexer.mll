@@ -113,8 +113,10 @@ rule
   | "MONTH"                     { f "MONTH" lexbuf; MONTH }
   | "YEAR"                      { f "YEAR" lexbuf; YEAR }
   | "FORMAT_DATE"               { f "FORMAT_DATE" lexbuf; FORMAT_DATE }
-  | "FALSE"                     { f "FALSE" lexbuf; FALSE }
-  | "TRUE"                      { f "TRUE" lexbuf; TRUE }
+  | "FALSE"                     { f "FALSE_F" lexbuf; FALSE_F }
+  | "TRUE"                      { f "TRUE_F" lexbuf; TRUE_F }
+  | "false"                     { f "FALSE_T" lexbuf; FALSE_T }
+  | "true"                      { f "TRUE_T" lexbuf; TRUE_T }
   | "LET"                       { f "LET" lexbuf; LET }
   | "LETPAST"                   { f "LETPAST" lexbuf; LETPAST }
   | "IN"                        { f "IN" lexbuf; IN }
