@@ -17,3 +17,10 @@
   (package monpoly-tools)
   (modules Join_test)
   (libraries libmonpoly))
+
+(executable
+  (name formula_stats)
+  (public_name formula_stats)
+  (package monpoly-tools)
+  (modules Formula_stats)
+  (libraries libmonpoly))
