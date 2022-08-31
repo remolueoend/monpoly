@@ -16,12 +16,16 @@ type result = {
 }
 
 let print_result r =
-  Printf.printf "log_predicates:  %3d\n" (Pred_set.cardinal r.log_preds);
-  Printf.printf "connectives:     %3d\n" r.conn;
-  Printf.printf "height:          %3d\n" r.height;
-  Printf.printf "temporal_conns:  %3d\n" r.ntemp;
-  Printf.printf "temporal_height: %3d\n" r.temp_height;
-  Printf.printf "let_bindings:    %3d\n" r.nlet
+  Printf.printf "log_predicates:  %4d\n" (Pred_set.cardinal r.log_preds);
+  Printf.printf "connectives:     %4d\n" r.conn;
+  Printf.printf "temporal_conns:  %4d\n" r.ntemp;
+  if r.nlet = 0 then
+    begin
+      Printf.printf "height:          %4d\n" r.height;
+      Printf.printf "temporal_height: %4d\n" r.temp_height
+    end
+  else
+    Printf.printf "let_bindings:    %4d\n" r.nlet
 
 let result_of_pred lets (n, a, _) = {
   log_preds = if List.mem (n, a) lets then Pred_set.empty
@@ -51,16 +55,21 @@ let lift_unary ~temporal r = { r with
 
 let combine ~temporal l r = {
   log_preds = Pred_set.union l.log_preds r.log_preds;
-  conn = l.conn + r.conn;
-  height = max l.height r.height;
+  conn = l.conn + r.conn + 1;
+  height = max l.height r.height + 1;
   ntemp = l.ntemp + r.ntemp + (if temporal then 1 else 0);
   temp_height = max l.temp_height r.temp_height + (if temporal then 1 else 0);
   nlet = l.nlet + r.nlet;
 }
 
-let lift_let l r =
-  let y = combine ~temporal:false l r in
-  { y with nlet = y.nlet + 1 }
+let lift_let l r = {
+  log_preds = Pred_set.union l.log_preds r.log_preds;
+  conn = l.conn + r.conn;
+  height = max l.height r.height;
+  ntemp = l.ntemp + r.ntemp;
+  temp_height = max l.temp_height r.temp_height;
+  nlet = l.nlet + r.nlet + 1;
+}
 
 let rec analyze lets f =
   let rec go = function
@@ -104,26 +113,22 @@ let analyse_formulafile ic =
 let main () = 
   let sign = Log_parser.parse_signature_file !sigfile in
   let f = analyse_formulafile !formulafile in
-  let is_mon, pf, vartypes = Rewriting.check_formula sign f in
-  print_result (analyze [] pf)
+  Rewriting.unfold_let := None;
+  let _, pf_orig, _ = Rewriting.check_formula sign f in
+  Rewriting.unfold_let := Some (Rewriting.ExpandAll);
+  let _, pf_unfolded, _ = Rewriting.check_formula sign f in
+  print_string "# without unfolding\n";
+  print_result (analyze [] pf_orig);
+  print_string "\n# with unfolding\n";
+  print_result (analyze [] pf_unfolded)
 
-let usage_string =
-  "Usage: formula_stats -sig <file> -formula <file> [-no_rw]
-                      [-unfold_let <mode>]"
-
-let set_unfold_let = function
-  | "no" -> Rewriting.unfold_let := None
-  | "full" -> Rewriting.unfold_let := Some (Rewriting.ExpandAll)
-  | "smart" -> Rewriting.unfold_let := Some (Rewriting.ExpandNonshared)
-  | _ -> ()  (* impossible *)
+let usage_string = "Usage: formula_stats -sig <file> -formula <file> [-no_rw]"
 
 let _ = 
   Arg.parse [
     "-sig", Arg.Set_string sigfile, "\t\tChoose the signature file";
     "-formula", Arg.Set_string formulafile, "\tChoose the formula file"; 
     "-no_rw", Arg.Set Rewriting.no_rw, "\tNo formula rewrite";
-    "-unfold_let", Arg.Symbol (["no"; "full"; "smart"], set_unfold_let),
-      "\tWhether and how LET expressions in the formula should be unfolded (default 'no')";
     ]
     (fun _ -> ())
     usage_string;
