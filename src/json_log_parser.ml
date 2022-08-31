@@ -150,8 +150,11 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
     match json with
     | `Assoc value -> value
     | _ -> failwith "Invalid json value type" in
+  (* returns a JSON object's field value as a string to be registered in a tuple: *)
   let get_field_value ({fname; ftyp} : record_field) : string =
     let json_value = List.assoc fname json_fields in
+    (* we can assume here that the type of the JSON value and the type in the signature agree,
+       it has been checked before when matching sorts against JSON objects. *)
     match ftyp with
     | TRef ctor ->
         parse_record pb reg_tuple
@@ -162,6 +165,8 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
       | `Bool b -> if b then "1" else "0"
       | _ -> failwith "invalid state: expected boolean value for boolean field."
       )
+    | TNull -> "0"
+    (* if json_value is a string already, to_string behaves badly: *)
     | _ -> ( match json_value with `String s -> s | v -> to_string v ) in
   let tuple_values = List.map get_field_value (extr_nodes rec_fields) in
   let inst_id = Int.to_string pb.id_index in

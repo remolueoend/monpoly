@@ -66,6 +66,7 @@ module SignTable = struct
                  | `Float _, TFloat -> true
                  | `String _, TStr -> true
                  | `Bool _, TBool -> true
+                 | `Null, TNull -> true
                  | `Assoc fs, TRef ctor ->
                      match_json signs (find_record_decl signs ctor) (`Assoc fs)
                  | _ -> false )
@@ -108,12 +109,6 @@ module TypeDeps = Map.Make (String)
     4. Arguments of predicates are of primitive types.
     5. No recursive record types. *)
 let typecheck (signatures : signatures) : unit =
-  let string_of_deps deps =
-    TypeDeps.fold
-      (fun n d acc ->
-        (n ^ ": " ^ (TypeSet.elements d |> String.concat ",")) :: acc )
-      deps []
-    |> String.concat "\n" in
   (* returns true whenever the provided type dependency graph is cyclic. *)
   let rec is_cyclic (deps : TypeSet.t TypeDeps.t) : bool =
     (* Printf.eprintf "====:\n%s\n" (string_of_deps deps) ; *)

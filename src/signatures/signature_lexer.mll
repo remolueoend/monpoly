@@ -23,6 +23,7 @@
     ("regexp", TREGEXP);
     ("event", EVENT);
     ("bool", TBOOL);
+    ("null", TNULL);
     
     (* symbol *)
     ("(", LPA);

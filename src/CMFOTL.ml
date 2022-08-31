@@ -362,6 +362,7 @@ let rec string_of_tcst (sorts : custom_sorts) = function
   | TStr -> "TStr"
   | TRegexp -> "TRegexp"
   | TBool -> "TBool"
+  | TNull -> "TNull"
   | TRef ctor -> (
     (* print their structure instead of teir ctor name for inline type *)
     match List.assoc ctor sorts with
@@ -1010,8 +1011,9 @@ end)
     All product-related types are not included, because their 'more-precise
     relation depends dynamically on their structure. *)
 let type_lattice =
-  [ (TCst TBool, TAny); (TCst TInt, TNum); (TCst TFloat, TNum); (TCst TStr, TOrd)
-  ; (TCst TRegexp, TOrd); (TSymb (TNum, 0), TOrd); (TSymb (TOrd, 0), TAny) ]
+  [ (TCst TBool, TAny); (TCst TNull, TAny); (TCst TInt, TNum)
+  ; (TCst TFloat, TNum); (TCst TStr, TOrd); (TCst TRegexp, TOrd)
+  ; (TSymb (TNum, 0), TOrd); (TSymb (TOrd, 0), TAny) ]
   |> List.to_seq |> TypeMap.of_seq
 
 (** returns whether ty1 is more precise than t2 based on the 'type_lattice' relation.
@@ -1670,7 +1672,7 @@ module Monitorability = struct
       | (Var _ as t) | (Proj _ as t) -> (
           let ty = type_of_term tctxt t in
           match ty with
-          | TInt | TFloat | TStr | TRegexp | TBool -> [string_of_term t]
+          | TInt | TFloat | TStr | TRegexp | TBool | TNull -> [string_of_term t]
           | TRef ctor ->
               let {fields; _} = List.assoc ctor tctxt.sorts in
               let subfields =
@@ -2202,7 +2204,8 @@ let compile_tcst (tcst : tcst) : Predicate.tcst =
   | TFloat -> TFloat
   | TStr -> TStr
   | TRegexp -> TRegexp
-  | TBool -> TInt
+  | TBool -> TInt (* booleans are encoded as false=0, true=1 *)
+  | TNull -> TInt (* null is encoded as 0 *)
   | TRef _ -> TInt
 
 let compile_tcl (tcl : tcl) : Predicate.tcl =

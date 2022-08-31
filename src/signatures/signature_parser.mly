@@ -39,7 +39,7 @@ let sort_rec_decl ((name, fields) : record_decl) : record_decl =
 
 %token EOF
 %token <string> IDENT
-%token TINT TSTRING TFLOAT TREGEXP TBOOL
+%token TINT TSTRING TFLOAT TREGEXP TBOOL TNULL
 %token EVENT
 %token LPA RPA LCB RCB COM SEP COL
 
@@ -81,6 +81,7 @@ pred_arg:
 ty:
   | t=native_ty { t }
   | fields=record_body { TInline (extr_nodes fields) }
+  | TNULL { TNull }
   | id=IDENT { TRef id }
 
 ident:
