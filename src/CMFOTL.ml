@@ -2222,11 +2222,11 @@ let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
   | TCst c -> TCst (compile_tcst c)
   | TNever -> failwith "[compile_tsymb] Cannot compile TBot"
 
-(** The full path of a given projection term.
+(** compiles a projection to a unique variable name.
     Example: The term r.user.name maps to the string 'r_user_name' *)
-let rec projection_path = function
+let rec compile_projection = function
   | Var v -> v
-  | Proj (t, f) -> Printf.sprintf "%s_%s" (projection_path t) f
+  | Proj (t, f) -> Printf.sprintf "%s-%s" (compile_projection t) f
   | t ->
       failwith
       @@ Printf.sprintf "[CMFOTL.projection_path]: Invalid term detected: %s"
@@ -2264,13 +2264,15 @@ let expand_cplx_var (f : type_context cplx_formula) (var : var) :
         | (Var _ as b) | Proj (b, _) ->
             let ctor = type_ctor b in
             let {fields; _} = List.assoc ctor tctxt.sorts in
-            (ctor, fields, projection_path b) ^:: acc
+            (ctor, fields, compile_projection b) ^:: acc
         | _ -> acc )
       usages [] in
   let expansions =
     List.map
       (fun (ctor, record, prefix) ->
-        let new_vars = List.map (fun (n, _) -> prefix ^ "_" ^ n) record in
+        let new_vars =
+          List.map (fun (n, _) -> compile_projection (Proj (Var prefix, n))) record
+        in
         let new_pred =
           MFOTL.Pred
             ( ctor
@@ -2320,7 +2322,7 @@ let rec expand_predicate_params (p : cplx_predicate)
     (* replace all used leaves by their new (flattened) variable in the body of the LET: *)
     let new_body =
       List.fold_left
-        (fun b l -> replace_var l (Var (projection_path l)) b)
+        (fun b l -> replace_var l (Var (compile_projection l)) b)
         body used_leaves in
     (new_body, List.combine used_leaves leave_tys) in
   (* expands a single argument passed to the given parameter.
@@ -2348,7 +2350,7 @@ let rec expand_predicate_params (p : cplx_predicate)
      re-init the type context of the body and type check if afterwards: *)
   let new_pred_vars =
     List.flatten leaves
-    |> List.map (fun (p, ty) -> (projection_path p, ref (TCst ty))) in
+    |> List.map (fun (p, ty) -> (compile_projection p, ref (TCst ty))) in
   let new_body =
     init_typed_formula {(f_annot body) with vars= new_pred_vars} new_body in
   type_check_formula_debug false new_body ;
@@ -2471,7 +2473,7 @@ let rec compile_term (input : cplx_term) : Predicate.term =
   | Mult (t1, t2) -> Mult (compile_term t1, compile_term t2)
   | Div (t1, t2) -> Div (compile_term t1, compile_term t2)
   | Mod (t1, t2) -> Mod (compile_term t1, compile_term t2)
-  | Proj _ as p -> Var (projection_path p)
+  | Proj _ as p -> Var (compile_projection p)
 
 let compile_predicate (tctxt : type_context)
     ((name, arity, args) : cplx_predicate) : predicate =
@@ -2573,7 +2575,7 @@ and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
       let sz = List.filter (fun v -> not (List.mem v gs)) (free_vars f) in
       let expanded_gs =
         List.map (fun g -> record_leaves tctxt (Var g)) gs
-        |> List.flatten |> List.map projection_path in
+        |> List.flatten |> List.map compile_projection in
       let compiled_f = compile_formula_scope sz f in
       Aggreg
         ( compile_tsymb !(List.assoc r tctxt.vars)
