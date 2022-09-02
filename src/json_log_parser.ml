@@ -235,10 +235,16 @@ module Make (C : Log_parser.Consumer) = struct
           in
           ( match signature_decl with
           | None ->
-              Printf.eprintf
-                "[JSON_log_parser | WARN]: Line %i did not match any signature.\n\
-                 %!"
-                pb.input_line
+              if !Misc.stop_at_unknown_json then
+                fail
+                  (Printf.sprintf "Unknown JSON structure on line %i"
+                     pb.input_line )
+              else
+                Printf.eprintf
+                  "[JSON_log_parser | WARN]: Line %i did not match any \
+                   signature.\n\
+                   %!"
+                  pb.input_line
           | Some decl ->
               ignore
               @@ parse_record pb

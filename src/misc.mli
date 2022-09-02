@@ -76,6 +76,7 @@ val new_last_ts: bool ref
 val ignore_parse_errors: bool ref
 val stop_at_out_of_order_ts: bool ref
 val stop_at_first_viol: bool ref
+val stop_at_unknown_json: bool ref
   (** Flags corresponding to the command-line options: -verbose, -check,
       -verified, -no_new_last_ts, -ignore_errors, -stop_at_out_of_order_ts,
       -stop_at_last_viol. *)

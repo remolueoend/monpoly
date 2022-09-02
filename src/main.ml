@@ -195,6 +195,8 @@ let _ =
     "-json_log", Arg.Unit (fun () -> Misc.log_format := JSON),
       "\tParse log file as lines of JSON strings";
     "-profile", Arg.String Perf.enable_profile, "\tWrite profile events to the given file";
+    "-stop_at_first_unknown_json", Arg.Set Misc.stop_at_unknown_json,
+      "\tStop monitoring whenever a JSON structure of unknown sort is detected";
   ]
     (fun _ -> print_usage_and_exit ())
     usage_string;
