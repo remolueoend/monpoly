@@ -82,6 +82,7 @@ and cst =
   | Regexp of (string * Str.regexp)
   | Record of (string * (string * cplx_term) list)
   | Bool of cst_bool
+  | Null
 
 (** Δ *)
 and predicate_schema = ((string * int) * tsymb ref list) list
@@ -98,12 +99,12 @@ and cplx_term =
   | S2i of cplx_term
   | F2s of cplx_term
   | S2f of cplx_term
+  | R2s of cplx_term
+  | S2r of cplx_term
   | DayOfMonth of cplx_term
   | Month of cplx_term
   | Year of cplx_term
   | FormatDate of cplx_term
-  | R2s of cplx_term
-  | S2r of cplx_term
   | Plus of cplx_term * cplx_term
   | Minus of cplx_term * cplx_term
   | UMinus of cplx_term
@@ -125,6 +126,7 @@ let type_of_cst = function
   | Regexp _ -> TRegexp
   | Record (ctor, _) -> TRef ctor
   | Bool _ -> TBool
+  | Null -> TNull
 
 module TermSet = Set.Make (struct
   type t = cplx_term
@@ -397,6 +399,7 @@ let rec string_of_cst c =
   | Str s -> format_string s
   | Regexp (p, _) -> Printf.sprintf "r%s" (format_string p)
   | Bool t -> ( match t with True -> "true" | False -> "false" )
+  | Null -> "null"
   | Record (ctor, fields) ->
       Printf.sprintf "%s {%s}" ctor
         ( List.map (fun (n, v) -> n ^ ": " ^ string_of_term v) fields
@@ -2271,8 +2274,9 @@ let expand_cplx_var (f : type_context cplx_formula) (var : var) :
     List.map
       (fun (ctor, record, prefix) ->
         let new_vars =
-          List.map (fun (n, _) -> compile_projection (Proj (Var prefix, n))) record
-        in
+          List.map
+            (fun (n, _) -> compile_projection (Proj (Var prefix, n)))
+            record in
         let new_pred =
           MFOTL.Pred
             ( ctor
@@ -2447,6 +2451,7 @@ let compile_cst (cst : cst) : Predicate.cst =
   | Regexp v -> Regexp v
   | Bool v -> (
     match v with False -> Int (Z.of_int 0) | True -> Int (Z.of_int 1) )
+  | Null -> Int (Z.of_int 0)
   | Record _ ->
       failwith
         "invalid state: Constant records must be expanded before compilation"
@@ -2575,7 +2580,8 @@ and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
       let sz = List.filter (fun v -> not (List.mem v gs)) (free_vars f) in
       let expanded_gs =
         List.map (fun g -> record_leaves tctxt (Var g)) gs
-        |> List.flatten |> List.map compile_projection in
+        |> List.flatten
+        |> List.map compile_projection in
       let compiled_f = compile_formula_scope sz f in
       Aggreg
         ( compile_tsymb !(List.assoc r tctxt.vars)

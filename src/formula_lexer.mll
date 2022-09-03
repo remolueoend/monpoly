@@ -70,7 +70,6 @@ let quoted_string = '"' ([^ '"' '\\'] | '\\' _)* '"'
 rule
   token = parse
   | [' ' '\t' '\n' '\r']        { f "white space" lexbuf; token lexbuf }
-
   | "+"                         { f "PLUS" lexbuf; PLUS }
   | "-"                         { f "MINUS" lexbuf; MINUS }
   | "."                         { f "DOT" lexbuf; DOT }
@@ -117,6 +116,7 @@ rule
   | "TRUE"                      { f "TRUE_F" lexbuf; TRUE_F }
   | "false"                     { f "FALSE_T" lexbuf; FALSE_T }
   | "true"                      { f "TRUE_T" lexbuf; TRUE_T }
+  | "null"                      { f "NULL" lexbuf; NULL }
   | "LET"                       { f "LET" lexbuf; LET }
   | "LETPAST"                   { f "LETPAST" lexbuf; LETPAST }
   | "IN"                        { f "IN" lexbuf; IN }

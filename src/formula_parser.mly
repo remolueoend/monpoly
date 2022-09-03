@@ -128,6 +128,7 @@
 
 %token FALSE_F TRUE_F /* constant formulas. Parsed as 1 = 0 and 0 = 0 */
 %token FALSE_T TRUE_T /* constant terms. Available as constant value in formulas */
+%token NULL /* `null` constant term */
 %token LPA RPA LSB RSB LCB RCB COM COL SC DOT QM LD LESSEQ EQ LESS GTR GTREQ STAR LARROW SUBSTRING MATCHES
 %token PLUS MINUS SLASH MOD F2I I2F DAY_OF_MONTH MONTH YEAR FORMAT_DATE R2S S2R I2S S2I F2S S2F
 %token <string> IDENT STR_CST REGEXP_CST
@@ -303,6 +304,7 @@ term:
 cst:
   | FALSE_T                 { f "cst(false)"; Bool False }
   | TRUE_T                  { f "cst(true)"; Bool True }
+  | NULL                    { f "cst(null)"; Null }
   | INT                     { f "cst(int)"; Int $1 }
   | RAT                     { f "cst(rat)"; Float $1 }
   | STR_CST                 { f "cst(str)"; Str (strip $1) }
