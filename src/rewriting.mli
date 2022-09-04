@@ -74,8 +74,9 @@ val check_let: formula -> bool
 
 val expand_let: expand_mode -> formula -> formula
 
-val check_monitorability: schema -> formula -> bool * (formula * var) option
-(** Checks the monitorability of a given formula. In case of a rejection, the failing formula and a reason is returned. *)
+val check_monitorability: schema -> formula -> formula * (bool * (formula * var) option)
+(** Checks the monitorability of a given formula. In case of a rejection, the failing formula and a reason is returned.
+    In any case, the first element of the returned tuple contians the rewritten formula. *)
 
 val print_monitorability_results: formula -> bool * (formula * var) option -> unit
 (** Pretty-prints the monitorability reaults to standard output. *)

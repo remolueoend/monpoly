@@ -124,8 +124,8 @@ let main () =
       let dbschema = Signatures.to_dbschema signatures in
       let pf, vartypes = check_formula dbschema pf in
       let fv = List.map fst vartypes in
+      let (pf, is_mon) = Rewriting.check_monitorability dbschema pf in
       if !Misc.verbose || !Misc.checkf then CMFOTL.print_formula_details f pf ;
-      let is_mon = Rewriting.check_monitorability dbschema pf in
       if !sigout then Predicate.print_vartypes_list vartypes
       else if not (fst is_mon) then (
         if !Misc.verified then Rewriting.print_monitorability_results pf is_mon else
@@ -139,7 +139,9 @@ let main () =
             failwith
               "Invariant violation: Extended formula is monitorable while \
                compiled formula is not." )
-      else if not !Misc.checkf then (
+      else if !Misc.checkf then
+          Printf.eprintf "The analyzed formula is monitorable.\n%!"
+      else (
         (* By default, that is without user specification (see option
           -nonewlastts), we add a new maximal timestamp for future formulas;
           that is, we assume that no more events will happen in the

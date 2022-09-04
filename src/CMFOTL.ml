@@ -249,8 +249,7 @@ and walk_regex (visitor : 'a cplx_formula -> unit) = function
 let rec var_usage ((_, f) : 'a cplx_formula) (var : var) : TermSet.t =
   let rec term_usage = function
     | Cst _ -> TermSet.empty
-    | Var v ->
-        if compare v var = 0 then TermSet.singleton (Var v) else TermSet.empty
+    | Var v -> if v = var then TermSet.singleton (Var v) else TermSet.empty
     | F2i t1
      |I2f t1
      |I2s t1
@@ -314,8 +313,9 @@ let rec var_usage ((_, f) : 'a cplx_formula) (var : var) : TermSet.t =
   | Since (_, f1, f2) | Until (_, f1, f2) ->
       TermSet.union (var_usage f1 var) (var_usage f2 var)
   | Frex (_, r) | Prex (_, r) -> var_usage_re r
-  (* the only outside variables used inside an aggregation are the ones we group over: *)
-  | Aggreg (_, _, _, gs, f) -> TermSet.of_list (List.map (fun v -> Var v) gs)
+  | Aggreg (s, _, _, gs, f) ->
+      TermSet.of_list
+        (List.map (fun v -> Var v) gs @ if s = var then [Var s] else [])
 
 (** Returns a list of free variables in the given formula.
     One can provide an optional tvars function to be used,
@@ -1923,9 +1923,11 @@ end
 
 let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
   let tctxt = f_annot f in
-  (* Printf.eprintf "The input formula is: %s\n%!" (string_of_formula "" f) ; *)
-  Printf.eprintf "The analyzed formula is:\n  %s\n%!"
-    (MFOTL.string_of_formula "" c) ;
+  let complex_str = string_of_formula "" f |> String.trim in
+  let compiled_str = MFOTL.string_of_formula "" c |> String.trim in
+  if compare compiled_str complex_str <> 0 then
+    Printf.eprintf "The input formula is:\n  %s\n%!" compiled_str ;
+  Printf.eprintf "The analyzed formula is:\n  %s\n%!" compiled_str ;
   Printf.eprintf "The sequence of free variables is: (%s)\n%!"
     (List.map fst tctxt.vars |> String.concat ",")
 
@@ -2419,7 +2421,12 @@ let rec expand_predicate_params (p : cplx_predicate)
     |> List.map (fun (p, ty) -> (compile_projection p, ref (TCst ty))) in
   let new_body =
     init_typed_formula {(f_annot body) with vars= new_pred_vars} new_body in
-  type_check_formula_debug false new_body new_body ;
+  if Misc.debugging Dbg_rewriting then
+    Printf.eprintf
+      "Expanding predicate %s with leave arguments %s and new body: %s\n%!" name
+      (List.map fst new_pred_vars |> String.concat ",")
+      (string_of_formula "" new_body) ;
+  type_check_formula_debug (Misc.debugging Dbg_typing) new_body new_body ;
   let new_param_tys = List.map (fun (_, t) -> t) new_pred_vars in
   (* replace the predicate usages in in_f by replacing the single argument by a new list of leaf arguments:  *)
   let new_f_in =

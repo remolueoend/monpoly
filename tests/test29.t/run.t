@@ -160,12 +160,12 @@
 
   $ echo '(r <- AVG x (W(x)))' > test29_13.mfotl
   $ monpoly -sig test29.sig -formula test29_13.mfotl -log test29.log -verbose -nonewlastts
-  Fatal error: exception Failure("[Rewriting.type_check_term] Type check error on term x: expected type String, actual type (Num t3) =>  t3")
+  Fatal error: exception Failure("Type error while evaluating term 'x': Actual type String is not compatible with expected type (Num t4) =>  t4")
   [2]
 
   $ echo '(r <- SUM x (W(x)))' > test29_14.mfotl
   $ monpoly -sig test29.sig -formula test29_14.mfotl -log test29.log -verbose -nonewlastts
-  Fatal error: exception Failure("[Rewriting.type_check_term] Type check error on term x: expected type String, actual type (Num t3) =>  t3")
+  Fatal error: exception Failure("Type error while evaluating term 'x': Actual type String is not compatible with expected type (Num t4) =>  t4")
   [2]
 
   $ echo '(r <- CNT x (W(x))) AND t = i2f(r)' > test29_15.mfotl
@@ -210,7 +210,7 @@
 
   $ echo '(r <- MED x (W(x)))' > test29_18.mfotl
   $ monpoly -sig test29.sig -formula test29_18.mfotl -log test29.log -verbose -nonewlastts
-  Fatal error: exception Failure("[Rewriting.type_check_term] Type check error on term x: expected type String, actual type (Num t3) =>  t3")
+  Fatal error: exception Failure("Type error while evaluating term 'x': Actual type String is not compatible with expected type (Num t4) =>  t4")
   [2]
 
   $ echo '(r <- AVG x ; x (I(x))) AND t = f2i(r)' > test29_19.mfotl
@@ -359,12 +359,12 @@
 
   $ echo '(r <- AVG x ; x (W(x)))' > test29_31.mfotl
   $ monpoly -sig test29.sig -formula test29_31.mfotl -log test29.log -verbose -nonewlastts
-  Fatal error: exception Failure("[Rewriting.type_check_term] Type check error on term x: expected type String, actual type (Num t3) =>  t3")
+  Fatal error: exception Failure("Type error while evaluating term 'x': Actual type String is not compatible with expected type (Num t4) =>  t4")
   [2]
 
   $ echo '(r <- SUM x ; x (W(x)))' > test29_32.mfotl
   $ monpoly -sig test29.sig -formula test29_32.mfotl -log test29.log -verbose -nonewlastts
-  Fatal error: exception Failure("[Rewriting.type_check_term] Type check error on term x: expected type String, actual type (Num t3) =>  t3")
+  Fatal error: exception Failure("Type error while evaluating term 'x': Actual type String is not compatible with expected type (Num t4) =>  t4")
   [2]
 
   $ echo '(r <- CNT x ; x (W(x))) AND t = i2f(r)' > test29_33.mfotl
@@ -405,5 +405,5 @@
 
   $ echo '(r <- MED x ; x (W(x)))' > test29_36.mfotl
   $ monpoly -sig test29.sig -formula test29_36.mfotl -log test29.log -verbose -nonewlastts
-  Fatal error: exception Failure("[Rewriting.type_check_term] Type check error on term x: expected type String, actual type (Num t3) =>  t3")
+  Fatal error: exception Failure("Type error while evaluating term 'x': Actual type String is not compatible with expected type (Num t4) =>  t4")
   [2]

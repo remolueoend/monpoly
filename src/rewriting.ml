@@ -1688,7 +1688,7 @@ let check_monitorability s f =
     else is_monitorable
   in
   if !no_rw then
-    check_mon f
+    (f, check_mon f)
   else
     (* Normalizing, rewriting, and checking monitorability again *)
     (* We normalize in two steps: 
@@ -1717,7 +1717,7 @@ let check_monitorability s f =
 
 
     let is_mon = if not (fst is_mon) then check_mon rf else is_mon in
-    is_mon
+    (rf, is_mon)
 
 
 let print_monitorability_results f is_mon =
