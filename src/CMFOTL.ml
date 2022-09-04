@@ -1909,11 +1909,11 @@ end
 
 let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
   let tctxt = f_annot f in
-  Printf.eprintf "The input formula is: %s\n%!" (string_of_formula "" f) ;
-  Printf.eprintf "The analyzed formula is: %s\n%!"
+  (* Printf.eprintf "The input formula is: %s\n%!" (string_of_formula "" f) ; *)
+  Printf.eprintf "The analyzed formula is:\n  %s\n%!"
     (MFOTL.string_of_formula "" c) ;
-  Printf.eprintf "The sequence of free variables and their types is: %s\n%!"
-    (string_of_gamma tctxt.sorts tctxt.vars)
+  Printf.eprintf "The sequence of free variables is: (%s)\n%!"
+    (List.map fst tctxt.vars |> String.concat ",")
 
 (** initializes the type annotations for all sub formulas in the given formula.
     All free variables of a sub-formula are initialized with TAny.
@@ -2082,7 +2082,7 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
   (* Make sure all variables in all symbol tables have been resolved
      to a concrete type. *)
   check_unresolved_vars f ;
-  if debug then (
+  if debug && false then (
     Printf.eprintf
       "[Typecheck.typecheck_formula] The final type judgement is (%s; %s) ⊢ "
       (string_of_delta tctxt.sorts tctxt.predicates)

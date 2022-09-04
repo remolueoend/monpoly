@@ -134,13 +134,14 @@ let transpile_signatures (s : ParseTree.signatures) : signatures =
             let new_field = no_node {fname; ftyp= TRef extr_type_name} in
             ( new_field :: fs
             , s
-              @ ProductSort ({inline= true; event= false}, no_node extracted_decl)
+              @ ProductSort
+                  ({inline= true; event= false}, no_node extracted_decl)
                 :: new_sigs )
         | _ -> ({elt= {fname; ftyp= transpile_ty ftyp}; loc} :: fs, s) )
       fields ([], []) in
   let transpiled =
-    List.fold_left
-      (fun acc (s : ParseTree.decl) ->
+    List.fold_right
+      (fun (s : ParseTree.decl) acc ->
         match s with
         | Predicate {elt= name, args; loc} ->
             Predicate
@@ -159,5 +160,5 @@ let transpile_signatures (s : ParseTree.signatures) : signatures =
                 ( {inline= false; event= is_event}
                 , {elt= (name, new_fields); loc} )
               :: acc )
-      [] s in
+      s [] in
   transpiled
