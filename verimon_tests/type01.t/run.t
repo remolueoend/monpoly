@@ -12,7 +12,7 @@ Type check atomic formulas correctly
   $ monpoly -verified -sig type01.sig -formula type01_3.mfotl -verbose -check -no_rw -debug typing 2>&1 | grep "final type judgement"
   [Rewriting.type_check] The final type judgement is (tp:(Int), ts:(Int), tpts:(Int, Int); _) ⊢ 0 = 1
 
-TODO zumstegr: following four tests throw "unresolved type for 'x'/'y'" with CMFOTL type checker. We should disable them
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 $ echo 'x=x' > type01_4.mfotl
 $ monpoly -verified -sig type01.sig -formula type01_4.mfotl -verbose -check -no_rw -debug typing 2>&1 | grep "final type judgement"
 [Rewriting.type_check] The final type judgement is (tp:(Int), ts:(Int), tpts:(Int, Int); x:t1) ⊢ x = x

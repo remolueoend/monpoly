@@ -16,7 +16,7 @@ Propagation of guarding conjunctions below quantifiers must not capture bound va
 In capture-avoiding substitution, the fresh variables must also avoid variables introduced by the substitution.
 (This test is brittle because _x1 must be one of the automatically generated variable names.)
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 $ echo 'R(x,y,z) AND (EXISTS x, y. NOT EXISTS _x1. EXISTS _x1. S(x,y,_x1))' > test33_2.mfotl
 $ monpoly -sig test33.sig -formula test33_2.mfotl -check
 The input formula is:

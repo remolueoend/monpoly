@@ -8,7 +8,7 @@ Type check terms correctly
   $ monpoly -sig type02.sig -formula type02_2.mfotl -verbose -check -no_rw -debug typing 2>&1 | grep "final type judgement"
   [Rewriting.type_check] The final type judgement is (tp:(Int), ts:(Int), tpts:(Int, Int); y:Int, x:Int) ⊢ x = y + 1
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 $ echo 'x=y+z' > type02_3.mfotl
 $ monpoly -sig type02.sig -formula type02_3.mfotl -verbose -check -no_rw -debug typing 2>&1 | grep "final type judgement"
 [Rewriting.type_check] The final type judgement is (tp:(Int), ts:(Int), tpts:(Int, Int); z:(Num t4) =>  t4, y:(Num t4) =>  t4, x:(Num t4) =>  t4) ⊢ x = y + z
@@ -57,7 +57,7 @@ $ monpoly -sig type02.sig -formula type02_5.mfotl -verbose -check -no_rw -debug 
   $ monpoly -sig type02.sig -formula type02_14.mfotl -verbose -check -no_rw -debug typing 2>&1 | grep "final type judgement"
   [Rewriting.type_check] The final type judgement is (tp:(Int), ts:(Int), tpts:(Int, Int); x:Int) ⊢ 0 = -x
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 $ echo 'y=-x' > type02_15.mfotl
 $ monpoly -sig type02.sig -formula type02_15.mfotl -verbose -check -no_rw -debug typing 2>&1 | grep "final type judgement"
 [Rewriting.type_check] The final type judgement is (tp:(Int), ts:(Int), tpts:(Int, Int); x:(Num t3) =>  t3, y:(Num t3) =>  t3) ⊢ y = -x

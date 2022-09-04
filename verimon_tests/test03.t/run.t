@@ -42,7 +42,7 @@ Safe-range:
   At time point 1:
   @200 (time point 1): ((0))
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
 $ echo '(x = x)' > test3_5.mfotl
 $ monpoly -verified -sig test3.sig -formula test3_5.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
@@ -131,7 +131,7 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
 $ echo '(x < x)' > test3_12.mfotl
 $ monpoly -verified -sig test3.sig -formula test3_12.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
@@ -201,7 +201,7 @@ Safe-range:
   At time point 1:
   @200 (time point 1): ()
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
 $ echo 'T() AND (x = x)' > test3_18.mfotl
 $ monpoly -verified -sig test3.sig -formula test3_18.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
@@ -286,7 +286,7 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
 $ echo 'T() AND (x < x) ' > test3_25.mfotl
 $ monpoly -verified -sig test3.sig -formula test3_25.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
@@ -358,7 +358,7 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
 $ echo 'T() AND NOT (x = x) ' > test3_31.mfotl
 $ monpoly -verified -sig test3.sig -formula test3_31.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
@@ -443,7 +443,7 @@ Domain dependent (integers):
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
 $ echo 'T() AND NOT (x < x)' > test3_38.mfotl
 $ monpoly -verified -sig test3.sig -formula test3_38.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp

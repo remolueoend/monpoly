@@ -192,7 +192,7 @@ Safe-range:
   At time point 2:
   @300 (time point 2): ()
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
 $ echo 'P(y) AND (x = x)' > test4_16.mfotl
 $ monpoly -sig test4.sig -formula test4_16.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
@@ -256,7 +256,7 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
 $ echo 'P(y) AND (x < x)' > test4_21.mfotl
 $ monpoly -sig test4.sig -formula test4_21.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
@@ -475,7 +475,7 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
 $ echo 'P(y) AND NOT (x = x)' > test4_38.mfotl
 $ monpoly -sig test4.sig -formula test4_38.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
@@ -538,7 +538,7 @@ Domain dependent (integers):
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
 
-TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
+NOTE zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
 $ echo 'P(y) AND NOT (x < x)' > test4_43.mfotl
 $ monpoly -sig test4.sig -formula test4_43.mfotl -log test4.log -verbose -nonewlastts
