@@ -84,7 +84,7 @@ A domain-dependent formula:
   $ monpoly -sig test1.sig -formula test1_7.mfotl -log test1.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     R(y,x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ()
   At time point 1:
@@ -310,7 +310,7 @@ A domain-dependent formula:
   $ monpoly -sig test1.sig -formula test1_24.mfotl -log test1.log -verbose -nonewlastts
   The analyzed formula is:
     P(x) SINCE[1,10] R(y,x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ()
   At time point 1:

@@ -82,3 +82,6 @@ val print_monitorability_results: formula -> bool * (formula * var) option -> un
 
 val is_future: formula -> bool
 (** Returns [true] if formula contains future operators *)
+
+val is_saferange: formula -> bool
+val is_tsfsaferange: formula -> bool

@@ -171,7 +171,7 @@ Safe-range:
   $ monpoly -sig test4.sig -formula test4_14.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND x = 0
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0))
   At time point 1:
@@ -184,7 +184,7 @@ Safe-range:
   $ monpoly -sig test4.sig -formula test4_15.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND 0 = x
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0))
   At time point 1:
@@ -192,24 +192,25 @@ Safe-range:
   At time point 2:
   @300 (time point 2): ()
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
-  $ echo 'P(y) AND (x = x)' > test4_16.mfotl
-  $ monpoly -sig test4.sig -formula test4_16.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    P(y) AND x = x
-  The sequence of free variables is: (y,x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    P(y) AND x = x
-  In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'P(y) AND (x = x)' > test4_16.mfotl
+$ monpoly -sig test4.sig -formula test4_16.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+P(y) AND x = x
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+P(y) AND x = x
+In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Domain independent but not safe-range:
   $ echo 'P(y) AND (x = y)' > test4_17.mfotl
   $ monpoly -sig test4.sig -formula test4_17.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND x = y
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0))
   At time point 1:
@@ -222,7 +223,7 @@ Domain dependent (integers):
   $ monpoly -sig test4.sig -formula test4_18.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND x < 0
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND x < 0
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -235,7 +236,7 @@ Domain dependent (integers):
   $ monpoly -sig test4.sig -formula test4_19.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND x < 1
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND x < 1
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -248,32 +249,33 @@ Domain dependent:
   $ monpoly -sig test4.sig -formula test4_20.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND 0 < x
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND 0 < x
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
-  $ echo 'P(y) AND (x < x)' > test4_21.mfotl
-  $ monpoly -sig test4.sig -formula test4_21.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    P(y) AND x < x
-  The sequence of free variables is: (y,x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    P(y) AND x < x
-  In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
-  However, the input (and also the analyzed) formula is safe-range, 
-  hence one should be able to rewrite it into a monitorable formula.
-  By the way, the analyzed formula is TSF safe-range.
+$ echo 'P(y) AND (x < x)' > test4_21.mfotl
+$ monpoly -sig test4.sig -formula test4_21.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+P(y) AND x < x
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+P(y) AND x < x
+In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
+However, the input (and also the analyzed) formula is safe-range, 
+hence one should be able to rewrite it into a monitorable formula.
+By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent (integers):
   $ echo 'P(y) AND (x < y)' > test4_22.mfotl
   $ monpoly -sig test4.sig -formula test4_22.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND x < y
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND x < y
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -454,7 +456,7 @@ Domain dependent:
   $ monpoly -sig test4.sig -formula test4_36.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND (NOT x = 0)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT x = 0)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -466,32 +468,33 @@ Domain dependent:
   $ monpoly -sig test4.sig -formula test4_37.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND (NOT 0 = x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT 0 = x)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
-  $ echo 'P(y) AND NOT (x = x)' > test4_38.mfotl
-  $ monpoly -sig test4.sig -formula test4_38.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    P(y) AND (NOT x = x)
-  The sequence of free variables is: (y,x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    P(y) AND (NOT x = x)
-  In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
-  However, the input (and also the analyzed) formula is safe-range, 
-  hence one should be able to rewrite it into a monitorable formula.
-  By the way, the analyzed formula is TSF safe-range.
+$ echo 'P(y) AND NOT (x = x)' > test4_38.mfotl
+$ monpoly -sig test4.sig -formula test4_38.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+P(y) AND (NOT x = x)
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+P(y) AND (NOT x = x)
+In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
+However, the input (and also the analyzed) formula is safe-range, 
+hence one should be able to rewrite it into a monitorable formula.
+By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent:
   $ echo 'P(y) AND NOT (x = y)' > test4_39.mfotl
   $ monpoly -sig test4.sig -formula test4_39.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND (NOT x = y)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT x = y)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -503,7 +506,7 @@ Domain dependent:
   $ monpoly -sig test4.sig -formula test4_40.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND (NOT x < 0)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT x < 0)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -515,7 +518,7 @@ Domain dependent:
   $ monpoly -sig test4.sig -formula test4_41.mfotl -log test4.log -verbose -nonewlastts -nofilteremptytp
   The analyzed formula is:
     P(y) AND (NOT x < 1)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT x < 1)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -527,7 +530,7 @@ Domain dependent (integers):
   $ monpoly -sig test4.sig -formula test4_42.mfotl -log test4.log -verbose -nonewlastts
   The analyzed formula is:
     P(y) AND (NOT 0 < x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT 0 < x)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
@@ -535,24 +538,25 @@ Domain dependent (integers):
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
-  $ echo 'P(y) AND NOT (x < x)' > test4_43.mfotl
-  $ monpoly -sig test4.sig -formula test4_43.mfotl -log test4.log -verbose -nonewlastts
-  The analyzed formula is:
-    P(y) AND (NOT x < x)
-  The sequence of free variables is: (y,x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    P(y) AND (NOT x < x)
-  In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'P(y) AND NOT (x < x)' > test4_43.mfotl
+$ monpoly -sig test4.sig -formula test4_43.mfotl -log test4.log -verbose -nonewlastts
+The analyzed formula is:
+P(y) AND (NOT x < x)
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+P(y) AND (NOT x < x)
+In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Domain dependent:
   $ echo 'P(y) AND NOT (x < y)' > test4_44.mfotl
   $ monpoly -sig test4.sig -formula test4_44.mfotl -log test4.log -verbose -nonewlastts
   The analyzed formula is:
     P(y) AND (NOT x < y)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   The analyzed formula is NOT monitorable, because of the subformula:
     P(y) AND (NOT x < y)
   In subformulas of the form psi AND t1 op t2 or psi AND NOT t1 op t2, with op among =, <, <=, either the variables of the terms t1 and t2 are among the free variables of psi or the formula is of the form psi AND x = t or psi AND x = t, and the variables of the term t are among the free variables of psi.

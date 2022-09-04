@@ -106,7 +106,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_14.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x = 0
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(4,0))
 
@@ -114,7 +114,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_15.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND 0 = x
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(4,0))
 
@@ -122,7 +122,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_16.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x = x
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(0,4),(4,0),(4,4))
 
@@ -130,7 +130,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_17.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x = y
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(4,4))
 
@@ -138,7 +138,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_18.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x < 0
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ()
 
@@ -146,7 +146,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_19.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x < 3
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(4,0))
 
@@ -154,7 +154,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_20.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND 0 < x
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,4),(4,4))
 
@@ -162,7 +162,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_21.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x < x
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ()
 
@@ -170,7 +170,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_22.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND x < y
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((4,0))
 
@@ -282,7 +282,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_36.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x = 0)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,4),(4,4))
 
@@ -290,7 +290,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_37.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT 0 = x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,4),(4,4))
 
@@ -298,7 +298,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_38.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x = x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ()
 
@@ -306,7 +306,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_39.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x = y)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,4),(4,0))
 
@@ -314,7 +314,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_40.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x < 0)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(0,4),(4,0),(4,4))
 
@@ -322,7 +322,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_41.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x < 3)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,4),(4,4))
 
@@ -330,7 +330,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_42.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT 0 < x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(4,0))
 
@@ -338,7 +338,7 @@
   $ monpoly -verified -sig test5.sig -formula test5_43.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x < x)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(0,4),(4,0),(4,4))
 
@@ -346,6 +346,6 @@
   $ monpoly -verified -sig test5.sig -formula test5_44.mfotl -log test5.log -verbose -nonewlastts
   The analyzed formula is:
     R(y,x) AND (NOT x < y)
-  The sequence of free variables is: (y,x)
+  The sequence of free variables is: (x,y)
   At time point 0:
   @100 (time point 0): ((0,0),(0,4),(4,4))

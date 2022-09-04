@@ -110,8 +110,9 @@ let analyse_formulafile ic =
   let ic = open_in !formulafile in
   Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) 
 
+(* TODO zumstegr: re-enable after merging CMFOTL branch *)
 let main () = 
-  let sign = Log_parser.parse_signature_file !sigfile in
+  (* let sign = Log_parser.parse_signature_file !sigfile in
   let f = analyse_formulafile !formulafile in
   Rewriting.unfold_let := None;
   let _, pf_orig, _ = Rewriting.check_formula sign f in
@@ -120,7 +121,8 @@ let main () =
   print_string "# without unfolding\n";
   print_result (analyze [] pf_orig);
   print_string "\n# with unfolding\n";
-  print_result (analyze [] pf_unfolded)
+  print_result (analyze [] pf_unfolded) *)
+  ()
 
 let usage_string = "Usage: formula_stats -sig <file> -formula <file> [-no_rw]"
 

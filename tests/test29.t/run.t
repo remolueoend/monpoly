@@ -217,7 +217,7 @@
   $ monpoly -sig test29.sig -formula test29_19.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- AVG x; x I(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ((7,7,7),(8,8,8))
   At time point 1:
@@ -229,7 +229,7 @@
   $ monpoly -sig test29.sig -formula test29_20.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- SUM x; x I(x)) AND t = i2f(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ((7,7,7),(8,8,8))
   At time point 1:
@@ -241,7 +241,7 @@
   $ monpoly -sig test29.sig -formula test29_21.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- CNT x; x I(x)) AND t = i2f(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ((1,7,1),(1,8,1))
   At time point 1:
@@ -253,7 +253,7 @@
   $ monpoly -sig test29.sig -formula test29_22.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- MIN x; x I(x)) AND t = i2f(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ((7,7,7),(8,8,8))
   At time point 1:
@@ -265,7 +265,7 @@
   $ monpoly -sig test29.sig -formula test29_23.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- MAX x; x I(x)) AND t = i2f(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ((7,7,7),(8,8,8))
   At time point 1:
@@ -277,7 +277,7 @@
   $ monpoly -sig test29.sig -formula test29_24.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- MED x; x I(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ((7,7,7),(8,8,8))
   At time point 1:
@@ -289,7 +289,7 @@
   $ monpoly -sig test29.sig -formula test29_25.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- AVG x; x F(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:
@@ -301,7 +301,7 @@
   $ monpoly -sig test29.sig -formula test29_26.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- SUM x; x F(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:
@@ -313,7 +313,7 @@
   $ monpoly -sig test29.sig -formula test29_27.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- CNT x; x F(x)) AND t = i2f(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:
@@ -325,7 +325,7 @@
   $ monpoly -sig test29.sig -formula test29_28.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- MIN x; x F(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:
@@ -337,7 +337,7 @@
   $ monpoly -sig test29.sig -formula test29_29.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- MAX x; x F(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:
@@ -349,7 +349,7 @@
   $ monpoly -sig test29.sig -formula test29_30.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- MED x; x F(x)) AND t = f2i(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:
@@ -371,7 +371,7 @@
   $ monpoly -sig test29.sig -formula test29_33.mfotl -log test29.log -verbose -nonewlastts
   The analyzed formula is:
     (r <- CNT x; x W(x)) AND t = i2f(r)
-  The sequence of free variables is: (r,x,t)
+  The sequence of free variables is: (r,t,x)
   At time point 0:
   @0 (time point 0): ()
   At time point 1:

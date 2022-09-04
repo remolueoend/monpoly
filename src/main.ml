@@ -128,13 +128,12 @@ let main () =
       let is_mon = Rewriting.check_monitorability dbschema pf in
       if !sigout then Predicate.print_vartypes_list vartypes
       else if not (fst is_mon) then (
+        if !Misc.verified then Rewriting.print_monitorability_results pf is_mon else
         (* if the compiled formula is monitorable, we continue with the monitoring.
-           Otherwise, we print the monitorability results of the extended formula. *)
+           Otherwise, we print the monitorability results of the CMFODL formula. *)
         match CMFOTL.Monitorability.is_monitorable f with
         | (false, Some reason) as result ->
             CMFOTL.Monitorability.print_results pf result ;
-            Printf.eprintf "\n\n%!" ;
-            Rewriting.print_monitorability_results pf is_mon
         | _ ->
             Rewriting.print_monitorability_results pf is_mon ;
             failwith

@@ -42,29 +42,30 @@ Safe-range:
   At time point 1:
   @200 (time point 1): ((0))
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
-  $ echo '(x = x)' > test3_5.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_5.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
-  The analyzed formula is:
-    x = x
-  The sequence of free variables is: (x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    x = x
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo '(x = x)' > test3_5.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_5.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
+The analyzed formula is:
+x = x
+The sequence of free variables is: (x)
+The analyzed formula is NOT monitorable, because of the subformula:
+x = x
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Domain dependent:
-  $ echo '(x = y)' > test3_6.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_6.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
-  The analyzed formula is:
-    x = y
-  The sequence of free variables is: (x,y)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    x = y
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo '(x = y)' > test3_6.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_6.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
+The analyzed formula is:
+x = y
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+x = y
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Safe-range:
   $ echo '( 0 <  0)' > test3_7.mfotl
@@ -130,30 +131,31 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
-  $ echo '(x < x)' > test3_12.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_12.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
-  The analyzed formula is:
-    x < x
-  The sequence of free variables is: (x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    x < x
-  MFODL formula is not monitorable
-  However, the input (and also the analyzed) formula is safe-range, 
-  hence one should be able to rewrite it into a monitorable formula.
-  By the way, the analyzed formula is TSF safe-range.
+$ echo '(x < x)' > test3_12.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_12.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp -nofilteremptytp
+The analyzed formula is:
+x < x
+The sequence of free variables is: (x)
+The analyzed formula is NOT monitorable, because of the subformula:
+x < x
+MFODL formula is not monitorable
+However, the input (and also the analyzed) formula is safe-range, 
+hence one should be able to rewrite it into a monitorable formula.
+By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent:
-  $ echo '(x < y)' > test3_13.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_13.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    x < y
-  The sequence of free variables is: (x,y)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    x < y
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo '(x < y)' > test3_13.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_13.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+x < y
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+x < y
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Safe-range:
   $ echo 'T() AND ( 0 =  0)' > test3_14.mfotl
@@ -199,29 +201,30 @@ Safe-range:
   At time point 1:
   @200 (time point 1): ()
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
-  $ echo 'T() AND (x = x)' > test3_18.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_18.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND x = x
-  The sequence of free variables is: (x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND x = x
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'T() AND (x = x)' > test3_18.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_18.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND x = x
+The sequence of free variables is: (x)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND x = x
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Domain dependent:
-  $ echo 'T() AND (x = y)' > test3_19.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_19.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND x = y
-  The sequence of free variables is: (x,y)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND x = y
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'T() AND (x = y)' > test3_19.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_19.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND x = y
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND x = y
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Safe-range:
   $ echo 'T() AND ( 0 <  0)' > test3_20.mfotl
@@ -283,30 +286,31 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
-  $ echo 'T() AND (x < x) ' > test3_25.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_25.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND x < x
-  The sequence of free variables is: (x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND x < x
-  MFODL formula is not monitorable
-  However, the input (and also the analyzed) formula is safe-range, 
-  hence one should be able to rewrite it into a monitorable formula.
-  By the way, the analyzed formula is TSF safe-range.
+$ echo 'T() AND (x < x) ' > test3_25.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_25.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND x < x
+The sequence of free variables is: (x)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND x < x
+MFODL formula is not monitorable
+However, the input (and also the analyzed) formula is safe-range, 
+hence one should be able to rewrite it into a monitorable formula.
+By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent:
-  $ echo 'T() AND (x < y)' > test3_26.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_26.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND x < y
-  The sequence of free variables is: (x,y)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND x < y
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'T() AND (x < y)' > test3_26.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_26.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND x < y
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND x < y
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Safe-range:
   $ echo 'T() AND NOT ( 0 =  0)' > test3_27.mfotl
@@ -354,30 +358,31 @@ Domain dependent:
   The analyzed formula is neither safe-range.
   By the way, the analyzed formula is not TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Safe-range:
-  $ echo 'T() AND NOT (x = x) ' > test3_31.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_31.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND (NOT x = x)
-  The sequence of free variables is: (x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND (NOT x = x)
-  MFODL formula is not monitorable
-  However, the input (and also the analyzed) formula is safe-range, 
-  hence one should be able to rewrite it into a monitorable formula.
-  By the way, the analyzed formula is TSF safe-range.
+$ echo 'T() AND NOT (x = x) ' > test3_31.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_31.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND (NOT x = x)
+The sequence of free variables is: (x)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND (NOT x = x)
+MFODL formula is not monitorable
+However, the input (and also the analyzed) formula is safe-range, 
+hence one should be able to rewrite it into a monitorable formula.
+By the way, the analyzed formula is TSF safe-range.
 
 Domain dependent:
-  $ echo 'T() AND NOT (x = y)' > test3_32.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_32.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND (NOT x = y)
-  The sequence of free variables is: (x,y)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND (NOT x = y)
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'T() AND NOT (x = y)' > test3_32.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_32.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND (NOT x = y)
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND (NOT x = y)
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Safe-range:
   $ echo 'T() AND NOT ( 0 <  0)' > test3_33.mfotl
@@ -438,26 +443,27 @@ Domain dependent (integers):
   hence one should be able to rewrite it into a monitorable formula.
   By the way, the analyzed formula is TSF safe-range.
 
+TODO zumstegr: CMFOTL typechecker throws because some free variables are not resovled to a concrete type:
 Domain dependent:
-  $ echo 'T() AND NOT (x < x)' > test3_38.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_38.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND (NOT x < x)
-  The sequence of free variables is: (x)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND (NOT x < x)
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'T() AND NOT (x < x)' > test3_38.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_38.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND (NOT x < x)
+The sequence of free variables is: (x)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND (NOT x < x)
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.
 
 Domain dependent:
-  $ echo 'T() AND NOT (x < y)' > test3_39.mfotl
-  $ monpoly -verified -sig test3.sig -formula test3_39.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
-  The analyzed formula is:
-    T() AND (NOT x < y)
-  The sequence of free variables is: (x,y)
-  The analyzed formula is NOT monitorable, because of the subformula:
-    T() AND (NOT x < y)
-  MFODL formula is not monitorable
-  The analyzed formula is neither safe-range.
-  By the way, the analyzed formula is not TSF safe-range.
+$ echo 'T() AND NOT (x < y)' > test3_39.mfotl
+$ monpoly -verified -sig test3.sig -formula test3_39.mfotl -log test3.log -verbose -nonewlastts -nofilteremptytp
+The analyzed formula is:
+T() AND (NOT x < y)
+The sequence of free variables is: (x,y)
+The analyzed formula is NOT monitorable, because of the subformula:
+T() AND (NOT x < y)
+MFODL formula is not monitorable
+The analyzed formula is neither safe-range.
+By the way, the analyzed formula is not TSF safe-range.

@@ -390,12 +390,12 @@ let rec is_mfodl ((_, f) : 'a cplx_formula) =
 (* STRING FUNCTIONS *)
 
 let rec string_of_tcst (sorts : custom_sorts) = function
-  | TFloat -> "TFloat"
-  | TInt -> "TInt"
-  | TStr -> "TStr"
-  | TRegexp -> "TRegexp"
-  | TBool -> "TBool"
-  | TNull -> "TNull"
+  | TFloat -> "Float"
+  | TInt -> "Int"
+  | TStr -> "String"
+  | TRegexp -> "Regexp"
+  | TBool -> "Bool"
+  | TNull -> "Null"
   | TRef ctor -> (
     (* print their structure instead of teir ctor name for inline type *)
     match List.assoc ctor sorts with
@@ -1892,17 +1892,31 @@ module Monitorability = struct
   let print_reason str reason =
     match reason with
     | Some (f, msg) ->
-        Printf.eprintf "%s, because of the subformula: %s\n%!%s\n%!" str
+        Printf.eprintf "%s, because of the subformula:\n  %s\n%!%s\n%!" str
           (string_of_formula "" f) msg
     | None -> failwith "[Rewriting.print_reason] internal error"
 
   let print_results (f : MFOTL.formula) (is_mon, reason) =
     if !Misc.verbose || !Misc.checkf then
-      if is_mon then Printf.eprintf "The extended formula is monitorable.\n%!"
-      else print_reason "The extended formula is NOT monitorable" reason
+      if is_mon then Printf.eprintf "The analyzed formula is monitorable.\n%!"
+      else (
+        print_reason "The analyzed formula is NOT monitorable" reason ;
+        (* NOTE zumstegr: safe-range and TSF safe-range checks have not yet been ported to CMFODL formulas *)
+        let is_sr = Rewriting.is_saferange f in
+        if is_sr then
+          prerr_endline
+            "However, the input (and also the analyzed) formula is safe-range, \n\
+             hence one should be able to rewrite it into a monitorable formula."
+        else prerr_endline "The analyzed formula is neither safe-range." ;
+        let is_tsfsr = Rewriting.is_tsfsaferange f in
+        if is_tsfsr then
+          prerr_endline "By the way, the analyzed formula is TSF safe-range."
+        else
+          prerr_endline
+            "By the way, the analyzed formula is not TSF safe-range." )
     else if not is_mon then
       Printf.eprintf
-        "The extended formula is NOT monitorable. Use the -check or -verbose \
+        "The analyzed formula is NOT monitorable. Use the -check or -verbose \
          flags.\n\
          %!"
 end
@@ -2028,7 +2042,7 @@ let initial_type_context (signatures : signatures) (f : unit cplx_formula) :
     TSymb (cls, !tsymb_id) in
   let native_predicates : predicate_schema =
     [ (("tp", 1), [ref (TCst TInt)]); (("ts", 1), [ref (TCst TInt)])
-    ; (("tpts", 1), [ref (TCst TInt); ref (TCst TInt)]) ] in
+    ; (("tpts", 2), [ref (TCst TInt); ref (TCst TInt)]) ] in
   (* create initial Δ *)
   let sch : predicate_schema =
     List.fold_left
@@ -2062,7 +2076,9 @@ let initial_type_context (signatures : signatures) (f : unit cplx_formula) :
       [] signatures in
   (* create initial Γ *)
   let globals =
-    List.map (fun v -> (v, ref (new_type_symbol TAny))) (free_vars f) in
+    List.map
+      (fun v -> (v, ref (new_type_symbol TAny)))
+      (free_vars f |> List.sort compare) in
   {predicates= sch @ native_predicates; sorts; vars= globals; new_type_symbol}
 
 (** type checks a complex formula given matching signature definitions.
@@ -2645,7 +2661,7 @@ and _compile_formula (f_scope : 'a cplx_formula) (input : 'a cplx_formula) :
   | Since (i, f1, f2) ->
       Since (i, _compile_formula f_scope f1, _compile_formula f_scope f2)
   | Until (i, f1, f2) ->
-      Since (i, _compile_formula f_scope f1, _compile_formula f_scope f2)
+      Until (i, _compile_formula f_scope f1, _compile_formula f_scope f2)
   | Frex (i, r) -> Frex (i, compile_regex f_scope r)
   | Prex (i, r) -> Prex (i, compile_regex f_scope r)
 
