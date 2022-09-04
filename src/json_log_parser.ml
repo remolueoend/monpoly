@@ -181,7 +181,7 @@ let rec parse_record (pb : parsebuf) (reg_tuple : string -> string list -> unit)
     lines of JSON strings. *)
 module Make (C : Log_parser.Consumer) = struct
   let parse (dbschema : Db.schema) (lexbuf : Lexing.lexbuf) (ctxt : C.t)
-      signatures : bool =
+      (signatures : Signature_ast.signatures) : bool =
     let pb = init_parsebuf lexbuf signatures in
     let debug msg =
       if Misc.debugging Misc.Dbg_log then

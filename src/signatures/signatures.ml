@@ -160,7 +160,7 @@ let typecheck (signatures : signatures) : unit =
         match atyp with
         | TRef _ ->
             raise (InvalidPredicateArgsType (name, aname, string_of_range loc))
-        | TInt | TFloat | TStr | TRegexp -> () )
+        | TInt | TFloat | TStr | TRegexp | TBool | TNull -> () )
       args in
   (* typecheck all fields of a record type and build up type dependencies.  *)
   let typecheck_record_decl deps ((sort_name, fields) : record_decl) =
@@ -227,50 +227,3 @@ let parse_signature_file (fname : string) : signatures =
       @@ Printf.sprintf "Parse error at: %s"
            (Range.string_of_range (Range.lex_range lexbuf)) in
   close_in ic ; schema
-
-(* **** INLINE TESTS **** *)
-(* let%test_module "typecheck tests" =
-   ( module struct
-     exception AssertException of string
-
-     let assert_str (actual : string) (expected : string) : unit =
-       if compare actual expected = 0 then ()
-       else
-         raise
-           (AssertException
-              (Printf.sprintf "Expected: %s\nActual: %s" expected actual) )
-
-     let%test_unit "typecheck throws on duplicated types" =
-       let decls =
-         [ Record (no_node ("SomeType", []))
-         ; Record
-             { elt= ("SomeType", [])
-             ; loc= mk_range "f.sig" (mk_pos 1 1) (mk_pos 1 10) } ] in
-       try
-         typecheck decls ;
-         raise (AssertException "Test did not throw")
-       with DuplicateType msg ->
-         assert_str msg "Duplicated type SomeType at f.sig:[1.1-1.10]"
-
-     let%test_unit "typecheck can resolve type references" =
-       let decls =
-         [ Record
-             (no_node
-                ("SomeType", [no_node {fname= "f1"; ftyp= Complex "AnotherType"}]) )
-         ; Record (no_node ("AnotherType", [])) ] in
-       typecheck decls
-
-     let%test_unit "throws if unknown type reference is detected" =
-       let decls =
-         [ Record
-             (no_node
-                ( "SomeType"
-                , [ { elt= {fname= "f1"; ftyp= Complex "TypeA"}
-                    ; loc= ("f.sig", mk_pos 2 42, mk_pos 2 45) } ] ) )
-         ; Record (no_node ("AnotherType", [])) ] in
-       try
-         typecheck decls ;
-         raise (AssertException "Test did not throw")
-       with UnknownType msg ->
-         assert_str msg "Unknown type TypeA at f.sig:[2.42-2.45]"
-   end ) *)

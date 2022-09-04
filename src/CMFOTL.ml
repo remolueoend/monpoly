@@ -62,15 +62,14 @@ let filter_some l =
 (* DATA STRUCTURES *)
 type tcst = Signature_ast.ty
 
-(* TODO: should be string * tsymb ref: *)
-type tcl = TNum | TAny | TOrd | TRecord of (string * tsymb) list
-and tsymb = TSymb of (tcl * int) | TCst of tcst | TNever
+type tcl = TNum | TAny | TOrd | TRecord of (string * ty) list
+and ty = TSymb of (tcl * int) | TCst of tcst | TNever
 
 (** represents a single custom product sort *)
 type sort = {inline: bool; fields: (string * tcst) list}
 
 (** Γ *)
-type symbol_table = (string * tsymb ref) list
+type symbol_table = (string * ty ref) list
 
 and cst_bool = True | False
 
@@ -85,7 +84,7 @@ and cst =
   | Null
 
 (** Δ *)
-and predicate_schema = ((string * int) * tsymb ref list) list
+and predicate_schema = ((string * int) * ty ref list) list
 
 (** T *)
 and custom_sorts = (var * sort) list
@@ -117,7 +116,7 @@ and type_context =
   { predicates: predicate_schema
   ; sorts: custom_sorts
   ; vars: symbol_table
-  ; new_type_symbol: tcl -> tsymb }
+  ; new_type_symbol: tcl -> ty }
 
 let type_of_cst = function
   | Int _ -> TInt
@@ -140,7 +139,7 @@ type cplx_predicate = string * int * cplx_term list
 let get_predicate_args ((name, ar, args) : cplx_predicate) = args
 
 (** assigns a new type to an existing variable in the given symbol table. *)
-let update_var_ty (vars : symbol_table) (var : var) (new_ty : tsymb) : unit =
+let update_var_ty (vars : symbol_table) (var : var) (new_ty : ty) : unit =
   List.iter (fun (v, tyr) -> if v == var then tyr := new_ty) vars
 
 (** returns the free variables in a given term *)
@@ -1034,10 +1033,10 @@ let check_wff (f : 'a cplx_formula) =
        operator. It is hence not monitorable." ;
   cl && ci && cb && ca
 
-exception IncompatibleTypes of tsymb * tsymb
+exception IncompatibleTypes of ty * ty
 
 module TypeMap = Map.Make (struct
-  type t = tsymb
+  type t = ty
 
   let compare = compare
 end)
@@ -1053,7 +1052,7 @@ let type_lattice =
 
 (** returns whether ty1 is more precise than t2 based on the 'type_lattice' relation.
     If one of the two types is not part of the type_lattice relation the result is always false. *)
-let rec is_more_precise (ty1 : tsymb) (ty2 : tsymb) : bool =
+let rec is_more_precise (ty1 : ty) (ty2 : ty) : bool =
   let gen = function TSymb (cls, _) -> TSymb (cls, 0) | t -> t in
   if TypeMap.mem (gen ty1) type_lattice then
     let next = TSymb (TypeMap.find (gen ty1) type_lattice, 0) in
@@ -1080,7 +1079,7 @@ let rec compare_tcst (sorts : custom_sorts) t1 t2 =
 
 (** Returns the meet of the two given types.
     Raises an IncompatibleTypes exception whenever the meet of the two types is the bottom type. *)
-let rec type_meet (tctxt : type_context) (t1 : tsymb) (t2 : tsymb) : tsymb =
+let rec type_meet (tctxt : type_context) (t1 : ty) (t2 : ty) : ty =
   (* first use the more-precise relation whenever possible and return
      the more precise type of the two: *)
   if is_more_precise t1 t2 then t1
@@ -1122,8 +1121,8 @@ let rec type_meet (tctxt : type_context) (t1 : tsymb) (t2 : tsymb) : tsymb =
 (** Accepts the fields of two symbolic record types and returns their meet.
     Raises an IncompatibleTypes exception whenever the meet of the types of a common field
     are incompatible, i.e. equal to bottom type. *)
-and merge_records (tctxt : type_context) (t1_fields : (var * tsymb) list)
-    (t2_fields : (var * tsymb) list) : tsymb =
+and merge_records (tctxt : type_context) (t1_fields : (var * ty) list)
+    (t2_fields : (var * ty) list) : ty =
   (* works similar to the merge function of a merge-sort. Assumes fields to be sorted by name. *)
   let rec merge = function
     | [], [] -> []
@@ -1146,7 +1145,7 @@ and merge_records (tctxt : type_context) (t1_fields : (var * tsymb) list)
     Raises an error if the record fields do not describe a subtype of the partial type
     described by its fields. *)
 and cast_to_record (tctxt : type_context) (fields : (var * tcst) list)
-    (fs : (var * tsymb) list) : bool =
+    (fs : (var * ty) list) : bool =
   (* raise if reference type is missing a field: *)
   if List.exists (fun (name, _) -> List.assoc_opt name fields = None) fs then
     false
@@ -1165,10 +1164,10 @@ and cast_to_record (tctxt : type_context) (fields : (var * tcst) list)
 (** Given that v:t1 and v:t2 for some v,
    checks which type is more specific and updates the symbol table
    of the given formula and all its subformulas. *)
-let propagate_type_constraints (t1 : tsymb) (t2 : tsymb) (t : cplx_term)
+let propagate_type_constraints (t1 : ty) (t2 : ty) (t : cplx_term)
     (f : type_context cplx_formula) =
   let tctxt = f_annot f in
-  let rec collect_constraints (meet : tsymb) (ty : tsymb) : (tsymb * tsymb) list
+  let rec collect_constraints (meet : ty) (ty : ty) : (ty * ty) list
       =
     if meet = ty then []
     else
@@ -1200,7 +1199,7 @@ let propagate_type_constraints (t1 : tsymb) (t2 : tsymb) (t : cplx_term)
           (string_of_tsymb tctxt.sorts t1) in
       failwith err_str in
   let constraints = collect_constraints meet t1 @ collect_constraints meet t2 in
-  let rec propagate_to_record (fields : (var * tsymb) list) : (var * tsymb) list
+  let rec propagate_to_record (fields : (var * ty) list) : (var * ty) list
       =
     List.map
       (fun (f, ftyp) ->
@@ -1209,7 +1208,7 @@ let propagate_type_constraints (t1 : tsymb) (t2 : tsymb) (t : cplx_term)
             (f, TSymb (TRecord (propagate_to_record nested_fields), i))
         | _ -> (f, ftyp) )
       fields in
-  let propagate_to_tsymb (typ : tsymb ref) : unit =
+  let propagate_to_tsymb (typ : ty ref) : unit =
     match List.assoc_opt !typ constraints with
     | Some new_ty -> typ := new_ty
     | _ -> (
@@ -1263,8 +1262,8 @@ Propagates the new type information to the given type context
 or raises a type exception if the given term is not castable to typ.
 *)
 let type_check_term_debug (d : bool) (root : type_context cplx_formula)
-    (tctxt : type_context) (typ : tsymb) (term : cplx_term) =
-  let rec type_check_term (tctxt : type_context) typ term : tsymb =
+    (tctxt : type_context) (typ : ty) (term : cplx_term) =
+  let rec type_check_term (tctxt : type_context) typ term : ty =
     let sch, sorts, vars = (tctxt.predicates, tctxt.sorts, tctxt.vars) in
     if d then (
       Printf.eprintf "[Typecheck.type_check_term] \n%!Δ: %s\n%!Γ: %s\n%!⊢ "
@@ -1552,7 +1551,7 @@ let type_check_formula_debug (d : bool) (root : type_context cplx_formula) =
           type_check_formula f ;
           (* typecheck x under the type context of the inner formula: *)
           let agg_ty = type_check_term_debug d root f_ctx exp_agg_ty (Var x) in
-          (* TODO: allow gs to be of complex type by correctly binding their scopes *)
+          (* TODO zumstegr: allow gs to be of complex type by correctly binding their scopes *)
           if
             List.exists
               (fun g ->
@@ -1938,7 +1937,7 @@ let print_formula_details (f : type_context cplx_formula) (c : MFOTL.formula) =
 let rec init_typed_formula (tctxt : type_context) (f : 'a cplx_formula) :
     type_context cplx_formula =
   let self = init_typed_formula in
-  (* TODO: if the symbol table of a sub-formula contains only a subset of all
+  (* TODO zumstegr: if the symbol table of a sub-formula contains only a subset of all
      free variables of its scope, the constraint propagation won't be able
      to update the type of variables not part of the symbol table.
      we therefore include all free variables from the parent formula for now,
@@ -2181,7 +2180,7 @@ let rec replace_var (old : cplx_term) (n : cplx_term) (f : 'a cplx_formula) :
 (** replaces the arguments in the usage of the given predicate with a new argument list.
     new_args will be called with the list of original arguments.
     shadowed predicates in LET statements won't be updated. *)
-let rec replace_pred_args (p : cplx_predicate) (new_arg_tys : tsymb ref list)
+let rec replace_pred_args (p : cplx_predicate) (new_arg_tys : ty ref list)
     (new_args : cplx_term list -> cplx_term list) (f : type_context cplx_formula)
     : type_context cplx_formula =
   let rec replace_pred_re r =
@@ -2283,7 +2282,7 @@ let compile_tcl (tcl : tcl) : Predicate.tcl =
   | TOrd -> TAny
   | TRecord _ -> failwith "[compile_tcl] Cannot compile TRecord"
 
-let compile_tsymb (tsymb : tsymb) : Predicate.tsymb =
+let compile_tsymb (tsymb : ty) : Predicate.tsymb =
   match tsymb with
   | TSymb (s, i) -> TSymb (compile_tcl s, i)
   | TCst c -> TCst (compile_tcst c)

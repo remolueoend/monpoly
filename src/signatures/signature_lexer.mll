@@ -53,7 +53,7 @@
     
   let lex_long_range lexbuf : Range.t =
     let end_p = lexeme_end_p lexbuf in
-    mk_range end_p.pos_fname (!start_lex) (pos_of_lexpos end_p)  
+    (end_p.pos_fname, (!start_lex), (pos_of_lexpos end_p))
 
 }
 
