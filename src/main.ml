@@ -47,36 +47,43 @@ open Algorithm
 open Rewriting
 
 let usage_string =
-  "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]\n\
-  \               [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]\n\
-  \               [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]\n\
-  \               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-stats]\n\
-  \               [-ignore_parse_errors] [-stop_at_out_of_order_ts]\n\
-  \               [-stop_at_first_viol] [-load <file>]"
+  "Usage: monpoly -sig <file> -formula <file> [-negate] [-log <file>]
+               [-help] [-version] [-debug <unit>] [-verbose] [-no_rw]
+               [-check] [-sigout] [-unix] [-mem] [-nonewlastts] [-verified]
+               [-no_mw] [-nofilterrel] [-nofilteremptytp] [-stats]
+               [-ignore_parse_errors] [-stop_at_out_of_order_ts]
+               [-stop_at_first_viol] [-load <file>] [-json_json] [-stop_at_first_unknown_json]"
 
-let print_usage_and_exit () = prerr_endline usage_string ; exit 2
+let print_usage_and_exit () =
+  prerr_endline usage_string;
+  exit 2
+
+
 let formulafile = ref ""
 
 let analyze_formulafile () =
   let ic = open_in !formulafile in
   try
-    let f =
-      Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) in
+    let f = Formula_parser.formula Formula_lexer.token (Lexing.from_channel ic) in
     if Misc.debugging Dbg_all then
-      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n%!" ;
+      Printf.eprintf "[Main.main] The formula file was parsed correctly.\n%!";
     f
-  with e ->
-    Printf.eprintf "[Main.main] Failed to parse formula file\n%!" ;
-    raise e
+  with e -> Printf.eprintf "[Main.main] Failed to parse formula file\n%!"; raise e
+
+
+
+
 
 let logfile = ref ""
 let sigfile = ref ""
 let debug = ref ""
+
 let negate = ref false
 let inc = ref false
 let memarg = ref false
 let sigout = ref false
 let statsarg = ref false
+
 let nofilteremptytpopt = ref false
 let nofilterrelopt = ref false
 
@@ -85,29 +92,41 @@ let nofilterrelopt = ref false
 let starttime = Unix.time ()
 
 let sigusr1_handler =
-  Sys.Signal_handle
-    (fun _ ->
-      prerr_endline "SIGUSR1 handler: exiting..." ;
-      exit 0 )
+  (Sys.Signal_handle
+     (fun _ ->
+        prerr_endline "SIGUSR1 handler: exiting...";
+        exit 0))
 
-let sigusr2_handler = Sys.Signal_handle (fun _ -> Misc.usr2 := true)
-let sigalrm_handler = Sys.Signal_handle (fun _ -> Misc.alrm := true)
+let sigusr2_handler =
+  (Sys.Signal_handle
+     (fun _ -> Misc.usr2 := true ))
+
+let sigalrm_handler =
+  (Sys.Signal_handle
+     (fun _ -> Misc.alrm := true ))
+
+
 let displayver = ref false
 
 let print_banner () =
   let banner =
     match Build_info.V1.version () with
     | None -> "MonPoly (development build)"
-    | Some v -> "MonPoly, version " ^ Build_info.V1.Version.to_string v in
+    | Some v -> "MonPoly, version " ^ Build_info.V1.Version.to_string v
+  in
   print_endline banner
 
 let main () =
-  Sys.set_signal Sys.sigusr1 sigusr1_handler ;
-  Sys.set_signal Sys.sigusr2 sigusr2_handler ;
-  Sys.set_signal Sys.sigalrm sigalrm_handler ;
-  Misc.split_debug !debug ;
-  if !displayver then print_banner ()
-  else if !formulafile = "" then print_usage_and_exit ()
+  Sys.set_signal Sys.sigusr1 sigusr1_handler;
+  Sys.set_signal Sys.sigusr2 sigusr2_handler;
+  Sys.set_signal Sys.sigalrm sigalrm_handler;
+
+  Misc.split_debug !debug;
+
+  if !displayver then
+    print_banner ()
+  else if !formulafile = "" then
+    print_usage_and_exit ()
   else
     (* read formula file *)
     let f = analyze_formulafile () in

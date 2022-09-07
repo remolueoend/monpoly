@@ -151,7 +151,6 @@ rule
   | quoted_string as lxm        { f "STR_CST" lexbuf; STR_CST lxm }
   | 'r' quoted_string as lxm    { f "REGEXP" lexbuf; REGEXP_CST lxm }
   | ident as lxm                { f "IDENT" lexbuf ; IDENT lxm }
-  (* | string as lxm               { f "STR" lexbuf; STR lxm } *)
 
   | "(*"                        { f "multi-line comment" lexbuf; comment lexbuf }
   | "#"                         { f "line comment" lexbuf; line_comment lexbuf}

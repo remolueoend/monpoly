@@ -7,6 +7,7 @@
   (name libmonpoly)
   (public_name libmonpoly)
   (libraries str unix zarith yojson)
+  ; zumstegr: (enable for inline tests (none so far))
   ; (inline_tests)
   ; (preprocess (pps ppx_inline_test))
   (modules (:standard \ Main)))
