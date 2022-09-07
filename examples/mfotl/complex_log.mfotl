@@ -1,0 +1,2 @@
+LET is_error(entry) = entry.level = "ERROR" IN
+Log(l) AND l.type = "Log" AND is_error(l.event.log_entry)

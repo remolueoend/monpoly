@@ -1,4 +1,0 @@
-@10 {"is_error": false, "source": "kernel"}
-@20 {"is_error": true, "source": "driver"}
-@25 {"is_error": true, "source": "driver"}
-@30

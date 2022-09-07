@@ -1167,8 +1167,7 @@ and cast_to_record (tctxt : type_context) (fields : (var * tcst) list)
 let propagate_type_constraints (t1 : ty) (t2 : ty) (t : cplx_term)
     (f : type_context cplx_formula) =
   let tctxt = f_annot f in
-  let rec collect_constraints (meet : ty) (ty : ty) : (ty * ty) list
-      =
+  let rec collect_constraints (meet : ty) (ty : ty) : (ty * ty) list =
     if meet = ty then []
     else
       match (meet, ty) with
@@ -1199,8 +1198,7 @@ let propagate_type_constraints (t1 : ty) (t2 : ty) (t : cplx_term)
           (string_of_tsymb tctxt.sorts t1) in
       failwith err_str in
   let constraints = collect_constraints meet t1 @ collect_constraints meet t2 in
-  let rec propagate_to_record (fields : (var * ty) list) : (var * ty) list
-      =
+  let rec propagate_to_record (fields : (var * ty) list) : (var * ty) list =
     List.map
       (fun (f, ftyp) ->
         match ftyp with
@@ -2099,6 +2097,7 @@ let rec typecheck_formula (signatures : signatures) (f : unit cplx_formula) :
   (* Make sure all variables in all symbol tables have been resolved
      to a concrete type. *)
   check_unresolved_vars f ;
+  (* TODO zumstegr: output would actually be useful, but currently breaks all tests. *)
   if debug && false then (
     Printf.eprintf
       "[Typecheck.typecheck_formula] The final type judgement is (%s; %s) ⊢ "

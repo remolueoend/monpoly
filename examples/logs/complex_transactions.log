@@ -1,0 +1,8 @@
+@10
+{"client": {"name": "alice", "id": "a"}, "amount": 200}
+@20
+{"client": {"name": "bob", "id": "b"}, "amount": 200}
+{"client": {"name": "alice", "id": "a"}, "amount": 200}
+@30
+{"client": {"name": "alice", "id": "a"}, "amount": 200}
+@40

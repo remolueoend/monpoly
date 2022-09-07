@@ -1,0 +1,5 @@
+(s <- SUM count; type (
+	ONCE [0,*]
+	(EXISTS e. (Error(e) AND type = e.type AND count = e.meta.count)) OR
+	(EXISTS e. (ErrorNullCount(e) AND type = e.type AND count = 1))
+)) AND s > 0

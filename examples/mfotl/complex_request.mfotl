@@ -1,0 +1,3 @@
+(Request(r) AND r.url = "http://bad.url" AND NOT EVENTUALLY[0, 50] EXISTS u . Report(u) AND r.user = u.user)
+AND name = r.user.name
+AND url = r.url

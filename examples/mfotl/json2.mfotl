@@ -1,2 +1,0 @@
-LET is_error(entry) = LogEntry(entry) AND entry.level = "ERROR" IN
-Log(l) AND is_error(l.event.log_entry)

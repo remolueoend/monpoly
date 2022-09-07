@@ -1,3 +1,0 @@
-(c <- CNT i; source (
-	ONCE [0,*] Entry(e) AND source = e.source AND e.is_error = true AND tp(i)
-)) AND c > 0

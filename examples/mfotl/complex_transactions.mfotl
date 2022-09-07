@@ -1,0 +1,3 @@
+(s <- SUM a; c (
+	ONCE [0, 30] Transaction(t) AND c = t.client.name AND a = t.amount AND tp(i)
+)) AND s >= 500
